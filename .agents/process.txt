@@ -12,7 +12,7 @@ Current State
   local release validation.
 - Maintainer review follow-up documentation has been added for profile behavior
   and the initial public experience backfill.
-- Push, tag, and release publication are in progress for `v0.1.0`.
+- `v0.1.0` has been pushed, tagged, and published as a GitHub Release.
 
 Completed
 - Public repository scaffold created with MIT license.
@@ -40,9 +40,8 @@ Completed
 - Public high-risk audit refresh found no matches after release hardening.
 
 Next Actions
-- Complete `v0.1.0` push/tag/GitHub Release publication.
-- Re-run `scripts/validate-release.ps1` if any further public release input
-  changes before publishing.
+- Future public changes should start a new release or maintenance work item.
+- Runtime cutover timing is tracked outside this public repository.
 
 Blocking Issues
 - No active blockers.

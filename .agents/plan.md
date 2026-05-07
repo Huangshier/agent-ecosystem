@@ -4,7 +4,7 @@ Active Spec
 - `none in public repository`
 
 Current Task
-- Publish `v0.1.0`.
+- `v0.1.0` is published.
 
 Session Status
 - Public engineering memory remains English-first.
@@ -24,8 +24,8 @@ Session Status
   documented in public release-facing docs.
 
 Next Work
-- Run final release validation.
-- Push main, tag `v0.1.0`, and publish GitHub Release.
+- No active public release task.
+- Future public changes should start a new maintenance or release work item.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.
