@@ -28,6 +28,7 @@ The validator checks:
 - installer no-`-Force` conflict behavior and forced reinstall behavior
 - `hub.lock` drift checking against a temporary git-backed hub
 - knowledge catalog, pattern, and standard entry coverage
+- public domain-pack catalog coverage
 - public experience index search
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
@@ -36,6 +37,15 @@ The validator checks:
 - duplicate helper script hashes
 - language policy template coverage in both repository guidance and bootstrap
   output
+- first-session language write capability for English and Simplified Chinese
+  temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
+  the agent or workflow
+- workflow-spec-lite spec validation against complete and intentionally broken
+  fixtures
+- anti-drift template and memory-governance coverage for scope drift, unrelated
+  refactors, and skipped acceptance checks
+- adoption guide and minimal project example coverage
+- v0.2.0 release notes coverage
 
 ## CI Gate
 
@@ -56,9 +66,8 @@ content hashes in the experience registry are stable on hosted Windows, Ubuntu,
 and macOS runners.
 
 Deferred checks are allowed only when the capability does not exist yet. The
-current known deferred item is automatic first-session language writing; the
-templates are installed and validated, but choosing and writing the first
-session language automatically is not script-driven yet.
+release validator should report zero deferred checks for a publishable release
+unless a maintainer explicitly records a new deferral.
 
 ## Publishing Steps
 

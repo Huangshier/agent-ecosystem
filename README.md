@@ -6,9 +6,9 @@ Lightweight engineering scaffolding for agent-assisted software projects.
 
 The project is organized around a small Workflow Kernel, a layered knowledge
 hub, and project-local memory templates. The first public release is focused on
-the reusable kernel only; domain-specific skills are intentionally deferred.
+the reusable kernel, public-safe knowledge scaffolds, and adoption examples.
 
-Current release: `v0.1.0`.
+Current release: `v0.2.0`.
 
 ## First Release Scope
 
@@ -17,7 +17,9 @@ Current release: `v0.1.0`.
 - `workflow-spec-lite`
 - `memory-governance`
 - Public knowledge hub templates
+- Public-safe domain-pack scaffold
 - Installer/profile scaffolding
+- Adaptation guide and minimal project example
 
 ## Repository Model
 
@@ -30,10 +32,13 @@ Current release: `v0.1.0`.
 ## Project Docs
 
 - [Architecture](docs/architecture.md)
+- [How to adapt](docs/how-to-adapt.md)
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
+- [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
+- [Examples](examples/README.md)
 
 ## Status
 
@@ -41,8 +46,9 @@ The initial `v0.1.0` public release is available. The Workflow Kernel, public
 installer, public knowledge templates, and release validation workflow have
 passed temporary-runtime validation.
 
-Post-`v0.1.0` maintenance has started the Knowledge Hub Phase 3 structure:
-catalog-first reading, `experience/`, `patterns/`, and `standards/`.
+Post-`v0.1.0` maintenance has added catalog-first knowledge, first-session
+language write support, spec-lite validation, public-safe domain-pack scaffold,
+and adoption examples for `v0.2.0`.
 
 ## Quick Start
 
@@ -69,5 +75,5 @@ The `v0.1.0` release provides four public profile names:
 - `full`: currently installs the same public content as `recommended`.
 - `dev`: currently installs the same public content as `recommended`.
 
-`full` and `dev` are reserved for future public domain packs and developer
-maintenance tooling after the kernel release is stable.
+`full` and `dev` are reserved for future installable public domain packs and
+developer maintenance tooling after the kernel release is stable.

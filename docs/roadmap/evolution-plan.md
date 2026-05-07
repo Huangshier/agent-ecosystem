@@ -66,6 +66,18 @@ The next public knowledge-hub layer is catalog-first:
 `index.json` remains generated registry state for experience search. The
 Markdown catalog remains the curated reading surface.
 
+## Domain Pack Incubation
+
+Public domain packs start as Markdown knowledge bundles under
+`knowledge-hub/knowledge/domain-packs/`. A pack can describe reusable domain
+vocabulary, checklists, and boundaries, but it should not contain private
+environment assumptions or become a skill until repeated usage proves a stable
+workflow.
+
+The first public scaffold is `embedded-core`, a public-safe embedded validation
+checklist. SDK-specific automation and private domain skills remain outside the
+public kernel.
+
 ## Installation Direction
 
 The long-term quick start should be:
@@ -78,7 +90,8 @@ Planned profiles:
 
 - `minimal`: smallest bootstrap support.
 - `recommended`: Workflow Kernel and public knowledge hub.
-- `full`: all public skills and public domain packs.
+- `full`: all public skills and public domain packs when public packs become
+  installable content.
 - `dev`: development and migration support tools.
 
 ## Language Policy

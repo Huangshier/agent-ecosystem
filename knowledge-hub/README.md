@@ -14,9 +14,10 @@ imports.
 - `knowledge/experience/`: public-safe cross-project workflow lessons.
 - `knowledge/patterns/`: reusable engineering workflows.
 - `knowledge/standards/`: cross-project rules and boundaries.
+- `knowledge/domain-packs/`: optional public-safe domain knowledge bundles.
 
-Domain-specific knowledge and private migration notes are intentionally
-excluded from this public hub.
+Private domain skills, private migration notes, and environment-specific
+automation are intentionally excluded from this public hub.
 
 ## Retrieval
 

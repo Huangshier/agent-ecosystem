@@ -19,6 +19,7 @@ Use it before opening individual knowledge files.
 | `knowledge/experience/` | Reusable lessons from toolchains, host environments, shells, build systems, caches, ports, permissions, path handling, and workflow failures. | You see a recurring failure shape or host/tooling symptom. |
 | `knowledge/patterns/` | Reusable engineering workflows that coordinate agent work across context loading, planning, implementation, and validation. | You need a proven work sequence, not a troubleshooting case. |
 | `knowledge/standards/` | Cross-project rules and boundaries that should stay stable across projects and releases. | You need to decide where content belongs or how public artifacts should behave. |
+| `knowledge/domain-packs/` | Optional public-safe domain knowledge bundles that start as Markdown before becoming skills. | A task needs reusable domain vocabulary, checklists, or boundaries without private assumptions. |
 
 ## Current Entries
 
@@ -45,6 +46,14 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: deciding whether a knowledge item belongs in the public hub,
     private overlay, or project-local memory.
+
+### Domain Packs
+
+- [Embedded Core](knowledge/domain-packs/embedded-core/catalog.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: firmware build, flash, monitor, or device validation tasks need
+    public-safe boundaries before project-local or private domain automation.
 
 ## Maintenance
 

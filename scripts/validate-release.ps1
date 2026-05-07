@@ -96,6 +96,7 @@ $evidence = [ordered]@{
     knowledge_hub = [ordered]@{}
     duplicate_helpers = @()
     language_policy = [ordered]@{}
+    spec_lite = [ordered]@{}
 }
 
 function Add-Check {
@@ -288,10 +289,17 @@ $requiredFiles = @(
     "scripts/install.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
+    "docs/how-to-adapt.md",
     "docs/language-policy.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
-    "knowledge-hub/knowledge-catalog.md"
+    "docs/releases/v0.2.0.md",
+    "knowledge-hub/knowledge-catalog.md",
+    "skills/workflow-spec-lite/scripts/validate_spec.ps1",
+    "examples/minimal-project/README.md",
+    "examples/minimal-project/.agents/AGENTS.md",
+    "examples/minimal-project/docs/specs/example-work/spec.md",
+    "examples/minimal-project/docs/specs/example-work/tasks.md"
 )
 $missingFiles = @($requiredFiles | Where-Object { -not (Test-RequiredPath -RelativePath $_) })
 
@@ -304,7 +312,8 @@ $requiredDirs = @(
     "knowledge-hub/scripts",
     "knowledge-hub/knowledge/experience",
     "knowledge-hub/knowledge/patterns",
-    "knowledge-hub/knowledge/standards"
+    "knowledge-hub/knowledge/standards",
+    "knowledge-hub/knowledge/domain-packs"
 )
 $missingDirs = @($requiredDirs | Where-Object { -not (Test-RequiredPath -RelativePath $_ -Directory) })
 
@@ -491,10 +500,228 @@ catch {
 }
 
 try {
+    $specValidator = Join-PathParts $repoRoot "skills" "workflow-spec-lite" "scripts" "validate_spec.ps1"
+    $fixtureDir = Join-PathParts $scratchRootFull "spec-lite-fixtures"
+    New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
+    Assert-PathInsideRoot -Path $fixtureDir -Root $scratchRootFull
+
+    $completeSpec = @"
+# Work Spec
+
+- **Title**: Spec validator fixture
+- **Slug**: spec-validator-fixture
+- **Status**: Active
+- **Owner**: release validation
+- **Updated**: 2026-05-08
+
+## 1. Summary
+- Validate the workflow-spec-lite spec validator helper.
+
+## 2. Current Context
+- Release validation creates temporary positive and negative fixtures.
+
+## 3. Goals
+- Confirm complete specs pass.
+
+## 4. Non-Goals
+- Do not rewrite or normalize the target spec automatically.
+
+## 5. Constraints
+- Run only against temporary fixture files.
+
+## 6. Assumptions
+- Markdown headings follow the lightweight spec template.
+
+## 7. Risks
+- Missing acceptance or stop rules can let scope drift go unnoticed.
+
+## 8. Proposed Approach
+- Execute the validator and inspect structured findings.
+
+## 9. Acceptance / Evidence
+- Positive fixture passes and targeted negative fixtures fail.
+
+## 10. Loop Contract
+- Not required for this fixture.
+
+## 11. Execution Contract
+- Use for multi-phase work where the agent should continue after each validated phase.
+- **Autonomy level**: bounded-autonomous
+- **Phase list**:
+  - P01: Run validator fixture checks.
+- **Continue rule**: Continue only when fixture results match expectations.
+- **Stop rule**: Stop when required goals, non-goals, risks, acceptance, or stop rule fields are missing.
+- **State record**: release validation evidence.
+
+## 12. Open Questions
+- None for this fixture.
+"@
+
+    $positivePath = Join-PathParts $fixtureDir "complete-spec.md"
+    Set-Content -LiteralPath $positivePath -Value $completeSpec -Encoding UTF8
+    $positive = & $specValidator -SpecPath $positivePath -RequireExecutionContract -Json | ConvertFrom-Json
+    if (-not [bool]$positive.pass) {
+        throw ("Complete spec fixture failed: {0}" -f (($positive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
+    $negativeFixtures = @(
+        [ordered]@{
+            name = "missing-goals"
+            expected_finding = "section_goals_missing"
+            text = [regex]::Replace($completeSpec, '(?ms)^## 3\. Goals\s*\r?\n.*?(?=^## 4\.)', '')
+        },
+        [ordered]@{
+            name = "missing-non-goals"
+            expected_finding = "section_non_goals_missing"
+            text = [regex]::Replace($completeSpec, '(?ms)^## 4\. Non-Goals\s*\r?\n.*?(?=^## 5\.)', '')
+        },
+        [ordered]@{
+            name = "missing-acceptance"
+            expected_finding = "section_acceptance_missing"
+            text = [regex]::Replace($completeSpec, '(?ms)^## 9\. Acceptance / Evidence\s*\r?\n.*?(?=^## 10\.)', '')
+        },
+        [ordered]@{
+            name = "missing-risks"
+            expected_finding = "section_risks_missing"
+            text = [regex]::Replace($completeSpec, '(?ms)^## 7\. Risks\s*\r?\n.*?(?=^## 8\.)', '')
+        },
+        [ordered]@{
+            name = "missing-stop-rule"
+            expected_finding = "execution_stop_rule_missing"
+            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Stop rule\*\*:\s+.*\r?$', '- **Stop rule**:')
+        }
+    )
+
+    $negativeEvidence = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($fixture in $negativeFixtures) {
+        $path = Join-PathParts $fixtureDir ("{0}.md" -f $fixture.name)
+        Set-Content -LiteralPath $path -Value $fixture.text -Encoding UTF8
+        $result = & $specValidator -SpecPath $path -RequireExecutionContract -Json | ConvertFrom-Json
+        $findingIds = @($result.findings | ForEach-Object { [string]$_.id })
+        if ([bool]$result.pass) {
+            throw ("Negative fixture unexpectedly passed: {0}" -f $fixture.name)
+        }
+        if ([string]$fixture.expected_finding -notin $findingIds) {
+            throw ("Negative fixture {0} did not report expected finding {1}. Findings: {2}" -f $fixture.name, $fixture.expected_finding, ($findingIds -join ", "))
+        }
+        $negativeEvidence.Add([ordered]@{
+            name = [string]$fixture.name
+            expected_finding = [string]$fixture.expected_finding
+            findings = @($findingIds)
+        })
+    }
+
+    $script:evidence.spec_lite = [ordered]@{
+        validator = $specValidator
+        positive_fixture = $positivePath
+        negative_fixtures = @($negativeEvidence.ToArray())
+    }
+    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts a complete spec and rejects missing goals, non-goals, acceptance, risks, and stop rule fixtures." $evidence.spec_lite
+}
+catch {
+    Add-Check "spec-lite validator" "FAIL" $_.Exception.Message
+}
+
+try {
+    $antiDriftFiles = [ordered]@{
+        "skills/workflow-spec-lite/references/spec-template.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
+        "docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
+        "knowledge-hub/templates/project-root/docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
+        "knowledge-hub/templates/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
+        "skills/workflow-spec-lite/SKILL.md" = @("scope drift", "unrelated refactors", "skipped acceptance checks", "validate_spec.ps1")
+        "skills/memory-governance/SKILL.md" = @("Scope drift", "Unrelated refactor", "Skipped acceptance")
+    }
+
+    $antiDriftMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $antiDriftFiles.Keys) {
+        $text = Get-FileText -RelativePath $relativePath
+        foreach ($token in $antiDriftFiles[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $antiDriftMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    if ($antiDriftMissing.Count -gt 0) {
+        Add-Check "anti-drift hardening" "FAIL" "Spec templates or memory-governance guidance are missing scope drift protections." @($antiDriftMissing.ToArray())
+    }
+    else {
+        Add-Check "anti-drift hardening" "PASS" "Spec templates, project-agent template, workflow-spec-lite, and memory-governance guidance include scope drift, unrelated refactor, and skipped acceptance protections." ([ordered]@{
+            checked_files = @($antiDriftFiles.Keys)
+        })
+    }
+}
+catch {
+    Add-Check "anti-drift hardening" "FAIL" $_.Exception.Message
+}
+
+try {
+    $adoptionFiles = [ordered]@{
+        "docs/how-to-adapt.md" = @("Install A Runtime", "Bootstrap A Project", "Use The Workflow Kernel", "Keep Layers Separate", "examples/minimal-project")
+        "examples/README.md" = @("Minimal Project", "How To Adapt")
+        "examples/minimal-project/README.md" = @("Workflow Kernel", ".agents", "docs/specs")
+        "examples/minimal-project/.agents/AGENTS.md" = @("Project Language Policy", "unrelated refactors", "skipped validation")
+        "examples/minimal-project/docs/specs/example-work/spec.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Stop rule")
+        "README.md" = @("How to adapt", "Examples")
+    }
+
+    $adoptionMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $adoptionFiles.Keys) {
+        $text = Get-FileText -RelativePath $relativePath
+        foreach ($token in $adoptionFiles[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $adoptionMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    if ($adoptionMissing.Count -gt 0) {
+        Add-Check "adoption surface" "FAIL" "Adoption guide or examples are incomplete." @($adoptionMissing.ToArray())
+    }
+    else {
+        Add-Check "adoption surface" "PASS" "How-to-adapt guide and minimal project example are present and linked from public entrypoints." ([ordered]@{
+            checked_files = @($adoptionFiles.Keys)
+        })
+    }
+}
+catch {
+    Add-Check "adoption surface" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.2.0.md"
+    $releaseTokens = @(
+        "v0.2.0",
+        "zero deferred",
+        "ProjectLanguage",
+        "spec completeness validator",
+        "domain-pack scaffold",
+        "PASS=21 FAIL=0 WARN=0 DEFERRED=0"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.2.0 release notes" "FAIL" "Release notes are missing required v0.2.0 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.2.0 release notes" "PASS" "v0.2.0 release notes summarize closeout features, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.2.0 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
     Assert-PathInsideRoot -Path $hubFixture -Root $scratchRootFull
     Assert-PathInsideRoot -Path $projectFixture -Root $scratchRootFull
+    foreach ($fixturePath in @($hubFixture, $projectFixture)) {
+        if (Test-Path -LiteralPath $fixturePath) {
+            Remove-Item -LiteralPath $fixturePath -Recurse -Force
+        }
+    }
     Copy-Item -LiteralPath (Join-PathParts $repoRoot "knowledge-hub") -Destination $hubFixture -Recurse -Force
     New-Item -ItemType Directory -Force -Path $projectFixture | Out-Null
 
@@ -581,14 +808,17 @@ try {
     $catalogRequiredTokens = @(
         "knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
-        "knowledge/standards/public-knowledge-boundary.md"
+        "knowledge/standards/public-knowledge-boundary.md",
+        "knowledge/domain-packs/embedded-core/catalog.md"
     )
     $missingCatalogTokens = @($catalogRequiredTokens | Where-Object { $catalogText -notlike "*$_*" })
 
     $metadataFiles = @(
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
-        "knowledge-hub/knowledge/standards/public-knowledge-boundary.md"
+        "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
+        "knowledge-hub/knowledge/domain-packs/embedded-core/catalog.md",
+        "knowledge-hub/knowledge/domain-packs/embedded-core/validation-checklist.md"
     )
     $metadataErrors = New-Object 'System.Collections.Generic.List[string]'
     foreach ($metadataFile in $metadataFiles) {
@@ -822,6 +1052,7 @@ try {
         "knowledge-hub/templates/project-agent/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md",
+        "skills/project-bootstrap/scripts/set_project_language.ps1",
         "skills/project-context-gate/SKILL.md",
         "scripts/validate-release.ps1"
     )
@@ -866,6 +1097,7 @@ try {
     $languagePolicyPresent = $agentGuide -match '(?m)^## Project Language Policy\s*$'
     $hotMemoryExists = $false
     $bootstrapLanguagePolicyPresent = $false
+    $autoWriteEvidence = @()
     $smokeEvidence = @($evidence.runtime_smoke | Where-Object {
         if ($null -eq $_) {
             return $false
@@ -896,15 +1128,87 @@ try {
             $bootstrapLanguagePolicyPresent = $bootstrapAgentGuide -match '(?m)^## Project Language Policy\s*$'
         }
     }
+
+    function Test-ProjectLanguageBootstrap {
+        param(
+            [Parameter(Mandatory = $true)][string]$Language,
+            [Parameter(Mandatory = $true)][string]$ExpectedMarker,
+            [Parameter(Mandatory = $true)][string]$ExpectedContextToken,
+            [Parameter(Mandatory = $true)][string]$ExpectedCommandToken,
+            [Parameter(Mandatory = $true)][string]$ExpectedSpecToken
+        )
+
+        if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+            throw "Recommended copy runtime was not created."
+        }
+
+        $projectName = "language-auto-write-{0}" -f ($Language -replace '[^A-Za-z0-9-]', '-')
+        $languageProjectDir = Join-PathParts $scratchRootFull $projectName
+        New-Item -ItemType Directory -Force -Path $languageProjectDir | Out-Null
+        Assert-PathInsideRoot -Path $languageProjectDir -Root $scratchRootFull
+
+        $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+        $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+        & $bootstrapScript -ProjectDir $languageProjectDir -HubDir $hubDir -ProjectLanguage $Language -SkipMemoryUpgradeAnalysis | Out-Host
+
+        $requiredMarkers = [ordered]@{
+            "AGENTS.md" = $ExpectedMarker
+            ".agents/AGENTS.md" = $ExpectedMarker
+            ".agents/process.txt" = $ExpectedMarker
+            ".agents/plan.md" = $ExpectedMarker
+            ".agents/notes.md" = $ExpectedMarker
+            ".agents/context/README.md" = $ExpectedContextToken
+            ".agents/context/tech/README.md" = $ExpectedMarker
+            ".agents/context/business/README.md" = $ExpectedMarker
+            ".agents/context/experience/README.md" = $ExpectedMarker
+            ".agents/context/experience/cases/README.md" = $ExpectedMarker
+            ".agents/context/experience/cases/case_template.md" = $ExpectedMarker
+            ".agents/commands/README.md" = $ExpectedCommandToken
+            "docs/specs/README.md" = $ExpectedSpecToken
+            "docs/specs/_templates/spec-lite.md" = $ExpectedMarker
+            "docs/specs/_templates/tasks-lite.md" = $ExpectedMarker
+        }
+
+        $missing = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($relativePath in $requiredMarkers.Keys) {
+            $path = Join-PathParts $languageProjectDir $relativePath
+            if (-not (Test-Path -LiteralPath $path)) {
+                $missing.Add("$relativePath missing")
+                continue
+            }
+            $text = Get-Content -LiteralPath $path -Raw
+            if ($text -notlike ("*{0}*" -f $requiredMarkers[$relativePath])) {
+                $missing.Add("$relativePath missing expected language marker")
+            }
+        }
+
+        if ($missing.Count -gt 0) {
+            throw ("Language bootstrap failed for {0}: {1}" -f $Language, ($missing.ToArray() -join "; "))
+        }
+
+        return [ordered]@{
+            language = $Language
+            project = $languageProjectDir
+            checked_files = @($requiredMarkers.Keys)
+            marker = $ExpectedMarker
+        }
+    }
+
+    if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+    }
+
     $script:evidence.language_policy = [ordered]@{
         project_language_policy_present = [bool]$languagePolicyPresent
         bootstrap_hot_memory_present = [bool]$hotMemoryExists
         bootstrap_project_language_policy_present = [bool]$bootstrapLanguagePolicyPresent
-        auto_language_write_behavior = "deferred"
+        auto_language_write_behavior = if ($autoWriteEvidence.Count -gt 0) { "passed" } else { "not_checked" }
+        auto_language_write_projects = @($autoWriteEvidence)
     }
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         Add-Check "language policy templates" "PASS" "Project Language Policy is present in repo and bootstrap output; bootstrap hot memory files are present." $evidence.language_policy
-        Add-Check "first-session language auto-write behavior" "DEFERRED" "Automatic first-session language writing is not implemented as a script capability; validate manually when that feature exists."
+        Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap can write English and Simplified Chinese project memory scaffolds when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
     }
     else {
         Add-Check "language policy templates" "FAIL" "Language policy or bootstrap hot memory check failed." $evidence.language_policy

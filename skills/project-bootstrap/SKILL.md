@@ -49,6 +49,7 @@ Default behavior:
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Use` guidance from the hub template so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
+- When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
 
 Optional flags:
 - `-HubDir <path>`: custom hub location.
@@ -57,6 +58,15 @@ Optional flags:
 - `-PlanMemoryUpgrade`: generate a reviewable `.agents/upgrade/<timestamp>/proposal.md`.
 - `-ApplyMemoryUpgrade -UpgradePlan <path>`: after user review, back up and normalize hot memory files according to the proposal.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
+- `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
+
+Standalone language update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
+```
+
+Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional template refreshes; it rewrites the initial memory scaffold files.
 
 ## Step 3: Verify Installation
 

@@ -133,6 +133,7 @@ The spec must capture:
 - constraints, assumptions, and risks
 - proposed approach
 - how completion will be judged
+- how scope drift, unrelated refactors, and skipped acceptance checks will be handled before claiming completion
 
 ### Step 4: Build Tasks Only When Needed
 Create `tasks.md` only on the `deep` path, or when the user explicitly asks for task decomposition.
@@ -189,6 +190,7 @@ After spec generation:
 - If the task is reverse engineering or research, evidence and open questions are first-class outputs.
 - For multi-phase execution, write an Execution Contract instead of relying on a vague "work through the plan" instruction.
 - For repeated execution, write a bounded loop contract instead of relying on a vague "continue until done" instruction.
+- Use `scripts/validate_spec.ps1` when you need a read-only check that a spec has the required goals, non-goals, risks, acceptance, and Execution Contract stop rule fields. The helper reports findings only; it does not rewrite the spec.
 
 ## Anti-Patterns
 - Writing long-lived design content only in `.agents/notes.md`

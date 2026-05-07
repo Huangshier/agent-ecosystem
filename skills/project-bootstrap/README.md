@@ -6,6 +6,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `SKILL.md`: workflow and usage entry
 - `scripts/init_hub.ps1`: initialize global knowledge-hub template repo and minimal runtime scripts
 - `scripts/bootstrap_project.ps1`: install/update project `.agents` scaffold; auto-initializes a missing hub template set from bundled assets
+- `scripts/set_project_language.ps1`: write first-session project memory language scaffolds when an agent/workflow supplies the language
 - `scripts/memory_upgrade.ps1`: analyze, plan, and apply legacy project memory upgrades
 - `scripts/check_hub_lock.ps1`: compare project `hub.lock.json` against the installed hub git state
 - `scripts/promote_experience.ps1`: compatibility copy; prefer `knowledge-hub/scripts/promote_experience.ps1` for routine hub maintenance
@@ -15,6 +16,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Lock Metadata
 - `bootstrap_project.ps1` writes hub git metadata plus `template_tree_hash_sha256`.
+- When `-ProjectLanguage` is supplied, the lock records the normalized project language.
 - `check_hub_lock.ps1` compares the template hash when present and fails on dirty hub state, so uncommitted hub changes are not treated as reproducible pins.
 
 ## Repository Role

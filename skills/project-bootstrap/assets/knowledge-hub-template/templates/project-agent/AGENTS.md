@@ -56,6 +56,8 @@ When the user's request is semantically broad or underspecified, do a short read
 
 After exploration, proceed only when the goal, scope, non-goals, and validation path are clear. Ask a concise question when ambiguity is about product intent, success criteria, destructive/high-impact actions, external systems, or incompatible interpretations. Make reversible implementation choices yourself once intent is clear.
 
+Scope discipline: do not fold unrelated refactors, cleanup, or behavior changes into a work item unless they are explicit goals. If acceptance checks are skipped or unavailable, record that before claiming completion.
+
 ## Delivery Protocol & Working Loop
 For implementation tasks that produce repository changes, a complete unit of work may include the relevant parts of the following sequence:
 

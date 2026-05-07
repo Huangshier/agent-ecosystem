@@ -6,7 +6,8 @@ param(
     [switch]$PlanMemoryUpgrade,
     [switch]$ApplyMemoryUpgrade,
     [switch]$SkipMemoryUpgradeAnalysis,
-    [string]$UpgradePlan = ""
+    [string]$UpgradePlan = "",
+    [string]$ProjectLanguage = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -202,6 +203,23 @@ if ($null -ne $git) {
 
 $templateTreeHash = Get-TemplateTreeHash -ProjectRootTemplate $projectRootTemplate -ProjectAgentTemplate $projectAgentTemplate
 
+$languageResult = $null
+if (-not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
+    $languageScript = Join-PathParts $PSScriptRoot "set_project_language.ps1"
+    if (-not (Test-Path -LiteralPath $languageScript)) {
+        throw "Project language helper not found: $languageScript"
+    }
+    $languageParams = @{
+        ProjectDir = $ProjectDir
+        ProjectLanguage = $ProjectLanguage
+    }
+    if ($OverwriteTemplates.IsPresent -or $copiedCount -gt 0) {
+        $languageParams.OverwriteScaffold = $true
+    }
+    $languageJson = & $languageScript @languageParams
+    $languageResult = $languageJson | ConvertFrom-Json
+}
+
 $lockData = [ordered]@{
     schema_version = 1
     installed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -215,6 +233,7 @@ $lockData = [ordered]@{
     template_source = "templates/project-root + templates/project-agent"
     template_tree_hash_sha256 = $templateTreeHash
     overwrite_templates = [bool]$OverwriteTemplates.IsPresent
+    project_language = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
 }
 
 $lockPath = Join-Path $projectAgentDir "hub.lock.json"
@@ -224,6 +243,9 @@ Write-Output "Project bootstrap complete."
 Write-Output "Project: $ProjectDir"
 Write-Output "Hub: $HubDir"
 Write-Output ("Template files copied: {0}, updated: {1}, skipped: {2}" -f $copiedCount, $updatedCount, $skippedCount)
+if ($null -ne $languageResult) {
+    Write-Output ("Project language: {0} ({1} files written, {2} skipped)" -f [string]$languageResult.project_language, [int]$languageResult.files_written, [int]$languageResult.files_skipped)
+}
 Write-Output "Lock file: $lockPath"
 
 $memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"

@@ -1,10 +1,9 @@
 # Release Readiness
 
-Status: `v0.1.0` published; hardened release validation is active for the next
-maintenance/release cycle.
+Status: `v0.2.0` release candidate.
 
-The initial public release has passed the local validation gate and has been
-published as `v0.1.0`.
+The initial public release has been published as `v0.1.0`; `v0.2.0` closes the
+public migration work and moves the project toward normal maintenance.
 
 ## Completed
 
@@ -13,8 +12,11 @@ published as `v0.1.0`.
 - Public knowledge hub templates and selected generic maintenance scripts are present.
 - One public-safe workflow experience entry is indexed.
 - Knowledge Hub Phase 3 structure is present:
-  `knowledge-catalog.md`, `experience/`, `patterns/`, and `standards/`.
+  `knowledge-catalog.md`, `experience/`, `patterns/`, `standards/`, and
+  `domain-packs/`.
 - One reusable engineering pattern and one cross-project standard are present.
+- One public-safe domain pack scaffold is present:
+  `knowledge/domain-packs/embedded-core/`.
 - Public installer supports `minimal`, `recommended`, `full`, and `dev` profiles.
 - `full` and `dev` are documented as `v0.1.0` placeholders that currently
   install the same public content as `recommended`.
@@ -25,8 +27,8 @@ published as `v0.1.0`.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 16 checks passing, no
-  failures, and one deferred non-blocking behavior check.
+- Latest local hardened release validation passed with 21 checks passing, no
+  failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
@@ -46,6 +48,17 @@ published as `v0.1.0`.
 - Bootstrap templates install a `Project Language Policy` section into
   `.agents/AGENTS.md`; release validation checks both repository guidance and
   bootstrap output.
+- `project-bootstrap` can write first-session language scaffolds when an agent
+  or workflow supplies `-ProjectLanguage en` or `-ProjectLanguage zh-CN`; release
+  validation checks both languages with temporary projects.
+- `workflow-spec-lite` includes a read-only spec validator that checks goals,
+  non-goals, risks, acceptance evidence, and Execution Contract stop rules.
+- Spec templates and memory-governance guidance include scope drift, unrelated
+  refactor, and skipped acceptance protections.
+- Knowledge catalog coverage includes the `embedded-core` domain pack scaffold.
+- Public adoption surface includes `docs/how-to-adapt.md` and
+  `examples/minimal-project/`.
+- Public release notes are present at `docs/releases/v0.2.0.md`.
 
 ## Required Before Future Publishing
 
@@ -109,5 +122,12 @@ The release validator now covers:
 - `hub.lock` drift checking with a temporary git-backed hub
 - experience promote -> rebuild -> search closure using a temporary hub copy
 - knowledge catalog coverage for experience, patterns, and standards
+- public domain-pack catalog coverage
 - duplicate helper hashes, parser checks, JSON parsing, public structure,
   sensitive-pattern audit, and language policy templates
+- first-session language write coverage for English and Simplified Chinese
+  temporary projects
+- workflow-spec-lite validator positive/negative fixtures
+- anti-drift template and memory-governance coverage
+- adoption guide and minimal project example coverage
+- v0.2.0 release notes coverage

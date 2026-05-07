@@ -24,3 +24,12 @@ The Workflow Kernel is the reusable core:
 
 Domain-specific skills should not be required by the kernel.
 
+## Domain Packs
+
+Domain packs are optional knowledge bundles under
+`knowledge-hub/knowledge/domain-packs/`. They start as public-safe Markdown
+catalogs, checklists, and boundaries. Promote a domain pack into a skill only
+after repeated cross-project use proves a stable, scriptable workflow.
+
+Private domain skills and environment-specific automation belong outside this
+public repository.

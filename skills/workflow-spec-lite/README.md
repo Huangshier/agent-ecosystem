@@ -29,6 +29,7 @@ docs/
 - Specs capture **what**, **why**, **constraints**, **approach**, and **acceptance criteria**.
 - Tasks are **actionable, ordered, independently checkable** items mapping back to the spec.
 - Project-local templates at `docs/specs/_templates/` are preferred when present.
+- Specs should make scope drift explicit through goals, non-goals, acceptance evidence, and stop rules for unrelated refactors or skipped checks.
 
 ## Repeated Execution
 
@@ -73,6 +74,8 @@ workflow-spec-lite/
 |-- README.md                         # This file
 |-- agents/
 |   `-- openai.yaml                   # Agent interface configuration
+|-- scripts/
+|   `-- validate_spec.ps1             # Read-only spec completeness validator
 `-- references/
     |-- complexity-routing.md         # Routing heuristics (quick / standard / deep)
     |-- spec-template.md              # Template for spec.md

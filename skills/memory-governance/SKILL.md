@@ -107,6 +107,9 @@ Follow this exact sequence:
    | **Toolchain/environment issue** | Shell, build, port, path, permissions | `.agents/context/experience/` -> consider promote |
    | **Domain knowledge gap** | AI misunderstood business logic or hardware behavior | `.agents/context/business/` |
    | **Workflow omission** | Skipped a verification step or process | `.agents/notes.md` (as stable rule) |
+   | **Scope drift** | Work expanded beyond stated goals or ignored non-goals | `.agents/context/experience/` or active spec/tasks |
+   | **Unrelated refactor** | Cleanup or refactor was bundled into unrelated work | `.agents/context/experience/` or active spec non-goals |
+   | **Skipped acceptance** | Completion was claimed without running or recording required checks | `.agents/notes.md` plus active spec/tasks evidence |
 
    6c. **Generate deposit suggestions** (up to 3 items):
    For each, state:

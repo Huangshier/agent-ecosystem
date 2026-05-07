@@ -4,8 +4,10 @@
 
 公开文档以英文优先；本文件提供第一版 public release 的简短中文入口。
 
-当前公开版本是 `v0.1.0`。第一版公开 release 包含 Workflow Kernel、public
-installer、public knowledge templates 和 release validation workflow。
+当前公开版本是 `v0.2.0`。第一版公开 release 包含
+Workflow Kernel、public installer、public knowledge templates 和 release
+validation workflow；`v0.2.0` 补充 language write、spec validator、
+domain-pack scaffold 和 adoption examples。
 
 ## 第一版公开范围
 
@@ -17,6 +19,8 @@ installer、public knowledge templates 和 release validation workflow。
 - `memory-governance`
 - public knowledge hub templates
 - installer/profile scaffolding
+- public-safe domain-pack scaffold
+- adaptation guide 和 minimal project example
 
 ## 快速开始
 
@@ -55,4 +59,7 @@ developer maintenance tooling。
 更多细节请以英文文档为准：
 
 - [Architecture](docs/architecture.md)
+- [How to adapt](docs/how-to-adapt.md)
 - [Release readiness](docs/release-readiness.md)
+- [v0.2.0 release notes](docs/releases/v0.2.0.md)
+- [Examples](examples/README.md)
