@@ -4,8 +4,8 @@ Active Spec
 - `none in public repository`
 
 Current Task
-- Local `v0.1.0` release candidate hardening is complete; next public work is
-  maintainer review.
+- Local `v0.1.0` release validation is complete; next public work is maintainer
+  review.
 
 Session Status
 - Public engineering memory remains English-first.
@@ -17,10 +17,14 @@ Session Status
 - First-release Chinese entrypoint exists at `README.zh-CN.md`.
 - Release readiness docs record installer fallback metadata and duplicate
   helper script review.
+- Release validation workflow exists at `scripts/validate-release.ps1`.
+- Release process guidance exists at `docs/release-process.md`.
+- Latest local release validation passed with 12 pass, 0 fail, 0 warn, and
+  1 deferred non-blocking behavior check.
 
 Next Work
 - Maintainer review.
-- Re-run final audit/smoke test if review changes the public tree.
+- Re-run `scripts/validate-release.ps1` if review changes public release inputs.
 - Push/tag/release only when explicitly requested.
 
 Notes

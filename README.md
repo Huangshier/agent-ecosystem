@@ -31,6 +31,7 @@ Planned first public release: `v0.1.0`.
 
 - [Architecture](docs/architecture.md)
 - [Language policy](docs/language-policy.md)
+- [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
 
 ## Status

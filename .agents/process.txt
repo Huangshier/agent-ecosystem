@@ -8,8 +8,10 @@ Current State
   outside this repository.
 - The public installer entrypoint exists and the recommended profile has passed
   temporary-runtime install/bootstrap/context-gate smoke tests.
-- The local `v0.1.0` release candidate docs are prepared; push, tag, and
-  release publication are pending maintainer review.
+- The local `v0.1.0` release candidate now has a reusable release validation
+  gate and has passed local release validation.
+- Push, tag, and release publication are pending maintainer review and explicit
+  approval.
 
 Completed
 - Public repository scaffold created with MIT license.
@@ -27,11 +29,15 @@ Completed
 - Public `README.zh-CN.md` updated as the first-release Chinese entrypoint.
 - Release readiness docs now record the `v0.1.0` version, installer fallback
   metadata behavior, and duplicated helper script review.
+- Public `scripts/validate-release.ps1` and `docs/release-process.md` added.
+- Release validation passed locally for the `v0.1.0` candidate: 12 pass,
+  0 fail, 0 warn, 1 deferred non-blocking behavior check.
 - Public high-risk audit refresh found no matches after release hardening.
 
 Next Actions
-- Maintainer review of the local release candidate.
-- Re-run audit and smoke test if review changes the public tree.
+- Maintainer review of the validated local release candidate.
+- Re-run `scripts/validate-release.ps1` if review changes installer, skill,
+  template, release documentation, or audit-rule files.
 - Push/tag/release only when explicitly requested.
 
 Blocking Issues

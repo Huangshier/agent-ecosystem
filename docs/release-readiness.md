@@ -16,6 +16,10 @@ Push, tag, and release publication are pending maintainer review.
   a temporary runtime install.
 - First public release version selected: `v0.1.0`.
 - First public Chinese documentation ships as `README.zh-CN.md`.
+- Reusable release validation is available at `scripts/validate-release.ps1`.
+- Release process guidance is available at `docs/release-process.md`.
+- Latest local release validation for the `v0.1.0` candidate passed with
+  12 checks passing, no failures, and one deferred non-blocking behavior check.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
@@ -27,8 +31,8 @@ Push, tag, and release publication are pending maintainer review.
 ## Required Before Publishing
 
 - Re-run the final sensitive information audit if review changes the public tree.
-- Re-run the recommended profile smoke test if installer, skill, or template
-  files change during review.
+- Re-run `scripts/validate-release.ps1` if installer, skill, template, release
+  documentation, or audit rules change during review.
 - Review the final local diff.
 - Push, tag `v0.1.0`, and publish release notes only after maintainer approval.
 
@@ -42,6 +46,12 @@ Safe validation form:
 
 ```powershell
 .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+```
+
+Full release validation form:
+
+```powershell
+.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 ## Installer Metadata
@@ -60,3 +70,6 @@ installed item's final mode (`junction`, `symboliclink`, `copy`, or
 Before publishing, scan the public tree for high-risk path and credential
 patterns, then review any keyword matches manually. Security policy and audit
 documentation may intentionally contain safety terms.
+
+The release validator automates the current audit baseline and records a
+machine-readable result in the scratch directory.
