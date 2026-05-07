@@ -5,7 +5,7 @@ Current State
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
-- Release validation hardening is in progress for the next maintenance/release
+- Release validation hardening is complete for the next maintenance/release
   cycle.
 
 Completed
@@ -13,12 +13,14 @@ Completed
 - Public `scripts/validate-release.ps1` exists as the reusable release gate.
 - Latest local hardened validation passed with 15 pass, 0 fail, 0 warn, and
   1 deferred non-blocking behavior check.
-- CI release validation workflow has been added for Windows, Ubuntu, and macOS.
+- CI release validation workflow has passed on Windows, Ubuntu, and macOS:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
 - Validator coverage now includes link runtime smoke, installer behavior,
   hub.lock drift check, and experience promote closure.
+- `.gitattributes` keeps validation-sensitive text files LF-normalized so
+  experience hash checks stay byte-stable on Windows hosted runners.
 
 Next Actions
-- Commit validation hardening after memory and private evidence are updated.
 - Future public changes should start a maintenance or release work item.
 
 Blocking Issues

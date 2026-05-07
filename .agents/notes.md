@@ -13,6 +13,10 @@
   0 fail, 0 warn, and 1 deferred non-blocking behavior check.
 - CI release validation workflow exists at
   `.github/workflows/release-validation.yml` for Windows, Ubuntu, and macOS.
+- Hosted release validation passed on Windows, Ubuntu, and macOS on 2026-05-07:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
+- `.gitattributes` pins validation-sensitive text files to LF endings so
+  experience registry hashes remain stable across hosted Windows checkouts.
 - `v0.1.0` publication was explicitly requested on 2026-05-07.
 - `v0.1.0` GitHub Release:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.1.0

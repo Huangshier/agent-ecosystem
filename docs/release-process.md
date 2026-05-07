@@ -48,6 +48,10 @@ Each job uploads the validator scratch directory as evidence. Treat CI failures
 as release blockers unless the maintainer explicitly records a platform-specific
 deferral for a pre-release calibration run.
 
+Validation-sensitive text files are LF-normalized by `.gitattributes` so
+content hashes in the experience registry are stable on hosted Windows, Ubuntu,
+and macOS runners.
+
 Deferred checks are allowed only when the capability does not exist yet. The
 current known deferred item is automatic first-session language writing; the
 templates are validated, but the behavior is not script-driven yet.

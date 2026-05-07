@@ -1,7 +1,7 @@
 # Release Readiness
 
-Status: `v0.1.0` published; release validation hardening is in progress for the
-next maintenance/release cycle.
+Status: `v0.1.0` published; hardened release validation is active for the next
+maintenance/release cycle.
 
 The initial public release has passed the local validation gate and has been
 published as `v0.1.0`.
@@ -36,6 +36,10 @@ published as `v0.1.0`.
 - CI release validation workflow is present at
   `.github/workflows/release-validation.yml` and is configured for Windows,
   Ubuntu, and macOS runners.
+- Hosted CI release validation passed on Windows, Ubuntu, and macOS:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
+- `.gitattributes` pins validation-sensitive text files to LF endings so
+  experience registry hash checks remain stable across hosted runners.
 
 ## Required Before Future Publishing
 
