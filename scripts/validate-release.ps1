@@ -1255,3 +1255,5 @@ else {
 if ($result.summary.fail -gt 0) {
     exit 1
 }
+
+exit 0
