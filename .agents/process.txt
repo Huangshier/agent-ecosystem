@@ -4,24 +4,26 @@ Current State
 - Domain skills are deferred until the public kernel, installer, and knowledge
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
-  in the sibling private overlay repository.
-- The private migration control plane completed its P01 source inventory and
-  initial screening phase; public extraction has not started yet.
+  outside this repository.
+- The public Workflow Kernel extraction phase is complete; installer/profile
+  work has not started yet.
 
 Completed
 - Public repository scaffold created with MIT license.
 - Public roadmap, architecture, and language policy skeletons created.
 - Public project memory initialized from the current project-bootstrap template.
 - Public memory updated with public-safe P01 migration status.
+- Workflow Kernel skills imported under `skills/`.
+- Public knowledge hub templates, selected scripts, and one generic workflow
+  experience entry imported.
+- Kernel skill taxonomy metadata added.
 
 Next Actions
-- Extract public-safe Workflow Kernel skills into `skills/`.
-- Add public skill taxonomy metadata for category, stability, and scope.
-- Add or refine public knowledge templates and generic scripts.
 - Design installer profiles for minimal, recommended, full, and dev installs.
+- Add the public quick-start installer entrypoint.
 - Validate installation in a temporary runtime before touching any live runtime.
 - Run a sensitive information audit against the public tree before committing
-  extracted release-candidate content.
+  installer/profile release-candidate content.
 
 Blocking Issues
 - No active blockers.

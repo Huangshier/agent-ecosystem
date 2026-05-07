@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Context Gate"
+  short_description: "Reload project rules before long-task phases."
+  default_prompt: "Use $project-context-gate to load project rules and summarize current task constraints before continuing."

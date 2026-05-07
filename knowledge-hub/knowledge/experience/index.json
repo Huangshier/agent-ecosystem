@@ -1,0 +1,26 @@
+﻿{
+    "schema_version":  1,
+    "updated_at_utc":  "2026-05-07T03:47:49.1798131Z",
+    "entries":  [
+                    {
+                        "id":  "reindexed-windows-powershell-command-chaining-86598847",
+                        "promoted_at_utc":  "2026-04-23T02:03:39.1417284Z",
+                        "source_project":  "",
+                        "source_project_tag":  "",
+                        "source_relative_path":  "",
+                        "source_file":  "",
+                        "hash_sha256":  "86598847685e3e70af4f22830827ad5935adde44bce1cac61e4bb4b3b2487925",
+                        "title":  "Windows PowerShell Command Chaining",
+                        "keywords":  [
+                                         "PowerShell",
+                                         "command chaining",
+                                         "\u0026\u0026",
+                                         "cmd /c",
+                                         "shell_command",
+                                         "Windows",
+                                         "parser error"
+                                     ],
+                        "hub_file":  "windows-powershell-command-chaining.md"
+                    }
+                ]
+}

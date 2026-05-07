@@ -25,6 +25,5 @@ the reusable kernel only; domain-specific skills are intentionally deferred.
 
 ## Status
 
-This repository is being prepared from an existing private runtime. The public
+The Workflow Kernel has been imported into this public repository. The public
 quick start and installer are not ready yet.
-

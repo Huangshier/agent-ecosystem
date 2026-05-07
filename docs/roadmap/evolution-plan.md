@@ -22,7 +22,7 @@ agent-ecosystem/
   docs/
   examples/
 
-agent-ecosystem-private/
+private-overlay/
   profiles/
   knowledge/
   skills/
@@ -95,4 +95,3 @@ Before public release:
 - Run a simulated task through context gate, spec-lite, implementation intent,
   and memory governance.
 - Verify sensitive audit checks before public release.
-

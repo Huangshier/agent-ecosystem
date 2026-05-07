@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Project Bootstrap"
+  short_description: "Bootstrap .agents from global hub with lock."
+  default_prompt: "Initialize or refresh a project's .agents from a global knowledge hub and write a pinned lock."

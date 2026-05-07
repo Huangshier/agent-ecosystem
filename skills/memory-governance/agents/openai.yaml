@@ -1,0 +1,4 @@
+interface:
+  display_name: "Memory Governance"
+  short_description: "Refresh context and align Agent memory files."
+  default_prompt: "Use $memory-governance to refresh project context and clean .agents memory files after this session."

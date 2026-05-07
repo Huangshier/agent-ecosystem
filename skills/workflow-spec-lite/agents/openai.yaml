@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workflow Spec Lite"
+  short_description: "Load context, then create lightweight spec/tasks docs."
+  default_prompt: "Use $workflow-spec-lite to load project context, route this work as quick, standard, or deep, and create docs/specs artifacts when needed."
