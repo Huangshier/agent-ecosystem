@@ -7,6 +7,8 @@ Current State
   outside this repository.
 - Release validation hardening is complete for the next maintenance/release
   cycle.
+- Knowledge Hub Phase 3 first slice is complete: catalog-first reading,
+  patterns, standards, and validator coverage.
 
 Completed
 - `v0.1.0` has been pushed, tagged, and published as a GitHub Release.
@@ -19,6 +21,8 @@ Completed
   hub.lock drift check, and experience promote closure.
 - `.gitattributes` keeps validation-sensitive text files LF-normalized so
   experience hash checks stay byte-stable on Windows hosted runners.
+- Knowledge Hub Phase 3 local validation passed with 16 pass, 0 fail, 0 warn,
+  and 1 deferred behavior check.
 
 Next Actions
 - Future public changes should start a maintenance or release work item.

@@ -4,6 +4,19 @@
 This repository uses project-level `.agents` memory files.
 Use this file as the primary working guide for agent sessions.
 
+## Project Language Policy
+Project engineering memory should follow the language declared for this
+project. Fill this section during bootstrap or the first non-trivial session
+that writes engineering memory.
+
+Default rule when no explicit language has been chosen yet:
+- Use the user's primary language from the first non-trivial session as the
+  project memory language.
+- Keep file names, directory names, Markdown field labels, commands, paths, API
+  names, and raw error text in English or in their original form.
+- Keep public-facing artifacts in the language required by their target
+  repository or audience.
+
 ## Working Philosophy
 You are an engineering collaborator on this project, not a standby assistant.
 

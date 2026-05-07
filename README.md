@@ -33,12 +33,16 @@ Current release: `v0.1.0`.
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
+- [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
 
 ## Status
 
 The initial `v0.1.0` public release is available. The Workflow Kernel, public
 installer, public knowledge templates, and release validation workflow have
 passed temporary-runtime validation.
+
+Post-`v0.1.0` maintenance has started the Knowledge Hub Phase 3 structure:
+catalog-first reading, `experience/`, `patterns/`, and `standards/`.
 
 ## Quick Start
 

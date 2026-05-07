@@ -27,12 +27,15 @@ The validator checks:
   and memory diagnosis in both recommended copy and link installs
 - installer no-`-Force` conflict behavior and forced reinstall behavior
 - `hub.lock` drift checking against a temporary git-backed hub
+- knowledge catalog, pattern, and standard entry coverage
 - public experience index search
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
 - PowerShell parser checks and JSON parsing
 - public sensitive-pattern audit
 - duplicate helper script hashes
+- language policy template coverage in both repository guidance and bootstrap
+  output
 
 ## CI Gate
 
@@ -54,7 +57,8 @@ and macOS runners.
 
 Deferred checks are allowed only when the capability does not exist yet. The
 current known deferred item is automatic first-session language writing; the
-templates are validated, but the behavior is not script-driven yet.
+templates are installed and validated, but choosing and writing the first
+session language automatically is not script-driven yet.
 
 ## Publishing Steps
 

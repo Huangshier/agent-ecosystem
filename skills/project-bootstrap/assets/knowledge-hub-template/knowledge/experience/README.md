@@ -16,3 +16,6 @@ Index metadata is stored in `index.json`.
 ## Maintenance Rule
 - `index.json` is the lightweight discovery registry for this directory, not the primary editing target.
 - Maintain this registry through installed `knowledge-hub/scripts`: `promote_experience.ps1` for reviewed project-to-hub promotion and `rebuild_experience_index.ps1` for backfill or repair when hub files already exist.
+- Experience files should include `Maturity`, `Scope`, `Source`, and
+  `Last reviewed` metadata near the top so the catalog can distinguish draft,
+  verified, proven, and deprecated entries.

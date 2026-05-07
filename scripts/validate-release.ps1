@@ -290,7 +290,8 @@ $requiredFiles = @(
     "docs/architecture.md",
     "docs/language-policy.md",
     "docs/release-process.md",
-    "docs/release-readiness.md"
+    "docs/release-readiness.md",
+    "knowledge-hub/knowledge-catalog.md"
 )
 $missingFiles = @($requiredFiles | Where-Object { -not (Test-RequiredPath -RelativePath $_) })
 
@@ -301,7 +302,9 @@ $requiredDirs = @(
     "skills/memory-governance",
     "knowledge-hub/templates",
     "knowledge-hub/scripts",
-    "knowledge-hub/knowledge/experience"
+    "knowledge-hub/knowledge/experience",
+    "knowledge-hub/knowledge/patterns",
+    "knowledge-hub/knowledge/standards"
 )
 $missingDirs = @($requiredDirs | Where-Object { -not (Test-RequiredPath -RelativePath $_ -Directory) })
 
@@ -573,6 +576,49 @@ catch {
 }
 
 try {
+    $catalogPath = "knowledge-hub/knowledge-catalog.md"
+    $catalogText = Get-FileText -RelativePath $catalogPath
+    $catalogRequiredTokens = @(
+        "knowledge/experience/windows-powershell-command-chaining.md",
+        "knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge/standards/public-knowledge-boundary.md"
+    )
+    $missingCatalogTokens = @($catalogRequiredTokens | Where-Object { $catalogText -notlike "*$_*" })
+
+    $metadataFiles = @(
+        "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
+        "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge-hub/knowledge/standards/public-knowledge-boundary.md"
+    )
+    $metadataErrors = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($metadataFile in $metadataFiles) {
+        $metadataText = Get-FileText -RelativePath $metadataFile
+        foreach ($field in @("Maturity:", "Scope:", "Source:", "Last reviewed:")) {
+            if ($metadataText -notmatch ("(?m)^{0}\s*.+" -f [regex]::Escape($field))) {
+                $metadataErrors.Add("$metadataFile missing $field")
+            }
+        }
+    }
+
+    if ($missingCatalogTokens.Count -gt 0 -or $metadataErrors.Count -gt 0) {
+        Add-Check "knowledge hub catalog" "FAIL" "Knowledge catalog or entry metadata is incomplete." ([ordered]@{
+            missing_catalog_entries = @($missingCatalogTokens)
+            metadata_errors = @($metadataErrors.ToArray())
+        })
+    }
+    else {
+        Add-Check "knowledge hub catalog" "PASS" "Catalog links experience, patterns, and standards entries with required metadata." ([ordered]@{
+            catalog = $catalogPath
+            entries = @($catalogRequiredTokens)
+            metadata_files = @($metadataFiles)
+        })
+    }
+}
+catch {
+    Add-Check "knowledge hub catalog" "FAIL" $_.Exception.Message
+}
+
+try {
     $indexPath = Join-PathParts $repoRoot "knowledge-hub" "knowledge" "experience" "index.json"
     $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
     $searchScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "search_experience.ps1"
@@ -819,6 +865,7 @@ try {
     $agentGuide = Get-FileText -RelativePath ".agents/AGENTS.md"
     $languagePolicyPresent = $agentGuide -match '(?m)^## Project Language Policy\s*$'
     $hotMemoryExists = $false
+    $bootstrapLanguagePolicyPresent = $false
     $smokeEvidence = @($evidence.runtime_smoke | Where-Object {
         if ($null -eq $_) {
             return $false
@@ -842,14 +889,21 @@ try {
             Measure-Object |
             Select-Object -ExpandProperty Count
         $hotMemoryExists = ($hotMemoryExists -eq 4)
+
+        $bootstrapAgentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
+        if (Test-Path -LiteralPath $bootstrapAgentGuidePath) {
+            $bootstrapAgentGuide = Get-Content -LiteralPath $bootstrapAgentGuidePath -Raw
+            $bootstrapLanguagePolicyPresent = $bootstrapAgentGuide -match '(?m)^## Project Language Policy\s*$'
+        }
     }
     $script:evidence.language_policy = [ordered]@{
         project_language_policy_present = [bool]$languagePolicyPresent
         bootstrap_hot_memory_present = [bool]$hotMemoryExists
+        bootstrap_project_language_policy_present = [bool]$bootstrapLanguagePolicyPresent
         auto_language_write_behavior = "deferred"
     }
-    if ($languagePolicyPresent -and $hotMemoryExists) {
-        Add-Check "language policy templates" "PASS" "Project Language Policy and bootstrap hot memory files are present." $evidence.language_policy
+    if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
+        Add-Check "language policy templates" "PASS" "Project Language Policy is present in repo and bootstrap output; bootstrap hot memory files are present." $evidence.language_policy
         Add-Check "first-session language auto-write behavior" "DEFERRED" "Automatic first-session language writing is not implemented as a script capability; validate manually when that feature exists."
     }
     else {

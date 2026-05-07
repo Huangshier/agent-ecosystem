@@ -52,6 +52,20 @@ knowledge templates:
 
 Domain skills are deferred until the public kernel is stable.
 
+## Knowledge Hub Phase 3
+
+The next public knowledge-hub layer is catalog-first:
+
+- `knowledge-hub/knowledge-catalog.md` is the reading map for agents and
+  maintainers.
+- `knowledge/experience/` keeps workflow lessons and its script-search
+  `index.json`.
+- `knowledge/patterns/` keeps reusable engineering workflows.
+- `knowledge/standards/` keeps stable cross-project rules and boundaries.
+
+`index.json` remains generated registry state for experience search. The
+Markdown catalog remains the curated reading surface.
+
 ## Installation Direction
 
 The long-term quick start should be:

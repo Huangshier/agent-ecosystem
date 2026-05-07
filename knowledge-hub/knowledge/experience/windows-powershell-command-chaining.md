@@ -1,5 +1,10 @@
 # Windows PowerShell Command Chaining
 
+Maturity: verified
+Scope: cross-project
+Source: migration backfill
+Last reviewed: 2026-05-08
+
 ## Keywords
 PowerShell, command chaining, &&, cmd /c, shell_command, Windows, parser error
 
