@@ -1,0 +1,26 @@
+Current State
+- This repository is the public source repository for Agent Ecosystem.
+- The first public release scope is Workflow Kernel only.
+- Domain skills are deferred until the public kernel, installer, and knowledge
+  templates are stable.
+- Private migration state, local source mappings, and sensitive audit notes live
+  in the sibling private overlay repository.
+
+Completed
+- Public repository scaffold created with MIT license.
+- Public roadmap, architecture, and language policy skeletons created.
+- Public project memory initialized from the current project-bootstrap template.
+
+Next Actions
+- Complete public-safe architecture documentation.
+- Migrate Workflow Kernel skills from the current runtime source.
+- Add skill metadata for category, stability, scope, and domain boundaries.
+- Design installer profiles for minimal, recommended, full, and dev installs.
+- Validate installation in a temporary runtime before touching any live runtime.
+
+Blocking Issues
+- No active blockers.
+- Before public push or release, run a sensitive information audit.
+
+Last Updated
+- 2026-05-07
