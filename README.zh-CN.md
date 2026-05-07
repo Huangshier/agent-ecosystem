@@ -2,7 +2,45 @@
 
 轻量 Agent 工程脚手架，用于在软件项目中管理上下文、规格、记忆和可复用经验。
 
-第一版公开范围只包含通用 Workflow Kernel，不包含领域专用 skill。
+公开文档以英文优先；本文件提供第一版 public release 的简短中文入口。
 
-当前仓库处于公开化准备阶段，Quick Start 和安装器尚未完成。
+计划中的第一版公开版本是 `v0.1.0`。当前仓库已进入本地 release candidate
+准备状态，尚未 push、tag 或发布 release。
 
+## 第一版公开范围
+
+第一版只包含通用 Workflow Kernel，不包含领域专用 skill：
+
+- `project-bootstrap`
+- `project-context-gate`
+- `workflow-spec-lite`
+- `memory-governance`
+- public knowledge hub templates
+- installer/profile scaffolding
+
+## 快速开始
+
+```powershell
+.\scripts\install.ps1 -Profile recommended
+```
+
+建议先安装到临时 runtime 做验证：
+
+```powershell
+.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+```
+
+默认安装模式会优先创建链接；如果链接创建失败，安装器会回退到 copy mode。
+安装器会在目标 runtime 下生成 `install-manifest.json`，记录 profile、skills 和
+每个安装项使用的模式。
+
+## 边界
+
+- domain skills 暂不进入第一版公开 release。
+- private overlay、敏感知识、本机迁移映射和审计细节不属于 public repo。
+- live runtime cutover 需要在 release 决策后单独执行。
+
+更多细节请以英文文档为准：
+
+- [Architecture](docs/architecture.md)
+- [Release readiness](docs/release-readiness.md)

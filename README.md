@@ -2,9 +2,13 @@
 
 Lightweight engineering scaffolding for agent-assisted software projects.
 
+[简体中文](README.zh-CN.md)
+
 The project is organized around a small Workflow Kernel, a layered knowledge
 hub, and project-local memory templates. The first public release is focused on
 the reusable kernel only; domain-specific skills are intentionally deferred.
+
+Planned first public release: `v0.1.0`.
 
 ## First Release Scope
 
@@ -32,10 +36,11 @@ the reusable kernel only; domain-specific skills are intentionally deferred.
 ## Status
 
 The Workflow Kernel has been imported into this public repository. The public
-installer is available for temporary-runtime validation; final release readiness
-work is still in progress.
+installer and recommended profile have passed temporary-runtime validation.
+The repository is being prepared as a local `v0.1.0` release candidate; push,
+tag, and release publication are still pending maintainer review.
 
-## Quick Start Preview
+## Quick Start
 
 ```powershell
 .\scripts\install.ps1 -Profile recommended
@@ -46,3 +51,7 @@ For safe testing, install into a temporary runtime first:
 ```powershell
 .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+The default install mode prefers links (`Junction` on Windows,
+`SymbolicLink` elsewhere) and falls back to copy mode if link creation fails.
+The generated runtime manifest records the mode used for each installed item.

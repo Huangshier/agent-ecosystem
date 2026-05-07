@@ -1,12 +1,15 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - The first public release scope is Workflow Kernel only.
+- Planned first public release version is `v0.1.0`.
 - Domain skills are deferred until the public kernel, installer, and knowledge
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
 - The public installer entrypoint exists and the recommended profile has passed
-  a temporary-runtime bootstrap smoke test.
+  temporary-runtime install/bootstrap/context-gate smoke tests.
+- The local `v0.1.0` release candidate docs are prepared; push, tag, and
+  release publication are pending maintainer review.
 
 Completed
 - Public repository scaffold created with MIT license.
@@ -21,16 +24,19 @@ Completed
   profiles.
 - Recommended profile validated in copy mode against a temporary runtime.
 - Bootstrap smoke test passed from a temporary runtime install.
+- Public `README.zh-CN.md` updated as the first-release Chinese entrypoint.
+- Release readiness docs now record the `v0.1.0` version, installer fallback
+  metadata behavior, and duplicated helper script review.
+- Public high-risk audit refresh found no matches after release hardening.
 
 Next Actions
-- Decide first release versioning and first-pass Chinese documentation scope.
-- Review duplicate helper scripts between `project-bootstrap` assets and
-  top-level `knowledge-hub/scripts`.
-- Do not push until explicitly requested.
+- Maintainer review of the local release candidate.
+- Re-run audit and smoke test if review changes the public tree.
+- Push/tag/release only when explicitly requested.
 
 Blocking Issues
 - No active blockers.
-- Final release version and live runtime cutover timing are not decided yet.
+- Live runtime cutover timing is not decided and is outside this public repo.
 
 Last Updated
 - 2026-05-07
