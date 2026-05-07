@@ -5,22 +5,28 @@ Current State
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
   in the sibling private overlay repository.
+- The private migration control plane completed its P01 source inventory and
+  initial screening phase; public extraction has not started yet.
 
 Completed
 - Public repository scaffold created with MIT license.
 - Public roadmap, architecture, and language policy skeletons created.
 - Public project memory initialized from the current project-bootstrap template.
+- Public memory updated with public-safe P01 migration status.
 
 Next Actions
-- Complete public-safe architecture documentation.
-- Migrate Workflow Kernel skills from the current runtime source.
-- Add skill metadata for category, stability, scope, and domain boundaries.
+- Extract public-safe Workflow Kernel skills into `skills/`.
+- Add public skill taxonomy metadata for category, stability, and scope.
+- Add or refine public knowledge templates and generic scripts.
 - Design installer profiles for minimal, recommended, full, and dev installs.
 - Validate installation in a temporary runtime before touching any live runtime.
+- Run a sensitive information audit against the public tree before committing
+  extracted release-candidate content.
 
 Blocking Issues
 - No active blockers.
-- Before public push or release, run a sensitive information audit.
+- First release versioning and first-pass Chinese public documentation scope are
+  still open decisions.
 
 Last Updated
 - 2026-05-07

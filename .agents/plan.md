@@ -1,13 +1,17 @@
 # Active Plan
 
 Active Spec
-- `none`
+- `none in public repository`
 
 Current Task
-- Initialize public repository memory and baseline version control.
+- Await sanitized Workflow Kernel extraction from the private migration control
+  workflow.
 
 This Session
-- [x] Bootstrap public project memory.
 - [x] Keep public engineering memory English-first.
-- [x] Exclude runtime-specific hub lock data from public version control.
-- [ ] Start a durable migration spec before extracting Workflow Kernel files.
+- [x] Record public-safe P01 migration status.
+- [ ] Extract Workflow Kernel files after private inventory decisions are applied.
+- [ ] Run public-tree sensitive scan before committing extracted content.
+
+Notes
+- Do not store private mappings, local paths, or sensitive audit findings here.
