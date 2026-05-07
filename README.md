@@ -26,4 +26,17 @@ the reusable kernel only; domain-specific skills are intentionally deferred.
 ## Status
 
 The Workflow Kernel has been imported into this public repository. The public
-quick start and installer are not ready yet.
+installer is available for temporary-runtime validation; final release readiness
+work is still in progress.
+
+## Quick Start Preview
+
+```powershell
+.\scripts\install.ps1 -Profile recommended
+```
+
+For safe testing, install into a temporary runtime first:
+
+```powershell
+.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+```

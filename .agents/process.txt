@@ -5,30 +5,29 @@ Current State
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
-- The public Workflow Kernel extraction phase is complete; installer/profile
-  work has not started yet.
+- The public installer entrypoint exists and has been validated against a
+  temporary runtime target.
 
 Completed
 - Public repository scaffold created with MIT license.
 - Public roadmap, architecture, and language policy skeletons created.
-- Public project memory initialized from the current project-bootstrap template.
-- Public memory updated with public-safe P01 migration status.
 - Workflow Kernel skills imported under `skills/`.
 - Public knowledge hub templates, selected scripts, and one generic workflow
   experience entry imported.
 - Kernel skill taxonomy metadata added.
+- `scripts/install.ps1` added with `minimal`, `recommended`, `full`, and `dev`
+  profiles.
+- Recommended profile validated in copy mode against a temporary runtime.
 
 Next Actions
-- Design installer profiles for minimal, recommended, full, and dev installs.
-- Add the public quick-start installer entrypoint.
-- Validate installation in a temporary runtime before touching any live runtime.
-- Run a sensitive information audit against the public tree before committing
-  installer/profile release-candidate content.
+- Prepare first release readiness notes and final public audit.
+- Decide first release versioning and first-pass Chinese documentation scope.
+- Optionally run a bootstrap smoke test using the temporary runtime install.
+- Do not push until explicitly requested.
 
 Blocking Issues
 - No active blockers.
-- First release versioning and first-pass Chinese public documentation scope are
-  still open decisions.
+- Final release readiness is not complete yet.
 
 Last Updated
 - 2026-05-07
