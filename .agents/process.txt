@@ -5,8 +5,8 @@ Current State
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
-- The public installer entrypoint exists and has been validated against a
-  temporary runtime target.
+- The public installer entrypoint exists and the recommended profile has passed
+  a temporary-runtime bootstrap smoke test.
 
 Completed
 - Public repository scaffold created with MIT license.
@@ -20,16 +20,17 @@ Completed
 - `scripts/install.ps1` added with `minimal`, `recommended`, `full`, and `dev`
   profiles.
 - Recommended profile validated in copy mode against a temporary runtime.
+- Bootstrap smoke test passed from a temporary runtime install.
 
 Next Actions
-- Prepare first release readiness notes and final public audit.
 - Decide first release versioning and first-pass Chinese documentation scope.
-- Optionally run a bootstrap smoke test using the temporary runtime install.
+- Review duplicate helper scripts between `project-bootstrap` assets and
+  top-level `knowledge-hub/scripts`.
 - Do not push until explicitly requested.
 
 Blocking Issues
 - No active blockers.
-- Final release readiness is not complete yet.
+- Final release version and live runtime cutover timing are not decided yet.
 
 Last Updated
 - 2026-05-07

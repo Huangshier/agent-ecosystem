@@ -10,13 +10,14 @@ Status: not release-ready yet.
 - One public-safe workflow experience entry is indexed.
 - Public installer supports `minimal`, `recommended`, `full`, and `dev` profiles.
 - Recommended profile has been validated against a temporary runtime in copy mode.
+- Recommended profile has been smoke-tested by bootstrapping a new project from
+  a temporary runtime install.
 
 ## Required Before First Public Release
 
 - Decide the first public version number.
 - Decide whether Chinese public documentation ships in the first release.
 - Run a final sensitive information audit over the public tree.
-- Run a bootstrap smoke test from a temporary runtime install.
 - Review duplicated knowledge-hub helper scripts in `project-bootstrap` assets
   and top-level `knowledge-hub/scripts`.
 - Confirm installer link/junction fallback metadata behavior.

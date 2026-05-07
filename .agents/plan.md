@@ -4,19 +4,21 @@ Active Spec
 - `none in public repository`
 
 Current Task
-- Release readiness and final audit preparation are complete for this migration pass.
+- Temporary-runtime bootstrap smoke test is complete; next public work depends
+  on release/versioning and runtime cutover decisions.
 
 Session Status
 - Public engineering memory remains English-first.
 - Workflow Kernel files are present under `skills/`.
-- Public-tree sensitive scans were run during extraction and installer phases.
-- Public installer/profile entrypoint exists and recommended profile was validated against a temporary runtime target.
-- Public release readiness, contributing, and security docs have been added.
+- Public installer/profile entrypoint exists.
+- Recommended profile was validated against a temporary runtime target.
+- A new project was bootstrapped from the temporary runtime install.
+- Public-tree sensitive audit refresh found no high-risk matches.
 
 Next Work
 - Decide first release versioning.
 - Decide whether first release ships Chinese public docs.
-- Run a bootstrap smoke test from a temporary runtime install.
+- Review duplicate helper script placement.
 - Push only when explicitly requested.
 
 Notes
