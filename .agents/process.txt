@@ -10,7 +10,9 @@ Current State
 
 Completed
 - Public repository scaffold created with MIT license.
+- Public contributing and security policy files added.
 - Public roadmap, architecture, and language policy skeletons created.
+- Public release readiness checklist added.
 - Workflow Kernel skills imported under `skills/`.
 - Public knowledge hub templates, selected scripts, and one generic workflow
   experience entry imported.

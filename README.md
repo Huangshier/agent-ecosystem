@@ -23,6 +23,12 @@ the reusable kernel only; domain-specific skills are intentionally deferred.
 - Runtime layer: generated under `$HOME/.agents` by the installer.
 - Project local layer: each project's `.agents/` and `docs/specs/` directories.
 
+## Project Docs
+
+- [Architecture](docs/architecture.md)
+- [Language policy](docs/language-policy.md)
+- [Release readiness](docs/release-readiness.md)
+
 ## Status
 
 The Workflow Kernel has been imported into this public repository. The public
