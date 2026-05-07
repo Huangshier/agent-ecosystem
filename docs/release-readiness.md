@@ -1,8 +1,9 @@
 # Release Readiness
 
-Status: local `v0.1.0` release candidate preparation.
+Status: `v0.1.0` published.
 
-Push, tag, and release publication are pending maintainer review.
+The initial public release has passed the local validation gate and has been
+published as `v0.1.0`.
 
 ## Completed
 
@@ -32,13 +33,13 @@ Push, tag, and release publication are pending maintainer review.
 - Latest local high-risk public audit found no matches, and public PowerShell
   scripts parsed successfully.
 
-## Required Before Publishing
+## Required Before Future Publishing
 
 - Re-run the final sensitive information audit if review changes the public tree.
 - Re-run `scripts/validate-release.ps1` if installer, skill, template, release
   documentation, or audit rules change during review.
 - Review the final local diff.
-- Push, tag `v0.1.0`, and publish release notes only after maintainer approval.
+- Push, tag, and publish release notes only after maintainer approval.
 
 ## Current Quick Start
 

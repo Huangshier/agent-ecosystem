@@ -1,19 +1,18 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - The first public release scope is Workflow Kernel only.
-- Planned first public release version is `v0.1.0`.
+- Current public release version is `v0.1.0`.
 - Domain skills are deferred until the public kernel, installer, and knowledge
   templates are stable.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
 - The public installer entrypoint exists and the recommended profile has passed
   temporary-runtime install/bootstrap/context-gate smoke tests.
-- The local `v0.1.0` release candidate now has a reusable release validation
-  gate and has passed local release validation.
+- The `v0.1.0` release has a reusable release validation gate and has passed
+  local release validation.
 - Maintainer review follow-up documentation has been added for profile behavior
   and the initial public experience backfill.
-- Push, tag, and release publication are pending maintainer review and explicit
-  approval.
+- Push, tag, and release publication are in progress for `v0.1.0`.
 
 Completed
 - Public repository scaffold created with MIT license.
@@ -41,10 +40,9 @@ Completed
 - Public high-risk audit refresh found no matches after release hardening.
 
 Next Actions
-- Await explicit push/tag/release instruction for `v0.1.0`.
+- Complete `v0.1.0` push/tag/GitHub Release publication.
 - Re-run `scripts/validate-release.ps1` if any further public release input
-  changes.
-- Push/tag/release only when explicitly requested.
+  changes before publishing.
 
 Blocking Issues
 - No active blockers.

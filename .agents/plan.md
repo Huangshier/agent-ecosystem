@@ -4,7 +4,7 @@ Active Spec
 - `none in public repository`
 
 Current Task
-- Local `v0.1.0` maintainer review follow-up documentation is complete.
+- Publish `v0.1.0`.
 
 Session Status
 - Public engineering memory remains English-first.
@@ -24,9 +24,8 @@ Session Status
   documented in public release-facing docs.
 
 Next Work
-- Await explicit push/tag/release instruction for `v0.1.0`.
-- Re-run `scripts/validate-release.ps1` if any further public release input changes.
-- Push/tag/release only when explicitly requested.
+- Run final release validation.
+- Push main, tag `v0.1.0`, and publish GitHub Release.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

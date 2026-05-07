@@ -8,7 +8,7 @@ The project is organized around a small Workflow Kernel, a layered knowledge
 hub, and project-local memory templates. The first public release is focused on
 the reusable kernel only; domain-specific skills are intentionally deferred.
 
-Planned first public release: `v0.1.0`.
+Current release: `v0.1.0`.
 
 ## First Release Scope
 
@@ -36,10 +36,9 @@ Planned first public release: `v0.1.0`.
 
 ## Status
 
-The Workflow Kernel has been imported into this public repository. The public
-installer and recommended profile have passed temporary-runtime validation.
-The repository is being prepared as a local `v0.1.0` release candidate; push,
-tag, and release publication are still pending maintainer review.
+The initial `v0.1.0` public release is available. The Workflow Kernel, public
+installer, public knowledge templates, and release validation workflow have
+passed temporary-runtime validation.
 
 ## Quick Start
 
@@ -59,7 +58,7 @@ The generated runtime manifest records the mode used for each installed item.
 
 ## Profiles
 
-The `v0.1.0` release candidate provides four public profile names:
+The `v0.1.0` release provides four public profile names:
 
 - `minimal`: installs the bootstrap skill and public knowledge hub templates.
 - `recommended`: installs the Workflow Kernel and public knowledge hub.

@@ -8,6 +8,7 @@
   and duplicate helper hashes.
 - The local `v0.1.0` release candidate passed release validation on 2026-05-07
   with 12 pass, 0 fail, 0 warn, and 1 deferred non-blocking behavior check.
+- `v0.1.0` publication was explicitly requested on 2026-05-07.
 - For `v0.1.0`, `full` and `dev` are public profile placeholders that install
   the same content as `recommended`; future releases may add public domain
   packs or developer maintenance tooling.

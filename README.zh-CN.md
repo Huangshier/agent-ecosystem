@@ -4,8 +4,8 @@
 
 公开文档以英文优先；本文件提供第一版 public release 的简短中文入口。
 
-计划中的第一版公开版本是 `v0.1.0`。当前仓库已进入本地 release candidate
-准备状态，尚未 push、tag 或发布 release。
+当前公开版本是 `v0.1.0`。第一版公开 release 包含 Workflow Kernel、public
+installer、public knowledge templates 和 release validation workflow。
 
 ## 第一版公开范围
 
@@ -36,7 +36,7 @@
 
 ## Profiles
 
-`v0.1.0` release candidate 提供四个公开 profile 名称：
+`v0.1.0` release 提供四个公开 profile 名称：
 
 - `minimal`：安装 bootstrap skill 和 public knowledge hub templates。
 - `recommended`：安装 Workflow Kernel 和 public knowledge hub。
