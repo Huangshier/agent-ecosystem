@@ -10,6 +10,8 @@ Current State
   temporary-runtime install/bootstrap/context-gate smoke tests.
 - The local `v0.1.0` release candidate now has a reusable release validation
   gate and has passed local release validation.
+- Maintainer review follow-up documentation has been added for profile behavior
+  and the initial public experience backfill.
 - Push, tag, and release publication are pending maintainer review and explicit
   approval.
 
@@ -32,12 +34,16 @@ Completed
 - Public `scripts/validate-release.ps1` and `docs/release-process.md` added.
 - Release validation passed locally for the `v0.1.0` candidate: 12 pass,
   0 fail, 0 warn, 1 deferred non-blocking behavior check.
+- Release-facing documentation now explains that `full` and `dev` currently
+  install the same public content as `recommended`.
+- The public experience README now explains that initial reindexed backfill
+  entries intentionally omit local source paths and private migration details.
 - Public high-risk audit refresh found no matches after release hardening.
 
 Next Actions
-- Maintainer review of the validated local release candidate.
-- Re-run `scripts/validate-release.ps1` if review changes installer, skill,
-  template, release documentation, or audit-rule files.
+- Await explicit push/tag/release instruction for `v0.1.0`.
+- Re-run `scripts/validate-release.ps1` if any further public release input
+  changes.
 - Push/tag/release only when explicitly requested.
 
 Blocking Issues

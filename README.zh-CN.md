@@ -34,6 +34,18 @@
 安装器会在目标 runtime 下生成 `install-manifest.json`，记录 profile、skills 和
 每个安装项使用的模式。
 
+## Profiles
+
+`v0.1.0` release candidate 提供四个公开 profile 名称：
+
+- `minimal`：安装 bootstrap skill 和 public knowledge hub templates。
+- `recommended`：安装 Workflow Kernel 和 public knowledge hub。
+- `full`：当前安装内容与 `recommended` 相同。
+- `dev`：当前安装内容与 `recommended` 相同。
+
+`full` 和 `dev` 会在 kernel release 稳定后用于后续 public domain packs 和
+developer maintenance tooling。
+
 ## 边界
 
 - domain skills 暂不进入第一版公开 release。

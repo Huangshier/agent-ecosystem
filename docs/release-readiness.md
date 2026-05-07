@@ -11,6 +11,8 @@ Push, tag, and release publication are pending maintainer review.
 - Public knowledge hub templates and selected generic maintenance scripts are present.
 - One public-safe workflow experience entry is indexed.
 - Public installer supports `minimal`, `recommended`, `full`, and `dev` profiles.
+- `full` and `dev` are documented as `v0.1.0` placeholders that currently
+  install the same public content as `recommended`.
 - Recommended profile has been validated against a temporary runtime in copy mode.
 - Recommended profile has been smoke-tested by bootstrapping a new project from
   a temporary runtime install.
@@ -23,6 +25,8 @@ Push, tag, and release publication are pending maintainer review.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
+- The initial public experience entry is documented as a public-safe reindexed
+  backfill with local source paths intentionally omitted from `index.json`.
 - Installer fallback metadata behavior is documented: the runtime
   `install-manifest.json` records the install mode used for each item.
 - Latest local high-risk public audit found no matches, and public PowerShell

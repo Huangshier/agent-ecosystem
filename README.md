@@ -56,3 +56,15 @@ For safe testing, install into a temporary runtime first:
 The default install mode prefers links (`Junction` on Windows,
 `SymbolicLink` elsewhere) and falls back to copy mode if link creation fails.
 The generated runtime manifest records the mode used for each installed item.
+
+## Profiles
+
+The `v0.1.0` release candidate provides four public profile names:
+
+- `minimal`: installs the bootstrap skill and public knowledge hub templates.
+- `recommended`: installs the Workflow Kernel and public knowledge hub.
+- `full`: currently installs the same public content as `recommended`.
+- `dev`: currently installs the same public content as `recommended`.
+
+`full` and `dev` are reserved for future public domain packs and developer
+maintenance tooling after the kernel release is stable.

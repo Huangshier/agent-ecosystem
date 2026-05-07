@@ -4,6 +4,11 @@ Promoted cross-project experience files live here.
 
 Index metadata is stored in `index.json`.
 
+The first public release may include reindexed backfill entries migrated from
+the pre-release knowledge hub. Their index records intentionally omit local
+source paths and private migration details; the Markdown experience file is the
+public source of truth.
+
 ## Retrieval Rule
 - Do not preload this directory into normal project sessions.
 - Search `index.json` first and open only matching experience entries when the issue looks related to toolchains, host environment, shell behavior, build systems, caches, ports, permissions, path handling, or other cross-project workflow failures.
