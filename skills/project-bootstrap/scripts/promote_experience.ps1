@@ -9,6 +9,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Ensure-Dir {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -145,14 +165,14 @@ function Test-RegistryConsistency {
 }
 
 $projectFull = (Resolve-Path -LiteralPath $ProjectDir).Path
-$sourceExperienceDir = Join-Path $projectFull ".agents\context\experience"
+$sourceExperienceDir = Join-PathParts $projectFull ".agents" "context" "experience"
 if (-not (Test-Path -LiteralPath $sourceExperienceDir)) {
     throw "Project experience directory not found: $sourceExperienceDir"
 }
 
-$hubExperienceDir = Join-Path $HubDir "knowledge\experience"
+$hubExperienceDir = Join-PathParts $HubDir "knowledge" "experience"
 Ensure-Dir -Path $hubExperienceDir
-$registryPath = Join-Path $hubExperienceDir "index.json"
+$registryPath = Join-PathParts $hubExperienceDir "index.json"
 $registry = Load-Registry -RegistryPath $registryPath
 $entries = @($registry.entries)
 
@@ -232,7 +252,8 @@ foreach ($fileItem in $sourceFiles) {
         $title = $baseName
     }
 
-    $relativePath = $fileItem.FullName.Substring($projectFull.Length).TrimStart("\")
+    $relativePath = $fileItem.FullName.Substring($projectFull.Length).TrimStart([char[]]"\/")
+    $relativePath = $relativePath -replace "\\", "/"
 
     # Extract keywords from ## Keywords section, fallback to title words
     $keywords = @()

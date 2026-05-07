@@ -16,6 +16,26 @@ function Resolve-ProjectRoot {
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Add-FileIfExists {
     param(
         [System.Collections.Generic.List[object]]$List,
@@ -55,7 +75,7 @@ function Find-SpecReferences {
     }
 
     return $refs | ForEach-Object {
-        $candidate = Join-Path $Root ($_ -replace '/', [IO.Path]::DirectorySeparatorChar)
+        $candidate = Join-PathParts $Root $_
         if (Test-Path -LiteralPath $candidate) {
             (Resolve-Path -LiteralPath $candidate).Path
         }
@@ -131,11 +151,11 @@ $root = Resolve-ProjectRoot $ProjectRoot
 $contextItems = New-Object 'System.Collections.Generic.List[object]'
 $warnings = New-Object 'System.Collections.Generic.List[string]'
 
-$rootAgents = Join-Path $root "AGENTS.md"
-$agentGuide = Join-Path $root ".agents\AGENTS.md"
-$processPath = Join-Path $root ".agents\process.txt"
-$planPath = Join-Path $root ".agents\plan.md"
-$notesPath = Join-Path $root ".agents\notes.md"
+$rootAgents = Join-PathParts $root "AGENTS.md"
+$agentGuide = Join-PathParts $root ".agents" "AGENTS.md"
+$processPath = Join-PathParts $root ".agents" "process.txt"
+$planPath = Join-PathParts $root ".agents" "plan.md"
+$notesPath = Join-PathParts $root ".agents" "notes.md"
 
 Add-FileIfExists $contextItems $rootAgents "hot" "Root project guidance"
 Add-FileIfExists $contextItems $agentGuide "hot" "Primary project agent guide"
@@ -151,7 +171,7 @@ foreach ($spec in $specRefs) {
     }
 }
 
-$contextDir = Join-Path $root ".agents\context"
+$contextDir = Join-PathParts $root ".agents" "context"
 foreach ($file in Get-ContextDiscoveryFiles -ContextDir $contextDir -IncludeAllTemplates $IncludeTemplates.IsPresent) {
     $reason = if ($IncludeTemplates.IsPresent) { "Full context audit requested" } else { "Context discovery index; open matching entries on demand" }
     Add-FileIfExists $contextItems $file.FullName "cold" $reason

@@ -1,0 +1,39 @@
+name: Release validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run release validator
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
+          ./scripts/validate-release.ps1 -ScratchRoot $scratch -Json |
+            Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ matrix.os }}
+          path: ${{ runner.temp }}/agent-ecosystem-release-validation
+          if-no-files-found: ignore

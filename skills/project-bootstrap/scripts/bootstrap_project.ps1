@@ -11,6 +11,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Ensure-Dir {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -93,9 +113,9 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) {
     throw "Project directory does not exist: $ProjectDir"
 }
 
-$templateRoot = Join-Path $HubDir "templates"
-$projectRootTemplate = Join-Path $templateRoot "project-root"
-$projectAgentTemplate = Join-Path $templateRoot "project-agent"
+$templateRoot = Join-PathParts $HubDir "templates"
+$projectRootTemplate = Join-PathParts $templateRoot "project-root"
+$projectAgentTemplate = Join-PathParts $templateRoot "project-agent"
 
 $missingTemplateFolders = @()
 if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
@@ -106,7 +126,7 @@ if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
 }
 
 if ($missingTemplateFolders.Count -gt 0) {
-    $initHubScript = Join-Path $PSScriptRoot "init_hub.ps1"
+    $initHubScript = Join-PathParts $PSScriptRoot "init_hub.ps1"
     if (Test-Path -LiteralPath $initHubScript) {
         Write-Warning ("Hub templates missing; initializing hub at {0} from bundled bootstrap assets." -f $HubDir)
         & $initHubScript -HubDir $HubDir | Out-Null
@@ -150,7 +170,7 @@ $hubCommit = "UNKNOWN"
 $hubBranch = "UNKNOWN"
 $hubRemote = ""
 $hubDirty = $false
-if (($null -ne $git) -and (Test-Path -LiteralPath (Join-Path $HubDir ".git"))) {
+if ($null -ne $git) {
     try {
         $commitProbe = (& git -C $HubDir rev-parse --verify HEAD 2>$null)
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commitProbe)) {
@@ -206,7 +226,7 @@ Write-Output "Hub: $HubDir"
 Write-Output ("Template files copied: {0}, updated: {1}, skipped: {2}" -f $copiedCount, $updatedCount, $skippedCount)
 Write-Output "Lock file: $lockPath"
 
-$memoryUpgradeScript = Join-Path $PSScriptRoot "memory_upgrade.ps1"
+$memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"
 if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent) {
     if (-not (Test-Path -LiteralPath $memoryUpgradeScript)) {
         throw "Memory upgrade helper not found: $memoryUpgradeScript"

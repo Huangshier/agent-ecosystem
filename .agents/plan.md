@@ -1,31 +1,21 @@
 # Active Plan
 
 Active Spec
-- `none in public repository`
+- Private control work item:
+  `release-validation-hardening` (tracked outside this public repository)
 
 Current Task
-- `v0.1.0` is published.
+- Release validation hardening for the public repository.
 
 Session Status
-- Public engineering memory remains English-first.
-- Workflow Kernel files are present under `skills/`.
-- Public installer/profile entrypoint exists.
-- Recommended profile was validated against a temporary runtime target.
-- A new project was bootstrapped from the temporary runtime install.
-- Public-tree sensitive audit refresh found no high-risk matches.
-- First-release Chinese entrypoint exists at `README.zh-CN.md`.
-- Release readiness docs record installer fallback metadata and duplicate
-  helper script review.
-- Release validation workflow exists at `scripts/validate-release.ps1`.
-- Release process guidance exists at `docs/release-process.md`.
-- Latest local release validation passed with 12 pass, 0 fail, 0 warn, and
-  1 deferred non-blocking behavior check.
-- Profile placeholder behavior and initial reindexed experience backfill are
-  documented in public release-facing docs.
+- Public validator has been expanded and passes locally:
+  15 pass, 0 fail, 0 warn, 1 deferred.
+- CI workflow has been added:
+  `.github/workflows/release-validation.yml`.
+- Public release process/readiness docs have been updated.
 
 Next Work
-- No active public release task.
-- Future public changes should start a new maintenance or release work item.
+- Final memory diagnose and local commits.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

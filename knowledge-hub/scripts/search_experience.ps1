@@ -8,6 +8,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Get-PreventionRule {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -35,8 +55,8 @@ function Get-PreventionRule {
     return (($result | Select-Object -First 6) -join " ")
 }
 
-$experienceDir = Join-Path $HubDir "knowledge\experience"
-$indexPath = Join-Path $experienceDir "index.json"
+$experienceDir = Join-PathParts $HubDir "knowledge" "experience"
+$indexPath = Join-PathParts $experienceDir "index.json"
 if (-not (Test-Path -LiteralPath $indexPath)) {
     throw "Experience index not found: $indexPath"
 }

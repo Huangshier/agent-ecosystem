@@ -37,6 +37,26 @@ function Assert-PathInsideRoot {
     }
 }
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Get-PublicSkillNames {
     param([string]$SelectedProfile)
 
@@ -118,13 +138,13 @@ $items = New-Object 'System.Collections.Generic.List[object]'
 
 New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
 
-$hubSource = Join-Path $repoRoot "knowledge-hub"
-$hubDestination = Join-Path $targetRoot "knowledge-hub"
+$hubSource = Join-PathParts $repoRoot "knowledge-hub"
+$hubDestination = Join-PathParts $targetRoot "knowledge-hub"
 $items.Add((Install-Directory -Name "knowledge-hub" -Source $hubSource -Destination $hubDestination))
 
 foreach ($skillName in $skillNames) {
-    $skillSource = Join-Path $repoRoot "skills\$skillName"
-    $skillDestination = Join-Path $targetRoot "skills\$skillName"
+    $skillSource = Join-PathParts $repoRoot "skills" $skillName
+    $skillDestination = Join-PathParts $targetRoot "skills" $skillName
     $items.Add((Install-Directory -Name "skills/$skillName" -Source $skillSource -Destination $skillDestination))
 }
 

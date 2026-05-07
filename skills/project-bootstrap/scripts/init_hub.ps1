@@ -6,6 +6,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Ensure-Dir {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -93,8 +113,8 @@ function Sync-File {
 }
 
 $skillRoot = Split-Path -Parent $PSScriptRoot
-$templateRoot = Join-Path $skillRoot "assets\knowledge-hub-template"
-$rebuildScript = Join-Path $PSScriptRoot "rebuild_experience_index.ps1"
+$templateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template"
+$rebuildScript = Join-PathParts $PSScriptRoot "rebuild_experience_index.ps1"
 
 if (-not (Test-Path -LiteralPath $templateRoot)) {
     throw "Hub template not found: $templateRoot"
@@ -103,8 +123,8 @@ if (-not (Test-Path -LiteralPath $templateRoot)) {
 Ensure-Dir -Path $HubDir
 
 # Preserve existing experience index metadata before sync may overwrite it
-$experienceDir = Join-Path $HubDir "knowledge\experience"
-$indexPath = Join-Path $experienceDir "index.json"
+$experienceDir = Join-PathParts $HubDir "knowledge" "experience"
+$indexPath = Join-PathParts $experienceDir "index.json"
 $indexBackup = ""
 if ($Overwrite.IsPresent -and (Test-Path -LiteralPath $indexPath)) {
     $indexBackup = Join-Path $env:TEMP "hub_index_backup_$([guid]::NewGuid().ToString('N')).json"
@@ -116,7 +136,7 @@ $sync = Sync-Tree -SourceRoot $templateRoot -DestinationRoot $HubDir -AllowOverw
 $runtimeScriptCopied = 0
 $runtimeScriptUpdated = 0
 $runtimeScriptSkipped = 0
-$hubScriptsDir = Join-Path $HubDir "scripts"
+$hubScriptsDir = Join-PathParts $HubDir "scripts"
 foreach ($scriptName in @("promote_experience.ps1", "rebuild_experience_index.ps1")) {
     $sourceScript = Join-Path $PSScriptRoot $scriptName
     if (-not (Test-Path -LiteralPath $sourceScript)) {

@@ -4,10 +4,15 @@
 - Include evidence source where possible.
 - The public release validation gate is `scripts/validate-release.ps1`; it
   validates structure, metadata, installer profiles, copy/link modes, runtime
-  smoke checks, experience search, audit checks, parser checks, JSON parsing,
-  and duplicate helper hashes.
+  smoke checks, installer behavior, hub.lock drift checks, experience search,
+  experience promotion closure, audit checks, parser checks, JSON parsing, and
+  duplicate helper hashes.
 - The local `v0.1.0` release candidate passed release validation on 2026-05-07
   with 12 pass, 0 fail, 0 warn, and 1 deferred non-blocking behavior check.
+- The hardened local release validator passed on 2026-05-08 with 15 pass,
+  0 fail, 0 warn, and 1 deferred non-blocking behavior check.
+- CI release validation workflow exists at
+  `.github/workflows/release-validation.yml` for Windows, Ubuntu, and macOS.
 - `v0.1.0` publication was explicitly requested on 2026-05-07.
 - `v0.1.0` GitHub Release:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.1.0

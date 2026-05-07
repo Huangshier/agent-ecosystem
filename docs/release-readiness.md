@@ -1,6 +1,7 @@
 # Release Readiness
 
-Status: `v0.1.0` published.
+Status: `v0.1.0` published; release validation hardening is in progress for the
+next maintenance/release cycle.
 
 The initial public release has passed the local validation gate and has been
 published as `v0.1.0`.
@@ -21,8 +22,8 @@ published as `v0.1.0`.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local release validation for the `v0.1.0` candidate passed with
-  12 checks passing, no failures, and one deferred non-blocking behavior check.
+- Latest local hardened release validation passed with 15 checks passing, no
+  failures, and one deferred non-blocking behavior check.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
@@ -32,6 +33,9 @@ published as `v0.1.0`.
   `install-manifest.json` records the install mode used for each item.
 - Latest local high-risk public audit found no matches, and public PowerShell
   scripts parsed successfully.
+- CI release validation workflow is present at
+  `.github/workflows/release-validation.yml` and is configured for Windows,
+  Ubuntu, and macOS runners.
 
 ## Required Before Future Publishing
 
@@ -59,6 +63,12 @@ Full release validation form:
 .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
+Machine-readable output form:
+
+```powershell
+.\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+```
+
 ## Installer Metadata
 
 By default, the installer prefers link-based installs: `Junction` on Windows
@@ -78,3 +88,15 @@ documentation may intentionally contain safety terms.
 
 The release validator automates the current audit baseline and records a
 machine-readable result in the scratch directory.
+
+## Hardened Validation Coverage
+
+The release validator now covers:
+
+- profile matrix installs in copy and link modes
+- recommended runtime smoke for copy and link installs
+- no-`-Force` conflict behavior and forced reinstall behavior
+- `hub.lock` drift checking with a temporary git-backed hub
+- experience promote -> rebuild -> search closure using a temporary hub copy
+- duplicate helper hashes, parser checks, JSON parsing, public structure,
+  sensitive-pattern audit, and language policy templates

@@ -2,50 +2,27 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - The first public release scope is Workflow Kernel only.
 - Current public release version is `v0.1.0`.
-- Domain skills are deferred until the public kernel, installer, and knowledge
-  templates are stable.
+- Public engineering memory is English-first.
 - Private migration state, local source mappings, and sensitive audit notes live
   outside this repository.
-- The public installer entrypoint exists and the recommended profile has passed
-  temporary-runtime install/bootstrap/context-gate smoke tests.
-- The `v0.1.0` release has a reusable release validation gate and has passed
-  local release validation.
-- Maintainer review follow-up documentation has been added for profile behavior
-  and the initial public experience backfill.
-- `v0.1.0` has been pushed, tagged, and published as a GitHub Release.
+- Release validation hardening is in progress for the next maintenance/release
+  cycle.
 
 Completed
-- Public repository scaffold created with MIT license.
-- Public contributing and security policy files added.
-- Public roadmap, architecture, and language policy skeletons created.
-- Public release readiness checklist added.
-- Workflow Kernel skills imported under `skills/`.
-- Public knowledge hub templates, selected scripts, and one generic workflow
-  experience entry imported.
-- Kernel skill taxonomy metadata added.
-- `scripts/install.ps1` added with `minimal`, `recommended`, `full`, and `dev`
-  profiles.
-- Recommended profile validated in copy mode against a temporary runtime.
-- Bootstrap smoke test passed from a temporary runtime install.
-- Public `README.zh-CN.md` updated as the first-release Chinese entrypoint.
-- Release readiness docs now record the `v0.1.0` version, installer fallback
-  metadata behavior, and duplicated helper script review.
-- Public `scripts/validate-release.ps1` and `docs/release-process.md` added.
-- Release validation passed locally for the `v0.1.0` candidate: 12 pass,
-  0 fail, 0 warn, 1 deferred non-blocking behavior check.
-- Release-facing documentation now explains that `full` and `dev` currently
-  install the same public content as `recommended`.
-- The public experience README now explains that initial reindexed backfill
-  entries intentionally omit local source paths and private migration details.
-- Public high-risk audit refresh found no matches after release hardening.
+- `v0.1.0` has been pushed, tagged, and published as a GitHub Release.
+- Public `scripts/validate-release.ps1` exists as the reusable release gate.
+- Latest local hardened validation passed with 15 pass, 0 fail, 0 warn, and
+  1 deferred non-blocking behavior check.
+- CI release validation workflow has been added for Windows, Ubuntu, and macOS.
+- Validator coverage now includes link runtime smoke, installer behavior,
+  hub.lock drift check, and experience promote closure.
 
 Next Actions
-- Future public changes should start a new release or maintenance work item.
-- Runtime cutover timing is tracked outside this public repository.
+- Commit validation hardening after memory and private evidence are updated.
+- Future public changes should start a maintenance or release work item.
 
 Blocking Issues
 - No active blockers.
-- Live runtime cutover timing is not decided and is outside this public repo.
 
 Last Updated
-- 2026-05-07
+- 2026-05-08

@@ -4,6 +4,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Load-Registry {
     param([string]$RegistryPath)
 
@@ -113,12 +133,12 @@ function Get-ExperienceKeywords {
     return $words
 }
 
-$hubExperienceDir = Join-Path $HubDir "knowledge\experience"
+$hubExperienceDir = Join-PathParts $HubDir "knowledge" "experience"
 if (-not (Test-Path -LiteralPath $hubExperienceDir)) {
     throw "Hub experience directory not found: $hubExperienceDir"
 }
 
-$registryPath = Join-Path $hubExperienceDir "index.json"
+$registryPath = Join-PathParts $hubExperienceDir "index.json"
 $existingRegistry = Load-Registry -RegistryPath $registryPath
 $existingEntries = @($existingRegistry.entries)
 

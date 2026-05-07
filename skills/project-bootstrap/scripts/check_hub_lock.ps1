@@ -5,6 +5,26 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Join-PathParts {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
+    )
+
+    $path = $Root
+    foreach ($child in $Children) {
+        if ([string]::IsNullOrWhiteSpace($child)) {
+            continue
+        }
+        foreach ($segment in @($child -split '[\\/]+')) {
+            if (-not [string]::IsNullOrWhiteSpace($segment)) {
+                $path = Join-Path $path $segment
+            }
+        }
+    }
+    return $path
+}
+
 function Get-TrimmedString {
     param($Value)
 
@@ -36,9 +56,9 @@ function Get-TemplateTreeHash {
         [string]$HubRoot
     )
 
-    $templateRoot = Join-Path $HubRoot "templates"
-    $projectRootTemplate = Join-Path $templateRoot "project-root"
-    $projectAgentTemplate = Join-Path $templateRoot "project-agent"
+    $templateRoot = Join-PathParts $HubRoot "templates"
+    $projectRootTemplate = Join-PathParts $templateRoot "project-root"
+    $projectAgentTemplate = Join-PathParts $templateRoot "project-agent"
     $records = @()
     $roots = @(
         @{ Label = "project-root"; Path = $projectRootTemplate },
@@ -79,7 +99,7 @@ $hasDrift = $false
 
 foreach ($project in $ProjectDir) {
     $projectFull = (Resolve-Path -LiteralPath $project).Path
-    $lockPath = Join-Path $projectFull ".agents\hub.lock.json"
+    $lockPath = Join-PathParts $projectFull ".agents" "hub.lock.json"
 
     Write-Output ("Project: {0}" -f $projectFull)
 
@@ -112,8 +132,8 @@ foreach ($project in $ProjectDir) {
         continue
     }
 
-    $hubGitDir = Join-Path $effectiveHubDir ".git"
-    if (-not (Test-Path -LiteralPath $hubGitDir)) {
+    $hubGitRoot = Get-GitValue -RepoDir $effectiveHubDir -GitArgs @("rev-parse", "--show-toplevel")
+    if ([string]::IsNullOrWhiteSpace($hubGitRoot)) {
         Write-Output ("Resolved hub dir: {0}" -f $effectiveHubDir)
         Write-Output "Status: hub_not_git"
         Write-Output ""
