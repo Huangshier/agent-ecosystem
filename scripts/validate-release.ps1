@@ -169,6 +169,34 @@ function Get-LineMatches {
     return @($lineMatches.ToArray())
 }
 
+function Get-CurrentPwshPath {
+    $currentProcess = Get-Process -Id $PID
+    if (-not [string]::IsNullOrWhiteSpace($currentProcess.Path)) {
+        return $currentProcess.Path
+    }
+
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -ne $pwsh -and -not [string]::IsNullOrWhiteSpace($pwsh.Source)) {
+        return $pwsh.Source
+    }
+
+    throw "Unable to locate pwsh executable for isolated negative-path checks."
+}
+
+function Invoke-IsolatedPwshScript {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    $pwshPath = Get-CurrentPwshPath
+    $output = @(& $pwshPath -NoProfile -File $ScriptPath @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    return [ordered]@{
+        exit_code = [int]$LASTEXITCODE
+        output = @($output)
+    }
+}
+
 function Test-ExactArray {
     param(
         [object[]]$Actual,
@@ -573,6 +601,123 @@ try {
         throw ("Complete spec fixture failed: {0}" -f (($positive.findings | ConvertTo-Json -Compress -Depth 5)))
     }
 
+    $loopSpec = @"
+# Work Spec
+
+- **Title**: Loop contract fixture
+- **Slug**: loop-contract-fixture
+- **Status**: Active
+- **Owner**: release validation
+- **Updated**: 2026-05-08
+
+## 1. Summary
+- Validate that loop-oriented specs can pass the lightweight validator.
+
+## 2. Current Context
+- Release validation needs a positive fixture with a Loop Contract.
+
+## 3. Goals
+- Confirm loop specs pass when required sections are present.
+
+## 4. Non-Goals
+- Do not execute the loop action.
+
+## 5. Constraints
+- Run only against temporary fixture files.
+
+## 6. Assumptions
+- The loop contract is agent-facing state, not executable code.
+
+## 7. Risks
+- A vague loop can lead to unbounded repeated work.
+
+## 8. Proposed Approach
+- Validate a bounded Loop Contract fixture.
+
+## 9. Acceptance / Evidence
+- The Loop Contract fixture passes validation.
+
+## 10. Loop Contract
+- **Variable**: retry count
+- **Source of truth**: temporary fixture text
+- **Check command**: inspect fixture
+- **Pass predicate**: retry count is below the limit
+- **Iteration action**: no-op validation fixture
+- **State record**: release validation evidence
+- **Limits**: one validation attempt
+- **Abort conditions**: missing required spec sections
+
+## 11. Execution Contract
+
+## 12. Open Questions
+- None for this fixture.
+"@
+
+    $loopPath = Join-PathParts $fixtureDir "loop-contract-spec.md"
+    Set-Content -LiteralPath $loopPath -Value $loopSpec -Encoding UTF8
+    $loopPositive = & $specValidator -SpecPath $loopPath -Json | ConvertFrom-Json
+    if (-not [bool]$loopPositive.pass) {
+        throw ("Loop Contract spec fixture failed: {0}" -f (($loopPositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
+    $chineseSpec = @"
+# 工作说明
+
+- **Title**: 中文章节 fixture
+- **Slug**: chinese-section-fixture
+- **Status**: Active
+- **Owner**: release validation
+- **Updated**: 2026-05-08
+
+## 1. 摘要
+- 验证中文章节别名可以通过轻量 spec validator。
+
+## 2. 当前上下文
+- release validation 需要覆盖中文项目记忆场景。
+
+## 3. 目标
+- 确认中文章节正例通过。
+
+## 4. 非目标
+- 不改写 fixture 文件。
+
+## 5. 约束
+- 只使用临时 fixture。
+
+## 6. 假设
+- 中文章节标题保持模板约定。
+
+## 7. 风险
+- 中文章节别名缺失会影响中文项目 spec。
+
+## 8. 方案
+- 执行 validator 并检查 pass 字段。
+
+## 9. 验收与证据
+- 中文章节 fixture 通过验证。
+
+## 10. 循环契约
+- 不适用。
+
+## 11. 执行契约
+- **Autonomy level**: bounded-autonomous
+- **Phase list**:
+  - P01: 验证中文章节 fixture。
+- **Continue rule**: fixture 通过时继续。
+- **Stop rule**: 必需章节缺失时停止。
+- **State record**: release validation evidence。
+
+## 12. 开放问题
+- 无。
+"@
+
+    $chinesePath = Join-PathParts $fixtureDir "chinese-section-spec.md"
+    Set-Content -LiteralPath $chinesePath -Value $chineseSpec -Encoding UTF8
+    $chinesePositive = & $specValidator -SpecPath $chinesePath -RequireExecutionContract -Json | ConvertFrom-Json
+    if (-not [bool]$chinesePositive.pass) {
+        throw ("Chinese section spec fixture failed: {0}" -f (($chinesePositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
     $negativeFixtures = @(
         [ordered]@{
             name = "missing-goals"
@@ -623,6 +768,10 @@ try {
     $script:evidence.spec_lite = [ordered]@{
         validator = $specValidator
         positive_fixture = $positivePath
+        positive_variants = @(
+            [ordered]@{ name = "loop-contract"; path = $loopPath },
+            [ordered]@{ name = "chinese-sections"; path = $chinesePath }
+        )
         negative_fixtures = @($negativeEvidence.ToArray())
     }
     Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts a complete spec and rejects missing goals, non-goals, acceptance, risks, and stop rule fixtures." $evidence.spec_lite
@@ -724,15 +873,23 @@ catch {
 try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
+    $batchProjectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project-batch"
+    $missingLockProject = Join-PathParts $scratchRootFull "hub-lock-missing-project"
+    $invalidHubDir = Join-PathParts $scratchRootFull "hub-lock-missing-hub"
     Assert-PathInsideRoot -Path $hubFixture -Root $scratchRootFull
     Assert-PathInsideRoot -Path $projectFixture -Root $scratchRootFull
-    foreach ($fixturePath in @($hubFixture, $projectFixture)) {
+    Assert-PathInsideRoot -Path $batchProjectFixture -Root $scratchRootFull
+    Assert-PathInsideRoot -Path $missingLockProject -Root $scratchRootFull
+    Assert-PathInsideRoot -Path $invalidHubDir -Root $scratchRootFull
+    foreach ($fixturePath in @($hubFixture, $projectFixture, $batchProjectFixture, $missingLockProject, $invalidHubDir)) {
         if (Test-Path -LiteralPath $fixturePath) {
             Remove-Item -LiteralPath $fixturePath -Recurse -Force
         }
     }
     Copy-Item -LiteralPath (Join-PathParts $repoRoot "knowledge-hub") -Destination $hubFixture -Recurse -Force
     New-Item -ItemType Directory -Force -Path $projectFixture | Out-Null
+    New-Item -ItemType Directory -Force -Path $batchProjectFixture | Out-Null
+    New-Item -ItemType Directory -Force -Path $missingLockProject | Out-Null
 
     & git -C $hubFixture init | Out-Null
     & git -C $hubFixture config user.email "release-validation@example.invalid" | Out-Null
@@ -747,6 +904,7 @@ try {
 
     $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $projectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
+    & $bootstrapScript -ProjectDir $batchProjectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
     $checkHubLockScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "check_hub_lock.ps1"
     $hubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture -HubDir $hubFixture)
     $hubLockStatusLine = @($hubLockOutput | Where-Object { $_ -match '^Status:\s+' } | Select-Object -Last 1)
@@ -754,10 +912,45 @@ try {
         throw ("hub.lock drift check did not report in_sync. Output: {0}" -f ($hubLockOutput -join " | "))
     }
 
+    $batchHubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture,$batchProjectFixture -HubDir $hubFixture)
+    $batchInSyncCount = @($batchHubLockOutput | Where-Object { $_ -match '^Status:\s+in_sync' }).Count
+    if ($batchInSyncCount -ne 2) {
+        throw ("hub.lock batch check did not report two in_sync projects. Output: {0}" -f ($batchHubLockOutput -join " | "))
+    }
+
+    function Assert-HubLockNegativeCase {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [Parameter(Mandatory = $true)][string[]]$Arguments,
+            [Parameter(Mandatory = $true)][string]$ExpectedStatus
+        )
+
+        $result = Invoke-IsolatedPwshScript -ScriptPath $checkHubLockScript -Arguments $Arguments
+        $statusMatched = @($result.output | Where-Object { $_ -match ("^Status:\s+{0}$" -f [regex]::Escape($ExpectedStatus)) }).Count -gt 0
+        if ($result.exit_code -eq 0 -or -not $statusMatched) {
+            throw ("hub.lock negative case {0} failed. Exit={1}; expected status={2}; output={3}" -f $Name, $result.exit_code, $ExpectedStatus, ($result.output -join " | "))
+        }
+        return [ordered]@{
+            name = $Name
+            expected_status = $ExpectedStatus
+            exit_code = $result.exit_code
+        }
+    }
+
+    $negativeEvidence = New-Object 'System.Collections.Generic.List[object]'
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "missing-lock" -Arguments @("-ProjectDir", $missingLockProject, "-HubDir", $hubFixture) -ExpectedStatus "missing_lock"))
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "invalid-hub-dir" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $invalidHubDir) -ExpectedStatus "invalid_hub_dir"))
+
+    Add-Content -LiteralPath (Join-PathParts $hubFixture "templates" "project-root" "AGENTS.md") -Value "`nrelease validation drift marker"
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "drift"))
+
     Add-Check "hub.lock drift check" "PASS" "Git-backed temporary hub lock check reported in_sync." ([ordered]@{
         temp_hub = $hubFixture
         temp_project = $projectFixture
+        batch_project = $batchProjectFixture
         status = "in_sync"
+        batch_status_count = $batchInSyncCount
+        negative_cases = @($negativeEvidence.ToArray())
     })
 }
 catch {
@@ -809,6 +1002,63 @@ try {
 }
 catch {
     Add-Check "installer behavior" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $memoryUpgradeProject = Join-PathParts $scratchRootFull "memory-upgrade-flow-project"
+    New-Item -ItemType Directory -Force -Path $memoryUpgradeProject | Out-Null
+    Assert-PathInsideRoot -Path $memoryUpgradeProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    & $bootstrapScript -ProjectDir $memoryUpgradeProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $processPath = Join-PathParts $memoryUpgradeProject ".agents" "process.txt"
+    $planPath = Join-PathParts $memoryUpgradeProject ".agents" "plan.md"
+    $notesPath = Join-PathParts $memoryUpgradeProject ".agents" "notes.md"
+    Add-Content -LiteralPath $processPath -Value "`nPrevious session timeline entry used by validation."
+    Add-Content -LiteralPath $planPath -Value "`n- [ ] T99: Durable task that should be normalized."
+    Add-Content -LiteralPath $notesPath -Value "`nTODO: temporary session state used by validation."
+
+    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $analyze = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Analyze -Json | ConvertFrom-Json
+    if (@($analyze.findings).Count -lt 1) {
+        throw "Memory upgrade Analyze did not report validation findings."
+    }
+
+    $plan = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Plan -Json | ConvertFrom-Json
+    $proposalPath = [string]$plan.proposal
+    if ([string]::IsNullOrWhiteSpace($proposalPath) -or -not (Test-Path -LiteralPath $proposalPath)) {
+        throw "Memory upgrade Plan did not create a proposal."
+    }
+
+    $apply = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Apply -UpgradePlan $proposalPath -Json | ConvertFrom-Json
+    $backupDir = [string]$apply.apply_result.backup_dir
+    $resultPath = [string]$apply.apply_result.result
+    if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
+        throw "Memory upgrade Apply did not create a backup."
+    }
+    if ([string]::IsNullOrWhiteSpace($resultPath) -or -not (Test-Path -LiteralPath $resultPath)) {
+        throw "Memory upgrade Apply did not create a result file."
+    }
+    if ((Get-Content -LiteralPath $processPath -Raw) -notmatch "Memory upgraded") {
+        throw "Memory upgrade Apply did not normalize process.txt."
+    }
+
+    Add-Check "memory upgrade flow" "PASS" "Memory upgrade Analyze, Plan, and Apply flow passed against a temporary project." ([ordered]@{
+        project = $memoryUpgradeProject
+        findings = @($analyze.findings).Count
+        proposal = $proposalPath
+        backup = $backupDir
+        result = $resultPath
+    })
+}
+catch {
+    Add-Check "memory upgrade flow" "FAIL" $_.Exception.Message
 }
 
 try {

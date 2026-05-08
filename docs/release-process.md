@@ -28,7 +28,9 @@ The validator checks:
 - runtime smoke coverage for bootstrap, context gate, workflow spec creation,
   and memory diagnosis in both recommended copy and link installs
 - installer no-`-Force` conflict behavior and forced reinstall behavior
-- `hub.lock` drift checking against a temporary git-backed hub
+- `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project
+  batch checking against temporary git-backed hubs
+- memory upgrade Analyze, Plan, and Apply flow against a temporary project
 - knowledge catalog, pattern, and standard entry coverage
 - public domain-pack catalog coverage
 - public experience index search
@@ -42,8 +44,8 @@ The validator checks:
 - first-session language write capability for English and Simplified Chinese
   temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
   the agent or workflow
-- workflow-spec-lite spec validation against complete and intentionally broken
-  fixtures
+- workflow-spec-lite spec validation against complete, Loop Contract,
+  Simplified Chinese, and intentionally broken fixtures
 - anti-drift template and memory-governance coverage for scope drift, unrelated
   refactors, and skipped acceptance checks
 - adoption guide and minimal project example coverage

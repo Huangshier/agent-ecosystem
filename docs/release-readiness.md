@@ -27,7 +27,7 @@ public migration work and moves the project toward normal maintenance.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 21 checks passing, no
+- Latest local hardened release validation passed with 22 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
