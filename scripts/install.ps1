@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "lib/path-guard.ps1")
 $targetRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($TargetDir)
 
 $kernelSkills = @(
@@ -22,40 +23,6 @@ $kernelSkills = @(
     "workflow-spec-lite",
     "memory-governance"
 )
-
-function Assert-PathInsideRoot {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Root
-    )
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
-    if (-not ($fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-            $fullPath.StartsWith($fullRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))) {
-        throw "Refusing to modify path outside target root: $fullPath"
-    }
-}
-
-function Join-PathParts {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
-    )
-
-    $path = $Root
-    foreach ($child in $Children) {
-        if ([string]::IsNullOrWhiteSpace($child)) {
-            continue
-        }
-        foreach ($segment in @($child -split '[\\/]+')) {
-            if (-not [string]::IsNullOrWhiteSpace($segment)) {
-                $path = Join-Path $path $segment
-            }
-        }
-    }
-    return $path
-}
 
 function Get-PublicSkillNames {
     param([string]$SelectedProfile)
@@ -93,7 +60,7 @@ function Install-Directory {
         throw "Source not found for ${Name}: $Source"
     }
 
-    Assert-PathInsideRoot -Path $Destination -Root $targetRoot
+    Assert-PathInsideRoot -Path $Destination -Root $targetRoot -Message "Refusing to modify path outside target root"
 
     if (Test-Path -LiteralPath $Destination) {
         if (-not $Force.IsPresent) {
@@ -166,4 +133,7 @@ if ($PSCmdlet.ShouldProcess($manifestPath, "Write install manifest")) {
 
 Write-Host "Installed Agent Ecosystem profile '$Profile' to: $targetRoot"
 Write-Host "Skills: $($skillNames -join ', ')"
+if ($Profile -in @("full", "dev")) {
+    Write-Host "Note: profile '$Profile' currently installs the same public content as 'recommended'; it is reserved for future public content."
+}
 Write-Host "Manifest: $manifestPath"

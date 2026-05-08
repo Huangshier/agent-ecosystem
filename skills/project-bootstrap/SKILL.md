@@ -15,12 +15,17 @@ scope: cross-project
 3. Write `.agents/hub.lock.json` with the pinned hub commit.
 4. Keep project-local files as higher-priority overrides by default.
 
+Command examples use Windows PowerShell 5.1-compatible invocation. On
+non-Windows systems, or when PowerShell 7+ is already available, replace
+`powershell -NoProfile -ExecutionPolicy Bypass -File` with
+`pwsh -NoProfile -File`.
+
 ## Step 1: Initialize Global Hub
 
 Run the initialization script when `%USERPROFILE%\\.agents\\knowledge-hub` is missing or when you want to refresh hub templates from this skill's assets.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/init_hub.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init_hub.ps1
 ```
 
 Optional flags:
@@ -37,7 +42,7 @@ Notes:
 Run the project bootstrap script from any location:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path>
 ```
 
 Default behavior:
@@ -63,7 +68,7 @@ Optional flags:
 Standalone language update:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
 ```
 
 Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional template refreshes; it rewrites the initial memory scaffold files.
@@ -85,7 +90,7 @@ If needed, review `references/maintenance-model.md` for long-term update rules.
 Check whether a project's pinned `hub.lock.json` still matches the currently installed hub:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/check_hub_lock.ps1 -ProjectDir <project_path>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check_hub_lock.ps1 -ProjectDir <project_path>
 ```
 
 Behavior:
@@ -105,9 +110,9 @@ Use this when re-running bootstrap in a project that already has old `.agents` m
 Recommended flow:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeMemoryUpgrade
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanMemoryUpgrade
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeMemoryUpgrade
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanMemoryUpgrade
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
 ```
 
 Behavior:

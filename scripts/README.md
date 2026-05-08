@@ -14,6 +14,18 @@ Useful validation form:
 .\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
+Manifest-based uninstall:
+
+```powershell
+.\uninstall.ps1 -TargetDir <runtime>
+```
+
+Context gate benchmark:
+
+```powershell
+.\benchmark-context-gate.ps1 -ContextFileCount 500 -MaxSeconds 30
+```
+
 Profiles:
 
 - `minimal`: `project-bootstrap` plus the public knowledge hub.
@@ -33,3 +45,16 @@ Install modes:
 The generated `install-manifest.json` is runtime metadata. It records the
 selected profile, installed skills, whether link mode was preferred, and each
 item's final install mode.
+Because this metadata includes local runtime and source paths, do not commit
+generated runtime directories or manifests to project repositories.
+
+The uninstaller reads `install-manifest.json` and removes only the destinations
+listed there, then removes the manifest. It preserves unknown files and prints
+manual cleanup guidance instead of deleting anything when the manifest is
+missing.
+
+Helper layout:
+
+- `lib/path-guard.ps1`: shared path joining and safety guards.
+- `validation/release-test-helper.ps1`: common helper functions used by the
+  release validator.

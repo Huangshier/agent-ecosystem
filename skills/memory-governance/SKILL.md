@@ -41,7 +41,7 @@ Apply this routing model every time:
 4. `.agents/context/*`:
 - Store durable domain knowledge by category (`tech`, `business`, `experience`).
 - Move broad, reusable facts from session artifacts into context files when repeated.
-- Add `## Summary` and `## Keywords` near the top of non-template context files so agents can discover relevant entries without preloading the full directory.
+- Add `## Summary` and `## Keywords` near the top of non-template context files so agents can discover relevant entries without preloading the full directory. Tooling also recognizes localized equivalents for project memory while public templates remain English-first.
 - Keep project-specific experience local by default.
 - Promote only cross-project toolchain/host/workflow lessons into the global knowledge hub when they can be stated as stable prevention rules.
 - When a lesson becomes a global hub candidate, mark it locally and point to the installed `knowledge-hub/scripts` promotion workflow; `memory-governance` does not mutate the global hub by itself.
@@ -67,9 +67,9 @@ Follow this exact sequence:
 - Detect when `.agents` has become a second copy of active `docs/specs/` content.
 - Prefer the helper when available:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
   ```
-  Use `-Json` for structured output.
+  Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or when PowerShell 7+ is already available. Use `-Json` for structured output.
 
 4. Refactor by destination:
 - Compress `notes.md` to stable facts.

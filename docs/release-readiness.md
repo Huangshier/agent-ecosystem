@@ -1,9 +1,10 @@
 # Release Readiness
 
-Status: `v0.2.0` release candidate.
+Status: `v0.3.0` release candidate.
 
-The initial public release has been published as `v0.1.0`; `v0.2.0` closes the
-public migration work and moves the project toward normal maintenance.
+The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
+public migration work. `v0.3.0` packages backlog remediation and two public
+maintenance issues into the normal release flow.
 
 ## Completed
 
@@ -27,7 +28,7 @@ public migration work and moves the project toward normal maintenance.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 21 checks passing, no
+- Latest local hardened release validation passed with 23 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
@@ -39,8 +40,8 @@ public migration work and moves the project toward normal maintenance.
 - Latest local high-risk public audit found no matches, and public PowerShell
   scripts parsed successfully.
 - CI release validation workflow is present at
-  `.github/workflows/release-validation.yml` and is configured for Windows,
-  Ubuntu, and macOS runners.
+  `.github/workflows/release-validation.yml` and is configured for PowerShell 7
+  on Windows, Ubuntu, and macOS, plus Windows PowerShell 5.1 on Windows.
 - Hosted CI release validation passed on Windows, Ubuntu, and macOS:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
 - `.gitattributes` pins validation-sensitive text files to LF endings so
@@ -59,6 +60,21 @@ public migration work and moves the project toward normal maintenance.
 - Public adoption surface includes `docs/how-to-adapt.md` and
   `examples/minimal-project/`.
 - Public release notes are present at `docs/releases/v0.2.0.md`.
+- Manifest-based uninstall preserves unknown runtime files and provides manual
+  cleanup guidance when no manifest exists.
+- Shared PowerShell helper extraction keeps path guard logic consistent across
+  installer, uninstaller, validator, and benchmark scripts.
+- Release validation helper extraction keeps common test utilities in
+  `scripts/validation/release-test-helper.ps1`.
+- Large-context benchmark coverage validates context gate JSON behavior with
+  500 generated context files.
+- Cross-platform shell strategy documents PowerShell as the canonical public
+  script surface and defers Bash or Zsh wrappers.
+- Memory diagnostics and memory upgrade analysis accept localized context
+  discovery headings while preserving English-first public templates.
+- Bilingual Public/Private Routing guidance is documented in the public
+  knowledge hub and language policy.
+- Public release notes are present at `docs/releases/v0.3.0.md`.
 
 ## Required Before Future Publishing
 
@@ -71,26 +87,29 @@ public migration work and moves the project toward normal maintenance.
 ## Current Quick Start
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 Safe validation form:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
 Full release validation form:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Machine-readable output form:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
+
+Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or
+when PowerShell 7+ is already available.
 
 ## Installer Metadata
 
@@ -102,6 +121,11 @@ The generated `install-manifest.json` is runtime metadata. It records the
 selected profile, skill names, whether link mode was preferred, and each
 installed item's final mode (`junction`, `symboliclink`, `copy`, or
 `copy-fallback`).
+
+`scripts/uninstall.ps1` uses that manifest as the only automatic cleanup
+authority. It removes manifest-listed install destinations and the manifest,
+preserves unknown runtime files, and prints manual cleanup guidance without
+removing anything when the manifest is missing.
 
 ## Suggested Public Audit
 
@@ -119,15 +143,23 @@ The release validator now covers:
 - profile matrix installs in copy and link modes
 - recommended runtime smoke for copy and link installs
 - no-`-Force` conflict behavior and forced reinstall behavior
+- manifest-based uninstall behavior with unknown runtime files preserved
+- context gate JSON performance with 500 generated context files
+- cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub
 - experience promote -> rebuild -> search closure using a temporary hub copy
 - knowledge catalog coverage for experience, patterns, and standards
 - public domain-pack catalog coverage
-- duplicate helper hashes, parser checks, JSON parsing, public structure,
-  sensitive-pattern audit, and language policy templates
+- duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,
+  public structure, sensitive-pattern audit, and language policy templates
+- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
+- localized context discovery headings for memory diagnosis and upgrade
+  analysis
+- bilingual public/private routing documentation coverage
+- v0.3.0 release notes coverage

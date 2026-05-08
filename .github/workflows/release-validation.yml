@@ -9,7 +9,7 @@ on:
 
 jobs:
   validate:
-    name: validate (${{ matrix.os }})
+    name: validate pwsh (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,6 +34,29 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: validation-${{ matrix.os }}
+          name: validation-pwsh-${{ matrix.os }}
           path: ${{ runner.temp }}/agent-ecosystem-release-validation
+          if-no-files-found: ignore
+
+  validate-windows-powershell:
+    name: validate Windows PowerShell 5.1
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run release validator
+        shell: powershell
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot $scratch -Json |
+            Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-windows-powershell
+          path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
           if-no-files-found: ignore

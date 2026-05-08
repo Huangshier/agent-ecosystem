@@ -8,29 +8,42 @@ without copying this repository's private workflow.
 Install the recommended public runtime:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 For evaluation, use a temporary runtime first:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+On non-Windows systems, or when PowerShell 7+ is already available, replace
+`powershell -NoProfile -ExecutionPolicy Bypass -File` with
+`pwsh -NoProfile -File`.
+
+To remove a generated runtime later, use the manifest-based uninstaller:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
+```
+
+It removes only paths recorded in `install-manifest.json` and preserves unknown
+files. If the manifest is missing, no cleanup is performed automatically.
 
 ## 2. Bootstrap A Project
 
 Run `project-bootstrap` from the installed runtime:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
 ```
 
 Set project memory language explicitly during the first non-trivial memory
 write when the agent or workflow knows the user's primary language:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
 The script does not infer chat language by itself.
@@ -60,14 +73,14 @@ Do not copy the public tree into a private overlay. Add only private increments.
 Recommended checks:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
 ```
 
 For release-quality changes to this public repository, run:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 ## Example

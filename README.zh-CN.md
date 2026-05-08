@@ -4,10 +4,11 @@
 
 公开文档以英文优先；本文件提供第一版 public release 的简短中文入口。
 
-当前公开版本是 `v0.2.0`。第一版公开 release 包含
+当前公开版本是 `v0.3.0`。第一版公开 release 包含
 Workflow Kernel、public installer、public knowledge templates 和 release
 validation workflow；`v0.2.0` 补充 language write、spec validator、
-domain-pack scaffold 和 adoption examples。
+domain-pack scaffold 和 adoption examples；`v0.3.0` 补充 manifest-based
+uninstall、large-context validation 和 public/private language routing。
 
 ## 第一版公开范围
 
@@ -25,14 +26,17 @@ domain-pack scaffold 和 adoption examples。
 ## 快速开始
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 建议先安装到临时 runtime 做验证：
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+非 Windows 系统，或已经安装 PowerShell 7+ 时，可以用
+`pwsh -NoProfile -File` 加相同脚本参数。
 
 默认安装模式会优先创建链接；如果链接创建失败，安装器会回退到 copy mode。
 安装器会在目标 runtime 下生成 `install-manifest.json`，记录 profile、skills 和
@@ -61,5 +65,6 @@ developer maintenance tooling。
 - [Architecture](docs/architecture.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Release readiness](docs/release-readiness.md)
+- [v0.3.0 release notes](docs/releases/v0.3.0.md)
 - [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Examples](examples/README.md)

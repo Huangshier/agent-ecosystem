@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
@@ -9,6 +9,8 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "lib/path-guard.ps1")
+. (Join-Path $scriptDir "validation/release-test-helper.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -16,74 +18,7 @@ if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
 }
 
 $scratchRootFull = [System.IO.Path]::GetFullPath($ScratchRoot)
-$liveRuntimeCandidates = @()
-if (-not [string]::IsNullOrWhiteSpace($HOME)) {
-    $liveRuntimeCandidates += [System.IO.Path]::GetFullPath((Join-Path $HOME ".agents")).TrimEnd('\', '/')
-}
-if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-    $liveRuntimeCandidates += [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE ".agents")).TrimEnd('\', '/')
-}
-$liveRuntimeCandidates = @($liveRuntimeCandidates | Sort-Object -Unique)
-
-function Assert-PathInsideRoot {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Root
-    )
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
-    if (-not ($fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-            $fullPath.StartsWith($fullRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))) {
-        throw "Path is outside expected root: $fullPath"
-    }
-}
-
-function Assert-NotLiveRuntime {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-    foreach ($candidate in $script:liveRuntimeCandidates) {
-        if ($fullPath.Equals($candidate, [System.StringComparison]::OrdinalIgnoreCase) -or
-            $fullPath.StartsWith($candidate + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Refusing to use live runtime path: $fullPath"
-        }
-    }
-}
-
-function Join-PathParts {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
-    )
-
-    $path = $Root
-    foreach ($child in $Children) {
-        if ([string]::IsNullOrWhiteSpace($child)) {
-            continue
-        }
-        foreach ($segment in @($child -split '[\\/]+')) {
-            if (-not [string]::IsNullOrWhiteSpace($segment)) {
-                $path = Join-Path $path $segment
-            }
-        }
-    }
-    return $path
-}
-
-function ConvertTo-DisplayPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Root
-    )
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path)
-    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
-    if ($fullPath.StartsWith($fullRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-        return $fullPath.Substring($fullRoot.Length).TrimStart([char[]]"\/") -replace "\\", "/"
-    }
-    return $fullPath -replace "\\", "/"
-}
+$liveRuntimeCandidates = @(Get-AgentLiveRuntimeCandidates)
 
 Assert-NotLiveRuntime -Path $scratchRootFull
 New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
@@ -95,97 +30,10 @@ $evidence = [ordered]@{
     audit = [ordered]@{}
     knowledge_hub = [ordered]@{}
     duplicate_helpers = @()
+    memory_metadata = [ordered]@{}
     language_policy = [ordered]@{}
+    routing = [ordered]@{}
     spec_lite = [ordered]@{}
-}
-
-function Add-Check {
-    param(
-        [Parameter(Mandatory = $true)][string]$Name,
-        [ValidateSet("PASS", "FAIL", "WARN", "DEFERRED")]
-        [string]$Status,
-        [string]$Detail = "",
-        [object]$Data = $null
-    )
-
-    $script:checks.Add([ordered]@{
-        name = $Name
-        status = $Status
-        detail = $Detail
-        data = $Data
-    })
-}
-
-function Test-RequiredPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RelativePath,
-        [switch]$Directory
-    )
-
-    $path = Join-PathParts $repoRoot $RelativePath
-    if ($Directory.IsPresent) {
-        return [System.IO.Directory]::Exists($path)
-    }
-    return [System.IO.File]::Exists($path)
-}
-
-function Get-GitFiles {
-    $output = & git -C $repoRoot ls-files --cached --others --exclude-standard
-    if ($LASTEXITCODE -ne 0) {
-        throw "git ls-files failed."
-    }
-    return @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-}
-
-function Get-FileText {
-    param([Parameter(Mandatory = $true)][string]$RelativePath)
-
-    $path = Join-PathParts $repoRoot $RelativePath
-    return [System.IO.File]::ReadAllText($path)
-}
-
-function Get-LineMatches {
-    param(
-        [Parameter(Mandatory = $true)][string]$RelativePath,
-        [Parameter(Mandatory = $true)][string]$Pattern
-    )
-
-    $path = Join-PathParts $repoRoot $RelativePath
-    if (-not [System.IO.File]::Exists($path)) {
-        return @()
-    }
-
-    $lines = [System.IO.File]::ReadAllLines($path)
-    $lineMatches = New-Object 'System.Collections.Generic.List[object]'
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match $Pattern) {
-            $lineMatches.Add([object][ordered]@{
-                path = $RelativePath
-                line = $i + 1
-                text = $lines[$i].Trim()
-            })
-        }
-    }
-    return @($lineMatches.ToArray())
-}
-
-function Test-ExactArray {
-    param(
-        [object[]]$Actual,
-        [object[]]$Expected
-    )
-
-    $actualValues = @($Actual | ForEach-Object { [string]$_ } | Sort-Object)
-    $expectedValues = @($Expected | ForEach-Object { [string]$_ } | Sort-Object)
-    if ($actualValues.Count -ne $expectedValues.Count) {
-        return $false
-    }
-    for ($i = 0; $i -lt $actualValues.Count; $i++) {
-        if ($actualValues[$i] -ne $expectedValues[$i]) {
-            return $false
-        }
-    }
-    return $true
 }
 
 function Invoke-InstallerProfile {
@@ -280,21 +128,32 @@ function Test-Manifest {
     return @($errors.ToArray())
 }
 
+try {
+
 $requiredFiles = @(
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
+    "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "scripts/benchmark-context-gate.ps1",
     "scripts/install.ps1",
+    "scripts/lib/path-guard.ps1",
+    "scripts/uninstall.ps1",
+    "scripts/validation/release-test-helper.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/how-to-adapt.md",
     "docs/language-policy.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
+    "docs/shell-strategy.md",
+    "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
+    "docs/releases/v0.3.0.md",
     "knowledge-hub/knowledge-catalog.md",
+    "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
     "examples/minimal-project/README.md",
     "examples/minimal-project/.agents/AGENTS.md",
@@ -322,6 +181,90 @@ if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0) {
 }
 else {
     Add-Check "public structure" "FAIL" "Required public paths are missing." ([ordered]@{ files = $missingFiles; directories = $missingDirs })
+}
+
+try {
+    $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
+    $pathGuardConsumers = @("scripts/benchmark-context-gate.ps1", "scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
+    $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
+    $localDefinitions = New-Object 'System.Collections.Generic.List[string]'
+
+    foreach ($functionName in @("Join-PathParts", "Assert-PathInsideRoot", "Assert-NotLiveRuntime")) {
+        if ($pathGuardHelper -notmatch ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+            $localDefinitions.Add("scripts/lib/path-guard.ps1 missing $functionName")
+        }
+    }
+
+    foreach ($consumer in $pathGuardConsumers) {
+        $consumerText = Get-FileText -RelativePath $consumer
+        if ($consumerText -notmatch 'lib/path-guard\.ps1') {
+            $missingDotSource.Add("$consumer does not dot-source scripts/lib/path-guard.ps1")
+        }
+        foreach ($functionName in @("Join-PathParts", "Assert-PathInsideRoot", "Assert-NotLiveRuntime")) {
+            if ($consumerText -match ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+                $localDefinitions.Add("$consumer still defines $functionName locally")
+            }
+        }
+    }
+
+    if ($missingDotSource.Count -eq 0 -and $localDefinitions.Count -eq 0) {
+        Add-Check "shared path guard helper" "PASS" "Installer and release validator use the shared PowerShell path guard helper." ([ordered]@{
+            helper = "scripts/lib/path-guard.ps1"
+            consumers = @($pathGuardConsumers)
+        })
+    }
+    else {
+        Add-Check "shared path guard helper" "FAIL" "Shared path guard helper wiring is incomplete." ([ordered]@{
+            missing_dot_source = @($missingDotSource.ToArray())
+            local_definitions = @($localDefinitions.ToArray())
+        })
+    }
+}
+catch {
+    Add-Check "shared path guard helper" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseHelper = Get-FileText -RelativePath "scripts/validation/release-test-helper.ps1"
+    $validatorText = Get-FileText -RelativePath "scripts/validate-release.ps1"
+    $helperFunctions = @(
+        "ConvertTo-DisplayPath",
+        "Add-Check",
+        "Test-RequiredPath",
+        "Get-GitFiles",
+        "Get-FileText",
+        "Get-LineMatches",
+        "Get-CurrentPowerShellPath",
+        "Get-PowerShellFileArguments",
+        "Invoke-IsolatedPowerShellScript",
+        "Test-ExactArray"
+    )
+    $helperErrors = New-Object 'System.Collections.Generic.List[string]'
+
+    if ($validatorText -notmatch 'validation/release-test-helper\.ps1') {
+        $helperErrors.Add("scripts/validate-release.ps1 does not dot-source scripts/validation/release-test-helper.ps1")
+    }
+    foreach ($functionName in $helperFunctions) {
+        if ($releaseHelper -notmatch ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+            $helperErrors.Add("scripts/validation/release-test-helper.ps1 missing $functionName")
+        }
+        if ($validatorText -match ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+            $helperErrors.Add("scripts/validate-release.ps1 still defines $functionName locally")
+        }
+    }
+
+    if ($helperErrors.Count -eq 0) {
+        Add-Check "release validation helper" "PASS" "Release validator uses the shared validation helper for common test utilities." ([ordered]@{
+            helper = "scripts/validation/release-test-helper.ps1"
+            functions = @($helperFunctions)
+        })
+    }
+    else {
+        Add-Check "release validation helper" "FAIL" "Release validation helper wiring is incomplete." @($helperErrors.ToArray())
+    }
+}
+catch {
+    Add-Check "release validation helper" "FAIL" $_.Exception.Message
 }
 
 $skillNames = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
@@ -500,6 +443,79 @@ catch {
 }
 
 try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $localizedProject = Join-PathParts $scratchRootFull "localized-context-discovery"
+    New-Item -ItemType Directory -Force -Path $localizedProject | Out-Null
+    Assert-PathInsideRoot -Path $localizedProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    & $bootstrapScript -ProjectDir $localizedProject -HubDir $hubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $summaryHeading = -join @([char]0x6458, [char]0x8981)
+    $keywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
+    $localizedContextPath = Join-PathParts $localizedProject ".agents" "context" "experience" "localized-discovery.md"
+    $localizedContextText = @(
+        "# Localized Discovery Fixture",
+        "",
+        "## $summaryHeading",
+        "Temporary context entry used by release validation.",
+        "",
+        "## $keywordsHeading",
+        "localized discovery metadata, memory diagnosis, memory upgrade",
+        "",
+        "## Notes",
+        "Both memory diagnostics should recognize the localized discovery headings."
+    )
+    Set-Content -LiteralPath $localizedContextPath -Value $localizedContextText -Encoding UTF8
+
+    $memoryDiagnoseScript = Join-PathParts $recommendedCopyRuntime "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
+    $diagnose = & $memoryDiagnoseScript -ProjectRoot $localizedProject -Json | ConvertFrom-Json
+    $diagnoseMetadataFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "context_missing_discovery_metadata" })
+
+    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $upgrade = & $memoryUpgradeScript -ProjectDir $localizedProject -Mode Analyze -Json | ConvertFrom-Json
+    $upgradeMetadataFindings = @($upgrade.findings | Where-Object { [string]$_.code -eq "context_metadata_missing" })
+
+    $script:evidence.memory_metadata = [ordered]@{
+        project = $localizedProject
+        context_file = $localizedContextPath
+        memory_diagnose_findings = @($diagnose.findings).Count
+        memory_upgrade_findings = @($upgrade.findings).Count
+        diagnose_metadata_findings = $diagnoseMetadataFindings.Count
+        upgrade_metadata_findings = $upgradeMetadataFindings.Count
+    }
+
+    if ($diagnoseMetadataFindings.Count -gt 0 -or $upgradeMetadataFindings.Count -gt 0) {
+        Add-Check "localized context discovery metadata" "FAIL" "Localized discovery headings were reported as missing metadata." $evidence.memory_metadata
+    }
+    else {
+        Add-Check "localized context discovery metadata" "PASS" "Memory diagnosis and upgrade analysis accept localized Summary/Keywords discovery headings." $evidence.memory_metadata
+    }
+}
+catch {
+    Add-Check "localized context discovery metadata" "FAIL" $_.Exception.Message
+}
+
+try {
+    $benchmarkScript = Join-PathParts $repoRoot "scripts" "benchmark-context-gate.ps1"
+    $benchmarkScratch = Join-PathParts $scratchRootFull "context-gate-benchmark"
+    Assert-PathInsideRoot -Path $benchmarkScratch -Root $scratchRootFull
+    $benchmarkJsonText = & $benchmarkScript -ScratchRoot $benchmarkScratch -ContextFileCount 500 -MaxSeconds 30 -Json
+    $benchmark = $benchmarkJsonText | ConvertFrom-Json
+    if (-not [bool]$benchmark.passed) {
+        throw ("Benchmark did not pass. Elapsed={0}s, threshold={1}s, included={2}" -f $benchmark.elapsed_seconds, $benchmark.max_seconds, $benchmark.included_context_files)
+    }
+    Add-Check "context gate large context benchmark" "PASS" ("Context gate JSON handled {0} context files in {1}s." -f $benchmark.included_context_files, $benchmark.elapsed_seconds) $benchmark
+}
+catch {
+    Add-Check "context gate large context benchmark" "FAIL" $_.Exception.Message
+}
+
+try {
     $specValidator = Join-PathParts $repoRoot "skills" "workflow-spec-lite" "scripts" "validate_spec.ps1"
     $fixtureDir = Join-PathParts $scratchRootFull "spec-lite-fixtures"
     New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
@@ -564,6 +580,123 @@ try {
         throw ("Complete spec fixture failed: {0}" -f (($positive.findings | ConvertTo-Json -Compress -Depth 5)))
     }
 
+    $loopSpec = @"
+# Work Spec
+
+- **Title**: Loop contract fixture
+- **Slug**: loop-contract-fixture
+- **Status**: Active
+- **Owner**: release validation
+- **Updated**: 2026-05-08
+
+## 1. Summary
+- Validate that loop-oriented specs can pass the lightweight validator.
+
+## 2. Current Context
+- Release validation needs a positive fixture with a Loop Contract.
+
+## 3. Goals
+- Confirm loop specs pass when required sections are present.
+
+## 4. Non-Goals
+- Do not execute the loop action.
+
+## 5. Constraints
+- Run only against temporary fixture files.
+
+## 6. Assumptions
+- The loop contract is agent-facing state, not executable code.
+
+## 7. Risks
+- A vague loop can lead to unbounded repeated work.
+
+## 8. Proposed Approach
+- Validate a bounded Loop Contract fixture.
+
+## 9. Acceptance / Evidence
+- The Loop Contract fixture passes validation.
+
+## 10. Loop Contract
+- **Variable**: retry count
+- **Source of truth**: temporary fixture text
+- **Check command**: inspect fixture
+- **Pass predicate**: retry count is below the limit
+- **Iteration action**: no-op validation fixture
+- **State record**: release validation evidence
+- **Limits**: one validation attempt
+- **Abort conditions**: missing required spec sections
+
+## 11. Execution Contract
+
+## 12. Open Questions
+- None for this fixture.
+"@
+
+    $loopPath = Join-PathParts $fixtureDir "loop-contract-spec.md"
+    Set-Content -LiteralPath $loopPath -Value $loopSpec -Encoding UTF8
+    $loopPositive = & $specValidator -SpecPath $loopPath -Json | ConvertFrom-Json
+    if (-not [bool]$loopPositive.pass) {
+        throw ("Loop Contract spec fixture failed: {0}" -f (($loopPositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
+    $chineseSpec = @"
+# 工作说明
+
+- **Title**: 中文章节 fixture
+- **Slug**: chinese-section-fixture
+- **Status**: Active
+- **Owner**: release validation
+- **Updated**: 2026-05-08
+
+## 1. 摘要
+- 验证中文章节别名可以通过轻量 spec validator。
+
+## 2. 当前上下文
+- release validation 需要覆盖中文项目记忆场景。
+
+## 3. 目标
+- 确认中文章节正例通过。
+
+## 4. 非目标
+- 不改写 fixture 文件。
+
+## 5. 约束
+- 只使用临时 fixture。
+
+## 6. 假设
+- 中文章节标题保持模板约定。
+
+## 7. 风险
+- 中文章节别名缺失会影响中文项目 spec。
+
+## 8. 方案
+- 执行 validator 并检查 pass 字段。
+
+## 9. 验收与证据
+- 中文章节 fixture 通过验证。
+
+## 10. 循环契约
+- 不适用。
+
+## 11. 执行契约
+- **Autonomy level**: bounded-autonomous
+- **Phase list**:
+  - P01: 验证中文章节 fixture。
+- **Continue rule**: fixture 通过时继续。
+- **Stop rule**: 必需章节缺失时停止。
+- **State record**: release validation evidence。
+
+## 12. 开放问题
+- 无。
+"@
+
+    $chinesePath = Join-PathParts $fixtureDir "chinese-section-spec.md"
+    Set-Content -LiteralPath $chinesePath -Value $chineseSpec -Encoding UTF8
+    $chinesePositive = & $specValidator -SpecPath $chinesePath -RequireExecutionContract -Json | ConvertFrom-Json
+    if (-not [bool]$chinesePositive.pass) {
+        throw ("Chinese section spec fixture failed: {0}" -f (($chinesePositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
     $negativeFixtures = @(
         [ordered]@{
             name = "missing-goals"
@@ -614,6 +747,10 @@ try {
     $script:evidence.spec_lite = [ordered]@{
         validator = $specValidator
         positive_fixture = $positivePath
+        positive_variants = @(
+            [ordered]@{ name = "loop-contract"; path = $loopPath },
+            [ordered]@{ name = "chinese-sections"; path = $chinesePath }
+        )
         negative_fixtures = @($negativeEvidence.ToArray())
     }
     Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts a complete spec and rejects missing goals, non-goals, acceptance, risks, and stop rule fixtures." $evidence.spec_lite
@@ -691,6 +828,54 @@ catch {
 }
 
 try {
+    $shellStrategy = Get-FileText -RelativePath "docs/shell-strategy.md"
+    $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
+    $workflow = Get-FileText -RelativePath ".github/workflows/release-validation.yml"
+    $readme = Get-FileText -RelativePath "README.md"
+    $roadmap = Get-FileText -RelativePath "docs/roadmap/evolution-plan.md"
+    $shellExpectations = [ordered]@{
+        "docs/shell-strategy.md" = @("Windows PowerShell 5.1", "PowerShell 7+", "pwsh -NoProfile -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
+        "docs/release-process.md" = @("Shell strategy", "Bash or Zsh wrappers", "canonical", ".ps1")
+        "README.md" = @("Shell strategy")
+        "docs/roadmap/evolution-plan.md" = @("Shell Direction", "Bash or Zsh wrappers are deferred", "canonical", ".ps1")
+    }
+    $shellMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $shellExpectations.Keys) {
+        $text = switch ($relativePath) {
+            "docs/shell-strategy.md" { $shellStrategy }
+            "docs/release-process.md" { $releaseProcess }
+            "README.md" { $readme }
+            default { $roadmap }
+        }
+        foreach ($token in $shellExpectations[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $shellMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $workflowTokens = @("windows-latest", "ubuntu-latest", "macos-latest", "shell: pwsh", "shell: powershell")
+    foreach ($token in $workflowTokens) {
+        if ($workflow -notlike ("*{0}*" -f $token)) {
+            $shellMissing.Add(".github/workflows/release-validation.yml missing token: $token")
+        }
+    }
+
+    if ($shellMissing.Count -gt 0) {
+        Add-Check "cross-platform shell strategy" "FAIL" "Shell strategy docs or CI shell entries are inconsistent." @($shellMissing.ToArray())
+    }
+    else {
+        Add-Check "cross-platform shell strategy" "PASS" "PowerShell host support and deferred non-PowerShell wrapper policy are documented and aligned with CI." ([ordered]@{
+            docs = @($shellExpectations.Keys)
+            ci_tokens = @($workflowTokens)
+        })
+    }
+}
+catch {
+    Add-Check "cross-platform shell strategy" "FAIL" $_.Exception.Message
+}
+
+try {
     $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.2.0.md"
     $releaseTokens = @(
         "v0.2.0",
@@ -713,17 +898,47 @@ catch {
 }
 
 try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.3.0.md"
+    $releaseTokens = @(
+        "v0.3.0",
+        "manifest-based uninstall",
+        "localized context discovery headings",
+        "Bilingual Public/Private Routing",
+        "context gate large context benchmark",
+        "PASS="
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.3.0 release notes" "FAIL" "Release notes are missing required v0.3.0 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.3.0 release notes" "PASS" "v0.3.0 release notes summarize backlog remediation, issue fixes, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.3.0 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
+    $batchProjectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project-batch"
+    $missingLockProject = Join-PathParts $scratchRootFull "hub-lock-missing-project"
+    $invalidHubDir = Join-PathParts $scratchRootFull "hub-lock-missing-hub"
     Assert-PathInsideRoot -Path $hubFixture -Root $scratchRootFull
     Assert-PathInsideRoot -Path $projectFixture -Root $scratchRootFull
-    foreach ($fixturePath in @($hubFixture, $projectFixture)) {
+    Assert-PathInsideRoot -Path $batchProjectFixture -Root $scratchRootFull
+    Assert-PathInsideRoot -Path $missingLockProject -Root $scratchRootFull
+    Assert-PathInsideRoot -Path $invalidHubDir -Root $scratchRootFull
+    foreach ($fixturePath in @($hubFixture, $projectFixture, $batchProjectFixture, $missingLockProject, $invalidHubDir)) {
         if (Test-Path -LiteralPath $fixturePath) {
             Remove-Item -LiteralPath $fixturePath -Recurse -Force
         }
     }
     Copy-Item -LiteralPath (Join-PathParts $repoRoot "knowledge-hub") -Destination $hubFixture -Recurse -Force
     New-Item -ItemType Directory -Force -Path $projectFixture | Out-Null
+    New-Item -ItemType Directory -Force -Path $batchProjectFixture | Out-Null
+    New-Item -ItemType Directory -Force -Path $missingLockProject | Out-Null
 
     & git -C $hubFixture init | Out-Null
     & git -C $hubFixture config user.email "release-validation@example.invalid" | Out-Null
@@ -738,6 +953,7 @@ try {
 
     $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $projectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
+    & $bootstrapScript -ProjectDir $batchProjectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
     $checkHubLockScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "check_hub_lock.ps1"
     $hubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture -HubDir $hubFixture)
     $hubLockStatusLine = @($hubLockOutput | Where-Object { $_ -match '^Status:\s+' } | Select-Object -Last 1)
@@ -745,10 +961,45 @@ try {
         throw ("hub.lock drift check did not report in_sync. Output: {0}" -f ($hubLockOutput -join " | "))
     }
 
+    $batchHubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture,$batchProjectFixture -HubDir $hubFixture)
+    $batchInSyncCount = @($batchHubLockOutput | Where-Object { $_ -match '^Status:\s+in_sync' }).Count
+    if ($batchInSyncCount -ne 2) {
+        throw ("hub.lock batch check did not report two in_sync projects. Output: {0}" -f ($batchHubLockOutput -join " | "))
+    }
+
+    function Assert-HubLockNegativeCase {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [Parameter(Mandatory = $true)][string[]]$Arguments,
+            [Parameter(Mandatory = $true)][string]$ExpectedStatus
+        )
+
+        $result = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments $Arguments
+        $statusMatched = @($result.output | Where-Object { $_ -match ("^Status:\s+{0}$" -f [regex]::Escape($ExpectedStatus)) }).Count -gt 0
+        if ($result.exit_code -eq 0 -or -not $statusMatched) {
+            throw ("hub.lock negative case {0} failed. Exit={1}; expected status={2}; output={3}" -f $Name, $result.exit_code, $ExpectedStatus, ($result.output -join " | "))
+        }
+        return [ordered]@{
+            name = $Name
+            expected_status = $ExpectedStatus
+            exit_code = $result.exit_code
+        }
+    }
+
+    $negativeEvidence = New-Object 'System.Collections.Generic.List[object]'
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "missing-lock" -Arguments @("-ProjectDir", $missingLockProject, "-HubDir", $hubFixture) -ExpectedStatus "missing_lock"))
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "invalid-hub-dir" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $invalidHubDir) -ExpectedStatus "invalid_hub_dir"))
+
+    Add-Content -LiteralPath (Join-PathParts $hubFixture "templates" "project-root" "AGENTS.md") -Value "`nrelease validation drift marker"
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "drift"))
+
     Add-Check "hub.lock drift check" "PASS" "Git-backed temporary hub lock check reported in_sync." ([ordered]@{
         temp_hub = $hubFixture
         temp_project = $projectFixture
+        batch_project = $batchProjectFixture
         status = "in_sync"
+        batch_status_count = $batchInSyncCount
+        negative_cases = @($negativeEvidence.ToArray())
     })
 }
 catch {
@@ -803,12 +1054,130 @@ catch {
 }
 
 try {
+    $installer = Join-PathParts $repoRoot "scripts" "install.ps1"
+    $uninstaller = Join-PathParts $repoRoot "scripts" "uninstall.ps1"
+    $targetDir = Join-PathParts $scratchRootFull "uninstall-behavior-runtime"
+    Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
+
+    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    $manifestPath = Join-PathParts $targetDir "install-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        throw "Install manifest missing before uninstall validation."
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $manifestDestinations = @($manifest.items | ForEach-Object { [string]$_.destination })
+
+    $extraFile = Join-PathParts $targetDir "user-extra.txt"
+    $extraNested = Join-PathParts $targetDir "skills" "user-skill" "README.md"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $extraNested) | Out-Null
+    Set-Content -LiteralPath $extraFile -Value "preserve me" -Encoding UTF8
+    Set-Content -LiteralPath $extraNested -Value "preserve nested user content" -Encoding UTF8
+
+    $uninstallJsonText = & $uninstaller -TargetDir $targetDir -Json
+    $uninstallResult = $uninstallJsonText | ConvertFrom-Json
+    if ([string]$uninstallResult.status -ne "uninstalled") {
+        throw "Uninstaller did not report uninstalled status."
+    }
+    foreach ($destination in $manifestDestinations) {
+        if (Test-Path -LiteralPath $destination) {
+            throw "Manifest destination still exists after uninstall: $destination"
+        }
+    }
+    if (Test-Path -LiteralPath $manifestPath) {
+        throw "Install manifest still exists after uninstall."
+    }
+    if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $extraNested)) {
+        throw "Unknown runtime files were not preserved by uninstall."
+    }
+
+    $missingManifestDir = Join-PathParts $scratchRootFull "uninstall-missing-manifest-runtime"
+    New-Item -ItemType Directory -Force -Path $missingManifestDir | Out-Null
+    Set-Content -LiteralPath (Join-PathParts $missingManifestDir "user-extra.txt") -Value "preserve me" -Encoding UTF8
+    $missingManifestJsonText = & $uninstaller -TargetDir $missingManifestDir -Json
+    $missingManifestResult = $missingManifestJsonText | ConvertFrom-Json
+    if ([string]$missingManifestResult.status -ne "missing_manifest") {
+        throw "Missing-manifest uninstall did not report missing_manifest status."
+    }
+    if (-not (Test-Path -LiteralPath (Join-PathParts $missingManifestDir "user-extra.txt"))) {
+        throw "Missing-manifest uninstall removed unknown content."
+    }
+
+    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall removes installed items while preserving unknown runtime files." ([ordered]@{
+        target_dir = $targetDir
+        removed = @($uninstallResult.removed)
+        missing_manifest_status = [string]$missingManifestResult.status
+        preserved_unknown = [bool]$uninstallResult.preserved_unknown
+    })
+}
+catch {
+    Add-Check "uninstall behavior" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $memoryUpgradeProject = Join-PathParts $scratchRootFull "memory-upgrade-flow-project"
+    New-Item -ItemType Directory -Force -Path $memoryUpgradeProject | Out-Null
+    Assert-PathInsideRoot -Path $memoryUpgradeProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    & $bootstrapScript -ProjectDir $memoryUpgradeProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $processPath = Join-PathParts $memoryUpgradeProject ".agents" "process.txt"
+    $planPath = Join-PathParts $memoryUpgradeProject ".agents" "plan.md"
+    $notesPath = Join-PathParts $memoryUpgradeProject ".agents" "notes.md"
+    Add-Content -LiteralPath $processPath -Value "`nPrevious session timeline entry used by validation."
+    Add-Content -LiteralPath $planPath -Value "`n- [ ] T99: Durable task that should be normalized."
+    Add-Content -LiteralPath $notesPath -Value "`nTODO: temporary session state used by validation."
+
+    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $analyze = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Analyze -Json | ConvertFrom-Json
+    if (@($analyze.findings).Count -lt 1) {
+        throw "Memory upgrade Analyze did not report validation findings."
+    }
+
+    $plan = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Plan -Json | ConvertFrom-Json
+    $proposalPath = [string]$plan.proposal
+    if ([string]::IsNullOrWhiteSpace($proposalPath) -or -not (Test-Path -LiteralPath $proposalPath)) {
+        throw "Memory upgrade Plan did not create a proposal."
+    }
+
+    $apply = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Apply -UpgradePlan $proposalPath -Json | ConvertFrom-Json
+    $backupDir = [string]$apply.apply_result.backup_dir
+    $resultPath = [string]$apply.apply_result.result
+    if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
+        throw "Memory upgrade Apply did not create a backup."
+    }
+    if ([string]::IsNullOrWhiteSpace($resultPath) -or -not (Test-Path -LiteralPath $resultPath)) {
+        throw "Memory upgrade Apply did not create a result file."
+    }
+    if ((Get-Content -LiteralPath $processPath -Raw) -notmatch "Memory upgraded") {
+        throw "Memory upgrade Apply did not normalize process.txt."
+    }
+
+    Add-Check "memory upgrade flow" "PASS" "Memory upgrade Analyze, Plan, and Apply flow passed against a temporary project." ([ordered]@{
+        project = $memoryUpgradeProject
+        findings = @($analyze.findings).Count
+        proposal = $proposalPath
+        backup = $backupDir
+        result = $resultPath
+    })
+}
+catch {
+    Add-Check "memory upgrade flow" "FAIL" $_.Exception.Message
+}
+
+try {
     $catalogPath = "knowledge-hub/knowledge-catalog.md"
     $catalogText = Get-FileText -RelativePath $catalogPath
     $catalogRequiredTokens = @(
         "knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge/standards/public-knowledge-boundary.md",
+        "knowledge/standards/bilingual-public-private-routing.md",
         "knowledge/domain-packs/embedded-core/catalog.md"
     )
     $missingCatalogTokens = @($catalogRequiredTokens | Where-Object { $catalogText -notlike "*$_*" })
@@ -817,6 +1186,7 @@ try {
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
+        "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/catalog.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/validation-checklist.md"
     )
@@ -967,6 +1337,40 @@ try {
 }
 catch {
     Add-Check "git diff check" "FAIL" $_.Exception.Message
+}
+
+try {
+    $encodingErrors = New-Object 'System.Collections.Generic.List[string]'
+    $psFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.ps1" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
+    foreach ($file in $psFiles) {
+        $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+        if ($bytes.Length -eq 0) {
+            continue
+        }
+
+        $hasUtf8Bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+        $hasNonAscii = $false
+        foreach ($byte in $bytes) {
+            if ($byte -gt 0x7F) {
+                $hasNonAscii = $true
+                break
+            }
+        }
+
+        if ($hasNonAscii -and -not $hasUtf8Bom) {
+            $encodingErrors.Add(("{0}: contains non-ASCII bytes but is not UTF-8 with BOM" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot)))
+        }
+    }
+
+    if ($encodingErrors.Count -gt 0) {
+        Add-Check "Windows PowerShell script encoding" "FAIL" "Non-ASCII PowerShell scripts must be UTF-8 with BOM so Windows PowerShell 5.1 parses them correctly." @($encodingErrors.ToArray())
+    }
+    else {
+        Add-Check "Windows PowerShell script encoding" "PASS" "Non-ASCII PowerShell scripts are UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
+    }
+}
+catch {
+    Add-Check "Windows PowerShell script encoding" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -1216,6 +1620,64 @@ try {
 }
 catch {
     Add-Check "language policy templates" "FAIL" $_.Exception.Message
+}
+
+try {
+    $routingStandard = Get-FileText -RelativePath "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md"
+    $assetRoutingStandard = Get-FileText -RelativePath "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md"
+    $catalogText = Get-FileText -RelativePath "knowledge-hub/knowledge-catalog.md"
+    $assetCatalogText = Get-FileText -RelativePath "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md"
+    $languagePolicy = Get-FileText -RelativePath "docs/language-policy.md"
+    $readiness = Get-FileText -RelativePath "docs/release-readiness.md"
+    $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
+
+    $routingExpectations = [ordered]@{
+        "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
+        "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
+        "knowledge-hub/knowledge-catalog.md" = @("Bilingual Public/Private Routing", "language routing")
+        "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" = @("Bilingual Public/Private Routing")
+        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Public templates remain English-first")
+        "docs/release-readiness.md" = @("Bilingual Public/Private Routing", "localized context discovery headings")
+        "docs/release-process.md" = @("localized context discovery headings", "bilingual public/private routing")
+    }
+
+    $routingMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $routingExpectations.Keys) {
+        $text = switch ($relativePath) {
+            "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md" { $routingStandard }
+            "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" { $assetRoutingStandard }
+            "knowledge-hub/knowledge-catalog.md" { $catalogText }
+            "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" { $assetCatalogText }
+            "docs/language-policy.md" { $languagePolicy }
+            "docs/release-readiness.md" { $readiness }
+            default { $releaseProcess }
+        }
+        foreach ($token in $routingExpectations[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $routingMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $script:evidence.routing = [ordered]@{
+        checked_files = @($routingExpectations.Keys)
+        missing = @($routingMissing.ToArray())
+    }
+
+    if ($routingMissing.Count -gt 0) {
+        Add-Check "bilingual public/private routing" "FAIL" "Bilingual routing guidance is missing from public docs or bundled knowledge assets." $evidence.routing
+    }
+    else {
+        Add-Check "bilingual public/private routing" "PASS" "Public/private language routing is documented in public-safe docs and bundled knowledge assets." $evidence.routing
+    }
+}
+catch {
+    Add-Check "bilingual public/private routing" "FAIL" $_.Exception.Message
+}
+
+}
+catch {
+    Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
 }
 
 $result = [ordered]@{

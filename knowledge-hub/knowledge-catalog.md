@@ -46,6 +46,11 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: deciding whether a knowledge item belongs in the public hub,
     private overlay, or project-local memory.
+- [Bilingual Public/Private Routing](knowledge/standards/bilingual-public-private-routing.md)
+  - Maturity: verified
+  - Scope: cross-project
+  - Use when: deciding language routing across conversation, public artifacts,
+    project memory, and private overlay work.
 
 ### Domain Packs
 

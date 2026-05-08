@@ -8,7 +8,7 @@ The project is organized around a small Workflow Kernel, a layered knowledge
 hub, and project-local memory templates. The first public release is focused on
 the reusable kernel, public-safe knowledge scaffolds, and adoption examples.
 
-Current release: `v0.2.0`.
+Current release: `v0.3.0`.
 
 ## First Release Scope
 
@@ -36,6 +36,8 @@ Current release: `v0.2.0`.
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
+- [Shell strategy](docs/shell-strategy.md)
+- [v0.3.0 release notes](docs/releases/v0.3.0.md)
 - [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
 - [Examples](examples/README.md)
@@ -48,23 +50,40 @@ passed temporary-runtime validation.
 
 Post-`v0.1.0` maintenance has added catalog-first knowledge, first-session
 language write support, spec-lite validation, public-safe domain-pack scaffold,
-and adoption examples for `v0.2.0`.
+adoption examples, manifest-based uninstall, large-context validation coverage,
+and public/private language routing guidance through `v0.3.0`.
 
 ## Quick Start
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 For safe testing, install into a temporary runtime first:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+On non-Windows systems, or when PowerShell 7+ is already available, use
+`pwsh -NoProfile -File` with the same script arguments.
 
 The default install mode prefers links (`Junction` on Windows,
 `SymbolicLink` elsewhere) and falls back to copy mode if link creation fails.
 The generated runtime manifest records the mode used for each installed item.
+Generated runtime directories and manifests can contain local absolute paths.
+Do not commit them to a project repository.
+
+To remove a runtime installed by this public installer, use the manifest-based
+uninstaller:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
+```
+
+The uninstaller removes only paths recorded in `install-manifest.json` plus the
+manifest itself. Unknown files are preserved. If the manifest is missing, the
+script does not remove anything and prints manual cleanup guidance.
 
 ## Profiles
 

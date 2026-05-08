@@ -9,13 +9,20 @@ repository.
 Run the release validation gate before any push, tag, or published release:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
+Windows PowerShell 5.1 is supported. On non-Windows systems, or when PowerShell
+7+ is already available, use `pwsh -NoProfile -File` with the same script
+arguments. The Windows `-ExecutionPolicy Bypass` flag is process-scoped and
+helps when local execution policy or Mark-of-the-Web blocks downloaded scripts.
+See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
+the public release line does not ship Bash or Zsh wrappers yet, and future
+wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
 
 The validator checks:
 
@@ -26,13 +33,16 @@ The validator checks:
 - runtime smoke coverage for bootstrap, context gate, workflow spec creation,
   and memory diagnosis in both recommended copy and link installs
 - installer no-`-Force` conflict behavior and forced reinstall behavior
-- `hub.lock` drift checking against a temporary git-backed hub
+- `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project
+  batch checking against temporary git-backed hubs
+- memory upgrade Analyze, Plan, and Apply flow against a temporary project
 - knowledge catalog, pattern, and standard entry coverage
 - public domain-pack catalog coverage
 - public experience index search
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
 - PowerShell parser checks and JSON parsing
+- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - public sensitive-pattern audit
 - duplicate helper script hashes
 - language policy template coverage in both repository guidance and bootstrap
@@ -40,22 +50,29 @@ The validator checks:
 - first-session language write capability for English and Simplified Chinese
   temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
   the agent or workflow
-- workflow-spec-lite spec validation against complete and intentionally broken
-  fixtures
+- localized context discovery headings in memory diagnosis and upgrade analysis
+- bilingual public/private routing guidance in language policy and bundled
+  knowledge assets
+- workflow-spec-lite spec validation against complete, Loop Contract,
+  Simplified Chinese, and intentionally broken fixtures
 - anti-drift template and memory-governance coverage for scope drift, unrelated
   refactors, and skipped acceptance checks
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
+- v0.3.0 release notes coverage
 
 ## CI Gate
 
 The repository also runs `.github/workflows/release-validation.yml` on pushes to
 `main`, pull requests, and manual dispatch. The workflow executes the same
-validator on:
+validator with PowerShell 7+ (`pwsh`) on:
 
 - `windows-latest`
 - `ubuntu-latest`
 - `macos-latest`
+
+It also runs the validator on `windows-latest` with Windows PowerShell 5.1
+(`shell: powershell`) to keep the Windows bare-machine path covered.
 
 Each job uploads the validator scratch directory as evidence. Treat CI failures
 as release blockers unless the maintainer explicitly records a platform-specific
