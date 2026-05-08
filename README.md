@@ -8,7 +8,7 @@ The project is organized around a small Workflow Kernel, a layered knowledge
 hub, and project-local memory templates. The first public release is focused on
 the reusable kernel, public-safe knowledge scaffolds, and adoption examples.
 
-Current release: `v0.2.0`.
+Current release: `v0.3.0`.
 
 ## First Release Scope
 
@@ -37,6 +37,7 @@ Current release: `v0.2.0`.
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
 - [Shell strategy](docs/shell-strategy.md)
+- [v0.3.0 release notes](docs/releases/v0.3.0.md)
 - [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
 - [Examples](examples/README.md)
@@ -49,7 +50,8 @@ passed temporary-runtime validation.
 
 Post-`v0.1.0` maintenance has added catalog-first knowledge, first-session
 language write support, spec-lite validation, public-safe domain-pack scaffold,
-and adoption examples for `v0.2.0`.
+adoption examples, manifest-based uninstall, large-context validation coverage,
+and public/private language routing guidance through `v0.3.0`.
 
 ## Quick Start
 

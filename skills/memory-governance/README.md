@@ -15,6 +15,10 @@ Memory maintenance skill for project-level `.agents` files.
 - `scripts/memory_diagnose.ps1`: read-only memory health diagnosis.
 - `agents/openai.yaml`: skill metadata for local Agent usage.
 
+Public templates use `## Summary` and `## Keywords` for context discovery
+metadata. The diagnosis helper also recognizes localized equivalents for
+project memory files.
+
 ## Related Repositories
 - Global shared templates and experience live in `knowledge-hub`.
 - This skill governs how project-local memory should be cleaned and routed. It may mark global candidates, but promotion is a separate `knowledge-hub/scripts` maintenance action.

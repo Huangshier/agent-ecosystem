@@ -58,6 +58,28 @@ function Find-SpecRefs {
     )
 }
 
+function Test-DiscoveryHeading {
+    param(
+        [string[]]$Lines,
+        [string[]]$Aliases
+    )
+
+    foreach ($alias in $Aliases) {
+        $pattern = '^\s*##\s+{0}\s*$' -f [regex]::Escape($alias)
+        if ($Lines -match $pattern) {
+            return $true
+        }
+    }
+    return $false
+}
+
+$localizedSummaryHeading = -join @([char]0x6458, [char]0x8981)
+$localizedKeywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
+$discoveryHeadingAliases = [ordered]@{
+    summary = @("Summary", $localizedSummaryHeading)
+    keywords = @("Keywords", $localizedKeywordsHeading)
+}
+
 $root = Resolve-Root $ProjectRoot
 $agentDir = Join-Path $root ".agents"
 $findings = New-Object 'System.Collections.Generic.List[object]'
@@ -130,10 +152,10 @@ if (Test-Path -LiteralPath $contextDir) {
     $contextFiles = @(Get-ChildItem -LiteralPath $contextDir -Recurse -File -Filter "*.md" | Where-Object { $_.Name -notin @("README.md", "case_template.md") })
     foreach ($file in $contextFiles) {
         $preview = Get-Content -LiteralPath $file.FullName -TotalCount 30
-        $hasSummary = $preview -match '^\s*##\s+Summary\s*$'
-        $hasKeywords = $preview -match '^\s*##\s+Keywords\s*$'
+        $hasSummary = Test-DiscoveryHeading -Lines $preview -Aliases $discoveryHeadingAliases.summary
+        $hasKeywords = Test-DiscoveryHeading -Lines $preview -Aliases $discoveryHeadingAliases.keywords
         if (-not $hasSummary -or -not $hasKeywords) {
-            Add-Finding $findings "info" "context_missing_discovery_metadata" $file.FullName "Context file lacks ## Summary or ## Keywords near the top." "Add concise discovery metadata so agents can load context progressively."
+            Add-Finding $findings "info" "context_missing_discovery_metadata" $file.FullName "Context file lacks recognized discovery metadata near the top." "Add concise Summary/Keywords discovery metadata so agents can load context progressively."
         }
     }
 }

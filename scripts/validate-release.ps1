@@ -30,7 +30,9 @@ $evidence = [ordered]@{
     audit = [ordered]@{}
     knowledge_hub = [ordered]@{}
     duplicate_helpers = @()
+    memory_metadata = [ordered]@{}
     language_policy = [ordered]@{}
+    routing = [ordered]@{}
     spec_lite = [ordered]@{}
 }
 
@@ -149,7 +151,9 @@ $requiredFiles = @(
     "docs/shell-strategy.md",
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
+    "docs/releases/v0.3.0.md",
     "knowledge-hub/knowledge-catalog.md",
+    "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
     "examples/minimal-project/README.md",
     "examples/minimal-project/.agents/AGENTS.md",
@@ -436,6 +440,64 @@ try {
 }
 catch {
     Add-Check "runtime smoke" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $localizedProject = Join-PathParts $scratchRootFull "localized-context-discovery"
+    New-Item -ItemType Directory -Force -Path $localizedProject | Out-Null
+    Assert-PathInsideRoot -Path $localizedProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    & $bootstrapScript -ProjectDir $localizedProject -HubDir $hubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $summaryHeading = -join @([char]0x6458, [char]0x8981)
+    $keywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
+    $localizedContextPath = Join-PathParts $localizedProject ".agents" "context" "experience" "localized-discovery.md"
+    $localizedContextText = @(
+        "# Localized Discovery Fixture",
+        "",
+        "## $summaryHeading",
+        "Temporary context entry used by release validation.",
+        "",
+        "## $keywordsHeading",
+        "localized discovery metadata, memory diagnosis, memory upgrade",
+        "",
+        "## Notes",
+        "Both memory diagnostics should recognize the localized discovery headings."
+    )
+    Set-Content -LiteralPath $localizedContextPath -Value $localizedContextText -Encoding UTF8
+
+    $memoryDiagnoseScript = Join-PathParts $recommendedCopyRuntime "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
+    $diagnose = & $memoryDiagnoseScript -ProjectRoot $localizedProject -Json | ConvertFrom-Json
+    $diagnoseMetadataFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "context_missing_discovery_metadata" })
+
+    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $upgrade = & $memoryUpgradeScript -ProjectDir $localizedProject -Mode Analyze -Json | ConvertFrom-Json
+    $upgradeMetadataFindings = @($upgrade.findings | Where-Object { [string]$_.code -eq "context_metadata_missing" })
+
+    $script:evidence.memory_metadata = [ordered]@{
+        project = $localizedProject
+        context_file = $localizedContextPath
+        memory_diagnose_findings = @($diagnose.findings).Count
+        memory_upgrade_findings = @($upgrade.findings).Count
+        diagnose_metadata_findings = $diagnoseMetadataFindings.Count
+        upgrade_metadata_findings = $upgradeMetadataFindings.Count
+    }
+
+    if ($diagnoseMetadataFindings.Count -gt 0 -or $upgradeMetadataFindings.Count -gt 0) {
+        Add-Check "localized context discovery metadata" "FAIL" "Localized discovery headings were reported as missing metadata." $evidence.memory_metadata
+    }
+    else {
+        Add-Check "localized context discovery metadata" "PASS" "Memory diagnosis and upgrade analysis accept localized Summary/Keywords discovery headings." $evidence.memory_metadata
+    }
+}
+catch {
+    Add-Check "localized context discovery metadata" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -836,6 +898,28 @@ catch {
 }
 
 try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.3.0.md"
+    $releaseTokens = @(
+        "v0.3.0",
+        "manifest-based uninstall",
+        "localized context discovery headings",
+        "Bilingual Public/Private Routing",
+        "context gate large context benchmark",
+        "PASS="
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.3.0 release notes" "FAIL" "Release notes are missing required v0.3.0 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.3.0 release notes" "PASS" "v0.3.0 release notes summarize backlog remediation, issue fixes, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.3.0 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
     $batchProjectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project-batch"
@@ -1093,6 +1177,7 @@ try {
         "knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge/standards/public-knowledge-boundary.md",
+        "knowledge/standards/bilingual-public-private-routing.md",
         "knowledge/domain-packs/embedded-core/catalog.md"
     )
     $missingCatalogTokens = @($catalogRequiredTokens | Where-Object { $catalogText -notlike "*$_*" })
@@ -1101,6 +1186,7 @@ try {
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
+        "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/catalog.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/validation-checklist.md"
     )
@@ -1534,6 +1620,59 @@ try {
 }
 catch {
     Add-Check "language policy templates" "FAIL" $_.Exception.Message
+}
+
+try {
+    $routingStandard = Get-FileText -RelativePath "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md"
+    $assetRoutingStandard = Get-FileText -RelativePath "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md"
+    $catalogText = Get-FileText -RelativePath "knowledge-hub/knowledge-catalog.md"
+    $assetCatalogText = Get-FileText -RelativePath "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md"
+    $languagePolicy = Get-FileText -RelativePath "docs/language-policy.md"
+    $readiness = Get-FileText -RelativePath "docs/release-readiness.md"
+    $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
+
+    $routingExpectations = [ordered]@{
+        "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
+        "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
+        "knowledge-hub/knowledge-catalog.md" = @("Bilingual Public/Private Routing", "language routing")
+        "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" = @("Bilingual Public/Private Routing")
+        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Public templates remain English-first")
+        "docs/release-readiness.md" = @("Bilingual Public/Private Routing", "localized context discovery headings")
+        "docs/release-process.md" = @("localized context discovery headings", "bilingual public/private routing")
+    }
+
+    $routingMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $routingExpectations.Keys) {
+        $text = switch ($relativePath) {
+            "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md" { $routingStandard }
+            "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" { $assetRoutingStandard }
+            "knowledge-hub/knowledge-catalog.md" { $catalogText }
+            "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" { $assetCatalogText }
+            "docs/language-policy.md" { $languagePolicy }
+            "docs/release-readiness.md" { $readiness }
+            default { $releaseProcess }
+        }
+        foreach ($token in $routingExpectations[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $routingMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $script:evidence.routing = [ordered]@{
+        checked_files = @($routingExpectations.Keys)
+        missing = @($routingMissing.ToArray())
+    }
+
+    if ($routingMissing.Count -gt 0) {
+        Add-Check "bilingual public/private routing" "FAIL" "Bilingual routing guidance is missing from public docs or bundled knowledge assets." $evidence.routing
+    }
+    else {
+        Add-Check "bilingual public/private routing" "PASS" "Public/private language routing is documented in public-safe docs and bundled knowledge assets." $evidence.routing
+    }
+}
+catch {
+    Add-Check "bilingual public/private routing" "FAIL" $_.Exception.Message
 }
 
 }

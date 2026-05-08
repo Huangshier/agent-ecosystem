@@ -55,6 +55,28 @@ function Add-Finding {
     })
 }
 
+function Test-DiscoveryHeading {
+    param(
+        [string[]]$Lines,
+        [string[]]$Aliases
+    )
+
+    foreach ($alias in $Aliases) {
+        $pattern = '^\s*##\s+{0}\s*$' -f [regex]::Escape($alias)
+        if ($Lines -match $pattern) {
+            return $true
+        }
+    }
+    return $false
+}
+
+$localizedSummaryHeading = -join @([char]0x6458, [char]0x8981)
+$localizedKeywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
+$discoveryHeadingAliases = [ordered]@{
+    summary = @("Summary", $localizedSummaryHeading)
+    keywords = @("Keywords", $localizedKeywordsHeading)
+}
+
 function Get-Analysis {
     param([string]$Root)
 
@@ -118,8 +140,10 @@ function Get-Analysis {
         $contextFiles = @(Get-ChildItem -LiteralPath $contextDir -Recurse -File -Filter "*.md" | Where-Object { $_.Name -notin @("README.md", "case_template.md") })
         foreach ($file in $contextFiles) {
             $preview = Get-Content -LiteralPath $file.FullName -TotalCount 30
-            if (-not ($preview -match '^\s*##\s+Summary\s*$') -or -not ($preview -match '^\s*##\s+Keywords\s*$')) {
-                Add-Finding $findings "info" "context_metadata_missing" $file.FullName "Context file lacks discovery metadata." "Add ## Summary and ## Keywords near the top."
+            $hasSummary = Test-DiscoveryHeading -Lines $preview -Aliases $discoveryHeadingAliases.summary
+            $hasKeywords = Test-DiscoveryHeading -Lines $preview -Aliases $discoveryHeadingAliases.keywords
+            if (-not $hasSummary -or -not $hasKeywords) {
+                Add-Finding $findings "info" "context_metadata_missing" $file.FullName "Context file lacks discovery metadata." "Add concise Summary/Keywords discovery metadata near the top."
             }
         }
     }

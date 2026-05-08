@@ -4,10 +4,11 @@
 
 公开文档以英文优先；本文件提供第一版 public release 的简短中文入口。
 
-当前公开版本是 `v0.2.0`。第一版公开 release 包含
+当前公开版本是 `v0.3.0`。第一版公开 release 包含
 Workflow Kernel、public installer、public knowledge templates 和 release
 validation workflow；`v0.2.0` 补充 language write、spec validator、
-domain-pack scaffold 和 adoption examples。
+domain-pack scaffold 和 adoption examples；`v0.3.0` 补充 manifest-based
+uninstall、large-context validation 和 public/private language routing。
 
 ## 第一版公开范围
 
@@ -64,5 +65,6 @@ developer maintenance tooling。
 - [Architecture](docs/architecture.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Release readiness](docs/release-readiness.md)
+- [v0.3.0 release notes](docs/releases/v0.3.0.md)
 - [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Examples](examples/README.md)

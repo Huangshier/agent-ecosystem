@@ -50,12 +50,16 @@ The validator checks:
 - first-session language write capability for English and Simplified Chinese
   temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
   the agent or workflow
+- localized context discovery headings in memory diagnosis and upgrade analysis
+- bilingual public/private routing guidance in language policy and bundled
+  knowledge assets
 - workflow-spec-lite spec validation against complete, Loop Contract,
   Simplified Chinese, and intentionally broken fixtures
 - anti-drift template and memory-governance coverage for scope drift, unrelated
   refactors, and skipped acceptance checks
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
+- v0.3.0 release notes coverage
 
 ## CI Gate
 

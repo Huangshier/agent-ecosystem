@@ -1,9 +1,10 @@
 # Release Readiness
 
-Status: `v0.2.0` release candidate.
+Status: `v0.3.0` release candidate.
 
-The initial public release has been published as `v0.1.0`; `v0.2.0` closes the
-public migration work and moves the project toward normal maintenance.
+The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
+public migration work. `v0.3.0` packages backlog remediation and two public
+maintenance issues into the normal release flow.
 
 ## Completed
 
@@ -59,6 +60,21 @@ public migration work and moves the project toward normal maintenance.
 - Public adoption surface includes `docs/how-to-adapt.md` and
   `examples/minimal-project/`.
 - Public release notes are present at `docs/releases/v0.2.0.md`.
+- Manifest-based uninstall preserves unknown runtime files and provides manual
+  cleanup guidance when no manifest exists.
+- Shared PowerShell helper extraction keeps path guard logic consistent across
+  installer, uninstaller, validator, and benchmark scripts.
+- Release validation helper extraction keeps common test utilities in
+  `scripts/validation/release-test-helper.ps1`.
+- Large-context benchmark coverage validates context gate JSON behavior with
+  500 generated context files.
+- Cross-platform shell strategy documents PowerShell as the canonical public
+  script surface and defers Bash or Zsh wrappers.
+- Memory diagnostics and memory upgrade analysis accept localized context
+  discovery headings while preserving English-first public templates.
+- Bilingual Public/Private Routing guidance is documented in the public
+  knowledge hub and language policy.
+- Public release notes are present at `docs/releases/v0.3.0.md`.
 
 ## Required Before Future Publishing
 
@@ -143,3 +159,7 @@ The release validator now covers:
 - anti-drift template and memory-governance coverage
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
+- localized context discovery headings for memory diagnosis and upgrade
+  analysis
+- bilingual public/private routing documentation coverage
+- v0.3.0 release notes coverage

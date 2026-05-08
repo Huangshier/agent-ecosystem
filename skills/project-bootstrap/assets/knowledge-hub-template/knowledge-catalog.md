@@ -34,6 +34,7 @@ hub. Use it before opening individual knowledge files.
 ### Standards
 
 - [Public Knowledge Boundary](knowledge/standards/public-knowledge-boundary.md)
+- [Bilingual Public/Private Routing](knowledge/standards/bilingual-public-private-routing.md)
 
 ## Maintenance
 
