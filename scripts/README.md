@@ -46,3 +46,9 @@ The uninstaller reads `install-manifest.json` and removes only the destinations
 listed there, then removes the manifest. It preserves unknown files and prints
 manual cleanup guidance instead of deleting anything when the manifest is
 missing.
+
+Helper layout:
+
+- `lib/path-guard.ps1`: shared path joining and safety guards.
+- `validation/release-test-helper.ps1`: common helper functions used by the
+  release validator.

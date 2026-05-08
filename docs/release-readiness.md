@@ -132,8 +132,8 @@ The release validator now covers:
 - experience promote -> rebuild -> search closure using a temporary hub copy
 - knowledge catalog coverage for experience, patterns, and standards
 - public domain-pack catalog coverage
-- duplicate helper hashes, parser checks, JSON parsing, public structure,
-  sensitive-pattern audit, and language policy templates
+- duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,
+  public structure, sensitive-pattern audit, and language policy templates
 - Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
