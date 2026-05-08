@@ -20,6 +20,12 @@ Manifest-based uninstall:
 .\uninstall.ps1 -TargetDir <runtime>
 ```
 
+Context gate benchmark:
+
+```powershell
+.\benchmark-context-gate.ps1 -ContextFileCount 500 -MaxSeconds 30
+```
+
 Profiles:
 
 - `minimal`: `project-bootstrap` plus the public knowledge hub.

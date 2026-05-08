@@ -135,6 +135,7 @@ $requiredFiles = @(
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "scripts/benchmark-context-gate.ps1",
     "scripts/install.ps1",
     "scripts/lib/path-guard.ps1",
     "scripts/uninstall.ps1",
@@ -179,7 +180,7 @@ else {
 
 try {
     $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
-    $pathGuardConsumers = @("scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
+    $pathGuardConsumers = @("scripts/benchmark-context-gate.ps1", "scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
     $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
     $localDefinitions = New-Object 'System.Collections.Generic.List[string]'
 
@@ -434,6 +435,21 @@ try {
 }
 catch {
     Add-Check "runtime smoke" "FAIL" $_.Exception.Message
+}
+
+try {
+    $benchmarkScript = Join-PathParts $repoRoot "scripts" "benchmark-context-gate.ps1"
+    $benchmarkScratch = Join-PathParts $scratchRootFull "context-gate-benchmark"
+    Assert-PathInsideRoot -Path $benchmarkScratch -Root $scratchRootFull
+    $benchmarkJsonText = & $benchmarkScript -ScratchRoot $benchmarkScratch -ContextFileCount 500 -MaxSeconds 30 -Json
+    $benchmark = $benchmarkJsonText | ConvertFrom-Json
+    if (-not [bool]$benchmark.passed) {
+        throw ("Benchmark did not pass. Elapsed={0}s, threshold={1}s, included={2}" -f $benchmark.elapsed_seconds, $benchmark.max_seconds, $benchmark.included_context_files)
+    }
+    Add-Check "context gate large context benchmark" "PASS" ("Context gate JSON handled {0} context files in {1}s." -f $benchmark.included_context_files, $benchmark.elapsed_seconds) $benchmark
+}
+catch {
+    Add-Check "context gate large context benchmark" "FAIL" $_.Exception.Message
 }
 
 try {
