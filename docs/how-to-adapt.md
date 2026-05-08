@@ -21,6 +21,15 @@ On non-Windows systems, or when PowerShell 7+ is already available, replace
 `powershell -NoProfile -ExecutionPolicy Bypass -File` with
 `pwsh -NoProfile -File`.
 
+To remove a generated runtime later, use the manifest-based uninstaller:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
+```
+
+It removes only paths recorded in `install-manifest.json` and preserves unknown
+files. If the manifest is missing, no cleanup is performed automatically.
+
 ## 2. Bootstrap A Project
 
 Run `project-bootstrap` from the installed runtime:

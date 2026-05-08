@@ -14,6 +14,12 @@ Useful validation form:
 .\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
+Manifest-based uninstall:
+
+```powershell
+.\uninstall.ps1 -TargetDir <runtime>
+```
+
 Profiles:
 
 - `minimal`: `project-bootstrap` plus the public knowledge hub.
@@ -35,3 +41,8 @@ selected profile, installed skills, whether link mode was preferred, and each
 item's final install mode.
 Because this metadata includes local runtime and source paths, do not commit
 generated runtime directories or manifests to project repositories.
+
+The uninstaller reads `install-manifest.json` and removes only the destinations
+listed there, then removes the manifest. It preserves unknown files and prints
+manual cleanup guidance instead of deleting anything when the manifest is
+missing.

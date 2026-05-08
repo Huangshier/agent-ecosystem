@@ -293,6 +293,7 @@ $requiredFiles = @(
     "SECURITY.md",
     "scripts/install.ps1",
     "scripts/lib/path-guard.ps1",
+    "scripts/uninstall.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/how-to-adapt.md",
@@ -333,7 +334,7 @@ else {
 
 try {
     $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
-    $pathGuardConsumers = @("scripts/install.ps1", "scripts/validate-release.ps1")
+    $pathGuardConsumers = @("scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
     $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
     $localDefinitions = New-Object 'System.Collections.Generic.List[string]'
 
@@ -1013,6 +1014,66 @@ try {
 }
 catch {
     Add-Check "installer behavior" "FAIL" $_.Exception.Message
+}
+
+try {
+    $installer = Join-PathParts $repoRoot "scripts" "install.ps1"
+    $uninstaller = Join-PathParts $repoRoot "scripts" "uninstall.ps1"
+    $targetDir = Join-PathParts $scratchRootFull "uninstall-behavior-runtime"
+    Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
+
+    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    $manifestPath = Join-PathParts $targetDir "install-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        throw "Install manifest missing before uninstall validation."
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $manifestDestinations = @($manifest.items | ForEach-Object { [string]$_.destination })
+
+    $extraFile = Join-PathParts $targetDir "user-extra.txt"
+    $extraNested = Join-PathParts $targetDir "skills" "user-skill" "README.md"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $extraNested) | Out-Null
+    Set-Content -LiteralPath $extraFile -Value "preserve me" -Encoding UTF8
+    Set-Content -LiteralPath $extraNested -Value "preserve nested user content" -Encoding UTF8
+
+    $uninstallJsonText = & $uninstaller -TargetDir $targetDir -Json
+    $uninstallResult = $uninstallJsonText | ConvertFrom-Json
+    if ([string]$uninstallResult.status -ne "uninstalled") {
+        throw "Uninstaller did not report uninstalled status."
+    }
+    foreach ($destination in $manifestDestinations) {
+        if (Test-Path -LiteralPath $destination) {
+            throw "Manifest destination still exists after uninstall: $destination"
+        }
+    }
+    if (Test-Path -LiteralPath $manifestPath) {
+        throw "Install manifest still exists after uninstall."
+    }
+    if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $extraNested)) {
+        throw "Unknown runtime files were not preserved by uninstall."
+    }
+
+    $missingManifestDir = Join-PathParts $scratchRootFull "uninstall-missing-manifest-runtime"
+    New-Item -ItemType Directory -Force -Path $missingManifestDir | Out-Null
+    Set-Content -LiteralPath (Join-PathParts $missingManifestDir "user-extra.txt") -Value "preserve me" -Encoding UTF8
+    $missingManifestJsonText = & $uninstaller -TargetDir $missingManifestDir -Json
+    $missingManifestResult = $missingManifestJsonText | ConvertFrom-Json
+    if ([string]$missingManifestResult.status -ne "missing_manifest") {
+        throw "Missing-manifest uninstall did not report missing_manifest status."
+    }
+    if (-not (Test-Path -LiteralPath (Join-PathParts $missingManifestDir "user-extra.txt"))) {
+        throw "Missing-manifest uninstall removed unknown content."
+    }
+
+    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall removes installed items while preserving unknown runtime files." ([ordered]@{
+        target_dir = $targetDir
+        removed = @($uninstallResult.removed)
+        missing_manifest_status = [string]$missingManifestResult.status
+        preserved_unknown = [bool]$uninstallResult.preserved_unknown
+    })
+}
+catch {
+    Add-Check "uninstall behavior" "FAIL" $_.Exception.Message
 }
 
 try {

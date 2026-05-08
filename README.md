@@ -71,6 +71,17 @@ The generated runtime manifest records the mode used for each installed item.
 Generated runtime directories and manifests can contain local absolute paths.
 Do not commit them to a project repository.
 
+To remove a runtime installed by this public installer, use the manifest-based
+uninstaller:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
+```
+
+The uninstaller removes only paths recorded in `install-manifest.json` plus the
+manifest itself. Unknown files are preserved. If the manifest is missing, the
+script does not remove anything and prints manual cleanup guidance.
+
 ## Profiles
 
 The `v0.1.0` release provides four public profile names:

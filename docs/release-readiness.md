@@ -106,6 +106,11 @@ selected profile, skill names, whether link mode was preferred, and each
 installed item's final mode (`junction`, `symboliclink`, `copy`, or
 `copy-fallback`).
 
+`scripts/uninstall.ps1` uses that manifest as the only automatic cleanup
+authority. It removes manifest-listed install destinations and the manifest,
+preserves unknown runtime files, and prints manual cleanup guidance without
+removing anything when the manifest is missing.
+
 ## Suggested Public Audit
 
 Before publishing, scan the public tree for high-risk path and credential
@@ -122,6 +127,7 @@ The release validator now covers:
 - profile matrix installs in copy and link modes
 - recommended runtime smoke for copy and link installs
 - no-`-Force` conflict behavior and forced reinstall behavior
+- manifest-based uninstall behavior with unknown runtime files preserved
 - `hub.lock` drift checking with a temporary git-backed hub
 - experience promote -> rebuild -> search closure using a temporary hub copy
 - knowledge catalog coverage for experience, patterns, and standards
