@@ -65,6 +65,8 @@ For safe testing, install into a temporary runtime first:
 The default install mode prefers links (`Junction` on Windows,
 `SymbolicLink` elsewhere) and falls back to copy mode if link creation fails.
 The generated runtime manifest records the mode used for each installed item.
+Generated runtime directories and manifests can contain local absolute paths.
+Do not commit them to a project repository.
 
 ## Profiles
 

@@ -33,7 +33,7 @@ project-context-gate/
 Run the helper from a repository root to list the context files that should be loaded:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/context_gate.ps1 -ProjectRoot .
+pwsh -NoProfile -File scripts/context_gate.ps1 -ProjectRoot .
 ```
 
 The helper inventories files and git state; the agent still reads and applies the listed context.

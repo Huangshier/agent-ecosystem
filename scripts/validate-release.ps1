@@ -280,10 +280,18 @@ function Test-Manifest {
     return @($errors.ToArray())
 }
 
+try {
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Add-Check "PowerShell runtime" "FAIL" "Release validation requires PowerShell 7+ (`pwsh`) because validation fixtures include UTF-8 multilingual content."
+}
+else {
+
 $requiredFiles = @(
     "README.md",
     "README.zh-CN.md",
     "LICENSE",
+    "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
     "scripts/install.ps1",
@@ -293,6 +301,7 @@ $requiredFiles = @(
     "docs/language-policy.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
+    "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "knowledge-hub/knowledge-catalog.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -1216,6 +1225,12 @@ try {
 }
 catch {
     Add-Check "language policy templates" "FAIL" $_.Exception.Message
+}
+
+}
+}
+catch {
+    Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
 }
 
 $result = [ordered]@{

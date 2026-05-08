@@ -67,7 +67,7 @@ Follow this exact sequence:
 - Detect when `.agents` has become a second copy of active `docs/specs/` content.
 - Prefer the helper when available:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
+  pwsh -NoProfile -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
   ```
   Use `-Json` for structured output.
 

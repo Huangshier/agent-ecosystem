@@ -166,4 +166,7 @@ if ($PSCmdlet.ShouldProcess($manifestPath, "Write install manifest")) {
 
 Write-Host "Installed Agent Ecosystem profile '$Profile' to: $targetRoot"
 Write-Host "Skills: $($skillNames -join ', ')"
+if ($Profile -in @("full", "dev")) {
+    Write-Host "Note: profile '$Profile' currently installs the same public content as 'recommended'; it is reserved for future public content."
+}
 Write-Host "Manifest: $manifestPath"

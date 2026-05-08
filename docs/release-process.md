@@ -9,13 +9,15 @@ repository.
 Run the release validation gate before any push, tag, or published release:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
+Run the gate with PowerShell 7+ (`pwsh`); validation fixtures include UTF-8
+multilingual content.
 
 The validator checks:
 

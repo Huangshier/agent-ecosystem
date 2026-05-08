@@ -78,6 +78,18 @@ The first public scaffold is `embedded-core`, a public-safe embedded validation
 checklist. SDK-specific automation and private domain skills remain outside the
 public kernel.
 
+Promotion from a Markdown domain pack to a scriptable public skill should wait
+until all of these are true:
+
+- the workflow has been used successfully in at least two independent projects
+  or by two independent maintainers
+- the inputs, outputs, stop rules, and validation commands are stable enough to
+  document without private environment assumptions
+- public-safe fixtures or examples exist for the expected success and failure
+  paths
+- the workflow can pass the release validator without requiring private
+  credentials, local-only paths, or hardware-specific access
+
 ## Installation Direction
 
 The long-term quick start should be:

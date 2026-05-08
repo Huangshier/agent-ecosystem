@@ -50,7 +50,7 @@ Do not run the gate mechanically before every search, edit, validation command, 
 Prefer running the helper when available:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/context_gate.ps1 -ProjectRoot <repo-root>
+pwsh -NoProfile -File scripts/context_gate.ps1 -ProjectRoot <repo-root>
 ```
 
 Run the command from the `project-context-gate` skill directory, or specify the full path to the script.

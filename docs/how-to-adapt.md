@@ -22,15 +22,15 @@ For evaluation, use a temporary runtime first:
 Run `project-bootstrap` from the installed runtime:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
 ```
 
 Set project memory language explicitly during the first non-trivial memory
 write when the agent or workflow knows the user's primary language:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
 The script does not infer chat language by itself.
@@ -60,8 +60,8 @@ Do not copy the public tree into a private overlay. Add only private increments.
 Recommended checks:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
-powershell -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
 ```
 
 For release-quality changes to this public repository, run:

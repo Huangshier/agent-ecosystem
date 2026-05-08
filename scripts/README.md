@@ -33,3 +33,5 @@ Install modes:
 The generated `install-manifest.json` is runtime metadata. It records the
 selected profile, installed skills, whether link mode was preferred, and each
 item's final install mode.
+Because this metadata includes local runtime and source paths, do not commit
+generated runtime directories or manifests to project repositories.

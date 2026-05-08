@@ -14,6 +14,10 @@ The first public release is focused on the Workflow Kernel:
 Domain-specific skills and private overlays are intentionally out of scope until
 the public kernel and installer are stable.
 
+No contributor license agreement is required for this project. By contributing,
+you agree that your contribution can be distributed under the repository's MIT
+license.
+
 ## Public-Safe Contributions
 
 Before opening a change, make sure the public tree does not include:
@@ -30,8 +34,11 @@ Recommended checks before proposing a change:
 
 ```powershell
 git diff --check
-powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+Use PowerShell 7+ (`pwsh`) for validation commands. Some validation fixtures
+include UTF-8 multilingual content.
 
 For PowerShell changes, parse scripts before committing:
 

@@ -83,13 +83,13 @@ Safe validation form:
 Full release validation form:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Machine-readable output form:
 
 ```powershell
-.\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
 
 ## Installer Metadata
