@@ -146,6 +146,7 @@ $requiredFiles = @(
     "docs/language-policy.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
+    "docs/shell-strategy.md",
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "knowledge-hub/knowledge-catalog.md",
@@ -762,6 +763,54 @@ try {
 }
 catch {
     Add-Check "adoption surface" "FAIL" $_.Exception.Message
+}
+
+try {
+    $shellStrategy = Get-FileText -RelativePath "docs/shell-strategy.md"
+    $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
+    $workflow = Get-FileText -RelativePath ".github/workflows/release-validation.yml"
+    $readme = Get-FileText -RelativePath "README.md"
+    $roadmap = Get-FileText -RelativePath "docs/roadmap/evolution-plan.md"
+    $shellExpectations = [ordered]@{
+        "docs/shell-strategy.md" = @("Windows PowerShell 5.1", "PowerShell 7+", "pwsh -NoProfile -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
+        "docs/release-process.md" = @("Shell strategy", "Bash or Zsh wrappers", "canonical", ".ps1")
+        "README.md" = @("Shell strategy")
+        "docs/roadmap/evolution-plan.md" = @("Shell Direction", "Bash or Zsh wrappers are deferred", "canonical", ".ps1")
+    }
+    $shellMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $shellExpectations.Keys) {
+        $text = switch ($relativePath) {
+            "docs/shell-strategy.md" { $shellStrategy }
+            "docs/release-process.md" { $releaseProcess }
+            "README.md" { $readme }
+            default { $roadmap }
+        }
+        foreach ($token in $shellExpectations[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $shellMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $workflowTokens = @("windows-latest", "ubuntu-latest", "macos-latest", "shell: pwsh", "shell: powershell")
+    foreach ($token in $workflowTokens) {
+        if ($workflow -notlike ("*{0}*" -f $token)) {
+            $shellMissing.Add(".github/workflows/release-validation.yml missing token: $token")
+        }
+    }
+
+    if ($shellMissing.Count -gt 0) {
+        Add-Check "cross-platform shell strategy" "FAIL" "Shell strategy docs or CI shell entries are inconsistent." @($shellMissing.ToArray())
+    }
+    else {
+        Add-Check "cross-platform shell strategy" "PASS" "PowerShell host support and deferred non-PowerShell wrapper policy are documented and aligned with CI." ([ordered]@{
+            docs = @($shellExpectations.Keys)
+            ci_tokens = @($workflowTokens)
+        })
+    }
+}
+catch {
+    Add-Check "cross-platform shell strategy" "FAIL" $_.Exception.Message
 }
 
 try {

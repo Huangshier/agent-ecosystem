@@ -129,6 +129,7 @@ The release validator now covers:
 - no-`-Force` conflict behavior and forced reinstall behavior
 - manifest-based uninstall behavior with unknown runtime files preserved
 - context gate JSON performance with 500 generated context files
+- cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub
 - experience promote -> rebuild -> search closure using a temporary hub copy
 - knowledge catalog coverage for experience, patterns, and standards

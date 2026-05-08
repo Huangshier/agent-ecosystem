@@ -106,6 +106,17 @@ Planned profiles:
   installable content.
 - `dev`: development and migration support tools.
 
+## Shell Direction
+
+The public Workflow Kernel remains PowerShell-first. Windows users can use
+Windows PowerShell 5.1; cross-platform users should use PowerShell 7+ with
+`pwsh -NoProfile -File`.
+
+Bash or Zsh wrappers are deferred until a later release. When added, they should
+be thin launchers that locate `pwsh` and delegate to the canonical `.ps1`
+entrypoints rather than reimplementing install, uninstall, context-gate, or
+release validation behavior.
+
 ## Language Policy
 
 Community-facing public documentation is English-first. Chinese documentation

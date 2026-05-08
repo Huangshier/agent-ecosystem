@@ -20,6 +20,9 @@ Windows PowerShell 5.1 is supported. On non-Windows systems, or when PowerShell
 7+ is already available, use `pwsh -NoProfile -File` with the same script
 arguments. The Windows `-ExecutionPolicy Bypass` flag is process-scoped and
 helps when local execution policy or Mark-of-the-Web blocks downloaded scripts.
+See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
+the public release line does not ship Bash or Zsh wrappers yet, and future
+wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
 
 The validator checks:
 

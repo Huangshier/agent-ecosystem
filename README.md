@@ -36,6 +36,7 @@ Current release: `v0.2.0`.
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
+- [Shell strategy](docs/shell-strategy.md)
 - [v0.2.0 release notes](docs/releases/v0.2.0.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
 - [Examples](examples/README.md)
