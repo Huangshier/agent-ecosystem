@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
@@ -169,10 +169,15 @@ function Get-LineMatches {
     return @($lineMatches.ToArray())
 }
 
-function Get-CurrentPwshPath {
+function Get-CurrentPowerShellPath {
     $currentProcess = Get-Process -Id $PID
     if (-not [string]::IsNullOrWhiteSpace($currentProcess.Path)) {
         return $currentProcess.Path
+    }
+
+    $windowsPowerShell = Get-Command powershell -ErrorAction SilentlyContinue
+    if ($null -ne $windowsPowerShell -and -not [string]::IsNullOrWhiteSpace($windowsPowerShell.Source)) {
+        return $windowsPowerShell.Source
     }
 
     $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
@@ -180,17 +185,38 @@ function Get-CurrentPwshPath {
         return $pwsh.Source
     }
 
-    throw "Unable to locate pwsh executable for isolated negative-path checks."
+    throw "Unable to locate a PowerShell executable for isolated negative-path checks."
 }
 
-function Invoke-IsolatedPwshScript {
+function Get-PowerShellFileArguments {
+    param(
+        [Parameter(Mandatory = $true)][string]$PowerShellPath,
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
+
+    $result = @("-NoProfile")
+    $exeName = [System.IO.Path]::GetFileNameWithoutExtension($PowerShellPath)
+    $isWindowsPlatform = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+    if ($isWindowsPlatform -and $exeName -in @("powershell", "pwsh")) {
+        $result += "-ExecutionPolicy"
+        $result += "Bypass"
+    }
+    $result += "-File"
+    $result += $ScriptPath
+    $result += $Arguments
+    return @($result)
+}
+
+function Invoke-IsolatedPowerShellScript {
     param(
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [string[]]$Arguments = @()
     )
 
-    $pwshPath = Get-CurrentPwshPath
-    $output = @(& $pwshPath -NoProfile -File $ScriptPath @Arguments 2>&1 | ForEach-Object { [string]$_ })
+    $powerShellPath = Get-CurrentPowerShellPath
+    $powerShellArguments = @(Get-PowerShellFileArguments -PowerShellPath $powerShellPath -ScriptPath $ScriptPath -Arguments $Arguments)
+    $output = @(& $powerShellPath @powerShellArguments 2>&1 | ForEach-Object { [string]$_ })
     return [ordered]@{
         exit_code = [int]$LASTEXITCODE
         output = @($output)
@@ -309,11 +335,6 @@ function Test-Manifest {
 }
 
 try {
-
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Add-Check "PowerShell runtime" "FAIL" "Release validation requires PowerShell 7+ (`pwsh`) because validation fixtures include UTF-8 multilingual content."
-}
-else {
 
 $requiredFiles = @(
     "README.md",
@@ -925,7 +946,7 @@ try {
             [Parameter(Mandatory = $true)][string]$ExpectedStatus
         )
 
-        $result = Invoke-IsolatedPwshScript -ScriptPath $checkHubLockScript -Arguments $Arguments
+        $result = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments $Arguments
         $statusMatched = @($result.output | Where-Object { $_ -match ("^Status:\s+{0}$" -f [regex]::Escape($ExpectedStatus)) }).Count -gt 0
         if ($result.exit_code -eq 0 -or -not $statusMatched) {
             throw ("hub.lock negative case {0} failed. Exit={1}; expected status={2}; output={3}" -f $Name, $result.exit_code, $ExpectedStatus, ($result.output -join " | "))
@@ -1229,6 +1250,40 @@ catch {
 }
 
 try {
+    $encodingErrors = New-Object 'System.Collections.Generic.List[string]'
+    $psFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.ps1" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
+    foreach ($file in $psFiles) {
+        $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+        if ($bytes.Length -eq 0) {
+            continue
+        }
+
+        $hasUtf8Bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+        $hasNonAscii = $false
+        foreach ($byte in $bytes) {
+            if ($byte -gt 0x7F) {
+                $hasNonAscii = $true
+                break
+            }
+        }
+
+        if ($hasNonAscii -and -not $hasUtf8Bom) {
+            $encodingErrors.Add(("{0}: contains non-ASCII bytes but is not UTF-8 with BOM" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot)))
+        }
+    }
+
+    if ($encodingErrors.Count -gt 0) {
+        Add-Check "Windows PowerShell script encoding" "FAIL" "Non-ASCII PowerShell scripts must be UTF-8 with BOM so Windows PowerShell 5.1 parses them correctly." @($encodingErrors.ToArray())
+    }
+    else {
+        Add-Check "Windows PowerShell script encoding" "PASS" "Non-ASCII PowerShell scripts are UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
+    }
+}
+catch {
+    Add-Check "Windows PowerShell script encoding" "FAIL" $_.Exception.Message
+}
+
+try {
     $parseErrors = New-Object 'System.Collections.Generic.List[string]'
     $psFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.ps1" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
     foreach ($file in $psFiles) {
@@ -1477,7 +1532,6 @@ catch {
     Add-Check "language policy templates" "FAIL" $_.Exception.Message
 }
 
-}
 }
 catch {
     Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)

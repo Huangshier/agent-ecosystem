@@ -20,9 +20,12 @@ from the user's primary language.
 write. An agent or workflow can pass the user's primary language explicitly:
 
 ```powershell
-.\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
-.\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
+
+On non-Windows systems, or when PowerShell 7+ is already available, use
+`pwsh -NoProfile -File` with the same script arguments.
 
 The helper does not infer chat language by itself. It writes the supplied
 language into `.agents/AGENTS.md` and localizes the initial project memory

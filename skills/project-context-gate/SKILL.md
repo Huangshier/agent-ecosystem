@@ -50,8 +50,12 @@ Do not run the gate mechanically before every search, edit, validation command, 
 Prefer running the helper when available:
 
 ```powershell
-pwsh -NoProfile -File scripts/context_gate.ps1 -ProjectRoot <repo-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/context_gate.ps1 -ProjectRoot <repo-root>
 ```
+
+On non-Windows systems, or when PowerShell 7+ is already available, replace
+`powershell -NoProfile -ExecutionPolicy Bypass -File` with
+`pwsh -NoProfile -File`.
 
 Run the command from the `project-context-gate` skill directory, or specify the full path to the script.
 The skill is typically installed under the global agent home (`%USERPROFILE%\.agents\skills\project-context-gate\`) or the active agent's synchronized skills directory.

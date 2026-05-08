@@ -27,7 +27,7 @@ public migration work and moves the project toward normal maintenance.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 22 checks passing, no
+- Latest local hardened release validation passed with 23 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
@@ -39,8 +39,8 @@ public migration work and moves the project toward normal maintenance.
 - Latest local high-risk public audit found no matches, and public PowerShell
   scripts parsed successfully.
 - CI release validation workflow is present at
-  `.github/workflows/release-validation.yml` and is configured for Windows,
-  Ubuntu, and macOS runners.
+  `.github/workflows/release-validation.yml` and is configured for PowerShell 7
+  on Windows, Ubuntu, and macOS, plus Windows PowerShell 5.1 on Windows.
 - Hosted CI release validation passed on Windows, Ubuntu, and macOS:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
 - `.gitattributes` pins validation-sensitive text files to LF endings so
@@ -71,26 +71,29 @@ public migration work and moves the project toward normal maintenance.
 ## Current Quick Start
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 Safe validation form:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
 Full release validation form:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Machine-readable output form:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
+
+Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or
+when PowerShell 7+ is already available.
 
 ## Installer Metadata
 
@@ -125,6 +128,7 @@ The release validator now covers:
 - public domain-pack catalog coverage
 - duplicate helper hashes, parser checks, JSON parsing, public structure,
   sensitive-pattern audit, and language policy templates
+- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
 - workflow-spec-lite validator positive/negative fixtures

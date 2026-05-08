@@ -67,9 +67,9 @@ Follow this exact sequence:
 - Detect when `.agents` has become a second copy of active `docs/specs/` content.
 - Prefer the helper when available:
   ```powershell
-  pwsh -NoProfile -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memory_diagnose.ps1 -ProjectRoot <repo-root>
   ```
-  Use `-Json` for structured output.
+  Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or when PowerShell 7+ is already available. Use `-Json` for structured output.
 
 4. Refactor by destination:
 - Compress `notes.md` to stable facts.

@@ -25,14 +25,17 @@ domain-pack scaffold 和 adoption examples。
 ## 快速开始
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 建议先安装到临时 runtime 做验证：
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+非 Windows 系统，或已经安装 PowerShell 7+ 时，可以用
+`pwsh -NoProfile -File` 加相同脚本参数。
 
 默认安装模式会优先创建链接；如果链接创建失败，安装器会回退到 copy mode。
 安装器会在目标 runtime 下生成 `install-manifest.json`，记录 profile、skills 和

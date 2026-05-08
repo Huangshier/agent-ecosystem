@@ -53,14 +53,17 @@ and adoption examples for `v0.2.0`.
 ## Quick Start
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 For safe testing, install into a temporary runtime first:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
+
+On non-Windows systems, or when PowerShell 7+ is already available, use
+`pwsh -NoProfile -File` with the same script arguments.
 
 The default install mode prefers links (`Junction` on Windows,
 `SymbolicLink` elsewhere) and falls back to copy mode if link creation fails.

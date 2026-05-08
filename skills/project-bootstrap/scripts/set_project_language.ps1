@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess = $true)]
+﻿[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$ProjectDir = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$ProjectLanguage,

@@ -34,11 +34,14 @@ Recommended checks before proposing a change:
 
 ```powershell
 git diff --check
-pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
-Use PowerShell 7+ (`pwsh`) for validation commands. Some validation fixtures
-include UTF-8 multilingual content.
+Windows PowerShell 5.1 is supported for public scripts. On non-Windows systems,
+or when PowerShell 7+ is already available, use `pwsh -NoProfile -File` with the
+same script arguments. The Windows `-ExecutionPolicy Bypass` example is
+process-scoped and helps when downloaded scripts are blocked by local policy or
+Mark-of-the-Web.
 
 For PowerShell changes, parse scripts before committing:
 

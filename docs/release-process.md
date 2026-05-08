@@ -9,15 +9,17 @@ repository.
 Run the release validation gate before any push, tag, or published release:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
-Run the gate with PowerShell 7+ (`pwsh`); validation fixtures include UTF-8
-multilingual content.
+Windows PowerShell 5.1 is supported. On non-Windows systems, or when PowerShell
+7+ is already available, use `pwsh -NoProfile -File` with the same script
+arguments. The Windows `-ExecutionPolicy Bypass` flag is process-scoped and
+helps when local execution policy or Mark-of-the-Web blocks downloaded scripts.
 
 The validator checks:
 
@@ -37,6 +39,7 @@ The validator checks:
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
 - PowerShell parser checks and JSON parsing
+- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - public sensitive-pattern audit
 - duplicate helper script hashes
 - language policy template coverage in both repository guidance and bootstrap
@@ -55,11 +58,14 @@ The validator checks:
 
 The repository also runs `.github/workflows/release-validation.yml` on pushes to
 `main`, pull requests, and manual dispatch. The workflow executes the same
-validator on:
+validator with PowerShell 7+ (`pwsh`) on:
 
 - `windows-latest`
 - `ubuntu-latest`
 - `macos-latest`
+
+It also runs the validator on `windows-latest` with Windows PowerShell 5.1
+(`shell: powershell`) to keep the Windows bare-machine path covered.
 
 Each job uploads the validator scratch directory as evidence. Treat CI failures
 as release blockers unless the maintainer explicitly records a platform-specific

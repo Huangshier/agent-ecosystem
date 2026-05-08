@@ -95,7 +95,7 @@ until all of these are true:
 The long-term quick start should be:
 
 ```powershell
-.\scripts\install.ps1 -Profile recommended
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
 ```
 
 Planned profiles:
