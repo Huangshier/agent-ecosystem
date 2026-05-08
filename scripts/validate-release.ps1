@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
+. (Join-Path $scriptDir "lib/path-guard.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -16,60 +17,7 @@ if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
 }
 
 $scratchRootFull = [System.IO.Path]::GetFullPath($ScratchRoot)
-$liveRuntimeCandidates = @()
-if (-not [string]::IsNullOrWhiteSpace($HOME)) {
-    $liveRuntimeCandidates += [System.IO.Path]::GetFullPath((Join-Path $HOME ".agents")).TrimEnd('\', '/')
-}
-if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
-    $liveRuntimeCandidates += [System.IO.Path]::GetFullPath((Join-Path $env:USERPROFILE ".agents")).TrimEnd('\', '/')
-}
-$liveRuntimeCandidates = @($liveRuntimeCandidates | Sort-Object -Unique)
-
-function Assert-PathInsideRoot {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Root
-    )
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
-    if (-not ($fullPath.Equals($fullRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
-            $fullPath.StartsWith($fullRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase))) {
-        throw "Path is outside expected root: $fullPath"
-    }
-}
-
-function Assert-NotLiveRuntime {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-    foreach ($candidate in $script:liveRuntimeCandidates) {
-        if ($fullPath.Equals($candidate, [System.StringComparison]::OrdinalIgnoreCase) -or
-            $fullPath.StartsWith($candidate + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Refusing to use live runtime path: $fullPath"
-        }
-    }
-}
-
-function Join-PathParts {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children
-    )
-
-    $path = $Root
-    foreach ($child in $Children) {
-        if ([string]::IsNullOrWhiteSpace($child)) {
-            continue
-        }
-        foreach ($segment in @($child -split '[\\/]+')) {
-            if (-not [string]::IsNullOrWhiteSpace($segment)) {
-                $path = Join-Path $path $segment
-            }
-        }
-    }
-    return $path
-}
+$liveRuntimeCandidates = @(Get-AgentLiveRuntimeCandidates)
 
 function ConvertTo-DisplayPath {
     param(
@@ -344,6 +292,7 @@ $requiredFiles = @(
     "CONTRIBUTING.md",
     "SECURITY.md",
     "scripts/install.ps1",
+    "scripts/lib/path-guard.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/how-to-adapt.md",
@@ -380,6 +329,47 @@ if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0) {
 }
 else {
     Add-Check "public structure" "FAIL" "Required public paths are missing." ([ordered]@{ files = $missingFiles; directories = $missingDirs })
+}
+
+try {
+    $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
+    $pathGuardConsumers = @("scripts/install.ps1", "scripts/validate-release.ps1")
+    $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
+    $localDefinitions = New-Object 'System.Collections.Generic.List[string]'
+
+    foreach ($functionName in @("Join-PathParts", "Assert-PathInsideRoot", "Assert-NotLiveRuntime")) {
+        if ($pathGuardHelper -notmatch ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+            $localDefinitions.Add("scripts/lib/path-guard.ps1 missing $functionName")
+        }
+    }
+
+    foreach ($consumer in $pathGuardConsumers) {
+        $consumerText = Get-FileText -RelativePath $consumer
+        if ($consumerText -notmatch 'lib/path-guard\.ps1') {
+            $missingDotSource.Add("$consumer does not dot-source scripts/lib/path-guard.ps1")
+        }
+        foreach ($functionName in @("Join-PathParts", "Assert-PathInsideRoot", "Assert-NotLiveRuntime")) {
+            if ($consumerText -match ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
+                $localDefinitions.Add("$consumer still defines $functionName locally")
+            }
+        }
+    }
+
+    if ($missingDotSource.Count -eq 0 -and $localDefinitions.Count -eq 0) {
+        Add-Check "shared path guard helper" "PASS" "Installer and release validator use the shared PowerShell path guard helper." ([ordered]@{
+            helper = "scripts/lib/path-guard.ps1"
+            consumers = @($pathGuardConsumers)
+        })
+    }
+    else {
+        Add-Check "shared path guard helper" "FAIL" "Shared path guard helper wiring is incomplete." ([ordered]@{
+            missing_dot_source = @($missingDotSource.ToArray())
+            local_definitions = @($localDefinitions.ToArray())
+        })
+    }
+}
+catch {
+    Add-Check "shared path guard helper" "FAIL" $_.Exception.Message
 }
 
 $skillNames = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
