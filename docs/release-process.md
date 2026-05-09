@@ -33,6 +33,8 @@ The validator checks:
 - runtime smoke coverage for bootstrap, context gate, workflow spec creation,
   and memory diagnosis in both recommended copy and link installs
 - installer no-`-Force` conflict behavior and forced reinstall behavior
+- hub initialization Git mode, including default no-Git behavior and explicit
+  Git initialization
 - `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project
   batch checking against temporary git-backed hubs
 - memory upgrade Analyze, Plan, and Apply flow against a temporary project
@@ -41,6 +43,7 @@ The validator checks:
 - public experience index search
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
+- no-op experience index rebuilds that preserve registry file hashes
 - PowerShell parser checks and JSON parsing
 - Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - public sensitive-pattern audit

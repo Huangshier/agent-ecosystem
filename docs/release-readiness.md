@@ -28,7 +28,7 @@ maintenance issues into the normal release flow.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 23 checks passing, no
+- Latest local hardened release validation passed with 32 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
@@ -75,6 +75,10 @@ maintenance issues into the normal release flow.
 - Bilingual Public/Private Routing guidance is documented in the public
   knowledge hub and language policy.
 - Public release notes are present at `docs/releases/v0.3.0.md`.
+- Hub initialization now leaves template hubs as ordinary directories unless
+  `-InitializeGit` or `-CommitInitial` is explicitly supplied.
+- Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
+  timestamp-only diffs.
 
 ## Required Before Future Publishing
 
@@ -147,7 +151,10 @@ The release validator now covers:
 - context gate JSON performance with 500 generated context files
 - cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub
+- hub initialization Git mode coverage, ensuring default hub initialization
+  does not create nested Git repositories
 - experience promote -> rebuild -> search closure using a temporary hub copy
+- no-op experience index rebuild coverage that preserves registry file hashes
 - knowledge catalog coverage for experience, patterns, and standards
 - public domain-pack catalog coverage
 - duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,

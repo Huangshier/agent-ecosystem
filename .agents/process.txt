@@ -1,34 +1,30 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- The first public release scope is Workflow Kernel only.
-- Current public release version is `v0.1.0`.
+- Current published public release is `v0.3.0`.
 - Public engineering memory is English-first.
-- Private migration state, local source mappings, and sensitive audit notes live
-  outside this repository.
-- Release validation hardening is complete for the next maintenance/release
-  cycle.
-- Knowledge Hub Phase 3 first slice is complete: catalog-first reading,
-  patterns, standards, and validator coverage.
+- Private migration state, local source mappings, sensitive audit notes, and
+  personal overlay details live outside this repository.
+- `knowledge-hub/` is tracked as a normal directory inside this repository, not
+  as a nested Git repository or submodule.
 
 Completed
-- `v0.1.0` has been pushed, tagged, and published as a GitHub Release.
-- Public `scripts/validate-release.ps1` exists as the reusable release gate.
-- Latest local hardened validation passed with 15 pass, 0 fail, 0 warn, and
-  1 deferred non-blocking behavior check.
-- CI release validation workflow has passed on Windows, Ubuntu, and macOS:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
-- Validator coverage now includes link runtime smoke, installer behavior,
-  hub.lock drift check, and experience promote closure.
-- `.gitattributes` keeps validation-sensitive text files LF-normalized so
-  experience hash checks stay byte-stable on Windows hosted runners.
-- Knowledge Hub Phase 3 local validation passed with 16 pass, 0 fail, 0 warn,
-  and 1 deferred behavior check.
+- `v0.1.0`, `v0.2.0`, and `v0.3.0` have been published as GitHub Releases.
+- Public `scripts/validate-release.ps1` is the reusable release gate.
+- Release validation workflow has passed on Windows PowerShell 5.1, Windows
+  PowerShell 7, Ubuntu, and macOS.
+- GitHub issues #1, #2, #4, and #5 are closed.
+- PR #6 added caller-approved `project-bootstrap -AutoUpgrade` behavior and
+  the Step 2.5 memory upgrade decision workflow.
+- Local nested Git metadata under `knowledge-hub/.git` was removed so VS Code
+  sees `agent-ecosystem` as a single repository.
 
 Next Actions
-- Future public changes should start a maintenance or release work item.
+- No active public maintenance work item.
+- Start a new `docs/specs/<slug>/` work package for future non-trivial public
+  changes.
 
 Blocking Issues
 - No active blockers.
 
 Last Updated
-- 2026-05-08
+- 2026-05-09

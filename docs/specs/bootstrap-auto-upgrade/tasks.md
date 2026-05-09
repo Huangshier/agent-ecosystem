@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: docs/specs/bootstrap-auto-upgrade/spec.md
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-09
 
 ## Tasks
@@ -21,10 +21,10 @@
   - Validation: Diff review.
   - Notes: Added Step 2.5 decision rules for auto-upgrade, ask-first, and skip cases.
 
-- [ ] T04: Validate, commit, push, and merge.
+- [x] T04: Validate, commit, push, and merge.
   - Scope: Local validation, GitHub PR, CI, merge, issue closure.
-  - Validation: Windows PowerShell release validator passed with `PASS=31 FAIL=0 WARN=0 DEFERRED=0`; PR/merge pending.
-  - Notes: `knowledge-hub/knowledge/experience/index.json` has a pre-existing unrelated timestamp diff and remains unstaged.
+  - Validation: Windows PowerShell release validator passed with `PASS=31 FAIL=0 WARN=0 DEFERRED=0`; hosted release validation passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+  - Notes: PR #6 merged on 2026-05-09 and closed issues #4 and #5.
 
 ## Task-to-Spec Notes
 
@@ -55,9 +55,9 @@
   - Validation: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <temp>` passed with `PASS=31 FAIL=0 WARN=0 DEFERRED=0`; `git diff --check` passed.
   - Continue / stop decision: Continue to GitHub PR flow.
 
-- [ ] P04: Complete phase 4 and record validation.
+- [x] P04: Complete phase 4 and record validation.
   - Goal: GitHub PR flow and issue closure.
   - Inputs: Pushed branch and passing checks.
-  - Outputs:
-  - Validation:
-  - Continue / stop decision:
+  - Outputs: PR #6 merged; issues #4 and #5 closed.
+  - Validation: GitHub Actions release validation passed for all four jobs; issue list and PR list are empty.
+  - Continue / stop decision: Done.

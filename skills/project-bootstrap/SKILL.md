@@ -31,11 +31,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init_hub.ps1
 Optional flags:
 - `-HubDir <path>`: custom hub location.
 - `-Overwrite`: replace existing hub template files.
+- `-InitializeGit`: initialize the hub directory as a Git repository without committing.
 - `-CommitInitial`: attempt an initial git commit after sync.
 
 Notes:
 - `init_hub.ps1` rebuilds `knowledge/experience/index.json` after syncing templates so an overwrite refresh does not leave the installed hub with a stale or empty registry.
 - `init_hub.ps1` also syncs the minimal hub runtime scripts for experience promotion and index rebuild from the bootstrap compatibility copies.
+- `init_hub.ps1` does not create `.git` by default. Use `-InitializeGit` or `-CommitInitial` only when the target hub should be an independent Git repository.
 
 ## Step 2: Bootstrap a Project
 

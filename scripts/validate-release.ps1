@@ -184,6 +184,32 @@ else {
 }
 
 try {
+    $initHubScript = Join-PathParts $repoRoot "skills" "project-bootstrap" "scripts" "init_hub.ps1"
+    $defaultHub = Join-PathParts $scratchRootFull "init-hub-default"
+    $explicitGitHub = Join-PathParts $scratchRootFull "init-hub-explicit-git"
+    Assert-PathInsideRoot -Path $defaultHub -Root $scratchRootFull
+    Assert-PathInsideRoot -Path $explicitGitHub -Root $scratchRootFull
+
+    & $initHubScript -HubDir $defaultHub | Out-Host
+    if (Test-Path -LiteralPath (Join-PathParts $defaultHub ".git")) {
+        throw "init_hub.ps1 created .git without -InitializeGit or -CommitInitial."
+    }
+
+    & $initHubScript -HubDir $explicitGitHub -InitializeGit | Out-Host
+    if (-not (Test-Path -LiteralPath (Join-PathParts $explicitGitHub ".git"))) {
+        throw "init_hub.ps1 -InitializeGit did not create .git."
+    }
+
+    Add-Check "hub initialization git mode" "PASS" "init_hub.ps1 leaves default hubs as ordinary directories and initializes Git only when requested." ([ordered]@{
+        default_hub = $defaultHub
+        explicit_git_hub = $explicitGitHub
+    })
+}
+catch {
+    Add-Check "hub initialization git mode" "FAIL" $_.Exception.Message
+}
+
+try {
     $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
     $pathGuardConsumers = @("scripts/benchmark-context-gate.ps1", "scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
     $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
@@ -1308,6 +1334,14 @@ Validate experience promotion with a temporary hub so the public source tree is 
     $searchScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "search_experience.ps1"
     $promoteOutput = @(& $promoteScript -ProjectDir $tempProject -HubDir $tempHub -ProjectTag "validation")
     & $rebuildScript -HubDir $tempHub | Out-Host
+    $registryPath = Join-PathParts $tempHub "knowledge" "experience" "index.json"
+    $registryHashAfterRebuild = (Get-FileHash -LiteralPath $registryPath -Algorithm SHA256).Hash
+    & $rebuildScript -HubDir $tempHub | Out-Host
+    $registryHashAfterNoop = (Get-FileHash -LiteralPath $registryPath -Algorithm SHA256).Hash
+    if ($registryHashAfterNoop -ne $registryHashAfterRebuild) {
+        throw "No-op experience index rebuild changed the registry file."
+    }
+
     $searchText = & $searchScript -HubDir $tempHub -Query "validation promote closure" -Json
     $search = $searchText | ConvertFrom-Json
     $resultCount = @($search.results).Count
@@ -1324,6 +1358,7 @@ Validate experience promotion with a temporary hub so the public source tree is 
         temp_hub = $tempHub
         temp_project = $tempProject
         promote_output = @($promoteOutput)
+        noop_rebuild_preserved_hash = $true
         search_results = $resultCount
         top_result = [string]$topResult.title
     })

@@ -16,6 +16,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Lock Metadata
 - `bootstrap_project.ps1` writes hub git metadata plus `template_tree_hash_sha256`.
+- `init_hub.ps1` leaves the hub as an ordinary directory unless `-InitializeGit` or `-CommitInitial` is supplied.
 - When `-ProjectLanguage` is supplied, the lock records the normalized project language.
 - `check_hub_lock.ps1` compares the template hash when present and fails on dirty hub state, so uncommitted hub changes are not treated as reproducible pins.
 
