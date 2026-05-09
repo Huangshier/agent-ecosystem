@@ -28,3 +28,5 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `bootstrap_project.ps1 -AnalyzeMemoryUpgrade` reports old memory issues without editing memory.
 - `bootstrap_project.ps1 -PlanMemoryUpgrade` writes a reviewable proposal under `.agents/upgrade/`.
 - `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
+- `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
+- When ordinary bootstrap detects memory upgrade candidates, the skill workflow decides whether to auto-upgrade, ask first, or skip based on the user's stated intent.

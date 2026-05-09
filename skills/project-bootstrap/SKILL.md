@@ -62,6 +62,7 @@ Optional flags:
 - `-AnalyzeMemoryUpgrade`: after bootstrap, inspect legacy `.agents` memory and report issues without changing memory.
 - `-PlanMemoryUpgrade`: generate a reviewable `.agents/upgrade/<timestamp>/proposal.md`.
 - `-ApplyMemoryUpgrade -UpgradePlan <path>`: after user review, back up and normalize hot memory files according to the proposal.
+- `-AutoUpgrade`: when the caller has explicitly approved memory normalization, analyze candidates, create the default proposal, apply it, and print the proposal, backup, and result paths.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
@@ -72,6 +73,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language
 ```
 
 Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional template refreshes; it rewrites the initial memory scaffold files.
+
+## Step 2.5: Memory Upgrade Decision
+
+When bootstrap reports `Memory upgrade candidates detected: N`, do not silently ignore it.
+
+- If the user's request explicitly includes memory cleanup, organization, normalization, or upgrade, rerun bootstrap with `-AutoUpgrade` or run the manual `-PlanMemoryUpgrade` and `-ApplyMemoryUpgrade` flow after reviewing the proposal.
+- If the user's request only asked for project bootstrap or reinitialization, tell the user candidates were detected and ask before applying memory rewrites.
+- If the user explicitly says not to upgrade memory, skip the upgrade and use `-SkipMemoryUpgradeAnalysis` on repeated bootstrap runs when the reminder would add noise.
+- If no candidates are detected, or `-SkipMemoryUpgradeAnalysis` was intentionally supplied, continue to verification.
+
+`-AutoUpgrade` is for non-interactive, caller-approved upgrades. It preserves the proposal-first and backup-first safety model by writing `.agents/upgrade/<timestamp>/proposal.md`, applying the checked default actions, and writing a result file next to the proposal.
 
 ## Step 3: Verify Installation
 
@@ -115,10 +127,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
 ```
 
+Caller-approved non-interactive flow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AutoUpgrade
+```
+
 Behavior:
 - Analyze mode is read-only.
 - Plan mode writes a proposal for user review.
 - Apply mode requires a proposal path, backs up current memory under `.agents/_backup/<timestamp>/`, and normalizes hot memory (`process.txt`, `plan.md`, `notes.md`).
+- Auto-upgrade mode runs Analyze first, then Plan and Apply only when findings exist.
 - Durable multi-stage work should move into `docs/specs/`; `.agents` remains session-local.
 
 ## Operating Rules
