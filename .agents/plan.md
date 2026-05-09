@@ -1,21 +1,21 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/hub-maintenance-hardening/spec.md`
+- `docs/specs/v0-3-1-stabilization/spec.md`
 
 Current Task
-- Resolve GitHub issues #7 and #8 through an issue-first public maintenance PR.
+- Resolve #11 release validation metadata consistency.
 
 Session Status
-- Issues #7 and #8 were created and reviewed as project-relevant.
-- Issue #7: `init_hub.ps1` should not create nested Git repos by default.
-- Issue #8: experience index rebuilds should avoid timestamp-only diffs.
+- User authorized public implementation through release preparation.
+- Stop before tag/release publication for maintainer confirmation.
+- Issues #10, #11, #12, and #13 are open and project-relevant.
 
 Next Work
-- [x] Implement hub Git initialization hardening.
-- [x] Implement idempotent experience index rebuild.
-- [x] Run full release validation (`PASS=32 FAIL=0 WARN=0 DEFERRED=0`).
-- [x] Validate, open PR, merge, and confirm issues #7/#8 close.
+- [ ] Resolve #11 release validation metadata consistency.
+- [ ] Resolve #10/#12 README positioning and maintainer reader review.
+- [ ] Resolve #13 GitHub Actions runtime maintenance.
+- [ ] Stop at release preparation for maintainer confirmation.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

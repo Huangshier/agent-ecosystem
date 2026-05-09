@@ -1,6 +1,9 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.0`.
+- Active spec: `docs/specs/v0-3-1-stabilization/spec.md`.
+- Current work: resolve public stabilization issues #10, #11, #12, and #13
+  before asking for release approval.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -17,11 +20,11 @@ Completed
   the Step 2.5 memory upgrade decision workflow.
 - Local nested Git metadata under `knowledge-hub/.git` was removed so VS Code
   sees `agent-ecosystem` as a single repository.
+- Public v0.3.1 stabilization issues #10, #11, #12, and #13 are open.
 
 Next Actions
-- No active public maintenance work item.
-- Start a new `docs/specs/<slug>/` work package for future non-trivial public
-  changes.
+- Resolve #11 first, then #10/#12, then #13.
+- Stop before tag or release publication for maintainer approval.
 
 Blocking Issues
 - No active blockers.
