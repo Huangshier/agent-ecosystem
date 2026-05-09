@@ -1,23 +1,21 @@
 # Active Plan
 
 Active Spec
-- none
+- `docs/specs/hub-maintenance-hardening/spec.md`
 
 Current Task
-- Baseline cleanup after PR #6 and nested `knowledge-hub/.git` removal.
+- Resolve GitHub issues #7 and #8 through an issue-first public maintenance PR.
 
 Session Status
-- PR #6 is merged into `main`.
-- Issues #4 and #5 are closed.
-- `knowledge-hub/` now resolves to the outer `agent-ecosystem` Git repository.
-- The timestamp-only `knowledge-hub/knowledge/experience/index.json` diff was
-  reviewed and restored because it carried no content change.
+- Issues #7 and #8 were created and reviewed as project-relevant.
+- Issue #7: `init_hub.ps1` should not create nested Git repos by default.
+- Issue #8: experience index rebuilds should avoid timestamp-only diffs.
 
 Next Work
-- [x] Remove nested `knowledge-hub/.git` metadata.
-- [x] Review and clear non-substantive uncommitted index timestamp diff.
-- [x] Refresh `.agents` memory for the current baseline.
-- [x] Commit baseline cleanup.
+- [x] Implement hub Git initialization hardening.
+- [x] Implement idempotent experience index rebuild.
+- [x] Run full release validation (`PASS=32 FAIL=0 WARN=0 DEFERRED=0`).
+- [ ] Validate, open PR, merge, and confirm issues #7/#8 close.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

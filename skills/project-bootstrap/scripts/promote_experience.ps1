@@ -87,6 +87,21 @@ function Save-Registry {
         [string]$RegistryPath,
         [array]$Entries
     )
+
+    if (Test-Path -LiteralPath $RegistryPath) {
+        $raw = Get-Content -LiteralPath $RegistryPath -Raw
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            $parsed = $raw | ConvertFrom-Json
+            if ($parsed.PSObject.Properties.Name -contains "entries") {
+                $existingEntriesJson = ConvertTo-Json -InputObject @($parsed.entries) -Depth 8 -Compress
+                $newEntriesJson = ConvertTo-Json -InputObject @($Entries) -Depth 8 -Compress
+                if ($existingEntriesJson -eq $newEntriesJson) {
+                    return
+                }
+            }
+        }
+    }
+
     $payload = [ordered]@{
         schema_version = 1
         updated_at_utc = (Get-Date).ToUniversalTime().ToString("o")

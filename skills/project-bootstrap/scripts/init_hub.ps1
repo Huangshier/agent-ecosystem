@@ -1,6 +1,7 @@
 param(
     [string]$HubDir = "$env:USERPROFILE\.agents\knowledge-hub",
     [switch]$Overwrite,
+    [switch]$InitializeGit,
     [switch]$CommitInitial
 )
 
@@ -160,7 +161,8 @@ if ((Test-Path -LiteralPath $experienceDir) -and (Test-Path -LiteralPath $rebuil
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
-if ($null -ne $git) {
+$shouldInitializeGit = $InitializeGit.IsPresent -or $CommitInitial.IsPresent
+if (($null -ne $git) -and $shouldInitializeGit) {
     if (-not (Test-Path -LiteralPath (Join-Path $HubDir ".git"))) {
         git -C $HubDir init | Out-Null
     }

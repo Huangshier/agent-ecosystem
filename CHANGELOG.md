@@ -2,6 +2,15 @@
 
 All notable public changes are summarized here.
 
+## Unreleased
+
+- Made knowledge hub Git initialization explicit so `init_hub.ps1` does not
+  create nested repositories by default.
+- Made experience index rebuilds preserve registry files when entries are
+  unchanged, avoiding timestamp-only diffs.
+- Added release validation coverage for hub initialization Git mode and no-op
+  experience index rebuilds.
+
 ## v0.3.0 - 2026-05-08
 
 - Added manifest-based uninstall behavior that preserves unknown runtime files
