@@ -4,7 +4,7 @@ Active Spec
 - `docs/specs/v0-3-1-stabilization/spec.md` (Done)
 
 Current Task
-- Stop at release preparation for maintainer confirmation.
+- Prepare and publish `v0.3.1`.
 
 Session Status
 - User authorized public implementation through release preparation.
@@ -12,13 +12,17 @@ Session Status
 - PR #14 merged and closed issue #11.
 - PR #15 merged and closed issues #10 and #12.
 - PR #16 merged and closed issue #13.
-- Latest main release validation run `25597815165` passed.
+- Latest main release validation run `25597885095` passed.
+- User approved entering release stage.
 
 Next Work
 - [x] Resolve #11 release validation metadata consistency.
 - [x] Resolve #10/#12 README positioning and maintainer reader review.
 - [x] Resolve #13 GitHub Actions runtime maintenance.
 - [x] Stop at release preparation for maintainer confirmation.
+- [ ] Prepare v0.3.1 release docs and validator coverage.
+- [ ] Run final release validation.
+- [ ] Tag and publish v0.3.1.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

@@ -152,6 +152,7 @@ $requiredFiles = @(
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "docs/releases/v0.3.0.md",
+    "docs/releases/v0.3.1.md",
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -943,6 +944,28 @@ try {
 }
 catch {
     Add-Check "v0.3.0 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.3.1.md"
+    $releaseTokens = @(
+        "v0.3.1",
+        "Workflow Kernel",
+        "Public Reader Review",
+        "actions/checkout@v6",
+        "actions/upload-artifact@v7",
+        "PASS=33 FAIL=0 WARN=0 DEFERRED=0"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.3.1 release notes" "FAIL" "Release notes are missing required v0.3.1 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.3.1 release notes" "PASS" "v0.3.1 release notes summarize positioning stabilization, release hygiene, CI runtime maintenance, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.3.1 release notes" "FAIL" $_.Exception.Message
 }
 
 try {
