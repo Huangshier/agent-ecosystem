@@ -89,15 +89,36 @@ Deferred checks are allowed only when the capability does not exist yet. The
 release validator should report zero deferred checks for a publishable release
 unless a maintainer explicitly records a new deferral.
 
+## Public Reader Review
+
+For public-facing documentation and release metadata changes, include a short
+reader-oriented review before merging:
+
+- **First-time reader**: the README and docs index explain what the project is,
+  what it is not, and where to go next.
+- **Current release**: current docs do not rely on stale first-release framing
+  when describing the active release line.
+- **Validation summary**: release notes and readiness docs do not disagree with
+  the validator output or with each other.
+- **Public boundary**: docs do not include private overlay details, local
+  migration state, machine-specific paths, or private review material.
+- **Cross-platform onboarding**: PowerShell-first expectations are visible to
+  non-Windows readers, with `pwsh` guidance where appropriate.
+
+This review is intentionally lightweight. It is a checklist for adoption
+surfaces, not a separate approval process.
+
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
 2. Run the release validation gate with a temporary scratch directory.
-3. Review `validation-result.json` and any public diff.
-4. Open or update a pull request when using CI for release review.
-5. Confirm the release validation workflow passes on Windows, Ubuntu, and macOS.
-6. Record only public-safe release status in this repository.
-7. Push, tag, and publish release notes only after maintainer approval.
+3. Run the public reader review when the diff changes README, docs entrypoints,
+   release notes, or release process text.
+4. Review `validation-result.json` and any public diff.
+5. Open or update a pull request when using CI for release review.
+6. Confirm the release validation workflow passes on Windows, Ubuntu, and macOS.
+7. Record only public-safe release status in this repository.
+8. Push, tag, and publish release notes only after maintainer approval.
 
 Do not publish if the validator reports a failed check. Fix the public tree or
 record the release-blocking decision in private migration state, then rerun the

@@ -6,10 +6,11 @@
 
 ## Tasks
 
-- [ ] T01: Resolve #11 release validation metadata consistency.
+- [x] T01: Resolve #11 release validation metadata consistency.
   - Scope: `docs/releases/v0.3.0.md`, validator release-note coverage, public
     memory pointers.
-  - Validation: Local release validation passes; PR closes #11.
+  - Validation: PR #14 merged; issue #11 closed; hosted release validation
+    passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
   - Notes: Expected current summary is `PASS=32 FAIL=0 WARN=0 DEFERRED=0`.
 
 - [ ] T02: Resolve #10 README positioning and extension story.
