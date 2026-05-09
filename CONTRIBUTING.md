@@ -52,3 +52,7 @@ Get-ChildItem -Recurse -File -Include *.ps1 scripts,skills,knowledge-hub |
     [scriptblock]::Create($text) | Out-Null
   }
 ```
+
+For README, docs entrypoint, release notes, or release process changes, also
+run the lightweight [Public Reader Review](docs/release-process.md#public-reader-review)
+check before opening a pull request.
