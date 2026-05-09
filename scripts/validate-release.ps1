@@ -931,7 +931,7 @@ try {
         "localized context discovery headings",
         "Bilingual Public/Private Routing",
         "context gate large context benchmark",
-        "PASS="
+        "PASS=32 FAIL=0 WARN=0 DEFERRED=0"
     )
     $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
     if ($missingReleaseTokens.Count -gt 0) {
