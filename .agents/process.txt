@@ -2,7 +2,7 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.0`.
 - Active spec: `docs/specs/v0-3-1-stabilization/spec.md`.
-- Current work: resolve public stabilization issue #13 before asking for
+- Current work: v0.3.1 stabilization is complete; waiting for maintainer
   release approval.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
@@ -22,11 +22,12 @@ Completed
   sees `agent-ecosystem` as a single repository.
 - PR #14 merged and closed issue #11.
 - PR #15 merged and closed issues #10 and #12.
-- Public v0.3.1 stabilization issue #13 remains open.
+- PR #16 merged and closed issue #13.
+- Latest main release validation run `25597815165` passed.
 
 Next Actions
-- Resolve #13.
 - Stop before tag or release publication for maintainer approval.
+- If approved, prepare and publish the v0.3.1 release using the release process.
 
 Blocking Issues
 - No active blockers.

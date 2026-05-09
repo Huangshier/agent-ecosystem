@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/v0-3-1-stabilization/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-09
 
 ## Tasks
@@ -25,15 +25,17 @@
     passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
   - Notes: Keep process lightweight.
 
-- [ ] T04: Resolve #13 GitHub Actions runtime maintenance.
+- [x] T04: Resolve #13 GitHub Actions runtime maintenance.
   - Scope: `.github/workflows/release-validation.yml`.
-  - Validation: Local release validation and hosted CI pass; PR closes #13.
-  - Notes: Use official action version/runtime information.
+  - Validation: PR #16 merged; issue #13 closed; hosted release validation
+    passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+  - Notes: Updated to `actions/checkout@v6` and `actions/upload-artifact@v7`.
 
-- [ ] T05: Prepare release confirmation handoff.
+- [x] T05: Prepare release confirmation handoff.
   - Scope: Public and private state records.
-  - Validation: All stabilization issues closed and CI green.
-  - Notes: Stop before tag/release publication.
+  - Validation: All stabilization issues closed and latest main release
+    validation run `25597815165` passed.
+  - Notes: Stop before tag/release publication for maintainer confirmation.
 
 ## Task-to-Spec Notes
 
@@ -61,16 +63,16 @@ Not applicable.
   - Validation: Local and hosted release validation passed.
   - Continue / stop decision: Continue to P03.
 
-- [ ] P03: Complete phase 3 and record validation
+- [x] P03: Complete phase 3 and record validation
   - Goal: Resolve #13.
   - Inputs: Official action version/runtime information.
-  - Outputs: Merged PR and closed issue #13.
-  - Validation: Local and hosted release validation.
-  - Continue / stop decision:
+  - Outputs: PR #16 merged; issue #13 closed.
+  - Validation: Local and hosted release validation passed.
+  - Continue / stop decision: Continue to P04.
 
-- [ ] P04: Complete phase 4 and record validation
+- [x] P04: Complete phase 4 and record validation
   - Goal: Stop at release preparation.
   - Inputs: Merged stabilization PRs and CI evidence.
   - Outputs: Updated state records and release confirmation request.
-  - Validation: Final status checks.
+  - Validation: Latest main release validation run `25597815165` passed.
   - Continue / stop decision: Stop for maintainer release approval.

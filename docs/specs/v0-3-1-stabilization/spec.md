@@ -2,7 +2,7 @@
 
 - **Title**: v0.3.1 stabilization
 - **Slug**: v0-3-1-stabilization
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-09
 
@@ -113,5 +113,4 @@ Not applicable.
 
 ## 12. Open Questions
 
-- The exact release version and publication timing remain maintainer decisions
-  after stabilization PRs are merged.
+- The exact release version and publication timing remain maintainer decisions.
