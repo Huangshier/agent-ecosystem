@@ -5,12 +5,26 @@ param(
     [switch]$AnalyzeMemoryUpgrade,
     [switch]$PlanMemoryUpgrade,
     [switch]$ApplyMemoryUpgrade,
+    [switch]$AutoUpgrade,
     [switch]$SkipMemoryUpgradeAnalysis,
     [string]$UpgradePlan = "",
     [string]$ProjectLanguage = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+$memoryUpgradeModeCount = 0
+foreach ($modeSwitch in @($AnalyzeMemoryUpgrade, $PlanMemoryUpgrade, $ApplyMemoryUpgrade, $AutoUpgrade)) {
+    if ($modeSwitch.IsPresent) {
+        $memoryUpgradeModeCount++
+    }
+}
+if ($memoryUpgradeModeCount -gt 1) {
+    throw "Choose only one memory upgrade mode: -AnalyzeMemoryUpgrade, -PlanMemoryUpgrade, -ApplyMemoryUpgrade, or -AutoUpgrade."
+}
+if ($AutoUpgrade.IsPresent -and $SkipMemoryUpgradeAnalysis.IsPresent) {
+    throw "-AutoUpgrade cannot be combined with -SkipMemoryUpgradeAnalysis."
+}
 
 function Join-PathParts {
     param(
@@ -249,12 +263,32 @@ if ($null -ne $languageResult) {
 Write-Output "Lock file: $lockPath"
 
 $memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"
-if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent) {
+if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent -or $AutoUpgrade.IsPresent) {
     if (-not (Test-Path -LiteralPath $memoryUpgradeScript)) {
         throw "Memory upgrade helper not found: $memoryUpgradeScript"
     }
 
-    if ($ApplyMemoryUpgrade.IsPresent) {
+    if ($AutoUpgrade.IsPresent) {
+        $analysisJson = & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Analyze -Json | ConvertFrom-Json
+        $findingCount = @($analysisJson.findings).Count
+        if ($findingCount -lt 1) {
+            Write-Output "Memory upgrade auto: no candidates detected."
+        } else {
+            Write-Output ("Memory upgrade auto: candidates detected: {0}" -f $findingCount)
+            $planJson = & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Plan -Json | ConvertFrom-Json
+            $proposalPath = [string]$planJson.proposal
+            if ([string]::IsNullOrWhiteSpace($proposalPath) -or -not (Test-Path -LiteralPath $proposalPath)) {
+                throw "Memory upgrade auto failed to create a proposal."
+            }
+
+            Write-Output ("Memory upgrade auto proposal: {0}" -f $proposalPath)
+            $applyJson = & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Apply -UpgradePlan $proposalPath -Json | ConvertFrom-Json
+            $backupDir = [string]$applyJson.apply_result.backup_dir
+            $resultPath = [string]$applyJson.apply_result.result
+            Write-Output ("Memory upgrade auto backup: {0}" -f $backupDir)
+            Write-Output ("Memory upgrade auto result: {0}" -f $resultPath)
+        }
+    } elseif ($ApplyMemoryUpgrade.IsPresent) {
         & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Apply -UpgradePlan $UpgradePlan
     } elseif ($PlanMemoryUpgrade.IsPresent) {
         & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Plan
@@ -267,7 +301,7 @@ if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyM
         $findingCount = @($analysisJson.findings).Count
         if ($findingCount -gt 0) {
             Write-Output ("Memory upgrade candidates detected: {0}" -f $findingCount)
-            Write-Output "Run with -PlanMemoryUpgrade to create a reviewable proposal, then -ApplyMemoryUpgrade -UpgradePlan <path> after review."
+            Write-Output "Run with -PlanMemoryUpgrade to create a reviewable proposal, then -ApplyMemoryUpgrade -UpgradePlan <path> after review. Use -AutoUpgrade only when the caller explicitly approves the default proposal actions."
         }
     } catch {
         Write-Warning "Memory upgrade analysis failed: $($_.Exception.Message)"

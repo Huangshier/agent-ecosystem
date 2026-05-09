@@ -1158,12 +1158,48 @@ try {
         throw "Memory upgrade Apply did not normalize process.txt."
     }
 
-    Add-Check "memory upgrade flow" "PASS" "Memory upgrade Analyze, Plan, and Apply flow passed against a temporary project." ([ordered]@{
+    $autoUpgradeProject = Join-PathParts $scratchRootFull "memory-auto-upgrade-project"
+    New-Item -ItemType Directory -Force -Path $autoUpgradeProject | Out-Null
+    Assert-PathInsideRoot -Path $autoUpgradeProject -Root $scratchRootFull
+    & $bootstrapScript -ProjectDir $autoUpgradeProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $autoProcessPath = Join-PathParts $autoUpgradeProject ".agents" "process.txt"
+    $autoPlanPath = Join-PathParts $autoUpgradeProject ".agents" "plan.md"
+    $autoNotesPath = Join-PathParts $autoUpgradeProject ".agents" "notes.md"
+    Add-Content -LiteralPath $autoProcessPath -Value "`nPrevious session timeline entry used by auto-upgrade validation."
+    Add-Content -LiteralPath $autoPlanPath -Value "`n- [ ] T99: Durable task that auto-upgrade should normalize."
+    Add-Content -LiteralPath $autoNotesPath -Value "`nTODO: temporary session state used by auto-upgrade validation."
+
+    $autoOutput = @(& $bootstrapScript -ProjectDir $autoUpgradeProject -HubDir $hubDir -AutoUpgrade)
+    $autoProposal = @(Get-ChildItem -LiteralPath (Join-PathParts $autoUpgradeProject ".agents" "upgrade") -Recurse -File -Filter "proposal.md" | Select-Object -First 1)
+    $autoResult = @(Get-ChildItem -LiteralPath (Join-PathParts $autoUpgradeProject ".agents" "upgrade") -Recurse -File -Filter "result.md" | Select-Object -First 1)
+    $autoBackup = @(Get-ChildItem -LiteralPath (Join-PathParts $autoUpgradeProject ".agents" "_backup") -Directory | Select-Object -First 1)
+    if ($autoProposal.Count -lt 1) {
+        throw "Bootstrap -AutoUpgrade did not create a proposal."
+    }
+    if ($autoResult.Count -lt 1) {
+        throw "Bootstrap -AutoUpgrade did not create a result file."
+    }
+    if ($autoBackup.Count -lt 1) {
+        throw "Bootstrap -AutoUpgrade did not create a backup."
+    }
+    if ((Get-Content -LiteralPath $autoProcessPath -Raw) -notmatch "Memory upgraded") {
+        throw "Bootstrap -AutoUpgrade did not normalize process.txt."
+    }
+    if (@($autoOutput | Where-Object { $_ -match '^Memory upgrade auto: candidates detected:' }).Count -lt 1) {
+        throw "Bootstrap -AutoUpgrade did not report detected candidates."
+    }
+
+    Add-Check "memory upgrade flow" "PASS" "Memory upgrade manual and bootstrap -AutoUpgrade flows passed against temporary projects." ([ordered]@{
         project = $memoryUpgradeProject
         findings = @($analyze.findings).Count
         proposal = $proposalPath
         backup = $backupDir
         result = $resultPath
+        auto_project = $autoUpgradeProject
+        auto_proposal = $autoProposal[0].FullName
+        auto_backup = $autoBackup[0].FullName
+        auto_result = $autoResult[0].FullName
     })
 }
 catch {
