@@ -26,3 +26,9 @@
 - The initial public experience entry is a reindexed public-safe backfill.
   Its index metadata intentionally omits local source paths and private
   migration details.
+- The latest published public release is `v0.3.0`:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.3.0
+- `knowledge-hub/` is part of the `agent-ecosystem` repository tree. It is not
+  a Git submodule and should not contain a local nested `.git` directory.
+- PR #6 added `project-bootstrap -AutoUpgrade` and the Step 2.5 memory upgrade
+  decision workflow, closing GitHub issues #4 and #5.

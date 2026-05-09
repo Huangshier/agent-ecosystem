@@ -2,7 +2,7 @@
 
 - **Title**: Bootstrap memory auto-upgrade
 - **Slug**: bootstrap-auto-upgrade
-- **Status**: Active
+- **Status**: Done
 - **Owner**: maintenance
 - **Updated**: 2026-05-09
 
@@ -69,6 +69,8 @@
 - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch> -Json` passes.
 - GitHub PR is merged and issues #4 and #5 are closed.
 - Any skipped or unavailable acceptance check is recorded before claiming completion.
+- Evidence: PR #6 merged on 2026-05-09; issues #4 and #5 closed; local release
+  validator and hosted CI passed with zero failures.
 
 ## 10. Loop Contract
 
@@ -84,7 +86,7 @@
   - P04: Push branch, open PR, wait for checks, merge, and confirm issue closure.
 - **Continue rule**: Continue to the next phase when the current phase has a reviewable diff and relevant validation passes.
 - **Stop rule**: Stop for failed required validation that cannot be fixed in scope, GitHub permission failure, force-push requirement, destructive cleanup, public/private boundary ambiguity, or unrelated refactor pressure.
-- **State record**: `docs/specs/bootstrap-auto-upgrade/tasks.md` records task status and validation evidence.
+- **State record**: `docs/specs/bootstrap-auto-upgrade/tasks.md` records completed task status and validation evidence.
 
 ## 12. Open Questions
 
