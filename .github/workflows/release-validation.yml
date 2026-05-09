@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run release validator
         shell: pwsh
@@ -32,7 +32,7 @@ jobs:
 
       - name: Upload validation evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: validation-pwsh-${{ matrix.os }}
           path: ${{ runner.temp }}/agent-ecosystem-release-validation
@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run release validator
         shell: powershell
@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload validation evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: validation-windows-powershell
           path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell

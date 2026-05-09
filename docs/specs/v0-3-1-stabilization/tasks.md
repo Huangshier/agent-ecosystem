@@ -13,14 +13,16 @@
     passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
   - Notes: Expected current summary is `PASS=32 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] T02: Resolve #10 README positioning and extension story.
+- [x] T02: Resolve #10 README positioning and extension story.
   - Scope: `README.md`, `README.zh-CN.md`, and docs links as needed.
-  - Validation: Local release validation passes; PR closes #10.
+  - Validation: PR #15 merged; issue #10 closed; hosted release validation
+    passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
   - Notes: Lead with workflow kernel positioning and extension model.
 
-- [ ] T03: Resolve #12 lightweight public reader review.
+- [x] T03: Resolve #12 lightweight public reader review.
   - Scope: `docs/release-process.md`, `CONTRIBUTING.md`, or a maintainer guide.
-  - Validation: Local release validation passes; PR closes #12.
+  - Validation: PR #15 merged; issue #12 closed; hosted release validation
+    passed on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
   - Notes: Keep process lightweight.
 
 - [ ] T04: Resolve #13 GitHub Actions runtime maintenance.
@@ -52,12 +54,12 @@ Not applicable.
   - Validation: Local and hosted release validation.
   - Continue / stop decision:
 
-- [ ] P02: Complete phase 2 and record validation
+- [x] P02: Complete phase 2 and record validation
   - Goal: Resolve #10 and #12.
   - Inputs: Positioning issue and process issue.
-  - Outputs: Merged PR and closed issues #10/#12.
-  - Validation: Local and hosted release validation.
-  - Continue / stop decision:
+  - Outputs: PR #15 merged; issues #10/#12 closed.
+  - Validation: Local and hosted release validation passed.
+  - Continue / stop decision: Continue to P03.
 
 - [ ] P03: Complete phase 3 and record validation
   - Goal: Resolve #13.
