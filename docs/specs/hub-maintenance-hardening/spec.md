@@ -2,7 +2,7 @@
 
 - **Title**: Knowledge hub maintenance hardening
 - **Slug**: hub-maintenance-hardening
-- **Status**: Active
+- **Status**: Done
 - **Owner**: maintenance
 - **Updated**: 2026-05-09
 
@@ -62,6 +62,8 @@
 - PowerShell parser checks pass.
 - Release validator passes with zero failures.
 - PR merges and GitHub issues #7 and #8 close.
+- Evidence: PR #9 passed local and hosted release validation, then merged on
+  2026-05-09 to close issues #7 and #8.
 
 ## 10. Loop Contract
 
@@ -77,7 +79,7 @@
   - P04: Push PR, wait for CI, merge, and confirm issue closure.
 - **Continue rule**: Continue when the current phase has a clean review point and relevant validation passes.
 - **Stop rule**: Stop for failed validation that cannot be fixed in scope, GitHub permission failure, public/private boundary ambiguity, destructive cleanup, or force-push requirement.
-- **State record**: `docs/specs/hub-maintenance-hardening/tasks.md`.
+- **State record**: `docs/specs/hub-maintenance-hardening/tasks.md` records completed task status and validation evidence.
 
 ## 12. Open Questions
 

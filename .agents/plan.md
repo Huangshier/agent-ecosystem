@@ -15,7 +15,7 @@ Next Work
 - [x] Implement hub Git initialization hardening.
 - [x] Implement idempotent experience index rebuild.
 - [x] Run full release validation (`PASS=32 FAIL=0 WARN=0 DEFERRED=0`).
-- [ ] Validate, open PR, merge, and confirm issues #7/#8 close.
+- [x] Validate, open PR, merge, and confirm issues #7/#8 close.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

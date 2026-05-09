@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: docs/specs/hub-maintenance-hardening/spec.md
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-09
 
 ## Tasks
@@ -21,10 +21,10 @@
   - Validation: Targeted no-op hash smoke and release validator coverage passed.
   - Notes: No-op rebuilds preserve existing registry bytes; promotion helpers received the same guard for consistency.
 
-- [ ] T04: Merge PR and confirm issues close.
+- [x] T04: Merge PR and confirm issues close.
   - Scope: GitHub PR flow.
-  - Validation:
-  - Notes:
+  - Validation: Hosted release validation passed for Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+  - Notes: PR #9 merged on 2026-05-09 and closed issues #7 and #8.
 
 ## Task-to-Spec Notes
 
@@ -54,9 +54,9 @@
   - Validation: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <temp>` passed with `PASS=32 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to GitHub PR flow.
 
-- [ ] P04: Complete phase 4 and record validation.
+- [x] P04: Complete phase 4 and record validation.
   - Goal: GitHub PR flow.
   - Inputs: Pushed branch and passing checks.
-  - Outputs:
-  - Validation:
-  - Continue / stop decision:
+  - Outputs: PR #9 merged; issues #7 and #8 closed.
+  - Validation: GitHub Actions release validation passed for all four jobs; issue closure confirmed after merge.
+  - Continue / stop decision: Done.
