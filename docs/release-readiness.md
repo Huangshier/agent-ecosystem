@@ -1,10 +1,12 @@
 # Release Readiness
 
-Status: `v0.3.0` release candidate.
+Status: `v0.3.1` release candidate.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
-public migration work. `v0.3.0` packages backlog remediation and two public
-maintenance issues into the normal release flow.
+public migration work. `v0.3.0` packaged backlog remediation and public
+maintenance issues into the normal release flow. `v0.3.1` stabilizes the
+public adoption surface, release metadata, maintainer reader review, and GitHub
+Actions runtime versions.
 
 ## Completed
 
@@ -28,7 +30,7 @@ maintenance issues into the normal release flow.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 32 checks passing, no
+- Latest local hardened release validation passed with 33 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
@@ -75,6 +77,15 @@ maintenance issues into the normal release flow.
 - Bilingual Public/Private Routing guidance is documented in the public
   knowledge hub and language policy.
 - Public release notes are present at `docs/releases/v0.3.0.md`.
+- Public release notes are present at `docs/releases/v0.3.1.md`.
+- Current README and `README.zh-CN.md` describe the project as a Workflow
+  Kernel with an explicit extension model and non-runtime boundaries.
+- Release process guidance includes a lightweight Public Reader Review checklist.
+- Release validation workflow uses Node 24-compatible action versions:
+  `actions/checkout@v6` and `actions/upload-artifact@v7`.
+- Latest hosted CI release validation passed on Windows PowerShell 5.1,
+  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25597885095
 - Hub initialization now leaves template hubs as ordinary directories unless
   `-InitializeGit` or `-CommitInitial` is explicitly supplied.
 - Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
@@ -170,3 +181,4 @@ The release validator now covers:
   analysis
 - bilingual public/private routing documentation coverage
 - v0.3.0 release notes coverage
+- v0.3.1 release notes coverage

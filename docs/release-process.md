@@ -63,6 +63,7 @@ The validator checks:
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
 - v0.3.0 release notes coverage
+- v0.3.1 release notes coverage
 
 ## CI Gate
 
