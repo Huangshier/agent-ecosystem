@@ -34,3 +34,11 @@
   a Git submodule and should not contain a local nested `.git` directory.
 - PR #6 added `project-bootstrap -AutoUpgrade` and the Step 2.5 memory upgrade
   decision workflow, closing GitHub issues #4 and #5.
+- PR #20 added minimal agent governance docs/templates and closed issue #19.
+- PR #24 normalized `v0.3.1` release readiness evidence and closed issue #21.
+- The configured repository automation identity is the `agent-ecosystem-bot`
+  GitHub App. App auth material and local-only paths must not be stored in this
+  public repository.
+- The `protect-main` repository ruleset protects the default branch with
+  required pull requests, required release validation checks, conversation
+  resolution, deletion blocking, force-push blocking, and no bypass actors.
