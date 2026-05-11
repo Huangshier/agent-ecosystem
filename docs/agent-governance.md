@@ -49,13 +49,14 @@ The maintainer:
 ## Automation Identity
 
 Earlier maintenance work may have been performed by an agent operating through
-the maintainer account. Future agent-assisted maintenance should use a distinct
+the maintainer account. Agent-assisted maintenance should use a distinct
 automation identity where practical.
 
-The preferred long-term identity is a GitHub App installed only on this
-repository with least-privilege permissions. Until that identity is active,
-agent-assisted issues and pull requests should state the actor boundary in the
-issue or pull request body.
+The configured automation identity is the `agent-ecosystem-bot` GitHub App,
+installed only on this repository with least-privilege permissions. Work is not
+trusted only because it comes from the App. Agent-assisted issues and pull
+requests must still state the actor boundary in the issue or pull request body,
+and maintainer authority remains required for merge and release decisions.
 
 ## Required Labels
 
@@ -106,22 +107,22 @@ runtime behavior should include more specific rollback notes.
 
 ## Repository Controls
 
-The intended repository control model is:
+The current repository control model is:
 
 - agent-created changes use feature branches;
-- `main` requires pull requests;
-- required validation must pass before merge;
-- conversations should be resolved before merge;
-- force pushes and branch deletion on protected branches should be disabled;
+- `main` requires pull requests through the `protect-main` repository ruleset;
+- required release validation checks must pass before merge;
+- conversations must be resolved before merge;
+- force pushes and branch deletion on the default branch are blocked;
+- the ruleset has no bypass actors;
 - merge and release authority stays with the maintainer.
 
-Branch protection or repository rulesets are maintainer-controlled settings and
+Branch protection and repository rulesets are maintainer-controlled settings and
 may be tightened as the automation identity matures.
 
 ## GitHub App Adoption
 
-The preferred future automation identity is `agent-ecosystem-agent` or an
-equivalent GitHub App.
+The configured GitHub App identity is `agent-ecosystem-bot`.
 
 Initial repository permissions should be limited to the abilities actually
 needed for issue and pull request preparation:
