@@ -71,6 +71,7 @@ developer maintenance tooling。
 英文文档是当前权威入口：
 
 - [Architecture](docs/architecture.md)
+- [Agent governance](docs/agent-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
