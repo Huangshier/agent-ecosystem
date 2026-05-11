@@ -1,12 +1,12 @@
 # Release Readiness
 
-Status: `v0.3.1` release candidate.
+Status: `v0.3.1` public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
-maintenance issues into the normal release flow. `v0.3.1` stabilizes the
-public adoption surface, release metadata, maintainer reader review, and GitHub
-Actions runtime versions.
+maintenance issues into the normal release flow. `v0.3.1` has been published
+as a public stabilization release for the public adoption surface, release
+metadata, maintainer reader review, and GitHub Actions runtime versions.
 
 ## Completed
 
@@ -83,9 +83,11 @@ Actions runtime versions.
 - Release process guidance includes a lightweight Public Reader Review checklist.
 - Release validation workflow uses Node 24-compatible action versions:
   `actions/checkout@v6` and `actions/upload-artifact@v7`.
-- Latest hosted CI release validation passed on Windows PowerShell 5.1,
-  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25597885095
+- Final hosted CI release validation for the published `v0.3.1` main passed on
+  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25598098034
+- GitHub Release `v0.3.1` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.3.1
 - Hub initialization now leaves template hubs as ordinary directories unless
   `-InitializeGit` or `-CommitInitial` is explicitly supplied.
 - Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding

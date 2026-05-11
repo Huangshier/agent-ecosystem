@@ -1,9 +1,9 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.3.0`; `v0.3.1` release preparation is
-  in progress.
-- Active spec: `docs/specs/v0-3-1-stabilization/spec.md`.
-- Current work: prepare and publish `v0.3.1` after maintainer approval.
+- Current published public release is `v0.3.1`.
+- Active public maintenance issue: #21, normalize `v0.3.1` release readiness
+  and validation evidence.
+- Previous active spec `docs/specs/v0-3-1-stabilization/spec.md` is done.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -11,7 +11,8 @@ Current State
   as a nested Git repository or submodule.
 
 Completed
-- `v0.1.0`, `v0.2.0`, and `v0.3.0` have been published as GitHub Releases.
+- `v0.1.0`, `v0.2.0`, `v0.3.0`, and `v0.3.1` have been published as GitHub
+  Releases.
 - Public `scripts/validate-release.ps1` is the reusable release gate.
 - Release validation workflow has passed on Windows PowerShell 5.1, Windows
   PowerShell 7, Ubuntu, and macOS.
@@ -23,14 +24,15 @@ Completed
 - PR #14 merged and closed issue #11.
 - PR #15 merged and closed issues #10 and #12.
 - PR #16 merged and closed issue #13.
-- Latest main release validation run `25597885095` passed.
+- Final `v0.3.1` main release validation run `25598098034` passed.
+- PR #20 added minimal agent governance docs/templates and closed issue #19.
 
 Next Actions
-- Finish release prep PR, validate, merge, tag `v0.3.1`, and publish the GitHub
-  Release.
+- Finish #21 release metadata cleanup.
+- Then address #22 end-to-end minimal project adoption walkthrough.
 
 Blocking Issues
 - No active blockers.
 
 Last Updated
-- 2026-05-09
+- 2026-05-11
