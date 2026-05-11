@@ -101,6 +101,7 @@ developer maintenance tooling after the kernel base flow is stable.
 - [Architecture](docs/architecture.md)
 - [Agent governance](docs/agent-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
+- [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)

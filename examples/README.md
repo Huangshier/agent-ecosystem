@@ -9,3 +9,5 @@ without private overlay knowledge.
   `docs/specs` layout for a project that uses the Workflow Kernel.
 
 For the adaptation process, see [How To Adapt](../docs/how-to-adapt.md).
+For a continuous empty-project walkthrough, see
+[Minimal project adoption](../docs/walkthroughs/minimal-project-adoption.md).

@@ -36,6 +36,8 @@
   decision workflow, closing GitHub issues #4 and #5.
 - PR #20 added minimal agent governance docs/templates and closed issue #19.
 - PR #24 normalized `v0.3.1` release readiness evidence and closed issue #21.
+- PR #26 documented the installed `agent-ecosystem-bot` GitHub App identity and
+  closed issue #25. Merge commit: `817c0841550de24a0bbf10a097829dd2e11b388e`.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.
