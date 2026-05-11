@@ -1543,6 +1543,7 @@ try {
         ".agents/AGENTS.md",
         "CONTRIBUTING.md",
         "SECURITY.md",
+        "docs/agent-governance.md",
         "docs/release-readiness.md",
         "docs/release-process.md",
         "docs/roadmap/evolution-plan.md",

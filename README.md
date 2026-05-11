@@ -99,6 +99,7 @@ developer maintenance tooling after the kernel base flow is stable.
 ## Project Docs
 
 - [Architecture](docs/architecture.md)
+- [Agent governance](docs/agent-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
