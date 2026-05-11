@@ -1,28 +1,22 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/v0-3-1-stabilization/spec.md` (Done)
+- No active public spec for the current small maintenance item.
+- Completed reference: `docs/specs/v0-3-1-stabilization/spec.md` (Done)
 
 Current Task
-- Prepare and publish `v0.3.1`.
+- Resolve issue #21: normalize `v0.3.1` release readiness and validation
+  evidence.
 
 Session Status
-- User authorized public implementation through release preparation.
-- Stop before tag/release publication for maintainer confirmation.
-- PR #14 merged and closed issue #11.
-- PR #15 merged and closed issues #10 and #12.
-- PR #16 merged and closed issue #13.
-- Latest main release validation run `25597885095` passed.
-- User approved entering release stage.
+- `v0.3.1` has been published.
+- Final `v0.3.1` main release validation run `25598098034` passed.
+- PR #20 added minimal agent governance docs/templates and closed issue #19.
 
 Next Work
-- [x] Resolve #11 release validation metadata consistency.
-- [x] Resolve #10/#12 README positioning and maintainer reader review.
-- [x] Resolve #13 GitHub Actions runtime maintenance.
-- [x] Stop at release preparation for maintainer confirmation.
-- [ ] Prepare v0.3.1 release docs and validator coverage.
-- [ ] Run final release validation.
-- [ ] Tag and publish v0.3.1.
+- [ ] Resolve #21 release readiness and validation evidence drift.
+- [ ] Resolve #22 end-to-end minimal project adoption walkthrough.
+- [ ] Keep #23 deferred until the next release direction is chosen.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.
