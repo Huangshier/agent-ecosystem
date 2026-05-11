@@ -3,6 +3,9 @@
 This guide shows how to use the public Workflow Kernel in another project
 without copying this repository's private workflow.
 
+For a continuous first-use path from an empty project, see the
+[minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md).
+
 ## 1. Install A Runtime
 
 Install the recommended public runtime:
@@ -86,4 +89,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.p
 ## Example
 
 See [examples/minimal-project](../examples/minimal-project/README.md) for a
-small project-local scaffold that shows the intended file layout.
+small project-local scaffold that shows the intended file layout. For the full
+adoption sequence, use the
+[minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md).
