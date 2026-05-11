@@ -37,7 +37,11 @@
     - `git diff --check`
     - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     - hosted release validation checks on PR
-  - Notes: PR should close #22 and use the governance template.
+  - Notes: PR #28 is open, should close #22, and uses the governance template.
+    Local validation passed and hosted release validation passed. Maintainer
+    review requested minor spec/task/PR body corrections; no runtime behavior or
+    #27 scope is included. Follow-up release validation after review corrections
+    passed with `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## Task-to-Spec Notes
 
@@ -61,19 +65,24 @@
   - Validation: Link and content review; no private/local path leakage.
   - Continue / stop decision: Completed; continue to P03 validation.
 
-- [ ] P03: Validate locally, commit, push, and open PR
+- [x] P03: Validate locally, commit, push, and open PR
   - Goal: Produce a reviewable PR for #22.
   - Inputs: completed docs and memory updates.
   - Outputs: commit, remote branch, PR.
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Local validation passed; continue to commit,
-    push, and PR creation.
+  - Continue / stop decision: Completed; PR #28 is open and ready for hosted
+    checks / maintainer review.
 
 - [ ] P04: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
   - Inputs: opened PR.
   - Outputs: hosted check summary.
-  - Validation: four release validation jobs complete successfully.
-  - Continue / stop decision: Stop for maintainer review / merge.
+  - Validation:
+    - Hosted release validation passed on PR #28:
+      - `validate Windows PowerShell 5.1`: `SUCCESS`
+      - `validate pwsh (windows-latest)`: `SUCCESS`
+      - `validate pwsh (ubuntu-latest)`: `SUCCESS`
+      - `validate pwsh (macos-latest)`: `SUCCESS`
+  - Continue / stop decision: Hosted checks passed; maintainer review remains.

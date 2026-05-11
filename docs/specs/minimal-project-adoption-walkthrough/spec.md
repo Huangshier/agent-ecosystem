@@ -105,6 +105,10 @@
 - `scripts/validate-release.ps1` passes locally.
 - Hosted release validation passes on the PR before merge.
 
+## 10. Loop Contract
+
+- Not required for this documentation-only walkthrough task.
+
 ## 11. Execution Contract
 
 - **Autonomy level**: bounded-autonomous
