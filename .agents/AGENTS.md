@@ -70,6 +70,22 @@ For implementation tasks that produce repository changes, a complete unit of wor
     * **Tradeoffs**: Any compromises made.
 6. **Session Wrap-up**: For substantial sessions, when the user asks for memory cleanup, handoff, reflection, or next-session preparation, use the active runtime's skill discovery mechanism to find a relevant memory-governance or session-wrap-up workflow. There is no reliable automatic session-end hook, so do not assume this step runs unless it is requested or explicitly part of the project workflow. If no suitable workflow is available, manually update `.agents/process.txt`, record confirmed findings in `.agents/notes.md`, and store reusable lessons in `.agents/context/experience/`.
 
+## PR-Ready And Phase-Close Memory Sync Gate
+Before an agent marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight memory sync gate.
+
+This gate is a workflow checklist, not a Git hook, repository ruleset, or branch-protection change. Ordinary intermediate commits do not require a full engineering-memory sync; update only the files needed for the work at that point.
+
+Checklist:
+
+1. Re-read the active `docs/specs/<slug>/spec.md` and `docs/specs/<slug>/tasks.md`.
+2. Update the active spec status, phase state, acceptance evidence, and explicit non-goals when the phase result changed.
+3. Update `.agents/plan.md` so it points at the real active spec and current next action, without copying the full task list.
+4. Update `.agents/process.txt` when active issues, PRs, blockers, branch state, or next actions changed.
+5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.
+6. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
+7. Record hosted check results once at the relevant boundary. Do not create an endless loop of memory-only commits just to chase the latest hosted-check timestamp.
+8. Confirm the gate did not introduce unrelated refactors, pre-commit hooks, repository ruleset changes, or changes outside the accepted issue scope.
+
 ## Tooling Constraints
 - **Non-Interactive**: Do not wait for ceremonial approval before routine reversible edits. Commit and push rules still follow the Delivery Protocol.
 - **Environment Aware**: When the project is a git repository, check `git status` before committing. Inspect unstaged changes with `git diff` and staged changes with `git diff --cached` to ensure no unintended files or hunks are included.

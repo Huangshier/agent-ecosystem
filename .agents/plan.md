@@ -1,15 +1,17 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/memory-safety-language-normalization/spec.md` (Active)
+- `docs/specs/pr-ready-memory-sync-gate/spec.md` (Active)
+- Completed reference:
+  `docs/specs/memory-safety-language-normalization/spec.md` (Done)
 - Completed reference:
   `docs/specs/validation-tier-policy/spec.md` (Done)
 - Completed reference:
   `docs/specs/minimal-project-adoption-walkthrough/spec.md` (Done)
 
 Current Task
-- Resolve issues #29 and #31: protect project-specialized memory during
-  bootstrap refresh and make memory upgrade normalization language-aware.
+- Resolve issue #36: add a PR-ready / phase-close engineering-memory sync gate
+  without hooks, ruleset changes, or #30/#32/#33 implementation.
 
 Session Status
 - `v0.3.1` has been published.
@@ -19,20 +21,20 @@ Session Status
 - PR #26 documented `agent-ecosystem-bot` and closed issue #25.
 - PR #28 added the minimal project adoption walkthrough and closed issue #22.
 - PR #34 documented validation-tier policy and closed issue #27.
+- PR #35 protected project memory upgrades and closed issues #29 and #31.
 - Repository ruleset `protect-main` and GitHub App `agent-ecosystem-bot` are
   configured external governance controls.
 
 Next Work
-- [x] Implement #29 bootstrap overwrite safety.
-- [x] Implement #31 language-aware memory upgrade normalization.
-- [x] Add release validation fixtures for #29/#31.
-- [x] Commit, push, and open draft PR #35 for #29/#31.
-- [x] Add bootstrap evidence report mapping for #29 preserved/replaced/skipped/manual-review/backup.
-- [x] Re-run local release validation after evidence report update.
-- [ ] Push evidence update and mark PR #35 ready for review.
-- [ ] Wait for hosted release validation on the updated PR.
+- [x] Sync public `main` to PR #35 merge commit.
+- [x] Confirm #29/#31 are closed as completed.
+- [x] Clean merged branch `issue-29-31-memory-safety` locally and remotely.
+- [x] Accept #36 by updating triage labels.
+- [x] Add PR-ready / phase-close memory sync gate guidance.
+- [x] Close out #35 memory-safety work package as Done.
+- [ ] Validate, commit, push, and open PR for #36.
 - [ ] Keep #23 deferred until the next release direction is chosen.
-- [ ] Keep #30-#33 deferred unless needed for the active safety fix.
+- [ ] Keep #30, #32, and #33 deferred unless explicitly selected later.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

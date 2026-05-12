@@ -2,7 +2,7 @@
 
 - **Title**: Engineering Memory Safety And Language Normalization
 - **Slug**: memory-safety-language-normalization
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-12
 
@@ -18,16 +18,15 @@
 
 ## 2. Current Context
 
-- `skills/project-bootstrap/scripts/bootstrap_project.ps1` can overwrite
-  existing scaffold files when `-OverwriteTemplates` and `-ProjectLanguage`
-  are combined.
-- `skills/project-bootstrap/scripts/set_project_language.ps1` can rewrite hot
-  memory scaffolds when called with `-OverwriteScaffold`.
-- `skills/project-bootstrap/scripts/memory_upgrade.ps1` currently writes
-  English headings during `-Mode Apply`, regardless of `.agents/hub.lock.json`
+- PR #35 `fix: protect project memory upgrades` merged into `main` at
+  `89a7bd7e893378c19a6930288bff8c081d1732c1`.
+- Issues #29 and #31 are closed with `state_reason=completed`.
+- The merged implementation protects project-specialized memory during
+  bootstrap refreshes, writes bootstrap evidence reports, and makes
+  `memory_upgrade.ps1 -Mode Apply` respect `.agents/hub.lock.json`
   `project_language`.
-- Public release validation already covers the baseline memory-upgrade flow but
-  does not cover language-aware output or overwrite safety.
+- The local and remote `issue-29-31-memory-safety` branches were cleaned after
+  confirming the branch was merged and the public worktree was clean.
 
 ## 3. Goals
 
@@ -112,6 +111,7 @@
 - `git diff --check` passes.
 - Local release validation passes.
 - Hosted release validation passes on the PR before merge.
+- PR #35 merged and closed #29/#31.
 
 ## 10. Loop Contract
 
@@ -139,4 +139,5 @@
 ## 12. Open Questions
 
 - Whether a later explicit reset flag should be added for maintainers who want
-  to discard existing project memory and regenerate all scaffolds.
+  to discard existing project memory and regenerate all scaffolds. This remains
+  out of scope for the completed #29/#31 fix.

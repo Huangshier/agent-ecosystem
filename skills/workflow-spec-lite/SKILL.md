@@ -182,6 +182,20 @@ After spec generation:
 - do not copy the full spec into `.agents/notes.md` or `.agents/process.txt`
 - if execution starts immediately, keep the spec authoritative and update tasks there
 
+### Step 6: PR-Ready / Phase-Close Memory Sync Gate
+Before marking a pull request ready for review, handing off a non-draft pull request, or closing an implementation phase, run this boundary gate:
+
+1. Re-read the active `docs/specs/<slug>/spec.md` and `docs/specs/<slug>/tasks.md`.
+2. Update the active spec and tasks when the phase state, status, validation evidence, non-goals, or next action changed.
+3. Update `.agents/plan.md` so it points to the real active spec and current next action without duplicating the full task list.
+4. Update `.agents/process.txt` if active issues, PRs, branch state, blockers, or next actions changed.
+5. Update `.agents/notes.md` only when there is a durable verified fact, final decision, or evidence link worth preserving.
+6. Check that no completed hosted-check wait, ready-for-review step, or previous PR remains listed as active work.
+7. Record hosted check evidence once at the relevant boundary. Do not create repeated memory-only commits solely to refresh hosted-check timestamps.
+8. Confirm the sync did not add unrelated refactors, pre-commit hooks, GitHub ruleset changes, or work outside the accepted issue scope.
+
+Ordinary intermediate commits do not require a full engineering-memory sync. Keep this as a documented workflow gate; do not implement it as a pre-commit hook or repository ruleset requirement.
+
 ## Writing Rules
 - Keep the spec generic and project-facing, not agent-facing.
 - Put durable work intent in `docs/specs/`, not in `.agents`.

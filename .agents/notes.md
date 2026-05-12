@@ -50,6 +50,16 @@
   `.agents/_backup/bootstrap-*/bootstrap-evidence.json` and `.md` in target
   projects. Local release validation after the update passed:
   `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #35 `fix: protect project memory upgrades` merged on 2026-05-12 at
+  `89a7bd7e893378c19a6930288bff8c081d1732c1`; issues #29 and #31 are closed
+  with `state_reason=completed`. The merged branch
+  `issue-29-31-memory-safety` was cleaned locally and remotely after merge
+  confirmation.
+- Issue #36 was accepted on 2026-05-12 for a lightweight PR-ready /
+  phase-close engineering-memory sync gate. It remains scoped to governance
+  docs, skill guidance, specs, and tracked engineering memory; it does not
+  include pre-commit hooks, GitHub ruleset changes, hosted-check loops, or
+  implementation of #30/#32/#33.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

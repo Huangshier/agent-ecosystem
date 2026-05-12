@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/memory-safety-language-normalization/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-12
 
 ## Tasks
@@ -40,17 +40,19 @@
     existence, evidence report groups, project-specific memory sections, and
     spec reference preservation.
 
-- [ ] T06: Validate, publish PR, and wait for checks
+- [x] T06: Validate, publish PR, and wait for checks
   - Scope: branch `issue-29-31-memory-safety`.
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed.
     - Hosted release validation checks pass on the PR.
-  - Notes: Full validation is required because this touches bootstrap scripts,
+  - Notes: Full validation was required because this touched bootstrap scripts,
     release validation, specs, and tracked public `.agents` memory. Local
     release validation passed after the evidence-report update:
-    `PASS=34 FAIL=0 WARN=0 DEFERRED=0`. PR #35 opened as a draft by
-    `app/agent-ecosystem-bot`.
+    `PASS=34 FAIL=0 WARN=0 DEFERRED=0`. PR #35 was opened by
+    `app/agent-ecosystem-bot`, marked ready for review, passed hosted release
+    validation run `25717629762`, and merged at
+    `89a7bd7e893378c19a6930288bff8c081d1732c1`.
 
 ## Task-to-Spec Notes
 
@@ -103,10 +105,17 @@
     - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to hosted checks and maintainer review.
 
-- [ ] P06: Wait for hosted checks and maintainer review
+- [x] P06: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
   - Inputs: opened PR.
-  - Outputs: hosted check summary and ready-for-review state.
+  - Outputs:
+    - Hosted check summary and ready-for-review state.
+    - PR #35 merged into `main`.
+    - Issues #29 and #31 closed with `state_reason=completed`.
+    - Local and remote branch `issue-29-31-memory-safety` cleaned after merge
+      confirmation.
   - Validation: Required hosted release validation checks pass after the latest
-    evidence-report update.
-  - Continue / stop decision:
+    evidence-report update; PR #35 merged at
+    `89a7bd7e893378c19a6930288bff8c081d1732c1`.
+  - Continue / stop decision: Completed. #30, #32, and #33 remain separate
+    follow-up issues.
