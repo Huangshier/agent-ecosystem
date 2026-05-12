@@ -65,6 +65,9 @@ The validator checks:
 - first-session language write capability for English and Simplified Chinese
   temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
   the agent or workflow
+- project-bootstrap operating modes, including missing-template refresh,
+  unmodified-template refresh, compatibility overwrite warnings, and
+  backup-first force reset behavior
 - localized context discovery headings in memory diagnosis and upgrade analysis
 - bilingual public/private routing guidance in language policy and bundled
   knowledge assets

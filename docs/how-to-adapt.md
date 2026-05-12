@@ -51,6 +51,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-boo
 
 The script does not infer chat language by itself.
 
+For an existing project, treat bootstrap as a conservative refresh:
+
+- Default bootstrap copies missing scaffold files and preserves existing memory.
+- Use `-RefreshUnmodifiedTemplates` only when you want files that still match
+  the previous installed template hash to pick up newer templates.
+- Do not use reset language for memory migration. Use the Analyze, Plan, and
+  Apply memory upgrade flow so project-specific content is reviewed and backed
+  up before changes are applied.
+- `-ForceResetScaffold` is only for intentionally discarding scaffold
+  customizations. It warns and backs up first, but it is not a conservative
+  language migration path.
+
 ## 3. Use The Workflow Kernel
 
 - Start non-trivial work with `project-context-gate`.

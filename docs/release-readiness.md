@@ -54,6 +54,10 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
 - `project-bootstrap` can write first-session language scaffolds when an agent
   or workflow supplies `-ProjectLanguage en` or `-ProjectLanguage zh-CN`; release
   validation checks both languages with temporary projects.
+- `project-bootstrap` distinguishes empty initialization, missing-template
+  refresh, unmodified-template refresh, conservative memory migration, and
+  explicit force reset. Compatibility overwrite emits warnings, and force reset
+  remains backup-first.
 - `workflow-spec-lite` includes a read-only spec validator that checks goals,
   non-goals, risks, acceptance evidence, and Execution Contract stop rules.
 - Spec templates and memory-governance guidance include scope drift, unrelated
@@ -178,6 +182,8 @@ The release validator now covers:
 - Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
+- project-bootstrap operating-mode coverage for safe refresh, compatibility
+  overwrite warnings, and backup-first force reset
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
 - validation scratch retention pruning dry-run/apply behavior

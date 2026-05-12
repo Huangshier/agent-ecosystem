@@ -2,6 +2,8 @@ param(
     [string]$ProjectDir = (Get-Location).Path,
     [string]$HubDir = "$env:USERPROFILE\.agents\knowledge-hub",
     [switch]$OverwriteTemplates,
+    [switch]$RefreshUnmodifiedTemplates,
+    [switch]$ForceResetScaffold,
     [switch]$AnalyzeMemoryUpgrade,
     [switch]$PlanMemoryUpgrade,
     [switch]$ApplyMemoryUpgrade,
@@ -24,6 +26,19 @@ if ($memoryUpgradeModeCount -gt 1) {
 }
 if ($AutoUpgrade.IsPresent -and $SkipMemoryUpgradeAnalysis.IsPresent) {
     throw "-AutoUpgrade cannot be combined with -SkipMemoryUpgradeAnalysis."
+}
+
+$templateModeCount = 0
+foreach ($templateModeSwitch in @($OverwriteTemplates, $RefreshUnmodifiedTemplates, $ForceResetScaffold)) {
+    if ($templateModeSwitch.IsPresent) {
+        $templateModeCount++
+    }
+}
+if ($templateModeCount -gt 1) {
+    throw "Choose only one template refresh/reset mode: -RefreshUnmodifiedTemplates, -ForceResetScaffold, or the compatibility -OverwriteTemplates alias."
+}
+if ($ForceResetScaffold.IsPresent -and $memoryUpgradeModeCount -gt 0) {
+    throw "-ForceResetScaffold cannot be combined with memory upgrade modes. Use conservative analyze/plan/apply migration or force reset, not both."
 }
 
 function Join-PathParts {
@@ -96,6 +111,39 @@ function Test-ExistingProjectMemory {
     return ($memoryFiles.Count -gt 0)
 }
 
+function Get-FileSha256 {
+    param([string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Read-PreviousTemplateHashMap {
+    param([string]$LockPath)
+
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $LockPath)) {
+        return $map
+    }
+
+    try {
+        $lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json
+    } catch {
+        return $map
+    }
+
+    if ($null -eq $lock.template_installed_hashes_sha256) {
+        return $map
+    }
+
+    foreach ($property in $lock.template_installed_hashes_sha256.PSObject.Properties) {
+        $relative = Normalize-RelativePath -Path $property.Name
+        if (-not [string]::IsNullOrWhiteSpace($relative) -and $null -ne $property.Value) {
+            $map[$relative] = ([string]$property.Value).ToLowerInvariant()
+        }
+    }
+
+    return $map
+}
+
 $script:bootstrapBackupDir = ""
 $script:bootstrapBackupStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $script:bootstrapBackupCount = 0
@@ -156,7 +204,11 @@ function Write-BootstrapEvidenceReport {
         [string]$ProjectDirFull,
         [string]$HubDirValue,
         [string]$LockPath,
+        [string]$OperationMode,
+        [string]$TemplateMode,
         [bool]$Overwrite,
+        [bool]$RefreshUnmodified,
+        [bool]$ForceReset,
         [bool]$HadExistingMemory,
         [string]$ProjectLanguageValue,
         [array]$Copied,
@@ -178,7 +230,11 @@ function Write-BootstrapEvidenceReport {
         project_dir = $ProjectDirFull
         hub_dir = $HubDirValue
         lock_file = $LockPath
+        operation_mode = $OperationMode
+        template_mode = $TemplateMode
         overwrite_templates = $Overwrite
+        refresh_unmodified_templates = $RefreshUnmodified
+        force_reset_scaffold = $ForceReset
         had_existing_project_memory = $HadExistingMemory
         project_language = $ProjectLanguageValue
         copied = @($Copied)
@@ -198,13 +254,17 @@ function Write-BootstrapEvidenceReport {
     $markdown += "- Project: $ProjectDirFull"
     $markdown += "- Hub: $HubDirValue"
     $markdown += "- Lock file: $LockPath"
+    $markdown += "- Operation mode: $OperationMode"
+    $markdown += "- Template mode: $TemplateMode"
     $markdown += "- Overwrite templates: $Overwrite"
+    $markdown += "- Refresh unmodified templates: $RefreshUnmodified"
+    $markdown += "- Force reset scaffold: $ForceReset"
     $markdown += "- Existing project memory detected: $HadExistingMemory"
     if (-not [string]::IsNullOrWhiteSpace($ProjectLanguageValue)) {
         $markdown += "- Project language: $ProjectLanguageValue"
     }
     $markdown += ""
-    $markdown += "Preserved files were left unchanged. Manual-review files are the protected memory subset that differed from the template and must be reviewed before any replacement."
+    $markdown += "Preserved files were left unchanged. Manual-review files differed from the current template or prior installed template hash and must be reviewed before any replacement."
     $markdown += ""
     $markdown += Format-EvidenceSection -Title "Preserved" -Items @($Preserved)
     $markdown += Format-EvidenceSection -Title "Replaced" -Items @($Replaced)
@@ -223,9 +283,10 @@ function Copy-TemplateFile {
     param(
         [string]$Source,
         [string]$Destination,
-        [bool]$AllowOverwrite,
         [string]$RelativePath,
-        [bool]$ProtectModifiedMemory
+        [bool]$RefreshUnmodified,
+        [bool]$ForceReset,
+        [hashtable]$PreviousTemplateHashes
     )
 
     $destinationDir = Split-Path -Parent $Destination
@@ -238,22 +299,35 @@ function Copy-TemplateFile {
     }
 
     # Compare content hash
-    $sourceHash = (Get-FileHash -Path $Source -Algorithm SHA256).Hash
-    $destHash = (Get-FileHash -Path $Destination -Algorithm SHA256).Hash
+    $sourceHash = Get-FileSha256 -Path $Source
+    $destHash = Get-FileSha256 -Path $Destination
 
     if ($sourceHash -eq $destHash) {
         # Content identical, skip
-        return "skipped"
+        return "skipped-current-template"
     }
 
     # Content differs
-    if ($AllowOverwrite) {
-        if ($ProtectModifiedMemory -and (Test-ProtectedMemoryPath -RelativePath $RelativePath)) {
-            return "manual-review"
-        }
+    if ($ForceReset) {
         Backup-ExistingTemplateFile -Destination $Destination -RelativePath $RelativePath
         Copy-Item -LiteralPath $Source -Destination $Destination -Force
         return "updated"
+    }
+
+    if ($RefreshUnmodified) {
+        $normalizedRelative = Normalize-RelativePath -Path $RelativePath
+        $previousHash = ""
+        if ($PreviousTemplateHashes.ContainsKey($normalizedRelative)) {
+            $previousHash = [string]$PreviousTemplateHashes[$normalizedRelative]
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($previousHash) -and $destHash -eq $previousHash.ToLowerInvariant()) {
+            Backup-ExistingTemplateFile -Destination $Destination -RelativePath $RelativePath
+            Copy-Item -LiteralPath $Source -Destination $Destination -Force
+            return "updated"
+        }
+
+        return "manual-review"
     }
 
     return "skipped"
@@ -337,12 +411,62 @@ $preservedPaths = New-Object 'System.Collections.Generic.List[string]'
 $replacedPaths = New-Object 'System.Collections.Generic.List[string]'
 $manualReviewPaths = New-Object 'System.Collections.Generic.List[string]'
 $hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
+$projectAgentDir = Join-Path $ProjectDir ".agents"
+$lockPath = Join-Path $projectAgentDir "hub.lock.json"
+$previousTemplateHashes = Read-PreviousTemplateHashMap -LockPath $lockPath
+$installedTemplateHashes = [ordered]@{}
+$refreshUnmodifiedMode = ($RefreshUnmodifiedTemplates.IsPresent -or $OverwriteTemplates.IsPresent)
+$templateMode = "refresh-missing-templates"
+if ($ForceResetScaffold.IsPresent) {
+    $templateMode = "force-reset-scaffold"
+} elseif ($refreshUnmodifiedMode) {
+    $templateMode = "refresh-unmodified-templates"
+}
+
+$bootstrapOperationMode = "refresh-missing-templates"
+if (-not $hadExistingProjectMemory) {
+    $bootstrapOperationMode = "initialize-empty-project"
+} elseif ($ForceResetScaffold.IsPresent) {
+    $bootstrapOperationMode = "explicit-force-reset"
+} elseif ($memoryUpgradeModeCount -gt 0) {
+    $bootstrapOperationMode = "conservative-memory-migration"
+} elseif ($refreshUnmodifiedMode) {
+    $bootstrapOperationMode = "refresh-unmodified-templates"
+}
+
+if ($OverwriteTemplates.IsPresent) {
+    Write-Warning "-OverwriteTemplates is a compatibility alias for -RefreshUnmodifiedTemplates. It does not overwrite modified project memory. Use -ForceResetScaffold only when discarding scaffold customizations is intentional; replacements remain backup-first."
+}
+if ($ForceResetScaffold.IsPresent) {
+    Write-Warning "-ForceResetScaffold can replace existing scaffold and memory template files. Existing files are backed up under .agents/_backup before replacement. Do not use this for conservative memory migration."
+}
+if ($refreshUnmodifiedMode -and $hadExistingProjectMemory -and $previousTemplateHashes.Count -lt 1) {
+    Write-Warning "No prior template hash manifest was found; modified existing files will be preserved for manual review instead of being refreshed."
+}
+
+function Record-InstalledTemplateHash {
+    param(
+        [string]$RelativePath,
+        [string]$Destination,
+        [string]$Result
+    )
+
+    $normalized = Normalize-RelativePath -Path $RelativePath
+    if ($Result -eq "copied" -or $Result -eq "updated" -or $Result -eq "skipped-current-template") {
+        if (Test-Path -LiteralPath $Destination) {
+            $installedTemplateHashes[$normalized] = Get-FileSha256 -Path $Destination
+        }
+    } elseif ($previousTemplateHashes.ContainsKey($normalized)) {
+        $installedTemplateHashes[$normalized] = [string]$previousTemplateHashes[$normalized]
+    }
+}
 
 Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
     $relative = $_.FullName.Substring($projectRootTemplate.Length).TrimStart([char[]]"\/")
     $destination = Join-Path $ProjectDir $relative
     $normalizedRelative = Normalize-RelativePath -Path $relative
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
+    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
+    Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
     if ($result -eq "copied") {
         $copiedCount++
         $copiedPaths.Add($normalizedRelative) | Out-Null
@@ -364,14 +488,14 @@ Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
     }
 }
 
-$projectAgentDir = Join-Path $ProjectDir ".agents"
 Ensure-Dir -Path $projectAgentDir
 
 Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
     $relative = $_.FullName.Substring($projectAgentTemplate.Length).TrimStart([char[]]"\/")
     $destination = Join-Path $projectAgentDir $relative
     $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
+    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
+    Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
     if ($result -eq "copied") {
         $copiedCount++
         $copiedPaths.Add($normalizedRelative) | Out-Null
@@ -442,20 +566,36 @@ if (-not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
     }
     if (-not $hadExistingProjectMemory) {
         $languageParams.OverwriteScaffold = $true
+        $languageParams.SkipOverwriteBackup = $true
+    }
+    if ($ForceResetScaffold.IsPresent) {
+        $languageParams.OverwriteScaffold = $true
     }
     $languageJson = & $languageScript @languageParams
     $languageResult = $languageJson | ConvertFrom-Json
+    if ([bool]$languageResult.overwrite_scaffold) {
+        foreach ($languagePathValue in @($languageResult.scaffold_paths)) {
+            $languageRelative = Normalize-RelativePath -Path ([string]$languagePathValue)
+            $languagePath = Join-PathParts $ProjectDir $languageRelative
+            if (Test-Path -LiteralPath $languagePath) {
+                $installedTemplateHashes[$languageRelative] = Get-FileSha256 -Path $languagePath
+            }
+        }
+    }
 }
 
-$lockPath = Join-Path $projectAgentDir "hub.lock.json"
 $projectLanguageValue = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
 $evidenceReport = $null
-if ($OverwriteTemplates.IsPresent -or $manualReviewCount -gt 0 -or $script:bootstrapBackupCount -gt 0) {
+if ($OverwriteTemplates.IsPresent -or $RefreshUnmodifiedTemplates.IsPresent -or $ForceResetScaffold.IsPresent -or $manualReviewCount -gt 0 -or $script:bootstrapBackupCount -gt 0) {
     $evidenceReport = Write-BootstrapEvidenceReport `
         -ProjectDirFull (Resolve-Path -LiteralPath $ProjectDir).Path `
         -HubDirValue $HubDir `
         -LockPath $lockPath `
+        -OperationMode $bootstrapOperationMode `
+        -TemplateMode $templateMode `
         -Overwrite ([bool]$OverwriteTemplates.IsPresent) `
+        -RefreshUnmodified ([bool]$refreshUnmodifiedMode) `
+        -ForceReset ([bool]$ForceResetScaffold.IsPresent) `
         -HadExistingMemory ([bool]$hadExistingProjectMemory) `
         -ProjectLanguageValue $projectLanguageValue `
         -Copied @($copiedPaths.ToArray()) `
@@ -478,7 +618,11 @@ $lockData = [ordered]@{
     hub_dirty = [bool]$hubDirty
     template_source = "templates/project-root + templates/project-agent"
     template_tree_hash_sha256 = $templateTreeHash
+    bootstrap_operation_mode = $bootstrapOperationMode
+    template_mode = $templateMode
     overwrite_templates = [bool]$OverwriteTemplates.IsPresent
+    refresh_unmodified_templates = [bool]$refreshUnmodifiedMode
+    force_reset_scaffold = [bool]$ForceResetScaffold.IsPresent
     template_backup_count = [int]$script:bootstrapBackupCount
     template_backup_dir = $script:bootstrapBackupDir
     template_backup_paths = @($script:bootstrapBackupRecords.ToArray())
@@ -489,15 +633,26 @@ $lockData = [ordered]@{
     template_manual_review_paths = @($manualReviewPaths.ToArray())
     template_evidence_report_json = if ($null -ne $evidenceReport) { [string]$evidenceReport.json } else { "" }
     template_evidence_report_markdown = if ($null -ne $evidenceReport) { [string]$evidenceReport.markdown } else { "" }
+    template_installed_hashes_sha256 = $installedTemplateHashes
+    language_backup_count = if ($null -ne $languageResult) { [int]$languageResult.backup_count } else { 0 }
+    language_backup_dir = if ($null -ne $languageResult) { [string]$languageResult.backup_dir } else { "" }
+    language_backup_paths = if ($null -ne $languageResult) { @($languageResult.backup_paths) } else { @() }
     project_language = $projectLanguageValue
 }
 
 $lockData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
 Write-Output "Project bootstrap complete."
+Write-Output "Bootstrap operation mode: $bootstrapOperationMode"
 Write-Output "Project: $ProjectDir"
 Write-Output "Hub: $HubDir"
 Write-Output ("Template files copied: {0}, updated: {1}, skipped: {2}" -f $copiedCount, $updatedCount, $skippedCount)
+if ($refreshUnmodifiedMode) {
+    Write-Output "Template refresh mode: unmodified template files may be refreshed; modified files are preserved for manual review."
+}
+if ($ForceResetScaffold.IsPresent) {
+    Write-Output "Template reset mode: explicit force reset requested; replacements are backed up before writing."
+}
 if ($script:bootstrapBackupCount -gt 0) {
     Write-Output ("Template backups written: {0} ({1})" -f $script:bootstrapBackupCount, $script:bootstrapBackupDir)
 }
@@ -512,8 +667,13 @@ if ($null -ne $evidenceReport) {
 }
 if ($null -ne $languageResult) {
     Write-Output ("Project language: {0} ({1} files written, {2} skipped)" -f [string]$languageResult.project_language, [int]$languageResult.files_written, [int]$languageResult.files_skipped)
-    if ($hadExistingProjectMemory) {
+    if ([int]$languageResult.backup_count -gt 0) {
+        Write-Output ("Language scaffold backups written: {0} ({1})" -f [int]$languageResult.backup_count, [string]$languageResult.backup_dir)
+    }
+    if ($hadExistingProjectMemory -and -not $ForceResetScaffold.IsPresent) {
         Write-Output "Project language refresh preserved existing memory files; review skipped files before replacing customized content."
+    } elseif ($ForceResetScaffold.IsPresent) {
+        Write-Output "Project language scaffold reset used explicit force reset; replacements are backup-first."
     }
 }
 Write-Output "Lock file: $lockPath"

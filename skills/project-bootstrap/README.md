@@ -31,3 +31,11 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
 - `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
 - When ordinary bootstrap detects memory upgrade candidates, the skill workflow decides whether to auto-upgrade, ask first, or skip based on the user's stated intent.
+
+## Operating Modes
+- Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.
+- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory.
+- Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review.
+- Compatibility overwrite: `-OverwriteTemplates` is retained as a warning-emitting alias for unmodified-template refresh. It is not a force reset.
+- Conservative memory migration: use Analyze, Plan, and Apply memory upgrade modes with reviewable proposals and backups.
+- Explicit force reset: `-ForceResetScaffold` is the only reset path for intentionally discarding scaffold customizations. It warns, backs up first, and cannot be combined with memory upgrade modes.
