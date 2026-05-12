@@ -32,7 +32,8 @@ Next Work
 - [x] Accept #36 by updating triage labels.
 - [x] Add PR-ready / phase-close memory sync gate guidance.
 - [x] Close out #35 memory-safety work package as Done.
-- [ ] Validate, commit, push, and open PR for #36.
+- [x] Validate, commit, push, and open draft PR #37 for #36.
+- [ ] Wait for hosted checks and maintainer review / ready decision on PR #37.
 - [ ] Keep #23 deferred until the next release direction is chosen.
 - [ ] Keep #30, #32, and #33 deferred unless explicitly selected later.
 

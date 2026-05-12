@@ -60,6 +60,9 @@
   docs, skill guidance, specs, and tracked engineering memory; it does not
   include pre-commit hooks, GitHub ruleset changes, hosted-check loops, or
   implementation of #30/#32/#33.
+- PR #37 `docs: add PR-ready memory sync gate` was opened by
+  `app/agent-ecosystem-bot` as a draft PR for #36:
+  https://github.com/Huangshier/agent-ecosystem/pull/37
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

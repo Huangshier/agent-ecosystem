@@ -3,6 +3,8 @@ Current State
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
   - #36, add a PR-ready / phase-close engineering-memory sync gate.
+- Active public PR: #37, `docs: add PR-ready memory sync gate`, opened by
+  `app/agent-ecosystem-bot` as a draft PR.
 - Active public branch: `issue-36-pr-ready-memory-sync-gate`.
 - Active public spec:
   `docs/specs/pr-ready-memory-sync-gate/spec.md`.
@@ -36,7 +38,7 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Implement and publish #36 as a focused docs/skill governance PR.
+- Wait for hosted checks and maintainer review / ready decision on PR #37.
 - Keep #23 deferred until the next release direction is chosen.
 - Do not implement #30, #32, or #33 in the #36 work.
 

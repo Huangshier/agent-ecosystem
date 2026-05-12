@@ -29,12 +29,12 @@
     commit behavior, and explicit non-goals.
   - Notes: No hooks, rulesets, or hosted-check workflow changes.
 
-- [ ] T04: Validate, commit, push, and open PR
+- [x] T04: Validate, commit, push, and open PR
   - Scope: branch `issue-36-pr-ready-memory-sync-gate`.
-  - Validation: `git diff --check` passes.
-  - Notes: Full release validation is not required for this docs/skill-memory
-    governance change because no scripts, installer behavior, CI, or release
-    metadata are changed.
+  - Validation:
+    - `git diff --check` passed.
+    - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
+  - Notes: PR #37 opened as a draft PR by `app/agent-ecosystem-bot`.
 
 ## Task-to-Spec Notes
 
@@ -67,9 +67,15 @@
   - Validation: Hot memory points at #36; memory-safety work package is Done.
   - Continue / stop decision: Continue to validation and PR publication.
 
-- [ ] P04: Validate, commit, push, and open a PR for #36
+- [x] P04: Validate, commit, push, and open a PR for #36
   - Goal: Produce a reviewable PR that fixes #36.
   - Inputs: completed docs, skill guidance, specs, and memory updates.
-  - Outputs: Commit, remote branch, and PR.
-  - Validation: `git diff --check` passes.
-  - Continue / stop decision:
+  - Outputs:
+    - Commit `f51b77f docs: add PR-ready memory sync gate`.
+    - Remote branch `issue-36-pr-ready-memory-sync-gate`.
+    - Draft PR #37 `docs: add PR-ready memory sync gate`.
+  - Validation:
+    - `git diff --check` passed.
+    - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
+  - Continue / stop decision: Completed. Next boundary is hosted checks and
+    maintainer review / ready decision.

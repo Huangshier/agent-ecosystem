@@ -18,6 +18,7 @@
 - Issue #36 was created after PR #35 exposed a process gap: the PR could become
   ready while `.agents/plan.md`, `.agents/process.txt`, and active spec/tasks
   still described intermediate work.
+- PR #37 `docs: add PR-ready memory sync gate` is open as a draft PR for #36.
 - `project-context-gate` reloads memory but does not write updates.
 - `workflow-spec-lite` creates durable work packages but does not currently
   require a PR-ready or phase-close memory sync.
@@ -92,6 +93,8 @@
 - PR #35 and issues #29/#31 are no longer presented as active work in public
   engineering memory.
 - `git diff --check` passes.
+- Local release validation passes.
+- Draft PR #37 exists and references `Fixes #36`.
 
 ## 10. Loop Contract
 
