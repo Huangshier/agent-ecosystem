@@ -41,6 +41,15 @@
 - PR #28 added the end-to-end minimal project adoption walkthrough and closed
   issue #22. Merge commit:
   `38e39834398e034698b9c37541605a8a7630f04e`.
+- PR #34 documented validation-tier policy and closed issue #27. Merge commit:
+  `67dfdf161dad99c67f107099a58e2768cf65d190`.
+- PR #35 `fix: protect project memory upgrades` was opened by
+  `app/agent-ecosystem-bot` as a draft PR for #29 and #31:
+  https://github.com/Huangshier/agent-ecosystem/pull/35
+- PR #35 evidence-mapping update adds bootstrap evidence reports under
+  `.agents/_backup/bootstrap-*/bootstrap-evidence.json` and `.md` in target
+  projects. Local release validation after the update passed:
+  `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

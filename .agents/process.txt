@@ -1,12 +1,17 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
-- Active public maintenance issue: #27, define validation tiers for
-  agent-assisted maintenance.
-- Active public spec: `docs/specs/validation-tier-policy/spec.md`.
-- Previous active spec
-  `docs/specs/minimal-project-adoption-walkthrough/spec.md` is merged via
-  PR #28 and issue #22 is closed.
+- Active public maintenance issues:
+  - #29, protect project-specialized memory during bootstrap refresh.
+  - #31, make memory upgrade normalization respect project language.
+- Active public PR: #35, `fix: protect project memory upgrades`, opened by
+  `app/agent-ecosystem-bot` as a draft PR.
+- PR #35 evidence-mapping update added bootstrap `bootstrap-evidence.json/md`
+  reports for preserved, replaced, skipped, manual-review, and backup groups.
+- Active public spec:
+  `docs/specs/memory-safety-language-normalization/spec.md`.
+- Previous active spec `docs/specs/validation-tier-policy/spec.md` is merged
+  via PR #34 and issue #27 is closed.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -27,14 +32,17 @@ Completed
 - PR #26 documented the installed GitHub App identity and closed issue #25.
 - PR #28 added the end-to-end minimal project adoption walkthrough and closed
   issue #22.
+- PR #34 documented validation-tier policy and closed issue #27.
 - Repository ruleset `protect-main` protects the default branch with required
   pull requests, release validation checks, conversation resolution, deletion
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Finish #27 validation-tier policy documentation.
+- Push PR #35 evidence-mapping update.
+- Update PR #35 with evidence mapping and mark it ready for review.
 - Keep #23 deferred until the next release direction is chosen.
-- After #27, prioritize #29 and #31 engineering-memory safety bugs.
+- Keep #30-#33 deferred unless their acceptance criteria become necessary for
+  the #29/#31 safety fix.
 
 Blocking Issues
 - No active blockers.

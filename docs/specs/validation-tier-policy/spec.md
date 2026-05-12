@@ -2,7 +2,7 @@
 
 - **Title**: Validation Tier Policy
 - **Slug**: validation-tier-policy
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-12
 
@@ -15,8 +15,9 @@
 
 ## 2. Current Context
 
-- GitHub issue #27 asks for validation tiers after governance and GitHub App
+- GitHub issue #27 asked for validation tiers after governance and GitHub App
   rollout exposed repeated local-validation judgment calls.
+- PR #34 merged the policy and closed issue #27.
 - The `protect-main` ruleset already requires pull requests, conversation
   resolution, and hosted release validation checks before merge.
 - The PR template already asks for validation evidence.
@@ -32,7 +33,8 @@
 - Keep required hosted checks and release validation behavior unchanged.
 - Update PR evidence collection so reviewers can see the selected tier.
 - Refresh public `.agents` memory to point at #27 as the active maintenance
-  item.
+  item during implementation.
+- Close out public memory after PR #34 merge.
 
 ## 4. Non-Goals
 
