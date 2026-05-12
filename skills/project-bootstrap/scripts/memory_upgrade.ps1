@@ -77,6 +77,192 @@ $discoveryHeadingAliases = [ordered]@{
     keywords = @("Keywords", $localizedKeywordsHeading)
 }
 
+function Join-CodePoints {
+    param([int[]]$CodePoints)
+    return -join ($CodePoints | ForEach-Object { [char]$_ })
+}
+
+$zhText = [ordered]@{
+    Chinese = Join-CodePoints @(0x4E2D, 0x6587)
+    SimplifiedChinese = Join-CodePoints @(0x7B80, 0x4F53, 0x4E2D, 0x6587)
+    CurrentState = Join-CodePoints @(0x5F53, 0x524D, 0x72B6, 0x6001)
+    LegacyMemoryUpgradedPrefix = Join-CodePoints @(0x65E7, 0x7248, 0x5DE5, 0x7A0B, 0x8BB0, 0x5FC6, 0x5E03, 0x5C40, 0x5DF2, 0x4E8E)
+    UpgradedPeriod = Join-CodePoints @(0x5347, 0x7EA7, 0x3002)
+    CurrentSpecPrefix = Join-CodePoints @(0x5F53, 0x524D, 0x0020, 0x0053, 0x0070, 0x0065, 0x0063, 0x003A, 0x0020)
+    None = Join-CodePoints @(0x65E0)
+    NextActions = Join-CodePoints @(0x4E0B, 0x4E00, 0x6B65)
+    ContinueFromPlan = Join-CodePoints @(0x7EE7, 0x7EED, 0x67E5, 0x770B, 0x0020, 0x002E, 0x0061, 0x0067, 0x0065, 0x006E, 0x0074, 0x0073, 0x002F, 0x0070, 0x006C, 0x0061, 0x006E, 0x002E, 0x006D, 0x0064, 0x0020, 0x548C, 0x5F53, 0x524D, 0x0020, 0x0064, 0x006F, 0x0063, 0x0073, 0x002F, 0x0073, 0x0070, 0x0065, 0x0063, 0x0073, 0x0020, 0x4EFB, 0x52A1, 0x3002)
+    BlockingIssues = Join-CodePoints @(0x963B, 0x585E, 0x4E8B, 0x9879)
+    NoRecordedBlockers = Join-CodePoints @(0x65E0, 0x5DF2, 0x8BB0, 0x5F55, 0x963B, 0x585E)
+    LastUpdated = Join-CodePoints @(0x6700, 0x540E, 0x66F4, 0x65B0)
+    ActivePlanHeading = Join-CodePoints @(0x0023, 0x0020, 0x5F53, 0x524D, 0x8BA1, 0x5212)
+    ActiveSpecHeading = Join-CodePoints @(0x5F53, 0x524D, 0x0020, 0x0053, 0x0070, 0x0065, 0x0063)
+    CurrentTask = Join-CodePoints @(0x5F53, 0x524D, 0x4EFB, 0x52A1)
+    ThisSession = Join-CodePoints @(0x672C, 0x6B21, 0x4F1A, 0x8BDD)
+    ReviewBackupPrefix = Join-CodePoints @(0x67E5, 0x770B, 0x0020, 0x002E, 0x0061, 0x0067, 0x0065, 0x006E, 0x0074, 0x0073, 0x002F, 0x005F, 0x0062, 0x0061, 0x0063, 0x006B, 0x0075, 0x0070, 0x002F)
+    ReviewBackupSuffix = Join-CodePoints @(0x0020, 0x4E2D, 0x7684, 0x8BB0, 0x5FC6, 0x5347, 0x7EA7, 0x5907, 0x4EFD)
+    MoveDurableWork = Join-CodePoints @(0x5C06, 0x4ECD, 0x9700, 0x957F, 0x671F, 0x4FDD, 0x7559, 0x7684, 0x5DE5, 0x4F5C, 0x79FB, 0x5165, 0x0020, 0x0064, 0x006F, 0x0063, 0x0073, 0x002F, 0x0073, 0x0070, 0x0065, 0x0063, 0x0073, 0x002F)
+    ConfirmedNotesHeading = Join-CodePoints @(0x0023, 0x0020, 0x5DF2, 0x786E, 0x8BA4, 0x8BB0, 0x5F55)
+    MemoryUpgradedPrefix = Join-CodePoints @(0x5DE5, 0x7A0B, 0x8BB0, 0x5FC6, 0x5DF2, 0x4E8E)
+    MemoryUpgradedBackupPrefix = Join-CodePoints @(0x5347, 0x7EA7, 0xFF1B, 0x539F, 0x59CB, 0x6587, 0x4EF6, 0x5DF2, 0x5907, 0x4EFD, 0x5230, 0x0020, 0x002E, 0x0061, 0x0067, 0x0065, 0x006E, 0x0074, 0x0073, 0x002F, 0x005F, 0x0062, 0x0061, 0x0063, 0x006B, 0x0075, 0x0070, 0x002F)
+    Period = Join-CodePoints @(0x3002)
+    StableFactsOnly = Join-CodePoints @(0x672C, 0x6587, 0x4EF6, 0x53EA, 0x4FDD, 0x7559, 0x6709, 0x8BC1, 0x636E, 0x7684, 0x7A33, 0x5B9A, 0x4E8B, 0x5B9E, 0x3002)
+}
+
+function Resolve-MemoryLanguage {
+    param([string]$Root)
+
+    $agentDir = Join-Path $Root ".agents"
+    $lockPath = Join-Path $agentDir "hub.lock.json"
+    $requested = ""
+    $warning = ""
+
+    if (Test-Path -LiteralPath $lockPath) {
+        try {
+            $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+            if ($lock.PSObject.Properties.Name -contains "project_language") {
+                $requested = ([string]$lock.project_language).Trim()
+            }
+        } catch {
+            $warning = "Could not read project_language from .agents/hub.lock.json; falling back to English."
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($requested)) {
+        return [ordered]@{
+            requested = $requested
+            code = "en"
+            label = "English"
+            warning = $warning
+        }
+    }
+
+    $normalized = $requested.ToLowerInvariant()
+    if ($normalized -in @("en", "en-us", "english")) {
+        return [ordered]@{
+            requested = $requested
+            code = "en"
+            label = "English"
+            warning = $warning
+        }
+    }
+    if ($normalized -in @("zh", "zh-cn", "zh-hans", "chinese", "simplified-chinese", "simplified chinese", $zhText.Chinese, $zhText.SimplifiedChinese)) {
+        return [ordered]@{
+            requested = $requested
+            code = "zh-CN"
+            label = "Simplified Chinese"
+            warning = $warning
+        }
+    }
+
+    return [ordered]@{
+        requested = $requested
+        code = "en"
+        label = "English"
+        warning = ("Unsupported project_language '{0}'; falling back to English." -f $requested)
+    }
+}
+
+function New-ProcessLines {
+    param(
+        [string]$LanguageCode,
+        [string]$Today,
+        [string]$SpecRef
+    )
+
+    $lines = @()
+    if ($LanguageCode -eq "zh-CN") {
+        $lines += $zhText.CurrentState
+        $lines += ("- {0} {1} {2}" -f $zhText.LegacyMemoryUpgradedPrefix, $Today, $zhText.UpgradedPeriod)
+        if ($SpecRef) { $lines += ("- {0}{1}" -f $zhText.CurrentSpecPrefix, $SpecRef) } else { $lines += ("- {0}{1}" -f $zhText.CurrentSpecPrefix, $zhText.None) }
+        $lines += ""
+        $lines += $zhText.NextActions
+        $lines += ("- {0}" -f $zhText.ContinueFromPlan)
+        $lines += ""
+        $lines += $zhText.BlockingIssues
+        $lines += ("- {0}" -f $zhText.NoRecordedBlockers)
+        $lines += ""
+        $lines += $zhText.LastUpdated
+        $lines += "- $Today"
+        return $lines
+    }
+
+    $lines += "Current State"
+    $lines += "- Memory upgraded from legacy layout on $Today."
+    if ($SpecRef) { $lines += "- Active spec: $SpecRef" } else { $lines += "- Active spec: none" }
+    $lines += ""
+    $lines += "Next Actions"
+    $lines += "- Continue from .agents/plan.md and active docs/specs tasks."
+    $lines += ""
+    $lines += "Blocking Issues"
+    $lines += "- none recorded"
+    $lines += ""
+    $lines += "Last Updated"
+    $lines += "- $Today"
+    return $lines
+}
+
+function New-PlanLines {
+    param(
+        [string]$LanguageCode,
+        [string]$SpecRef,
+        [string]$Stamp
+    )
+
+    $lines = @()
+    if ($LanguageCode -eq "zh-CN") {
+        $lines += $zhText.ActivePlanHeading
+        $lines += ""
+        $lines += $zhText.ActiveSpecHeading
+        if ($SpecRef) { $lines += "- $SpecRef" } else { $lines += ("- {0}" -f $zhText.None) }
+        $lines += ""
+        $lines += $zhText.CurrentTask
+        $lines += ("- {0}" -f $zhText.None)
+        $lines += ""
+        $lines += $zhText.ThisSession
+        $lines += ("- [ ] {0}{1}/{2}" -f $zhText.ReviewBackupPrefix, $Stamp, $zhText.ReviewBackupSuffix)
+        $lines += ("- [ ] {0}" -f $zhText.MoveDurableWork)
+        return $lines
+    }
+
+    $lines += "# Active Plan"
+    $lines += ""
+    $lines += "Active Spec"
+    if ($SpecRef) { $lines += "- $SpecRef" } else { $lines += "- none" }
+    $lines += ""
+    $lines += "Current Task"
+    $lines += "- none"
+    $lines += ""
+    $lines += "This Session"
+    $lines += "- [ ] Review memory upgrade backup at .agents/_backup/$Stamp/"
+    $lines += "- [ ] Move any remaining durable work into docs/specs/"
+    return $lines
+}
+
+function New-NotesLines {
+    param(
+        [string]$LanguageCode,
+        [string]$Today,
+        [string]$Stamp
+    )
+
+    if ($LanguageCode -eq "zh-CN") {
+        return @(
+            $zhText.ConfirmedNotesHeading,
+            "",
+            ("- {0} {1} {2}{3}/{4}" -f $zhText.MemoryUpgradedPrefix, $Today, $zhText.MemoryUpgradedBackupPrefix, $Stamp, $zhText.Period),
+            ("- {0}" -f $zhText.StableFactsOnly)
+        )
+    }
+
+    return @(
+        "# Confirmed Notes",
+        "",
+        "- Memory upgraded on $Today; original files backed up at .agents/_backup/$Stamp/.",
+        "- Keep this file limited to stable verified facts with evidence."
+    )
+}
+
 function Get-Analysis {
     param([string]$Root)
 
@@ -250,51 +436,24 @@ function Apply-Upgrade {
     $planPath = Join-Path $agentDir "plan.md"
     $notesPath = Join-Path $agentDir "notes.md"
     $today = (Get-Date).ToString("yyyy-MM-dd")
+    $memoryLanguage = Resolve-MemoryLanguage -Root $Root
 
     if ($approvedActions.normalize_process -and (Test-Path -LiteralPath $processPath)) {
         $old = Get-Content -LiteralPath $processPath -Raw
         $specRef = ([regex]::Match($old, 'docs/specs/[A-Za-z0-9._-]+/spec\.md')).Value
-        $lines = @()
-        $lines += "Current State"
-        $lines += "- Memory upgraded from legacy layout on $today."
-        if ($specRef) { $lines += "- Active spec: $specRef" } else { $lines += "- Active spec: none" }
-        $lines += ""
-        $lines += "Next Actions"
-        $lines += "- Continue from .agents/plan.md and active docs/specs tasks."
-        $lines += ""
-        $lines += "Blocking Issues"
-        $lines += "- none recorded"
-        $lines += ""
-        $lines += "Last Updated"
-        $lines += "- $today"
+        $lines = New-ProcessLines -LanguageCode $memoryLanguage.code -Today $today -SpecRef $specRef
         Set-Content -LiteralPath $processPath -Value $lines -Encoding UTF8
     }
 
     if ($approvedActions.normalize_plan -and (Test-Path -LiteralPath $planPath)) {
         $old = Get-Content -LiteralPath $planPath -Raw
         $specRef = ([regex]::Match($old, 'docs/specs/[A-Za-z0-9._-]+/spec\.md')).Value
-        $lines = @()
-        $lines += "# Active Plan"
-        $lines += ""
-        $lines += "Active Spec"
-        if ($specRef) { $lines += "- $specRef" } else { $lines += "- none" }
-        $lines += ""
-        $lines += "Current Task"
-        $lines += "- none"
-        $lines += ""
-        $lines += "This Session"
-        $lines += "- [ ] Review memory upgrade backup at .agents/_backup/$stamp/"
-        $lines += "- [ ] Move any remaining durable work into docs/specs/"
+        $lines = New-PlanLines -LanguageCode $memoryLanguage.code -SpecRef $specRef -Stamp $stamp
         Set-Content -LiteralPath $planPath -Value $lines -Encoding UTF8
     }
 
     if ($approvedActions.normalize_notes -and (Test-Path -LiteralPath $notesPath)) {
-        $lines = @(
-            "# Confirmed Notes",
-            "",
-            "- Memory upgraded on $today; original files backed up at .agents/_backup/$stamp/.",
-            "- Keep this file limited to stable verified facts with evidence."
-        )
+        $lines = New-NotesLines -LanguageCode $memoryLanguage.code -Today $today -Stamp $stamp
         Set-Content -LiteralPath $notesPath -Value $lines -Encoding UTF8
     }
 
@@ -305,16 +464,24 @@ function Apply-Upgrade {
         "- Applied UTC: $((Get-Date).ToUniversalTime().ToString("o"))",
         "- Backup: .agents/_backup/$stamp/",
         "- Proposal: $resolvedPlanPath",
+        "- Project language: $($memoryLanguage.code)",
         "- Applied actions: $((@($approvedActions.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { $_.Key }) -join ', '))",
         "",
         "Approved hot memory actions were applied. Review backup before deleting or further condensing old material."
     )
+    if (-not [string]::IsNullOrWhiteSpace($memoryLanguage.warning)) {
+        $result += ""
+        $result += ("Language warning: {0}" -f $memoryLanguage.warning)
+    }
     Set-Content -LiteralPath $resultPath -Value $result -Encoding UTF8
 
     return [ordered]@{
         backup_dir = $backupDir
         result = $resultPath
         approved_actions = $approvedActions
+        project_language = $memoryLanguage.code
+        requested_project_language = $memoryLanguage.requested
+        language_warning = $memoryLanguage.warning
     }
 }
 
@@ -354,6 +521,10 @@ if ($proposal) {
     Write-Output ("Proposal: {0}" -f $proposal)
 }
 if ($null -ne $applyResult) {
+    Write-Output ("Project language: {0}" -f $applyResult.project_language)
+    if (-not [string]::IsNullOrWhiteSpace($applyResult.language_warning)) {
+        Write-Output ("Warning: {0}" -f $applyResult.language_warning)
+    }
     Write-Output ("Backup: {0}" -f $applyResult.backup_dir)
     Write-Output ("Result: {0}" -f $applyResult.result)
 }

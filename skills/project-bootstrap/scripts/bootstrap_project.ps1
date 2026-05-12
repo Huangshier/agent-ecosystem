@@ -53,11 +53,83 @@ function Ensure-Dir {
     }
 }
 
+function Normalize-RelativePath {
+    param([string]$Path)
+    return (($Path -replace "\\", "/").TrimStart("/"))
+}
+
+function Test-ProtectedMemoryPath {
+    param([string]$RelativePath)
+
+    $normalized = Normalize-RelativePath -Path $RelativePath
+    if ($normalized -eq "AGENTS.md") {
+        return $true
+    }
+    if ($normalized -eq ".agents/AGENTS.md") {
+        return $true
+    }
+    if ($normalized -eq ".agents/process.txt" -or $normalized -eq ".agents/plan.md" -or $normalized -eq ".agents/notes.md") {
+        return $true
+    }
+    if ($normalized.StartsWith(".agents/context/") -or $normalized.StartsWith(".agents/commands/")) {
+        return $true
+    }
+    return $false
+}
+
+function Test-ExistingProjectMemory {
+    param([string]$Root)
+
+    if (Test-Path -LiteralPath (Join-Path $Root "AGENTS.md")) {
+        return $true
+    }
+
+    $agentDir = Join-Path $Root ".agents"
+    if (-not (Test-Path -LiteralPath $agentDir)) {
+        return $false
+    }
+
+    $memoryFiles = @(Get-ChildItem -LiteralPath $agentDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
+        $relative = Normalize-RelativePath -Path $_.FullName.Substring($agentDir.Length).TrimStart([char[]]"\/")
+        $relative -notlike "_backup/*" -and $relative -notlike "upgrade/*" -and $relative -ne "hub.lock.json"
+    })
+    return ($memoryFiles.Count -gt 0)
+}
+
+$script:bootstrapBackupDir = ""
+$script:bootstrapBackupStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+$script:bootstrapBackupCount = 0
+
+function Get-BootstrapBackupDir {
+    $agentDir = Join-Path $ProjectDir ".agents"
+    Ensure-Dir -Path $agentDir
+    if ([string]::IsNullOrWhiteSpace($script:bootstrapBackupDir)) {
+        $script:bootstrapBackupDir = Join-Path $agentDir ("_backup\bootstrap-{0}" -f $script:bootstrapBackupStamp)
+        Ensure-Dir -Path $script:bootstrapBackupDir
+    }
+    return $script:bootstrapBackupDir
+}
+
+function Backup-ExistingTemplateFile {
+    param(
+        [string]$Destination,
+        [string]$RelativePath
+    )
+
+    $backupDir = Get-BootstrapBackupDir
+    $backupPath = Join-PathParts $backupDir (Normalize-RelativePath -Path $RelativePath)
+    Ensure-Dir -Path (Split-Path -Parent $backupPath)
+    Copy-Item -LiteralPath $Destination -Destination $backupPath -Force
+    $script:bootstrapBackupCount++
+}
+
 function Copy-TemplateFile {
     param(
         [string]$Source,
         [string]$Destination,
-        [bool]$AllowOverwrite
+        [bool]$AllowOverwrite,
+        [string]$RelativePath,
+        [bool]$ProtectModifiedMemory
     )
 
     $destinationDir = Split-Path -Parent $Destination
@@ -80,6 +152,10 @@ function Copy-TemplateFile {
 
     # Content differs
     if ($AllowOverwrite) {
+        if ($ProtectModifiedMemory -and (Test-ProtectedMemoryPath -RelativePath $RelativePath)) {
+            return "manual-review"
+        }
+        Backup-ExistingTemplateFile -Destination $Destination -RelativePath $RelativePath
         Copy-Item -LiteralPath $Source -Destination $Destination -Force
         return "updated"
     }
@@ -158,13 +234,22 @@ if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
 $copiedCount = 0
 $skippedCount = 0
 $updatedCount = 0
+$manualReviewCount = 0
+$manualReviewPaths = New-Object 'System.Collections.Generic.List[string]'
+$hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
 
 Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
     $relative = $_.FullName.Substring($projectRootTemplate.Length).TrimStart([char[]]"\/")
     $destination = Join-Path $ProjectDir $relative
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent
+    $normalizedRelative = Normalize-RelativePath -Path $relative
+    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
     if ($result -eq "copied") { $copiedCount++ }
     elseif ($result -eq "updated") { $updatedCount++ }
+    elseif ($result -eq "manual-review") {
+        $skippedCount++
+        $manualReviewCount++
+        $manualReviewPaths.Add($normalizedRelative) | Out-Null
+    }
     else { $skippedCount++ }
 }
 
@@ -174,9 +259,15 @@ Ensure-Dir -Path $projectAgentDir
 Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
     $relative = $_.FullName.Substring($projectAgentTemplate.Length).TrimStart([char[]]"\/")
     $destination = Join-Path $projectAgentDir $relative
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent
+    $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)
+    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
     if ($result -eq "copied") { $copiedCount++ }
     elseif ($result -eq "updated") { $updatedCount++ }
+    elseif ($result -eq "manual-review") {
+        $skippedCount++
+        $manualReviewCount++
+        $manualReviewPaths.Add($normalizedRelative) | Out-Null
+    }
     else { $skippedCount++ }
 }
 
@@ -227,7 +318,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
         ProjectDir = $ProjectDir
         ProjectLanguage = $ProjectLanguage
     }
-    if ($OverwriteTemplates.IsPresent -or $copiedCount -gt 0) {
+    if (-not $hadExistingProjectMemory) {
         $languageParams.OverwriteScaffold = $true
     }
     $languageJson = & $languageScript @languageParams
@@ -247,6 +338,10 @@ $lockData = [ordered]@{
     template_source = "templates/project-root + templates/project-agent"
     template_tree_hash_sha256 = $templateTreeHash
     overwrite_templates = [bool]$OverwriteTemplates.IsPresent
+    template_backup_count = [int]$script:bootstrapBackupCount
+    template_backup_dir = $script:bootstrapBackupDir
+    template_manual_review_count = [int]$manualReviewCount
+    template_manual_review_paths = @($manualReviewPaths.ToArray())
     project_language = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
 }
 
@@ -257,8 +352,20 @@ Write-Output "Project bootstrap complete."
 Write-Output "Project: $ProjectDir"
 Write-Output "Hub: $HubDir"
 Write-Output ("Template files copied: {0}, updated: {1}, skipped: {2}" -f $copiedCount, $updatedCount, $skippedCount)
+if ($script:bootstrapBackupCount -gt 0) {
+    Write-Output ("Template backups written: {0} ({1})" -f $script:bootstrapBackupCount, $script:bootstrapBackupDir)
+}
+if ($manualReviewCount -gt 0) {
+    Write-Output ("Template files preserved for manual review: {0}" -f $manualReviewCount)
+    foreach ($manualReviewPath in $manualReviewPaths) {
+        Write-Output ("  - {0}" -f $manualReviewPath)
+    }
+}
 if ($null -ne $languageResult) {
     Write-Output ("Project language: {0} ({1} files written, {2} skipped)" -f [string]$languageResult.project_language, [int]$languageResult.files_written, [int]$languageResult.files_skipped)
+    if ($hadExistingProjectMemory) {
+        Write-Output "Project language refresh preserved existing memory files; review skipped files before replacing customized content."
+    }
 }
 Write-Output "Lock file: $lockPath"
 

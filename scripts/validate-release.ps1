@@ -1178,8 +1178,11 @@ try {
     $processPath = Join-PathParts $memoryUpgradeProject ".agents" "process.txt"
     $planPath = Join-PathParts $memoryUpgradeProject ".agents" "plan.md"
     $notesPath = Join-PathParts $memoryUpgradeProject ".agents" "notes.md"
+    $exampleSpecRef = "docs/specs/example-work/spec.md"
     Add-Content -LiteralPath $processPath -Value "`nPrevious session timeline entry used by validation."
+    Add-Content -LiteralPath $processPath -Value "`nActive spec: $exampleSpecRef"
     Add-Content -LiteralPath $planPath -Value "`n- [ ] T99: Durable task that should be normalized."
+    Add-Content -LiteralPath $planPath -Value "`nSpec: $exampleSpecRef"
     Add-Content -LiteralPath $notesPath -Value "`nTODO: temporary session state used by validation."
 
     $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
@@ -1205,6 +1208,75 @@ try {
     }
     if ((Get-Content -LiteralPath $processPath -Raw) -notmatch "Memory upgraded") {
         throw "Memory upgrade Apply did not normalize process.txt."
+    }
+    if ((Get-Content -LiteralPath $processPath -Raw) -notlike ("*{0}*" -f $exampleSpecRef)) {
+        throw "Memory upgrade Apply did not preserve the active spec reference."
+    }
+
+    $zhMemoryUpgradeProject = Join-PathParts $scratchRootFull "memory-upgrade-zh-cn-project"
+    New-Item -ItemType Directory -Force -Path $zhMemoryUpgradeProject | Out-Null
+    Assert-PathInsideRoot -Path $zhMemoryUpgradeProject -Root $scratchRootFull
+    & $bootstrapScript -ProjectDir $zhMemoryUpgradeProject -HubDir $hubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $zhProcessPath = Join-PathParts $zhMemoryUpgradeProject ".agents" "process.txt"
+    $zhPlanPath = Join-PathParts $zhMemoryUpgradeProject ".agents" "plan.md"
+    $zhNotesPath = Join-PathParts $zhMemoryUpgradeProject ".agents" "notes.md"
+    $zhSpecRef = "docs/specs/zh-memory-work/spec.md"
+    Add-Content -LiteralPath $zhProcessPath -Value "`n历史时间线条目用于验证。"
+    Add-Content -LiteralPath $zhProcessPath -Value "`n当前 Spec: $zhSpecRef"
+    Add-Content -LiteralPath $zhPlanPath -Value "`n- [ ] T99: 应被规范化的长期任务。"
+    Add-Content -LiteralPath $zhPlanPath -Value "`nSpec: $zhSpecRef"
+    Add-Content -LiteralPath $zhNotesPath -Value "`nTODO: 用于验证的临时会话状态。"
+
+    $zhPlan = & $memoryUpgradeScript -ProjectDir $zhMemoryUpgradeProject -Mode Plan -Json | ConvertFrom-Json
+    $zhProposalPath = [string]$zhPlan.proposal
+    if ([string]::IsNullOrWhiteSpace($zhProposalPath) -or -not (Test-Path -LiteralPath $zhProposalPath)) {
+        throw "zh-CN memory upgrade Plan did not create a proposal."
+    }
+
+    $zhApply = & $memoryUpgradeScript -ProjectDir $zhMemoryUpgradeProject -Mode Apply -UpgradePlan $zhProposalPath -Json | ConvertFrom-Json
+    if ([string]$zhApply.apply_result.project_language -ne "zh-CN") {
+        throw "zh-CN memory upgrade Apply did not report zh-CN project language."
+    }
+    if ((Get-Content -LiteralPath $zhProcessPath -Raw) -notlike "*当前状态*") {
+        throw "zh-CN memory upgrade Apply did not normalize process.txt with Chinese headings."
+    }
+    if ((Get-Content -LiteralPath $zhPlanPath -Raw) -notlike "*# 当前计划*") {
+        throw "zh-CN memory upgrade Apply did not normalize plan.md with Chinese headings."
+    }
+    if ((Get-Content -LiteralPath $zhNotesPath -Raw) -notlike "*# 已确认记录*") {
+        throw "zh-CN memory upgrade Apply did not normalize notes.md with Chinese headings."
+    }
+    if ((Get-Content -LiteralPath $zhProcessPath -Raw) -notlike ("*{0}*" -f $zhSpecRef)) {
+        throw "zh-CN memory upgrade Apply did not preserve the active spec reference."
+    }
+
+    $fallbackProject = Join-PathParts $scratchRootFull "memory-upgrade-unsupported-language-project"
+    New-Item -ItemType Directory -Force -Path $fallbackProject | Out-Null
+    Assert-PathInsideRoot -Path $fallbackProject -Root $scratchRootFull
+    & $bootstrapScript -ProjectDir $fallbackProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $fallbackLockPath = Join-PathParts $fallbackProject ".agents" "hub.lock.json"
+    $fallbackLock = Get-Content -LiteralPath $fallbackLockPath -Raw | ConvertFrom-Json
+    $fallbackLock.project_language = "fr-FR"
+    $fallbackLock | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fallbackLockPath -Encoding UTF8
+    $fallbackProcessPath = Join-PathParts $fallbackProject ".agents" "process.txt"
+    Add-Content -LiteralPath $fallbackProcessPath -Value "`nPrevious session timeline entry for unsupported language validation."
+
+    $fallbackPlan = & $memoryUpgradeScript -ProjectDir $fallbackProject -Mode Plan -Json | ConvertFrom-Json
+    $fallbackProposalPath = [string]$fallbackPlan.proposal
+    if ([string]::IsNullOrWhiteSpace($fallbackProposalPath) -or -not (Test-Path -LiteralPath $fallbackProposalPath)) {
+        throw "Unsupported-language memory upgrade Plan did not create a proposal."
+    }
+    $fallbackApply = & $memoryUpgradeScript -ProjectDir $fallbackProject -Mode Apply -UpgradePlan $fallbackProposalPath -Json | ConvertFrom-Json
+    if ([string]$fallbackApply.apply_result.project_language -ne "en") {
+        throw "Unsupported-language memory upgrade Apply did not fall back to English."
+    }
+    if ([string]$fallbackApply.apply_result.language_warning -notlike "*Unsupported project_language*") {
+        throw "Unsupported-language memory upgrade Apply did not report an explicit fallback warning."
+    }
+    if ((Get-Content -LiteralPath $fallbackProcessPath -Raw) -notlike "*Current State*") {
+        throw "Unsupported-language memory upgrade Apply did not write English fallback headings."
     }
 
     $autoUpgradeProject = Join-PathParts $scratchRootFull "memory-auto-upgrade-project"
@@ -1239,12 +1311,16 @@ try {
         throw "Bootstrap -AutoUpgrade did not report detected candidates."
     }
 
-    Add-Check "memory upgrade flow" "PASS" "Memory upgrade manual and bootstrap -AutoUpgrade flows passed against temporary projects." ([ordered]@{
+    Add-Check "memory upgrade flow" "PASS" "Memory upgrade manual, language-aware, fallback, and bootstrap -AutoUpgrade flows passed against temporary projects." ([ordered]@{
         project = $memoryUpgradeProject
         findings = @($analyze.findings).Count
         proposal = $proposalPath
         backup = $backupDir
         result = $resultPath
+        zh_cn_project = $zhMemoryUpgradeProject
+        zh_cn_language = [string]$zhApply.apply_result.project_language
+        fallback_project = $fallbackProject
+        fallback_warning = [string]$fallbackApply.apply_result.language_warning
         auto_project = $autoUpgradeProject
         auto_proposal = $autoProposal[0].FullName
         auto_backup = $autoBackup[0].FullName
@@ -1253,6 +1329,76 @@ try {
 }
 catch {
     Add-Check "memory upgrade flow" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $preserveProject = Join-PathParts $scratchRootFull "bootstrap-memory-preservation-project"
+    New-Item -ItemType Directory -Force -Path $preserveProject | Out-Null
+    Assert-PathInsideRoot -Path $preserveProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
+
+    $rootAgentsPath = Join-PathParts $preserveProject "AGENTS.md"
+    $agentGuidePath = Join-PathParts $preserveProject ".agents" "AGENTS.md"
+    $processPath = Join-PathParts $preserveProject ".agents" "process.txt"
+    $replaceableTemplatePath = Join-PathParts $preserveProject "docs" "specs" "README.md"
+    $rootSentinel = "CUSTOM ROOT MEMORY SENTINEL"
+    $agentSentinel = "CUSTOM AGENT GUIDE SENTINEL"
+    $processSentinel = "CUSTOM PROCESS MEMORY SENTINEL"
+    $replaceableSentinel = "CUSTOM REPLACEABLE TEMPLATE SENTINEL"
+    Add-Content -LiteralPath $rootAgentsPath -Value "`n$rootSentinel"
+    Add-Content -LiteralPath $agentGuidePath -Value "`n$agentSentinel"
+    Add-Content -LiteralPath $processPath -Value "`n$processSentinel"
+    Add-Content -LiteralPath $replaceableTemplatePath -Value "`n$replaceableSentinel"
+
+    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis)
+
+    if ((Get-Content -LiteralPath $rootAgentsPath -Raw) -notlike ("*{0}*" -f $rootSentinel)) {
+        throw "Bootstrap refresh overwrote customized root AGENTS.md content."
+    }
+    if ((Get-Content -LiteralPath $agentGuidePath -Raw) -notlike ("*{0}*" -f $agentSentinel)) {
+        throw "Bootstrap refresh overwrote customized .agents/AGENTS.md content."
+    }
+    if ((Get-Content -LiteralPath $processPath -Raw) -notlike ("*{0}*" -f $processSentinel)) {
+        throw "Bootstrap refresh overwrote customized .agents/process.txt content."
+    }
+    if (@($preserveOutput | Where-Object { $_ -match '^Template files preserved for manual review:' }).Count -lt 1) {
+        throw "Bootstrap refresh did not report preserved memory files for manual review."
+    }
+    if (@($preserveOutput | Where-Object { $_ -match '^Project language refresh preserved existing memory files;' }).Count -lt 1) {
+        throw "Bootstrap language refresh did not report existing memory preservation."
+    }
+
+    $lockPath = Join-PathParts $preserveProject ".agents" "hub.lock.json"
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    if ([int]$lock.template_manual_review_count -lt 3) {
+        throw "Bootstrap lock did not record manual-review memory files."
+    }
+    if ([int]$lock.template_backup_count -lt 1) {
+        throw "Bootstrap refresh did not back up a replaced template file."
+    }
+    $backupReadme = @(Get-ChildItem -LiteralPath (Join-PathParts $preserveProject ".agents" "_backup") -Recurse -File -Filter "README.md" | Where-Object {
+        $_.FullName -like "*docs*specs*README.md"
+    })
+    if ($backupReadme.Count -lt 1) {
+        throw "Bootstrap refresh did not create a backup copy for a replaced template file."
+    }
+
+    Add-Check "bootstrap memory preservation" "PASS" "Bootstrap refresh preserved customized project memory and backed up replaced templates." ([ordered]@{
+        project = $preserveProject
+        manual_review_count = [int]$lock.template_manual_review_count
+        backup_count = [int]$lock.template_backup_count
+        backup_dir = [string]$lock.template_backup_dir
+    })
+}
+catch {
+    Add-Check "bootstrap memory preservation" "FAIL" $_.Exception.Message
 }
 
 try {

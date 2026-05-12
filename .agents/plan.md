@@ -1,12 +1,15 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/validation-tier-policy/spec.md` (Active)
+- `docs/specs/memory-safety-language-normalization/spec.md` (Active)
+- Completed reference:
+  `docs/specs/validation-tier-policy/spec.md` (Done)
 - Completed reference:
   `docs/specs/minimal-project-adoption-walkthrough/spec.md` (Done)
 
 Current Task
-- Resolve issue #27: define validation tiers for agent-assisted maintenance.
+- Resolve issues #29 and #31: protect project-specialized memory during
+  bootstrap refresh and make memory upgrade normalization language-aware.
 
 Session Status
 - `v0.3.1` has been published.
@@ -15,13 +18,18 @@ Session Status
 - PR #24 normalized `v0.3.1` release readiness evidence and closed issue #21.
 - PR #26 documented `agent-ecosystem-bot` and closed issue #25.
 - PR #28 added the minimal project adoption walkthrough and closed issue #22.
+- PR #34 documented validation-tier policy and closed issue #27.
 - Repository ruleset `protect-main` and GitHub App `agent-ecosystem-bot` are
   configured external governance controls.
 
 Next Work
-- [ ] Resolve #27 validation-tier policy.
+- [x] Implement #29 bootstrap overwrite safety.
+- [x] Implement #31 language-aware memory upgrade normalization.
+- [x] Add release validation fixtures for #29/#31.
+- [ ] Commit, push, and open a draft PR for #29/#31.
+- [ ] Wait for hosted release validation on the PR.
 - [ ] Keep #23 deferred until the next release direction is chosen.
-- [ ] After #27, prioritize #29 and #31 engineering-memory safety bugs.
+- [ ] Keep #30-#33 deferred unless needed for the active safety fix.
 
 Notes
 - Do not store private mappings, local paths, or sensitive audit findings here.

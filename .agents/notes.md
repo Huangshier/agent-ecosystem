@@ -41,6 +41,8 @@
 - PR #28 added the end-to-end minimal project adoption walkthrough and closed
   issue #22. Merge commit:
   `38e39834398e034698b9c37541605a8a7630f04e`.
+- PR #34 documented validation-tier policy and closed issue #27. Merge commit:
+  `67dfdf161dad99c67f107099a58e2768cf65d190`.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

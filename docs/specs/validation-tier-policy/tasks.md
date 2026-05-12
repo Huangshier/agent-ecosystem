@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/validation-tier-policy/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-12
 
 ## Tasks
@@ -30,15 +30,16 @@
   - Validation: Public memory no longer presents #22 as active.
   - Notes: Public memory points to #27 and records PR #28 closeout.
 
-- [ ] T05: Validate, publish PR, and wait for checks
+- [x] T05: Validate, publish PR, and wait for checks
   - Scope: branch `issue-27-validation-tiers`.
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
-    - hosted release validation checks on PR
-  - Notes: PR #34 is open and should close #27. Full local validation is
-    required because this touches release process docs, governance docs, PR
-    template, specs, and tracked public `.agents` memory.
+    - hosted release validation checks on PR passed before merge.
+  - Notes: PR #34 merged at
+    `67dfdf161dad99c67f107099a58e2768cf65d190` and closed #27. Full local
+    validation was required because this touched release process docs,
+    governance docs, PR template, specs, and tracked public `.agents` memory.
 
 ## Task-to-Spec Notes
 
@@ -73,9 +74,9 @@
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to hosted checks and maintainer review.
 
-- [ ] P04: Wait for hosted checks and maintainer review
+- [x] P04: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
   - Inputs: opened PR.
-  - Outputs: hosted check summary.
-  - Validation: required hosted release validation checks pass.
-  - Continue / stop decision:
+  - Outputs: PR #34 merged.
+  - Validation: Required hosted release validation checks passed before merge.
+  - Continue / stop decision: Stop. #27 is closed.
