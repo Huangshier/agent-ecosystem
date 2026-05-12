@@ -1427,7 +1427,7 @@ try {
     Add-Content -LiteralPath $processPath -Value "`n$processSentinel"
     Add-Content -LiteralPath $replaceableTemplatePath -Value "`n$replaceableSentinel"
 
-    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis)
+    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
 
     if ((Get-Content -LiteralPath $rootAgentsPath -Raw) -notlike ("*{0}*" -f $rootSentinel)) {
         throw "Bootstrap refresh overwrote customized root AGENTS.md content."
@@ -1437,6 +1437,9 @@ try {
     }
     if ((Get-Content -LiteralPath $processPath -Raw) -notlike ("*{0}*" -f $processSentinel)) {
         throw "Bootstrap refresh overwrote customized .agents/process.txt content."
+    }
+    if ((Get-Content -LiteralPath $replaceableTemplatePath -Raw) -notlike ("*{0}*" -f $replaceableSentinel)) {
+        throw "Compatibility overwrite refreshed a modified template file instead of preserving it."
     }
     $rootAgentsText = Get-Content -LiteralPath $rootAgentsPath -Raw
     foreach ($section in $rootCustomSections) {
@@ -1453,6 +1456,12 @@ try {
     if (@($preserveOutput | Where-Object { $_ -match '^Template files preserved for manual review:' }).Count -lt 1) {
         throw "Bootstrap refresh did not report preserved memory files for manual review."
     }
+    if (@($preserveOutput | Where-Object { [string]$_ -match '-OverwriteTemplates is a compatibility alias for -RefreshUnmodifiedTemplates' }).Count -lt 1) {
+        throw "Compatibility overwrite did not emit the expected warning."
+    }
+    if (@($preserveOutput | Where-Object { $_ -match '^Template refresh mode: unmodified template files may be refreshed;' }).Count -lt 1) {
+        throw "Compatibility overwrite did not report refresh-unmodified mode."
+    }
     if (@($preserveOutput | Where-Object { $_ -match '^Project language refresh preserved existing memory files;' }).Count -lt 1) {
         throw "Bootstrap language refresh did not report existing memory preservation."
     }
@@ -1462,17 +1471,14 @@ try {
 
     $lockPath = Join-PathParts $preserveProject ".agents" "hub.lock.json"
     $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
-    if ([int]$lock.template_manual_review_count -lt 3) {
-        throw "Bootstrap lock did not record manual-review memory files."
+    if ([string]$lock.bootstrap_operation_mode -ne "refresh-unmodified-templates") {
+        throw "Bootstrap lock did not record refresh-unmodified operation mode."
     }
-    if ([int]$lock.template_backup_count -lt 1) {
-        throw "Bootstrap refresh did not back up a replaced template file."
+    if (-not [bool]$lock.refresh_unmodified_templates) {
+        throw "Bootstrap lock did not record refresh_unmodified_templates."
     }
-    $backupReadme = @(Get-ChildItem -LiteralPath (Join-PathParts $preserveProject ".agents" "_backup") -Recurse -File -Filter "README.md" | Where-Object {
-        $_.FullName -like "*docs*specs*README.md"
-    })
-    if ($backupReadme.Count -lt 1) {
-        throw "Bootstrap refresh did not create a backup copy for a replaced template file."
+    if ([int]$lock.template_manual_review_count -lt 4) {
+        throw "Bootstrap lock did not record manual-review files."
     }
     $evidenceJsonPath = [string]$lock.template_evidence_report_json
     $evidenceMarkdownPath = [string]$lock.template_evidence_report_markdown
@@ -1489,7 +1495,7 @@ try {
     $skipped = @($bootstrapEvidence.skipped | ForEach-Object { [string]$_ })
     $backup = @($bootstrapEvidence.backup)
 
-    foreach ($requiredMemoryPath in @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt")) {
+    foreach ($requiredMemoryPath in @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", "docs/specs/README.md")) {
         if ($preserved -notcontains $requiredMemoryPath) {
             throw "Bootstrap evidence report did not list $requiredMemoryPath as preserved."
         }
@@ -1497,8 +1503,8 @@ try {
             throw "Bootstrap evidence report did not list $requiredMemoryPath for manual review."
         }
     }
-    if ($replaced -notcontains "docs/specs/README.md") {
-        throw "Bootstrap evidence report did not list docs/specs/README.md as replaced."
+    if ($replaced -contains "docs/specs/README.md") {
+        throw "Bootstrap evidence report listed a modified template as replaced during compatibility overwrite."
     }
     if ($bootstrapEvidence.PSObject.Properties.Name -notcontains "skipped") {
         throw "Bootstrap evidence report did not include a skipped group."
@@ -1506,16 +1512,52 @@ try {
     if ((Get-Content -LiteralPath $evidenceMarkdownPath -Raw) -notmatch '(?m)^## Skipped\r?$') {
         throw "Bootstrap Markdown evidence report did not include a Skipped section."
     }
-    $backupReadmeEvidence = @($backup | Where-Object { [string]$_.relative_path -eq "docs/specs/README.md" })
-    if ($backupReadmeEvidence.Count -lt 1) {
-        throw "Bootstrap evidence report did not list the backup for docs/specs/README.md."
+    $forceOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ForceResetScaffold -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
+    if (@($forceOutput | Where-Object { [string]$_ -match '-ForceResetScaffold can replace existing scaffold and memory template files' }).Count -lt 1) {
+        throw "Force reset did not emit the expected warning."
+    }
+    if (@($forceOutput | Where-Object { $_ -match '^Template reset mode: explicit force reset requested;' }).Count -lt 1) {
+        throw "Force reset did not report explicit reset mode."
+    }
+    if ((Get-Content -LiteralPath $rootAgentsPath -Raw) -like ("*{0}*" -f $rootSentinel)) {
+        throw "Force reset preserved customized root AGENTS.md content."
+    }
+    if ((Get-Content -LiteralPath $agentGuidePath -Raw) -like ("*{0}*" -f $agentSentinel)) {
+        throw "Force reset preserved customized .agents/AGENTS.md content."
+    }
+    if ((Get-Content -LiteralPath $processPath -Raw) -like ("*{0}*" -f $processSentinel)) {
+        throw "Force reset preserved customized .agents/process.txt content."
+    }
+    if ((Get-Content -LiteralPath $replaceableTemplatePath -Raw) -like ("*{0}*" -f $replaceableSentinel)) {
+        throw "Force reset preserved customized docs/specs/README.md content."
     }
 
-    Add-Check "bootstrap memory preservation" "PASS" "Bootstrap refresh preserved customized project memory and backed up replaced templates." ([ordered]@{
+    $forceLock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    if ([string]$forceLock.bootstrap_operation_mode -ne "explicit-force-reset") {
+        throw "Force reset lock did not record explicit force-reset operation mode."
+    }
+    if (-not [bool]$forceLock.force_reset_scaffold) {
+        throw "Force reset lock did not record force_reset_scaffold."
+    }
+    if (([int]$forceLock.template_backup_count + [int]$forceLock.language_backup_count) -lt 1) {
+        throw "Force reset did not write backup evidence before replacement."
+    }
+    $forceBackupReadme = @(Get-ChildItem -LiteralPath (Join-PathParts $preserveProject ".agents" "_backup") -Recurse -File -Filter "README.md" | Where-Object {
+        $_.FullName -like "*docs*specs*README.md"
+    })
+    if ($forceBackupReadme.Count -lt 1) {
+        throw "Force reset did not create a backup copy for docs/specs/README.md."
+    }
+
+    Add-Check "bootstrap memory preservation" "PASS" "Bootstrap modes preserve modified memory by default and require explicit force reset for backup-first replacement." ([ordered]@{
         project = $preserveProject
         manual_review_count = [int]$lock.template_manual_review_count
-        backup_count = [int]$lock.template_backup_count
-        backup_dir = [string]$lock.template_backup_dir
+        compatibility_mode = [string]$lock.bootstrap_operation_mode
+        compatibility_backup_count = [int]$lock.template_backup_count
+        force_mode = [string]$forceLock.bootstrap_operation_mode
+        force_template_backup_count = [int]$forceLock.template_backup_count
+        force_language_backup_count = [int]$forceLock.language_backup_count
+        backup_dir = [string]$forceLock.template_backup_dir
         evidence_json = $evidenceJsonPath
         evidence_markdown = $evidenceMarkdownPath
         preserved_count = $preserved.Count

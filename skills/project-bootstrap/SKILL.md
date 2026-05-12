@@ -60,7 +60,9 @@ Default behavior:
 
 Optional flags:
 - `-HubDir <path>`: custom hub location.
-- `-OverwriteTemplates`: overwrite existing project template files.
+- `-RefreshUnmodifiedTemplates`: refresh files that still match the previously installed template hash; preserve modified files for manual review.
+- `-OverwriteTemplates`: compatibility alias for `-RefreshUnmodifiedTemplates`. It emits a warning and does not overwrite modified project memory.
+- `-ForceResetScaffold`: explicit reset path for discarding scaffold customizations. It emits a warning, backs up existing files first, and cannot be combined with memory upgrade modes.
 - `-AnalyzeMemoryUpgrade`: after bootstrap, inspect legacy `.agents` memory and report issues without changing memory.
 - `-PlanMemoryUpgrade`: generate a reviewable `.agents/upgrade/<timestamp>/proposal.md`.
 - `-ApplyMemoryUpgrade -UpgradePlan <path>`: after user review, back up and normalize hot memory files according to the proposal.
@@ -68,20 +70,27 @@ Optional flags:
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
+Operating modes:
+- Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
+- Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested.
+- Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review.
+- Conservative memory migration: use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` after review. This is the safe path for existing project memory that needs normalization or migration.
+- Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. This is not a language migration path and remains backup-first.
+
 Standalone language update:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
 ```
 
-Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional template refreshes; it rewrites the initial memory scaffold files.
+Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional reset scenarios. It backs up existing files before rewriting initial memory scaffold files. For established project memory, use conservative migration instead of treating language selection as scaffold overwrite.
 
 ## Step 2.5: Memory Upgrade Decision
 
 When bootstrap reports `Memory upgrade candidates detected: N`, do not silently ignore it.
 
 - If the user's request explicitly includes memory cleanup, organization, normalization, or upgrade, rerun bootstrap with `-AutoUpgrade` or run the manual `-PlanMemoryUpgrade` and `-ApplyMemoryUpgrade` flow after reviewing the proposal.
-- If the user's request only asked for project bootstrap or reinitialization, tell the user candidates were detected and ask before applying memory rewrites.
+- If the user's request only asked for project bootstrap or reinitialization in an existing project, tell the user candidates were detected and ask before applying memory rewrites. Do not interpret reinitialization as force reset.
 - If the user explicitly says not to upgrade memory, skip the upgrade and use `-SkipMemoryUpgradeAnalysis` on repeated bootstrap runs when the reminder would add noise.
 - If no candidates are detected, or `-SkipMemoryUpgradeAnalysis` was intentionally supplied, continue to verification.
 
@@ -151,6 +160,7 @@ Behavior:
 - Promote stable cross-project practices into the hub template, not per-project runtime files.
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
 - Do not use bootstrap as a routine session-end promotion step. Cross-project experience promotion is a `knowledge-hub/scripts` maintenance action; bootstrap only installs the project guidance that points agents toward that hub workflow.
+- Treat `-OverwriteTemplates` as deprecated compatibility wording. Prefer `-RefreshUnmodifiedTemplates` for safe refreshes and `-ForceResetScaffold` only for explicit reset scenarios.
 - Legacy memory upgrades should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
 
 ## References

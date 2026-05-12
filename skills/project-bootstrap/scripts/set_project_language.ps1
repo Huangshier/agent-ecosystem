@@ -2,7 +2,8 @@
 param(
     [string]$ProjectDir = (Get-Location).Path,
     [Parameter(Mandatory = $true)][string]$ProjectLanguage,
-    [switch]$OverwriteScaffold
+    [switch]$OverwriteScaffold,
+    [switch]$SkipOverwriteBackup
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +33,38 @@ function Ensure-Dir {
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path | Out-Null
     }
+}
+
+$script:languageBackupDir = ""
+$script:languageBackupStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+$script:languageBackupCount = 0
+$script:languageBackupRecords = New-Object 'System.Collections.Generic.List[object]'
+
+function Get-LanguageBackupDir {
+    $agentDir = Join-Path $ProjectDir ".agents"
+    Ensure-Dir -Path $agentDir
+    if ([string]::IsNullOrWhiteSpace($script:languageBackupDir)) {
+        $script:languageBackupDir = Join-Path $agentDir ("_backup\language-{0}" -f $script:languageBackupStamp)
+        Ensure-Dir -Path $script:languageBackupDir
+    }
+    return $script:languageBackupDir
+}
+
+function Backup-LanguageScaffoldFile {
+    param(
+        [string]$Path,
+        [string]$RelativePath
+    )
+
+    $backupDir = Get-LanguageBackupDir
+    $backupPath = Join-PathParts $backupDir $RelativePath
+    Ensure-Dir -Path (Split-Path -Parent $backupPath)
+    Copy-Item -LiteralPath $Path -Destination $backupPath -Force
+    $script:languageBackupCount++
+    $script:languageBackupRecords.Add([ordered]@{
+        relative_path = $RelativePath
+        backup_path = $backupPath
+    }) | Out-Null
 }
 
 function Resolve-ProjectLanguage {
@@ -72,6 +105,12 @@ function Set-TextFile {
     }
 
     if ($PSCmdlet.ShouldProcess($path, "Write localized project memory scaffold")) {
+        if ((Test-Path -LiteralPath $path) -and $OverwriteScaffold.IsPresent -and -not $SkipOverwriteBackup.IsPresent) {
+            $current = Get-Content -LiteralPath $path -Raw
+            if ($current -ne $Content) {
+                Backup-LanguageScaffoldFile -Path $path -RelativePath $RelativePath
+            }
+        }
         Set-Content -LiteralPath $path -Value $Content -Encoding UTF8
     }
     return "written"
@@ -1007,8 +1046,13 @@ $resultData = [ordered]@{
     language_label = $resolved.label
     marker = $resolved.marker
     overwrite_scaffold = [bool]$OverwriteScaffold.IsPresent
+    skip_overwrite_backup = [bool]$SkipOverwriteBackup.IsPresent
     files_written = $written
     files_skipped = $skipped
+    scaffold_paths = @($scaffold.Keys)
+    backup_count = [int]$script:languageBackupCount
+    backup_dir = $script:languageBackupDir
+    backup_paths = @($script:languageBackupRecords.ToArray())
 }
 
 $resultData | ConvertTo-Json -Depth 4
