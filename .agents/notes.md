@@ -38,6 +38,9 @@
 - PR #24 normalized `v0.3.1` release readiness evidence and closed issue #21.
 - PR #26 documented the installed `agent-ecosystem-bot` GitHub App identity and
   closed issue #25. Merge commit: `817c0841550de24a0bbf10a097829dd2e11b388e`.
+- PR #28 added the end-to-end minimal project adoption walkthrough and closed
+  issue #22. Merge commit:
+  `38e39834398e034698b9c37541605a8a7630f04e`.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.
