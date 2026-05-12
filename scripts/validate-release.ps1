@@ -33,6 +33,7 @@ $evidence = [ordered]@{
     memory_metadata = [ordered]@{}
     language_policy = [ordered]@{}
     routing = [ordered]@{}
+    scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
 }
 
@@ -140,6 +141,7 @@ $requiredFiles = @(
     "scripts/benchmark-context-gate.ps1",
     "scripts/install.ps1",
     "scripts/lib/path-guard.ps1",
+    "scripts/prune-validation-scratch.ps1",
     "scripts/uninstall.ps1",
     "scripts/validation/release-test-helper.ps1",
     "scripts/validate-release.ps1",
@@ -212,7 +214,7 @@ catch {
 
 try {
     $pathGuardHelper = Get-FileText -RelativePath "scripts/lib/path-guard.ps1"
-    $pathGuardConsumers = @("scripts/benchmark-context-gate.ps1", "scripts/install.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
+    $pathGuardConsumers = @("scripts/benchmark-context-gate.ps1", "scripts/install.ps1", "scripts/prune-validation-scratch.ps1", "scripts/uninstall.ps1", "scripts/validate-release.ps1")
     $missingDotSource = New-Object 'System.Collections.Generic.List[string]'
     $localDefinitions = New-Object 'System.Collections.Generic.List[string]'
 
@@ -540,6 +542,66 @@ try {
 }
 catch {
     Add-Check "context gate large context benchmark" "FAIL" $_.Exception.Message
+}
+
+try {
+    $pruneScript = Join-PathParts $repoRoot "scripts" "prune-validation-scratch.ps1"
+    $pruneFixture = Join-PathParts $scratchRootFull "validation-scratch-retention"
+    New-Item -ItemType Directory -Force -Path $pruneFixture | Out-Null
+    Assert-PathInsideRoot -Path $pruneFixture -Root $scratchRootFull
+
+    foreach ($index in 1..4) {
+        $runDir = Join-PathParts $pruneFixture ("run-{0}" -f $index)
+        New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+        Assert-PathInsideRoot -Path $runDir -Root $pruneFixture
+        [ordered]@{
+            run = $index
+            status = "fixture"
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-PathParts $runDir "validation-result.json") -Encoding UTF8
+        (Get-Item -LiteralPath $runDir).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddMinutes($index)
+    }
+
+    $dryRunJson = & $pruneScript -ScratchRoot $pruneFixture -RetainLatest 2 -Json
+    $dryRun = $dryRunJson | ConvertFrom-Json
+    if ([bool]$dryRun.apply) {
+        throw "Dry run reported apply=true."
+    }
+    if ([int]$dryRun.summary.candidate_count -ne 4 -or
+        [int]$dryRun.summary.retained_count -ne 2 -or
+        [int]$dryRun.summary.prunable_count -ne 2) {
+        throw "Dry run retention counts were incorrect."
+    }
+    foreach ($index in 1..4) {
+        if (-not (Test-Path -LiteralPath (Join-PathParts $pruneFixture ("run-{0}" -f $index)))) {
+            throw "Dry run removed run-$index."
+        }
+    }
+
+    $applyJson = & $pruneScript -ScratchRoot $pruneFixture -RetainLatest 2 -Apply -Json
+    $apply = $applyJson | ConvertFrom-Json
+    if (-not [bool]$apply.apply) {
+        throw "Apply run reported apply=false."
+    }
+    foreach ($index in 1..2) {
+        if (Test-Path -LiteralPath (Join-PathParts $pruneFixture ("run-{0}" -f $index))) {
+            throw "Apply run did not prune run-$index."
+        }
+    }
+    foreach ($index in 3..4) {
+        if (-not (Test-Path -LiteralPath (Join-PathParts $pruneFixture ("run-{0}" -f $index)))) {
+            throw "Apply run pruned retained run-$index."
+        }
+    }
+
+    $script:evidence.scratch_retention = [ordered]@{
+        fixture_root = $pruneFixture
+        dry_run = $dryRun
+        apply = $apply
+    }
+    Add-Check "validation scratch retention pruning" "PASS" "Scratch pruning helper is dry-run by default and prunes only older evidence-marked run directories when -Apply is supplied." $evidence.scratch_retention
+}
+catch {
+    Add-Check "validation scratch retention pruning" "FAIL" $_.Exception.Message
 }
 
 try {

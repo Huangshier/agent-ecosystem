@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/pr-ready-memory-sync-gate/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-12
 
 ## Tasks
@@ -34,7 +34,8 @@
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
-  - Notes: PR #37 opened as a draft PR by `app/agent-ecosystem-bot`.
+  - Notes: PR #37 opened as a draft PR by `app/agent-ecosystem-bot`, later
+    marked ready and merged.
 
 ## Task-to-Spec Notes
 
@@ -74,8 +75,9 @@
     - Commit `f51b77f docs: add PR-ready memory sync gate`.
     - Remote branch `issue-36-pr-ready-memory-sync-gate`.
     - Draft PR #37 `docs: add PR-ready memory sync gate`.
+    - Merge commit `b5263c25512880e8f64c52d5a9dcab399de4a529`.
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Completed. Next boundary is hosted checks and
-    maintainer review / ready decision.
+    - Hosted release validation run `25719200593` passed.
+  - Continue / stop decision: Completed and merged. Issue #36 is closed.
