@@ -42,7 +42,10 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Wait for hosted checks and maintainer review / ready decision on PR #39.
+- Maintainer review / ready / merge decision on PR #39.
+- Re-read the latest PR #39 hosted check state before ready/merge if more
+  commits are pushed; do not create memory-only commits solely to refresh
+  hosted-check timestamps.
 - Keep #23 deferred until the next release direction is chosen.
 - Do not implement #30, #32, or #33 in the #38 work.
 - Do not merge directly to `main`.

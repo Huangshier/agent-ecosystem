@@ -38,7 +38,8 @@ Next Work
 - [x] Add guarded pruning helper, release validator coverage, docs, and spec.
 - [x] Run local validation.
 - [x] Commit, push, and open draft PR #39 for #38.
-- [ ] Wait for hosted checks and maintainer review / ready decision on PR #39.
+- [x] Record hosted check evidence once for PR #39.
+- [ ] Maintainer review / ready / merge decision on PR #39.
 - [ ] Keep #23 deferred until the next release direction is chosen.
 - [ ] Keep #30, #32, and #33 deferred unless explicitly selected later.
 

@@ -77,5 +77,8 @@
     - Spec validation passed.
     - Local release validation passed: `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
     - PR body references #38.
-  - Continue / stop decision: Completed. Next boundary is hosted checks and
-    maintainer review / ready decision.
+    - Hosted release validation run `25724432079` passed before the
+      memory-closeout commit.
+  - Continue / stop decision: Completed. Next boundary is maintainer review /
+    ready / merge decision. Re-read PR checks after later commits rather than
+    creating repeated memory-only commits for check timestamps.

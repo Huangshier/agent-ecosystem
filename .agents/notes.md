@@ -73,6 +73,10 @@
 - PR #39 `fix: add validation scratch pruning` was opened by
   `agent-ecosystem-bot[bot]` as a draft PR for #38:
   https://github.com/Huangshier/agent-ecosystem/pull/39
+- PR #39 hosted release validation run `25724432079` passed on Windows
+  PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh before the
+  memory-closeout commit. Do not create repeated memory-only commits solely to
+  refresh hosted-check timestamps.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.
