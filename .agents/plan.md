@@ -27,7 +27,10 @@ Next Work
 - [x] Implement #31 language-aware memory upgrade normalization.
 - [x] Add release validation fixtures for #29/#31.
 - [x] Commit, push, and open draft PR #35 for #29/#31.
-- [ ] Wait for hosted release validation on the PR.
+- [x] Add bootstrap evidence report mapping for #29 preserved/replaced/skipped/manual-review/backup.
+- [x] Re-run local release validation after evidence report update.
+- [ ] Push evidence update and mark PR #35 ready for review.
+- [ ] Wait for hosted release validation on the updated PR.
 - [ ] Keep #23 deferred until the next release direction is chosen.
 - [ ] Keep #30-#33 deferred unless needed for the active safety fix.
 

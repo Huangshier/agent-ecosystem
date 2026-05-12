@@ -6,6 +6,8 @@ Current State
   - #31, make memory upgrade normalization respect project language.
 - Active public PR: #35, `fix: protect project memory upgrades`, opened by
   `app/agent-ecosystem-bot` as a draft PR.
+- PR #35 evidence-mapping update added bootstrap `bootstrap-evidence.json/md`
+  reports for preserved, replaced, skipped, manual-review, and backup groups.
 - Active public spec:
   `docs/specs/memory-safety-language-normalization/spec.md`.
 - Previous active spec `docs/specs/validation-tier-policy/spec.md` is merged
@@ -36,8 +38,8 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Wait for hosted release validation on PR #35.
-- Keep PR #35 in draft until checks and maintainer review are ready.
+- Push PR #35 evidence-mapping update.
+- Update PR #35 with evidence mapping and mark it ready for review.
 - Keep #23 deferred until the next release direction is chosen.
 - Keep #30-#33 deferred unless their acceptance criteria become necessary for
   the #29/#31 safety fix.

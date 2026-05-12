@@ -99,6 +99,7 @@ function Test-ExistingProjectMemory {
 $script:bootstrapBackupDir = ""
 $script:bootstrapBackupStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $script:bootstrapBackupCount = 0
+$script:bootstrapBackupRecords = New-Object 'System.Collections.Generic.List[object]'
 
 function Get-BootstrapBackupDir {
     $agentDir = Join-Path $ProjectDir ".agents"
@@ -121,6 +122,101 @@ function Backup-ExistingTemplateFile {
     Ensure-Dir -Path (Split-Path -Parent $backupPath)
     Copy-Item -LiteralPath $Destination -Destination $backupPath -Force
     $script:bootstrapBackupCount++
+    $script:bootstrapBackupRecords.Add([ordered]@{
+        relative_path = Normalize-RelativePath -Path $RelativePath
+        backup_path = $backupPath
+    }) | Out-Null
+}
+
+function Format-EvidenceSection {
+    param(
+        [string]$Title,
+        [array]$Items
+    )
+
+    $lines = @()
+    $lines += "## $Title"
+    if ($Items.Count -lt 1) {
+        $lines += "- none"
+    } else {
+        foreach ($item in $Items) {
+            if ($item -is [System.Collections.IDictionary] -and $item.Contains("relative_path")) {
+                $lines += ("- {0} -> {1}" -f $item.relative_path, $item.backup_path)
+            } else {
+                $lines += ("- {0}" -f $item)
+            }
+        }
+    }
+    $lines += ""
+    return $lines
+}
+
+function Write-BootstrapEvidenceReport {
+    param(
+        [string]$ProjectDirFull,
+        [string]$HubDirValue,
+        [string]$LockPath,
+        [bool]$Overwrite,
+        [bool]$HadExistingMemory,
+        [string]$ProjectLanguageValue,
+        [array]$Copied,
+        [array]$Preserved,
+        [array]$Replaced,
+        [array]$Skipped,
+        [array]$ManualReview,
+        [array]$Backup
+    )
+
+    $reportDir = Get-BootstrapBackupDir
+    $jsonPath = Join-Path $reportDir "bootstrap-evidence.json"
+    $markdownPath = Join-Path $reportDir "bootstrap-evidence.md"
+    $createdAt = (Get-Date).ToUniversalTime().ToString("o")
+
+    $evidence = [ordered]@{
+        schema_version = 1
+        created_at_utc = $createdAt
+        project_dir = $ProjectDirFull
+        hub_dir = $HubDirValue
+        lock_file = $LockPath
+        overwrite_templates = $Overwrite
+        had_existing_project_memory = $HadExistingMemory
+        project_language = $ProjectLanguageValue
+        copied = @($Copied)
+        preserved = @($Preserved)
+        replaced = @($Replaced)
+        skipped = @($Skipped)
+        manual_review = @($ManualReview)
+        backup = @($Backup)
+    }
+
+    $evidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
+
+    $markdown = @()
+    $markdown += "# Bootstrap Evidence Report"
+    $markdown += ""
+    $markdown += "- Created UTC: $createdAt"
+    $markdown += "- Project: $ProjectDirFull"
+    $markdown += "- Hub: $HubDirValue"
+    $markdown += "- Lock file: $LockPath"
+    $markdown += "- Overwrite templates: $Overwrite"
+    $markdown += "- Existing project memory detected: $HadExistingMemory"
+    if (-not [string]::IsNullOrWhiteSpace($ProjectLanguageValue)) {
+        $markdown += "- Project language: $ProjectLanguageValue"
+    }
+    $markdown += ""
+    $markdown += "Preserved files were left unchanged. Manual-review files are the protected memory subset that differed from the template and must be reviewed before any replacement."
+    $markdown += ""
+    $markdown += Format-EvidenceSection -Title "Preserved" -Items @($Preserved)
+    $markdown += Format-EvidenceSection -Title "Replaced" -Items @($Replaced)
+    $markdown += Format-EvidenceSection -Title "Skipped" -Items @($Skipped)
+    $markdown += Format-EvidenceSection -Title "Manual Review" -Items @($ManualReview)
+    $markdown += Format-EvidenceSection -Title "Backup" -Items @($Backup)
+    $markdown | Set-Content -LiteralPath $markdownPath -Encoding UTF8
+
+    return [ordered]@{
+        json = $jsonPath
+        markdown = $markdownPath
+    }
 }
 
 function Copy-TemplateFile {
@@ -235,6 +331,10 @@ $copiedCount = 0
 $skippedCount = 0
 $updatedCount = 0
 $manualReviewCount = 0
+$copiedPaths = New-Object 'System.Collections.Generic.List[string]'
+$skippedPaths = New-Object 'System.Collections.Generic.List[string]'
+$preservedPaths = New-Object 'System.Collections.Generic.List[string]'
+$replacedPaths = New-Object 'System.Collections.Generic.List[string]'
 $manualReviewPaths = New-Object 'System.Collections.Generic.List[string]'
 $hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
 
@@ -243,14 +343,25 @@ Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
     $destination = Join-Path $ProjectDir $relative
     $normalizedRelative = Normalize-RelativePath -Path $relative
     $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
-    if ($result -eq "copied") { $copiedCount++ }
-    elseif ($result -eq "updated") { $updatedCount++ }
+    if ($result -eq "copied") {
+        $copiedCount++
+        $copiedPaths.Add($normalizedRelative) | Out-Null
+    }
+    elseif ($result -eq "updated") {
+        $updatedCount++
+        $replacedPaths.Add($normalizedRelative) | Out-Null
+    }
     elseif ($result -eq "manual-review") {
         $skippedCount++
         $manualReviewCount++
         $manualReviewPaths.Add($normalizedRelative) | Out-Null
+        $preservedPaths.Add($normalizedRelative) | Out-Null
     }
-    else { $skippedCount++ }
+    else {
+        $skippedCount++
+        $skippedPaths.Add($normalizedRelative) | Out-Null
+        $preservedPaths.Add($normalizedRelative) | Out-Null
+    }
 }
 
 $projectAgentDir = Join-Path $ProjectDir ".agents"
@@ -261,14 +372,25 @@ Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
     $destination = Join-Path $projectAgentDir $relative
     $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)
     $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -AllowOverwrite $OverwriteTemplates.IsPresent -RelativePath $normalizedRelative -ProtectModifiedMemory $hadExistingProjectMemory
-    if ($result -eq "copied") { $copiedCount++ }
-    elseif ($result -eq "updated") { $updatedCount++ }
+    if ($result -eq "copied") {
+        $copiedCount++
+        $copiedPaths.Add($normalizedRelative) | Out-Null
+    }
+    elseif ($result -eq "updated") {
+        $updatedCount++
+        $replacedPaths.Add($normalizedRelative) | Out-Null
+    }
     elseif ($result -eq "manual-review") {
         $skippedCount++
         $manualReviewCount++
         $manualReviewPaths.Add($normalizedRelative) | Out-Null
+        $preservedPaths.Add($normalizedRelative) | Out-Null
     }
-    else { $skippedCount++ }
+    else {
+        $skippedCount++
+        $skippedPaths.Add($normalizedRelative) | Out-Null
+        $preservedPaths.Add($normalizedRelative) | Out-Null
+    }
 }
 
 $git = Get-Command git -ErrorAction SilentlyContinue
@@ -325,6 +447,25 @@ if (-not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
     $languageResult = $languageJson | ConvertFrom-Json
 }
 
+$lockPath = Join-Path $projectAgentDir "hub.lock.json"
+$projectLanguageValue = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
+$evidenceReport = $null
+if ($OverwriteTemplates.IsPresent -or $manualReviewCount -gt 0 -or $script:bootstrapBackupCount -gt 0) {
+    $evidenceReport = Write-BootstrapEvidenceReport `
+        -ProjectDirFull (Resolve-Path -LiteralPath $ProjectDir).Path `
+        -HubDirValue $HubDir `
+        -LockPath $lockPath `
+        -Overwrite ([bool]$OverwriteTemplates.IsPresent) `
+        -HadExistingMemory ([bool]$hadExistingProjectMemory) `
+        -ProjectLanguageValue $projectLanguageValue `
+        -Copied @($copiedPaths.ToArray()) `
+        -Preserved @($preservedPaths.ToArray()) `
+        -Replaced @($replacedPaths.ToArray()) `
+        -Skipped @($skippedPaths.ToArray()) `
+        -ManualReview @($manualReviewPaths.ToArray()) `
+        -Backup @($script:bootstrapBackupRecords.ToArray())
+}
+
 $lockData = [ordered]@{
     schema_version = 1
     installed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -340,13 +481,18 @@ $lockData = [ordered]@{
     overwrite_templates = [bool]$OverwriteTemplates.IsPresent
     template_backup_count = [int]$script:bootstrapBackupCount
     template_backup_dir = $script:bootstrapBackupDir
+    template_backup_paths = @($script:bootstrapBackupRecords.ToArray())
+    template_preserved_paths = @($preservedPaths.ToArray())
+    template_replaced_paths = @($replacedPaths.ToArray())
+    template_skipped_paths = @($skippedPaths.ToArray())
     template_manual_review_count = [int]$manualReviewCount
     template_manual_review_paths = @($manualReviewPaths.ToArray())
-    project_language = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
+    template_evidence_report_json = if ($null -ne $evidenceReport) { [string]$evidenceReport.json } else { "" }
+    template_evidence_report_markdown = if ($null -ne $evidenceReport) { [string]$evidenceReport.markdown } else { "" }
+    project_language = $projectLanguageValue
 }
 
-$lockPath = Join-Path $projectAgentDir "hub.lock.json"
-$lockData | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $lockPath -Encoding UTF8
+$lockData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
 Write-Output "Project bootstrap complete."
 Write-Output "Project: $ProjectDir"
@@ -360,6 +506,9 @@ if ($manualReviewCount -gt 0) {
     foreach ($manualReviewPath in $manualReviewPaths) {
         Write-Output ("  - {0}" -f $manualReviewPath)
     }
+}
+if ($null -ne $evidenceReport) {
+    Write-Output ("Bootstrap evidence report: {0}" -f [string]$evidenceReport.markdown)
 }
 if ($null -ne $languageResult) {
     Write-Output ("Project language: {0} ({1} files written, {2} skipped)" -f [string]$languageResult.project_language, [int]$languageResult.files_written, [int]$languageResult.files_skipped)

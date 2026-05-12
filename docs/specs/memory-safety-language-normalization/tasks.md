@@ -22,7 +22,9 @@
   - Scope: `skills/project-bootstrap/scripts/bootstrap_project.ps1`.
   - Validation: Customized project memory is preserved during refresh and any
     replacement has a backup.
-  - Notes: Existing modified memory should be reported for manual review.
+  - Notes: Existing modified memory is reported for manual review. Bootstrap
+    refresh writes `bootstrap-evidence.json` and `bootstrap-evidence.md` with
+    preserved, replaced, skipped, manual-review, and backup groups.
 
 - [x] T04: Implement language-aware memory upgrade normalization
   - Scope: `skills/project-bootstrap/scripts/memory_upgrade.ps1`.
@@ -35,18 +37,20 @@
   - Validation: Fixtures cover #29 preservation, #31 zh-CN normalization, and
     unsupported language fallback.
   - Notes: Assertions should check stable headings, preserved sentinels, backup
-    existence, and spec reference preservation.
+    existence, evidence report groups, project-specific memory sections, and
+    spec reference preservation.
 
 - [ ] T06: Validate, publish PR, and wait for checks
   - Scope: branch `issue-29-31-memory-safety`.
   - Validation:
-    - `git diff --check` passes.
-    - Local release validation passes.
+    - `git diff --check` passed.
+    - Local release validation passed.
     - Hosted release validation checks pass on the PR.
   - Notes: Full validation is required because this touches bootstrap scripts,
     release validation, specs, and tracked public `.agents` memory. Local
-    release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`. PR #35
-    opened as a draft by `app/agent-ecosystem-bot`.
+    release validation passed after the evidence-report update:
+    `PASS=34 FAIL=0 WARN=0 DEFERRED=0`. PR #35 opened as a draft by
+    `app/agent-ecosystem-bot`.
 
 ## Task-to-Spec Notes
 
@@ -102,6 +106,7 @@
 - [ ] P06: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
   - Inputs: opened PR.
-  - Outputs: hosted check summary.
-  - Validation: Required hosted release validation checks pass.
+  - Outputs: hosted check summary and ready-for-review state.
+  - Validation: Required hosted release validation checks pass after the latest
+    evidence-report update.
   - Continue / stop decision:

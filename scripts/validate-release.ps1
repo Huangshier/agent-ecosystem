@@ -1352,8 +1352,16 @@ try {
     $agentSentinel = "CUSTOM AGENT GUIDE SENTINEL"
     $processSentinel = "CUSTOM PROCESS MEMORY SENTINEL"
     $replaceableSentinel = "CUSTOM REPLACEABLE TEMPLATE SENTINEL"
+    $rootCustomSections = @("Workspace Model", "Git Policy", "Governance Responsibilities")
+    $agentCustomSections = @("Language Policy", "Session Load Order", "Recording Rules")
     Add-Content -LiteralPath $rootAgentsPath -Value "`n$rootSentinel"
+    foreach ($section in $rootCustomSections) {
+        Add-Content -LiteralPath $rootAgentsPath -Value ("`n## {0}`n- project-specific {1} rule" -f $section, $section)
+    }
     Add-Content -LiteralPath $agentGuidePath -Value "`n$agentSentinel"
+    foreach ($section in $agentCustomSections) {
+        Add-Content -LiteralPath $agentGuidePath -Value ("`n## {0}`n- project-specific {1} rule" -f $section, $section)
+    }
     Add-Content -LiteralPath $processPath -Value "`n$processSentinel"
     Add-Content -LiteralPath $replaceableTemplatePath -Value "`n$replaceableSentinel"
 
@@ -1368,11 +1376,26 @@ try {
     if ((Get-Content -LiteralPath $processPath -Raw) -notlike ("*{0}*" -f $processSentinel)) {
         throw "Bootstrap refresh overwrote customized .agents/process.txt content."
     }
+    $rootAgentsText = Get-Content -LiteralPath $rootAgentsPath -Raw
+    foreach ($section in $rootCustomSections) {
+        if ($rootAgentsText -notlike ("*## {0}*" -f $section)) {
+            throw "Bootstrap refresh dropped customized root AGENTS.md section: $section"
+        }
+    }
+    $agentGuideText = Get-Content -LiteralPath $agentGuidePath -Raw
+    foreach ($section in $agentCustomSections) {
+        if ($agentGuideText -notlike ("*## {0}*" -f $section)) {
+            throw "Bootstrap refresh dropped customized .agents/AGENTS.md section: $section"
+        }
+    }
     if (@($preserveOutput | Where-Object { $_ -match '^Template files preserved for manual review:' }).Count -lt 1) {
         throw "Bootstrap refresh did not report preserved memory files for manual review."
     }
     if (@($preserveOutput | Where-Object { $_ -match '^Project language refresh preserved existing memory files;' }).Count -lt 1) {
         throw "Bootstrap language refresh did not report existing memory preservation."
+    }
+    if (@($preserveOutput | Where-Object { $_ -match '^Bootstrap evidence report:' }).Count -lt 1) {
+        throw "Bootstrap refresh did not report the evidence report path."
     }
 
     $lockPath = Join-PathParts $preserveProject ".agents" "hub.lock.json"
@@ -1389,12 +1412,53 @@ try {
     if ($backupReadme.Count -lt 1) {
         throw "Bootstrap refresh did not create a backup copy for a replaced template file."
     }
+    $evidenceJsonPath = [string]$lock.template_evidence_report_json
+    $evidenceMarkdownPath = [string]$lock.template_evidence_report_markdown
+    if ([string]::IsNullOrWhiteSpace($evidenceJsonPath) -or -not (Test-Path -LiteralPath $evidenceJsonPath)) {
+        throw "Bootstrap refresh did not create a JSON evidence report."
+    }
+    if ([string]::IsNullOrWhiteSpace($evidenceMarkdownPath) -or -not (Test-Path -LiteralPath $evidenceMarkdownPath)) {
+        throw "Bootstrap refresh did not create a Markdown evidence report."
+    }
+    $bootstrapEvidence = Get-Content -LiteralPath $evidenceJsonPath -Raw | ConvertFrom-Json
+    $preserved = @($bootstrapEvidence.preserved | ForEach-Object { [string]$_ })
+    $manualReview = @($bootstrapEvidence.manual_review | ForEach-Object { [string]$_ })
+    $replaced = @($bootstrapEvidence.replaced | ForEach-Object { [string]$_ })
+    $skipped = @($bootstrapEvidence.skipped | ForEach-Object { [string]$_ })
+    $backup = @($bootstrapEvidence.backup)
+
+    foreach ($requiredMemoryPath in @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt")) {
+        if ($preserved -notcontains $requiredMemoryPath) {
+            throw "Bootstrap evidence report did not list $requiredMemoryPath as preserved."
+        }
+        if ($manualReview -notcontains $requiredMemoryPath) {
+            throw "Bootstrap evidence report did not list $requiredMemoryPath for manual review."
+        }
+    }
+    if ($replaced -notcontains "docs/specs/README.md") {
+        throw "Bootstrap evidence report did not list docs/specs/README.md as replaced."
+    }
+    if ($bootstrapEvidence.PSObject.Properties.Name -notcontains "skipped") {
+        throw "Bootstrap evidence report did not include a skipped group."
+    }
+    if ((Get-Content -LiteralPath $evidenceMarkdownPath -Raw) -notmatch '(?m)^## Skipped\r?$') {
+        throw "Bootstrap Markdown evidence report did not include a Skipped section."
+    }
+    $backupReadmeEvidence = @($backup | Where-Object { [string]$_.relative_path -eq "docs/specs/README.md" })
+    if ($backupReadmeEvidence.Count -lt 1) {
+        throw "Bootstrap evidence report did not list the backup for docs/specs/README.md."
+    }
 
     Add-Check "bootstrap memory preservation" "PASS" "Bootstrap refresh preserved customized project memory and backed up replaced templates." ([ordered]@{
         project = $preserveProject
         manual_review_count = [int]$lock.template_manual_review_count
         backup_count = [int]$lock.template_backup_count
         backup_dir = [string]$lock.template_backup_dir
+        evidence_json = $evidenceJsonPath
+        evidence_markdown = $evidenceMarkdownPath
+        preserved_count = $preserved.Count
+        replaced_count = $replaced.Count
+        skipped_count = $skipped.Count
     })
 }
 catch {

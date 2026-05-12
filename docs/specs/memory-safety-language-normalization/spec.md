@@ -100,6 +100,8 @@
   zh-CN`.
 - Bootstrap output reports preserved or manual-review memory files when a
   modified protected file would otherwise be replaced.
+- Bootstrap refresh writes a reviewable evidence report with preserved,
+  replaced, skipped, manual-review, and backup groups.
 - Any bootstrap template replacement of an existing file creates a backup
   first.
 - `memory_upgrade.ps1 -Mode Apply` writes zh-CN headings/defaults for a project
