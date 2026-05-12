@@ -24,6 +24,18 @@ See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
 the public release line does not ship Bash or Zsh wrappers yet, and future
 wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
 
+When a maintainer intentionally reuses a persistent scratch parent, inspect
+retention before deleting anything:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
+```
+
+The pruning helper is a dry run by default. Add `-Apply` only after reviewing
+the evidence. It only considers direct child directories that contain
+`validation-result.json`, rejects live runtime and repository-root targets, and
+emits JSON evidence with `-Json`.
+
 The validator checks:
 
 - public repository structure and release documentation entrypoints
@@ -60,6 +72,7 @@ The validator checks:
   Simplified Chinese, and intentionally broken fixtures
 - anti-drift template and memory-governance coverage for scope drift, unrelated
   refactors, and skipped acceptance checks
+- validation scratch retention pruning dry-run/apply behavior
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
 - v0.3.0 release notes coverage

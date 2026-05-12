@@ -61,8 +61,22 @@
   include pre-commit hooks, GitHub ruleset changes, hosted-check loops, or
   implementation of #30/#32/#33.
 - PR #37 `docs: add PR-ready memory sync gate` was opened by
-  `app/agent-ecosystem-bot` as a draft PR for #36:
+  `app/agent-ecosystem-bot` for #36:
   https://github.com/Huangshier/agent-ecosystem/pull/37
+- PR #37 merged on 2026-05-12 at
+  `b5263c25512880e8f64c52d5a9dcab399de4a529`; issue #36 is closed with
+  `state_reason=completed`. Hosted release validation run `25719200593` passed
+  on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+- Issue #38 `Fix: add validation scratch retention pruning` was created by
+  `agent-ecosystem-bot[bot]` for guarded scratch retention cleanup:
+  https://github.com/Huangshier/agent-ecosystem/issues/38
+- PR #39 `fix: add validation scratch pruning` was opened by
+  `agent-ecosystem-bot[bot]` as a draft PR for #38:
+  https://github.com/Huangshier/agent-ecosystem/pull/39
+- PR #39 hosted release validation run `25724432079` passed on Windows
+  PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh before the
+  memory-closeout commit. Do not create repeated memory-only commits solely to
+  refresh hosted-check timestamps.
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

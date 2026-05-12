@@ -92,6 +92,9 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
   `-InitializeGit` or `-CommitInitial` is explicitly supplied.
 - Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
   timestamp-only diffs.
+- Validation scratch retention can be inspected with
+  `scripts/prune-validation-scratch.ps1`, which is dry-run by default and only
+  prunes evidence-marked validation run directories when `-Apply` is supplied.
 
 ## Required Before Future Publishing
 
@@ -177,6 +180,7 @@ The release validator now covers:
   temporary projects
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
+- validation scratch retention pruning dry-run/apply behavior
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
 - localized context discovery headings for memory diagnosis and upgrade

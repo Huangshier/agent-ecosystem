@@ -2,12 +2,14 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
-  - #36, add a PR-ready / phase-close engineering-memory sync gate.
-- Active public PR: #37, `docs: add PR-ready memory sync gate`, opened by
-  `app/agent-ecosystem-bot` as a draft PR.
-- Active public branch: `issue-36-pr-ready-memory-sync-gate`.
+  - #38, add guarded validation scratch retention pruning.
+- Active public PR: #39, `fix: add validation scratch pruning`, opened by
+  `agent-ecosystem-bot[bot]` as a draft PR.
+- Active public branch: `issue-38-validation-scratch-retention`.
 - Active public spec:
-  `docs/specs/pr-ready-memory-sync-gate/spec.md`.
+  `docs/specs/validation-scratch-retention/spec.md`.
+- Completed reference:
+  `docs/specs/pr-ready-memory-sync-gate/spec.md` is Done via PR #37.
 - Completed reference:
   `docs/specs/memory-safety-language-normalization/spec.md` is Done via PR
   #35.
@@ -33,14 +35,20 @@ Completed
   issue #22.
 - PR #34 documented validation-tier policy and closed issue #27.
 - PR #35 protected project memory upgrades and closed issues #29 and #31.
+- PR #37 added the PR-ready / phase-close engineering-memory sync gate and
+  closed issue #36.
 - Repository ruleset `protect-main` protects the default branch with required
   pull requests, release validation checks, conversation resolution, deletion
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Wait for hosted checks and maintainer review / ready decision on PR #37.
+- Maintainer review / ready / merge decision on PR #39.
+- Re-read the latest PR #39 hosted check state before ready/merge if more
+  commits are pushed; do not create memory-only commits solely to refresh
+  hosted-check timestamps.
 - Keep #23 deferred until the next release direction is chosen.
-- Do not implement #30, #32, or #33 in the #36 work.
+- Do not implement #30, #32, or #33 in the #38 work.
+- Do not merge directly to `main`.
 
 Blocking Issues
 - No active blockers.

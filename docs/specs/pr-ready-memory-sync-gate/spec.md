@@ -2,7 +2,7 @@
 
 - **Title**: PR-Ready Memory Sync Gate
 - **Slug**: pr-ready-memory-sync-gate
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-12
 
@@ -18,7 +18,8 @@
 - Issue #36 was created after PR #35 exposed a process gap: the PR could become
   ready while `.agents/plan.md`, `.agents/process.txt`, and active spec/tasks
   still described intermediate work.
-- PR #37 `docs: add PR-ready memory sync gate` is open as a draft PR for #36.
+- PR #37 `docs: add PR-ready memory sync gate` merged on 2026-05-12 and closed
+  issue #36.
 - `project-context-gate` reloads memory but does not write updates.
 - `workflow-spec-lite` creates durable work packages but does not currently
   require a PR-ready or phase-close memory sync.
@@ -94,7 +95,8 @@
   engineering memory.
 - `git diff --check` passes.
 - Local release validation passes.
-- Draft PR #37 exists and references `Fixes #36`.
+- PR #37 existed, referenced `Fixes #36`, passed hosted release validation, and
+  merged at `b5263c25512880e8f64c52d5a9dcab399de4a529`.
 
 ## 10. Loop Contract
 
@@ -113,10 +115,10 @@
 - **Stop rule**: Stop for scope drift into #30/#32/#33, pre-commit hooks,
   GitHub ruleset changes, repository setting changes, App-auth boundary
   changes, or missing permission for GitHub writes.
-- **State record**:
-  `docs/specs/pr-ready-memory-sync-gate/tasks.md` and `.agents/plan.md`.
+- **State record**: `docs/specs/pr-ready-memory-sync-gate/tasks.md` and
+  `.agents/plan.md`.
 
 ## 12. Open Questions
 
 - Whether a later release should add lightweight validator coverage for stale
-  memory references. This PR does not add that automation.
+  memory references. PR #37 did not add that automation.
