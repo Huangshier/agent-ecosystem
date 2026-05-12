@@ -97,7 +97,8 @@ Agent-assisted pull requests should include:
 - issue-to-change mapping;
 - necessity assessment;
 - scope control checks;
-- validation evidence;
+- validation tier and evidence, using the tiers in
+  [Release process](release-process.md#validation-tiers);
 - rollback plan;
 - human decision checklist.
 

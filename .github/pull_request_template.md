@@ -33,6 +33,8 @@ Fixes #
 
 ## Validation
 
+- Validation tier:
+
 ```text
 # command output summary
 ```

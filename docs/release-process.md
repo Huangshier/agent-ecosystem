@@ -109,6 +109,28 @@ reader-oriented review before merging:
 This review is intentionally lightweight. It is a checklist for adoption
 surfaces, not a separate approval process.
 
+## Validation Tiers
+
+The required hosted release validation checks remain the hard merge gate for
+pull requests to `main`. Pull requests must also report validation evidence in
+the PR body. The tiers below guide local validation depth before opening or
+updating a PR; they do not weaken the hosted checks, and maintainers may ask for
+more validation when risk is unclear.
+
+When a change spans multiple categories, use the highest tier that applies.
+
+| Tier | Change type | Local validation expectation |
+|---|---|---|
+| 0 | Issue or PR metadata only, such as labels, comments, issue routing, or branch cleanup with no repository diff | Read back the GitHub state that changed. No local repository validation is needed unless files changed. |
+| 1 | Low-risk text-only docs that do not affect README entrypoints, governance, release process, release notes, tracked `.agents` memory, scripts, installer behavior, CI, or generated runtime behavior | Run `git diff --check` and review links or changed prose manually. |
+| 2 | Public adoption docs, README entrypoints, governance docs, release process docs, release notes, release readiness, tracked `.agents` memory, specs, issue/PR templates, or public/private boundary wording | Run `git diff --check`, the public reader review when relevant, and the full local release validator. |
+| 3 | PowerShell scripts, installer or uninstaller behavior, release validator behavior, CI workflow files, skill metadata, knowledge hub generation/search behavior, templates that affect generated project memory, or release packaging | Run `git diff --check`, targeted parser or smoke checks for the changed surface, and the full local release validator before PR review. |
+
+Release publication still requires the full release gate and maintainer
+approval. Repository settings, secrets, GitHub App permissions, rulesets, and
+release publishing are maintainer-controlled actions, not agent-only validation
+tiers.
+
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
