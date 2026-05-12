@@ -36,9 +36,9 @@
     - `git diff --check` passed.
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
     - hosted release validation checks on PR
-  - Notes: Full local validation is required because this touches release
-    process docs, governance docs, PR template, specs, and tracked public
-    `.agents` memory.
+  - Notes: PR #34 is open and should close #27. Full local validation is
+    required because this touches release process docs, governance docs, PR
+    template, specs, and tracked public `.agents` memory.
 
 ## Task-to-Spec Notes
 
@@ -61,14 +61,17 @@
   - Validation: Content review against #27 acceptance criteria.
   - Continue / stop decision: Continue to local validation.
 
-- [ ] P03: Validate locally, commit, push, and open PR
+- [x] P03: Validate locally, commit, push, and open PR
   - Goal: Produce a reviewable PR for #27.
   - Inputs: completed docs, memory updates, validation evidence.
-  - Outputs: commit, remote branch, PR.
+  - Outputs:
+    - Commit `c106792 docs: define validation tiers`.
+    - Remote branch `issue-27-validation-tiers`.
+    - PR #34 `docs: define validation tiers` by `agent-ecosystem-bot[bot]`.
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision:
+  - Continue / stop decision: Continue to hosted checks and maintainer review.
 
 - [ ] P04: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
