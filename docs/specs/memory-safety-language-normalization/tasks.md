@@ -45,7 +45,8 @@
     - Hosted release validation checks pass on the PR.
   - Notes: Full validation is required because this touches bootstrap scripts,
     release validation, specs, and tracked public `.agents` memory. Local
-    release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
+    release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`. PR #35
+    opened as a draft by `app/agent-ecosystem-bot`.
 
 ## Task-to-Spec Notes
 
@@ -85,12 +86,18 @@
     `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to P05.
 
-- [ ] P05: Validate locally, commit, push, and open PR
+- [x] P05: Validate locally, commit, push, and open PR
   - Goal: Produce a reviewable PR for #29 and #31.
   - Inputs: completed implementation and validator updates.
-  - Outputs: branch, commit, and PR.
-  - Validation: `git diff --check` and local release validation pass.
-  - Continue / stop decision:
+  - Outputs:
+    - Commit `cfb8869 fix project memory safety bugs`.
+    - Remote branch `issue-29-31-memory-safety`.
+    - Draft PR #35 `fix: protect project memory upgrades` by
+      `app/agent-ecosystem-bot`.
+  - Validation:
+    - `git diff --check` passed.
+    - Local release validation passed: `PASS=34 FAIL=0 WARN=0 DEFERRED=0`.
+  - Continue / stop decision: Continue to hosted checks and maintainer review.
 
 - [ ] P06: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.

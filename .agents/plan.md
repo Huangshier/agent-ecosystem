@@ -26,7 +26,7 @@ Next Work
 - [x] Implement #29 bootstrap overwrite safety.
 - [x] Implement #31 language-aware memory upgrade normalization.
 - [x] Add release validation fixtures for #29/#31.
-- [ ] Commit, push, and open a draft PR for #29/#31.
+- [x] Commit, push, and open draft PR #35 for #29/#31.
 - [ ] Wait for hosted release validation on the PR.
 - [ ] Keep #23 deferred until the next release direction is chosen.
 - [ ] Keep #30-#33 deferred unless needed for the active safety fix.

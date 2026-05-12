@@ -4,6 +4,8 @@ Current State
 - Active public maintenance issues:
   - #29, protect project-specialized memory during bootstrap refresh.
   - #31, make memory upgrade normalization respect project language.
+- Active public PR: #35, `fix: protect project memory upgrades`, opened by
+  `app/agent-ecosystem-bot` as a draft PR.
 - Active public spec:
   `docs/specs/memory-safety-language-normalization/spec.md`.
 - Previous active spec `docs/specs/validation-tier-policy/spec.md` is merged
@@ -34,8 +36,8 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Fix #29 bootstrap overwrite safety.
-- Fix #31 language-aware memory upgrade normalization.
+- Wait for hosted release validation on PR #35.
+- Keep PR #35 in draft until checks and maintainer review are ready.
 - Keep #23 deferred until the next release direction is chosen.
 - Keep #30-#33 deferred unless their acceptance criteria become necessary for
   the #29/#31 safety fix.
