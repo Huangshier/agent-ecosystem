@@ -37,7 +37,8 @@ Next Work
 - [x] Create branch `issue-38-validation-scratch-retention`.
 - [x] Add guarded pruning helper, release validator coverage, docs, and spec.
 - [x] Run local validation.
-- [ ] Commit, push, and open draft PR for #38.
+- [x] Commit, push, and open draft PR #39 for #38.
+- [ ] Wait for hosted checks and maintainer review / ready decision on PR #39.
 - [ ] Keep #23 deferred until the next release direction is chosen.
 - [ ] Keep #30, #32, and #33 deferred unless explicitly selected later.
 

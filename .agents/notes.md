@@ -70,6 +70,9 @@
 - Issue #38 `Fix: add validation scratch retention pruning` was created by
   `agent-ecosystem-bot[bot]` for guarded scratch retention cleanup:
   https://github.com/Huangshier/agent-ecosystem/issues/38
+- PR #39 `fix: add validation scratch pruning` was opened by
+  `agent-ecosystem-bot[bot]` as a draft PR for #38:
+  https://github.com/Huangshier/agent-ecosystem/pull/39
 - The configured repository automation identity is the `agent-ecosystem-bot`
   GitHub App. App auth material and local-only paths must not be stored in this
   public repository.

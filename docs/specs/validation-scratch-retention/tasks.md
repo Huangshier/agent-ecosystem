@@ -24,7 +24,7 @@
     dry-run and apply behavior.
   - Notes: No hooks, rulesets, or default scratch-root behavior changes.
 
-- [ ] T04: Validate, commit, push, and open PR
+- [x] T04: Validate, commit, push, and open PR
   - Scope: branch `issue-38-validation-scratch-retention`.
   - Validation:
     - `git diff --check` passed.
@@ -32,9 +32,8 @@
       `docs/specs/validation-scratch-retention/spec.md`.
     - Local release validation passed:
       `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
-    - PR references `Fixes #38`.
-  - Notes: Commit, push, and PR publication remain pending. Do not merge
-    directly.
+    - Draft PR #39 references `Fixes #38`.
+  - Notes: PR #39 opened by `agent-ecosystem-bot[bot]`. Do not merge directly.
 
 ## Task-to-Spec Notes
 
@@ -66,13 +65,17 @@
   - Validation: Active spec points at #38.
   - Continue / stop decision: Continue to validation and PR publication.
 
-- [ ] P04: Validate, commit, push, and open a PR for #38
+- [x] P04: Validate, commit, push, and open a PR for #38
   - Goal: Produce a reviewable PR that fixes #38.
   - Inputs: completed implementation, docs, specs, and memory updates.
-  - Outputs: commit, remote branch, and PR.
+  - Outputs:
+    - Commit `f9b039d fix: add validation scratch pruning`.
+    - Remote branch `issue-38-validation-scratch-retention`.
+    - Draft PR #39 `fix: add validation scratch pruning`.
   - Validation:
     - `git diff --check` passed.
     - Spec validation passed.
     - Local release validation passed: `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
-    - PR body must reference #38.
-  - Continue / stop decision: Pending.
+    - PR body references #38.
+  - Continue / stop decision: Completed. Next boundary is hosted checks and
+    maintainer review / ready decision.

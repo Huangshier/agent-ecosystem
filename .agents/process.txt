@@ -3,7 +3,8 @@ Current State
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
   - #38, add guarded validation scratch retention pruning.
-- Active public PR: none yet for #38.
+- Active public PR: #39, `fix: add validation scratch pruning`, opened by
+  `agent-ecosystem-bot[bot]` as a draft PR.
 - Active public branch: `issue-38-validation-scratch-retention`.
 - Active public spec:
   `docs/specs/validation-scratch-retention/spec.md`.
@@ -41,7 +42,7 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Finish local validation for #38, commit, push, and open a draft PR.
+- Wait for hosted checks and maintainer review / ready decision on PR #39.
 - Keep #23 deferred until the next release direction is chosen.
 - Do not implement #30, #32, or #33 in the #38 work.
 - Do not merge directly to `main`.
