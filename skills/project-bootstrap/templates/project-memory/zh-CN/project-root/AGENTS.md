@@ -8,9 +8,11 @@
 
 每次实质会话的最低读取顺序：
 1. `.agents/AGENTS.md`
-2. `.agents/context/`
-3. `.agents/process.txt`
-4. `.agents/plan.md`，仅非平凡任务需要
+2. `.agents/process.txt`
+3. `.agents/plan.md`，仅非平凡任务需要
+4. `.agents/context/README.md`，然后只按 Summary、Keywords 或任务相关性打开匹配的 `.agents/context/**` 条目
+
+启动时不要预加载完整 `.agents/context/` 目录。
 
 即使 `.agents/AGENTS.md` 未加载，也适用以下核心规则：
 - 系统、runtime 和用户明确指令优先于项目默认值。

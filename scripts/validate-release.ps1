@@ -35,6 +35,7 @@ $evidence = [ordered]@{
     routing = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
+    agent_template_guidance = [ordered]@{}
 }
 
 function Invoke-InstallerProfile {
@@ -881,6 +882,66 @@ try {
 }
 catch {
     Add-Check "anti-drift hardening" "FAIL" $_.Exception.Message
+}
+
+try {
+    $rootGuidanceFiles = [ordered]@{
+        "AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "knowledge-hub/templates/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "skills/project-bootstrap/templates/project-memory/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "skills/project-bootstrap/templates/project-memory/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
+    }
+    $agentGuidanceFiles = [ordered]@{
+        ".agents/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "knowledge-hub/templates/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "skills/project-bootstrap/templates/project-memory/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "skills/project-bootstrap/templates/project-memory/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+    }
+    $commandGuidanceFiles = [ordered]@{
+        ".agents/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "knowledge-hub/templates/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "skills/project-bootstrap/templates/project-memory/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "skills/project-bootstrap/templates/project-memory/zh-CN/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "高频、可复用的项目工作流命令", "不要凭空发明命令", "预期通过/失败证据")
+    }
+
+    $guidanceExpectations = [ordered]@{}
+    foreach ($relativePath in $rootGuidanceFiles.Keys) {
+        $guidanceExpectations[$relativePath] = $rootGuidanceFiles[$relativePath]
+    }
+    foreach ($relativePath in $agentGuidanceFiles.Keys) {
+        $guidanceExpectations[$relativePath] = $agentGuidanceFiles[$relativePath]
+    }
+    foreach ($relativePath in $commandGuidanceFiles.Keys) {
+        $guidanceExpectations[$relativePath] = $commandGuidanceFiles[$relativePath]
+    }
+
+    $guidanceMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $guidanceExpectations.Keys) {
+        $text = Get-FileText -RelativePath $relativePath
+        foreach ($token in $guidanceExpectations[$relativePath]) {
+            if (-not $text.Contains($token)) {
+                $guidanceMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $script:evidence.agent_template_guidance = [ordered]@{
+        checked_files = @($guidanceExpectations.Keys)
+        missing = @($guidanceMissing.ToArray())
+    }
+
+    if ($guidanceMissing.Count -gt 0) {
+        Add-Check "agent template startup guidance" "FAIL" "Root, project-agent, or commands templates are missing lean startup, command, PR-ready, or large-issue guidance." $evidence.agent_template_guidance
+    }
+    else {
+        Add-Check "agent template startup guidance" "PASS" "Root, project-agent, and commands templates include lean startup context discovery, Project Commands, PR-ready memory sync, and large-issue planning guidance." $evidence.agent_template_guidance
+    }
+}
+catch {
+    Add-Check "agent template startup guidance" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -2159,8 +2220,8 @@ try {
 
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $recommendedCopyRuntime
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
         $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $recommendedCopyRuntime
     }
 

@@ -6,9 +6,11 @@ Primary instructions are in `.agents/AGENTS.md`. At the start of any non-trivial
 
 Minimum read order for each substantive session:
 1. `.agents/AGENTS.md`
-2. `.agents/context/`
-3. `.agents/process.txt`
-4. `.agents/plan.md` (for non-trivial tasks)
+2. `.agents/process.txt`
+3. `.agents/plan.md` (for non-trivial tasks)
+4. `.agents/context/README.md`, then only matching `.agents/context/**` entries by Summary, Keywords, or task relevance
+
+Do not preload the full `.agents/context/` tree at startup.
 
 Core rules that apply even if `.agents/AGENTS.md` was not loaded:
 - Follow system, runtime, and explicit user instructions before project defaults.

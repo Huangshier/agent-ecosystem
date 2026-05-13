@@ -52,6 +52,18 @@ After exploration, proceed only when the goal, scope, non-goals, and validation 
 
 Scope discipline: do not fold unrelated refactors, cleanup, or behavior changes into a work item unless they are explicit goals. If acceptance checks are skipped or unavailable, record that before claiming completion.
 
+## Project Commands
+Use documented project commands before inventing new ones. Discovery order:
+
+1. Project docs such as `README.md`, `CONTRIBUTING.md`, `docs/`, and release notes.
+2. Tooling surfaces such as package scripts, Makefiles, task runners, and CI workflows.
+3. `.agents/commands/README.md` and any workflow cards under `.agents/commands/`.
+
+Use `.agents/commands/` for reusable high-frequency workflows such as setup, format/lint, test, build, release validation, and review checklists. Each command card should be short and include purpose, when to use it, prerequisites, commands, expected evidence, and safety notes for external side effects.
+
+## Large Issue Planning
+For large, high-blast-radius, or multi-area issues, produce an implementation plan before editing. When the plan would create an oversized PR, propose a reviewable PR split and keep each phase tied to acceptance evidence.
+
 ## Delivery Protocol & Working Loop
 For implementation tasks that produce repository changes, a complete unit of work may include the relevant parts of the following sequence:
 
@@ -61,6 +73,22 @@ For implementation tasks that produce repository changes, a complete unit of wor
 4. **The Push**: Push only when the user explicitly asks, or when established project workflow unambiguously requires it and remote access is available.
 5. **The Report**: After validation and any required commit/push steps, provide your report. If the task is review-only or blocked by environment or policy, report the blocker or findings clearly instead of pretending the task is complete.
 
+## PR-Ready And Phase-Close Memory Sync Gate
+Before an agent opens a pull request, marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight engineering-memory sync gate.
+
+This gate is workflow guidance, not a Git hook, repository ruleset, or branch-protection change. Ordinary intermediate commits do not require a full engineering-memory sync; update only the files needed for the work at that point.
+
+Checklist:
+
+1. Re-read the active `docs/specs/<slug>/spec.md` and `docs/specs/<slug>/tasks.md`.
+2. Update the active spec status, phase state, acceptance evidence, and explicit non-goals when the phase result changed.
+3. Update `.agents/plan.md` so it points at the real active spec and current next action, without copying the full task list.
+4. Update `.agents/process.txt` when active issues, PRs, blockers, branch state, or next actions changed.
+5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.
+6. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
+7. Record hosted check results once at the relevant boundary. After a PR has been opened, do not push memory-only commits solely to refresh state or hosted-check timestamps unless explicitly approved.
+8. Confirm the gate did not introduce unrelated refactors, pre-commit hooks, repository ruleset changes, or changes outside the accepted issue scope.
+
 ## Tooling Constraints
 - **Non-Interactive**: Do not wait for ceremonial approval before routine reversible edits. Commit and push rules still follow the Delivery Protocol.
 - **Environment Aware**: When the project is a git repository, check `git status` before committing. Inspect unstaged changes with `git diff` and staged changes with `git diff --cached` to ensure no unintended files or hunks are included.
@@ -69,7 +97,7 @@ For implementation tasks that produce repository changes, a complete unit of wor
 1. This file and root `AGENTS.md`
 2. Hot memory: `.agents/process.txt` and `.agents/plan.md`
 3. Warm memory: active `docs/specs/<slug>/spec.md` and `tasks.md`
-4. Cold memory: `.agents/context/*` and `.agents/notes.md`, opened only by matching summary/keywords or task relevance
+4. Cold memory: `.agents/context/README.md` and indexes first, then only matching `.agents/context/**` entries and `.agents/notes.md` by Summary, Keywords, or task relevance
 
 ## Project Work Packages
 For work that should remain discoverable after the current session, store the canonical description under `docs/specs/`:
