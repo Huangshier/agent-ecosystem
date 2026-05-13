@@ -8,8 +8,15 @@ param(
     [switch]$PlanMemoryUpgrade,
     [switch]$ApplyMemoryUpgrade,
     [switch]$AutoUpgrade,
+    [switch]$AnalyzeLanguageMigration,
+    [switch]$PlanLanguageMigration,
+    [switch]$ApplyLanguageMigration,
+    [switch]$ValidateLanguageMigration,
     [switch]$SkipMemoryUpgradeAnalysis,
     [string]$UpgradePlan = "",
+    [string]$MigrationPlan = "",
+    [string]$SourceLanguage = "",
+    [string]$TargetLanguage = "",
     [string]$ProjectLanguage = ""
 )
 
@@ -28,6 +35,22 @@ if ($AutoUpgrade.IsPresent -and $SkipMemoryUpgradeAnalysis.IsPresent) {
     throw "-AutoUpgrade cannot be combined with -SkipMemoryUpgradeAnalysis."
 }
 
+$languageMigrationModeCount = 0
+foreach ($modeSwitch in @($AnalyzeLanguageMigration, $PlanLanguageMigration, $ApplyLanguageMigration, $ValidateLanguageMigration)) {
+    if ($modeSwitch.IsPresent) {
+        $languageMigrationModeCount++
+    }
+}
+if ($languageMigrationModeCount -gt 1) {
+    throw "Choose only one language migration mode: -AnalyzeLanguageMigration, -PlanLanguageMigration, -ApplyLanguageMigration, or -ValidateLanguageMigration."
+}
+if ($languageMigrationModeCount -gt 0 -and $memoryUpgradeModeCount -gt 0) {
+    throw "Language migration modes cannot be combined with legacy memory upgrade modes."
+}
+if ($languageMigrationModeCount -gt 0 -and -not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
+    throw "Do not combine -ProjectLanguage first-session scaffold writes with language migration modes. Use -SourceLanguage and -TargetLanguage."
+}
+
 $templateModeCount = 0
 foreach ($templateModeSwitch in @($OverwriteTemplates, $RefreshUnmodifiedTemplates, $ForceResetScaffold)) {
     if ($templateModeSwitch.IsPresent) {
@@ -39,6 +62,9 @@ if ($templateModeCount -gt 1) {
 }
 if ($ForceResetScaffold.IsPresent -and $memoryUpgradeModeCount -gt 0) {
     throw "-ForceResetScaffold cannot be combined with memory upgrade modes. Use conservative analyze/plan/apply migration or force reset, not both."
+}
+if ($ForceResetScaffold.IsPresent -and $languageMigrationModeCount -gt 0) {
+    throw "-ForceResetScaffold cannot be combined with language migration modes. Use conservative language migration or force reset, not both."
 }
 
 function Join-PathParts {
@@ -428,6 +454,8 @@ if (-not $hadExistingProjectMemory) {
     $bootstrapOperationMode = "initialize-empty-project"
 } elseif ($ForceResetScaffold.IsPresent) {
     $bootstrapOperationMode = "explicit-force-reset"
+} elseif ($languageMigrationModeCount -gt 0) {
+    $bootstrapOperationMode = "conservative-language-migration"
 } elseif ($memoryUpgradeModeCount -gt 0) {
     $bootstrapOperationMode = "conservative-memory-migration"
 } elseif ($refreshUnmodifiedMode) {
@@ -689,7 +717,22 @@ if ($null -ne $languageResult) {
 Write-Output "Lock file: $lockPath"
 
 $memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"
-if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent -or $AutoUpgrade.IsPresent) {
+$languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
+if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent) {
+    if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
+        throw "Language migration helper not found: $languageMigrationScript"
+    }
+
+    if ($AnalyzeLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Analyze -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
+    } elseif ($PlanLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
+    } elseif ($ApplyLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Apply -MigrationPlan $MigrationPlan
+    } else {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Validate -MigrationPlan $MigrationPlan
+    }
+} elseif ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent -or $AutoUpgrade.IsPresent) {
     if (-not (Test-Path -LiteralPath $memoryUpgradeScript)) {
         throw "Memory upgrade helper not found: $memoryUpgradeScript"
     }

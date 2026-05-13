@@ -65,9 +65,26 @@ plan, review, apply, and validate flow. Force reset options are only for
 intentional scaffold reset scenarios where project-specific memory can be
 discarded.
 
+The supported conservative language migration flow is explicit about direction:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyLanguageMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+```
+
+Use `-SourceLanguage zh-CN -TargetLanguage en` for the reverse direction. Plan
+mode writes a reviewable proposal and creates the backup required by apply.
+Apply mode refuses to write if the proposal, backup, or planned source hashes no
+longer match.
+
 The file templates are structural baselines for scaffold generation, language
-updates, and future conservative migration planning. They are not a reason to
-replace customized project memory with generic scaffolds.
+updates, and conservative migration planning. They are not a reason to replace
+customized project memory with generic scaffolds. Exact source-template matches
+can be replaced with target-language templates. Project-specific narrative that
+cannot be safely migrated deterministically is preserved verbatim and routed to
+manual review instead of being silently translated or dropped.
 
 Memory governance and upgrade diagnostics recognize English discovery headings
 and localized Simplified Chinese equivalents for context discovery metadata.

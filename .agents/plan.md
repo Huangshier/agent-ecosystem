@@ -1,28 +1,33 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/agents-template-startup-guidance/spec.md` (Active)
+- `docs/specs/conservative-language-migration/spec.md` (Active)
 
 Current Task
-- Resolve issue #44: improve base AGENTS templates for lean startup context,
-  project commands, PR-ready memory sync guidance, and large-issue planning.
+- Resolve issue #30 with a conservative `en` / `zh-CN` project-memory
+  migration workflow.
 
 Session Status
-- Branch `issue-44-agents-template-guidance` is active.
+- Branch `issue-30-conservative-language-migration` is active.
+- `main` was synchronized to `origin/main` before branching.
+- Issues #30, #32, #33, and #44 plus related merged PRs were inspected.
+- PR split decision: implement one scoped draft PR for deterministic
+  conservative migration; avoid arbitrary-language i18n and unattended
+  translation claims.
 - Implementation and release validation are complete.
 - `git diff --check` passed.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  passed with `PASS=39 FAIL=0 WARN=0 DEFERRED=0`.
+  passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 - PR-ready memory sync is complete before PR creation.
-- Issue #30 remains out of scope.
 
 Next Work
-- Commit the scoped #44 changes.
-- Push the branch and open a draft PR.
+- Inspect the final diff, commit the scoped #30 changes, push the branch, and
+  open a draft PR.
 - After PR creation, do not add a memory-only follow-up commit solely to refresh
   memory state or hosted-check timestamps unless explicitly approved.
 
 Notes
-- Durable task state lives in `docs/specs/agents-template-startup-guidance/tasks.md`.
+- Durable task state lives in
+  `docs/specs/conservative-language-migration/tasks.md`.
 - Do not store private mappings, local paths, automation identity material, or
   private audit findings here.

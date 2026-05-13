@@ -59,9 +59,15 @@ For an existing project, treat bootstrap as a conservative refresh:
 - Default bootstrap copies missing scaffold files and preserves existing memory.
 - Use `-RefreshUnmodifiedTemplates` only when you want files that still match
   the previous installed template hash to pick up newer templates.
-- Do not use reset language for memory migration. Use the Analyze, Plan, and
-  Apply memory upgrade flow so project-specific content is reviewed and backed
-  up before changes are applied.
+- Do not use reset language for memory migration. Use the Analyze, Plan, Apply,
+  and Validate flows so project-specific content is reviewed and backed up
+  before changes are applied.
+- For established project memory language changes, use the conservative
+  language migration switches with an explicit direction, for example
+  `-AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN`,
+  then `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan
+  <proposal.json>`, and `-ValidateLanguageMigration -MigrationPlan
+  <proposal.json>`.
 - `-ForceResetScaffold` is only for intentionally discarding scaffold
   customizations. It warns and backs up first, but it is not a conservative
   language migration path.

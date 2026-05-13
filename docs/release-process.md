@@ -65,6 +65,9 @@ The validator checks:
 - first-session language write capability for English and Simplified Chinese
   temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
   the agent or workflow
+- conservative project-memory language migration between `en` and `zh-CN`,
+  including proposal-first, backup-first, apply, validate, mixed-memory, and
+  project-specific preservation fixtures
 - project-bootstrap operating modes, including missing-template refresh,
   unmodified-template refresh, compatibility overwrite warnings, and
   backup-first force reset behavior

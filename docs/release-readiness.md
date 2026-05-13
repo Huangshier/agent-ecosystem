@@ -30,7 +30,7 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
 - First public Chinese documentation ships as `README.zh-CN.md`.
 - Reusable release validation is available at `scripts/validate-release.ps1`.
 - Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 33 checks passing, no
+- Latest local hardened release validation passed with 40 checks passing, no
   failures, warnings, or deferred checks.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
@@ -58,6 +58,9 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
   refresh, unmodified-template refresh, conservative memory migration, and
   explicit force reset. Compatibility overwrite emits warnings, and force reset
   remains backup-first.
+- `project-bootstrap` supports conservative `en` / `zh-CN` project-memory
+  language migration with analyze, plan, proposal, backup, apply, and validate
+  modes.
 - `workflow-spec-lite` includes a read-only spec validator that checks goals,
   non-goals, risks, acceptance evidence, and Execution Contract stop rules.
 - Spec templates and memory-governance guidance include scope drift, unrelated
@@ -184,6 +187,9 @@ The release validator now covers:
   temporary projects
 - project-bootstrap operating-mode coverage for safe refresh, compatibility
   overwrite warnings, and backup-first force reset
+- conservative project-memory language migration coverage for both `en` to
+  `zh-CN` and `zh-CN` to `en`, mixed memory, project-specific preservation,
+  proposal-first apply, and backup-first apply
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
 - validation scratch retention pruning dry-run/apply behavior

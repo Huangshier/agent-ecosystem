@@ -32,6 +32,7 @@ $evidence = [ordered]@{
     duplicate_helpers = @()
     memory_metadata = [ordered]@{}
     language_policy = [ordered]@{}
+    language_migration = [ordered]@{}
     routing = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
@@ -1511,6 +1512,191 @@ try {
 }
 catch {
     Add-Check "memory upgrade flow" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $languageMigrationScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "language_migration.ps1"
+    if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
+        throw "language_migration.ps1 was not installed into the recommended runtime."
+    }
+
+    function Assert-ApplyFails {
+        param(
+            [Parameter(Mandatory = $true)][scriptblock]$Command,
+            [Parameter(Mandatory = $true)][string]$ExpectedToken
+        )
+
+        $failed = $false
+        try {
+            & $Command | Out-Null
+        }
+        catch {
+            $failed = $true
+            if ($_.Exception.Message -notlike ("*{0}*" -f $ExpectedToken)) {
+                throw ("Expected failure containing '{0}', got: {1}" -f $ExpectedToken, $_.Exception.Message)
+            }
+        }
+
+        if (-not $failed) {
+            throw ("Expected language migration apply to fail: {0}" -f $ExpectedToken)
+        }
+    }
+
+    function Invoke-LanguageMigrationFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [Parameter(Mandatory = $true)][string]$SourceLanguage,
+            [Parameter(Mandatory = $true)][string]$TargetLanguage,
+            [Parameter(Mandatory = $true)][string]$ExpectedTargetMarker,
+            [switch]$ExerciseMissingBackupFailure
+        )
+
+        $projectDir = Join-PathParts $scratchRootFull $Name
+        New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+        Assert-PathInsideRoot -Path $projectDir -Root $scratchRootFull
+        & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -ProjectLanguage $SourceLanguage -SkipMemoryUpgradeAnalysis | Out-Host
+
+        $agentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
+        $contextPath = Join-PathParts $projectDir ".agents" "context" "experience" "migration-mixed.md"
+        $specDir = Join-PathParts $projectDir "docs" "specs" "migration-custom-work"
+        $specPath = Join-PathParts $specDir "spec.md"
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $contextPath) | Out-Null
+        New-Item -ItemType Directory -Force -Path $specDir | Out-Null
+
+        $tokenLine = "Keep command git status, path src/app.py, API Get-FooBar, filename AGENTS.md, commit type feat, raw error ERROR_PATH_NOT_FOUND, and code symbol CustomThing unchanged."
+        Add-Content -LiteralPath $agentGuidePath -Value ("`n## Custom API Notes`n- {0}" -f $tokenLine)
+        Set-Content -LiteralPath $contextPath -Value @(
+            "## Summary",
+            "- Mixed language validation entry.",
+            "",
+            "## Keywords",
+            "- language migration, mixed memory",
+            "",
+            "- 中文 mixed memory marker with ERROR_PATH_NOT_FOUND and src/app.py.",
+            "- $tokenLine"
+        ) -Encoding UTF8
+        Set-Content -LiteralPath $specPath -Value @(
+            "# Custom Migration Work",
+            "",
+            "- Project-specific durable spec content must remain available.",
+            "- $tokenLine"
+        ) -Encoding UTF8
+
+        $bootstrapAnalyzeOutput = @(& $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -AnalyzeLanguageMigration -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage 3>&1)
+        if (@($bootstrapAnalyzeOutput | Where-Object { $_ -match '^Language migration analyze:' }).Count -lt 1) {
+            throw "Bootstrap language migration analyze routing did not call the helper."
+        }
+
+        $analysis = & $languageMigrationScript -ProjectDir $projectDir -Mode Analyze -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage -Json | ConvertFrom-Json
+        if ([int]$analysis.summary.total -lt 1) {
+            throw "Language migration Analyze did not inspect project memory."
+        }
+        if ([int]$analysis.summary.mixed_language -lt 1) {
+            throw "Language migration Analyze did not report mixed-language fixture content."
+        }
+
+        Assert-ApplyFails -ExpectedToken "Migration plan is required" -Command {
+            & $languageMigrationScript -ProjectDir $projectDir -Mode Apply -MigrationPlan (Join-PathParts $projectDir "missing-proposal.json") -Json
+        }
+
+        $plan = & $languageMigrationScript -ProjectDir $projectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage -Json | ConvertFrom-Json
+        $proposalPath = [string]$plan.proposal
+        $backupDir = [string]$plan.backup_dir
+        if ([string]::IsNullOrWhiteSpace($proposalPath) -or -not (Test-Path -LiteralPath $proposalPath)) {
+            throw "Language migration Plan did not create proposal.json."
+        }
+        if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
+            throw "Language migration Plan did not create the backup required before apply."
+        }
+        if ([int]$plan.summary.manual_review -lt 2) {
+            throw "Language migration Plan did not route customized content to manual review."
+        }
+        if ([int]$plan.summary.template_replacements -lt 1) {
+            throw "Language migration Plan did not identify source template replacements."
+        }
+
+        if ($ExerciseMissingBackupFailure.IsPresent) {
+            Assert-PathInsideRoot -Path $backupDir -Root $scratchRootFull
+            Remove-Item -LiteralPath $backupDir -Recurse -Force
+            Assert-ApplyFails -ExpectedToken "existing backup directory" -Command {
+                & $languageMigrationScript -ProjectDir $projectDir -Mode Apply -MigrationPlan $proposalPath -Json
+            }
+            $plan = & $languageMigrationScript -ProjectDir $projectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage -Json | ConvertFrom-Json
+            $proposalPath = [string]$plan.proposal
+            $backupDir = [string]$plan.backup_dir
+        }
+
+        $apply = & $languageMigrationScript -ProjectDir $projectDir -Mode Apply -MigrationPlan $proposalPath -Json | ConvertFrom-Json
+        if ([int]$apply.apply_result.files_written -lt 1) {
+            throw "Language migration Apply did not write any files."
+        }
+        $validate = & $languageMigrationScript -ProjectDir $projectDir -Mode Validate -MigrationPlan $proposalPath -Json | ConvertFrom-Json
+        if (-not [bool]$validate.validation.valid) {
+            throw "Language migration Validate did not report a valid result."
+        }
+
+        $lockPath = Join-PathParts $projectDir ".agents" "hub.lock.json"
+        $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+        if ([string]$lock.project_language -ne $TargetLanguage) {
+            throw "Language migration did not update project_language to target language."
+        }
+        if ($lock.PSObject.Properties.Name -notcontains "language_migration") {
+            throw "Language migration did not record lock metadata."
+        }
+
+        $agentGuide = Get-Content -LiteralPath $agentGuidePath -Raw
+        foreach ($token in @($ExpectedTargetMarker, "language-migration:manual-review-source begin", "git status", "src/app.py", "Get-FooBar", "AGENTS.md", "feat", "ERROR_PATH_NOT_FOUND", "CustomThing")) {
+            if ($agentGuide -notlike ("*{0}*" -f $token)) {
+                throw "Language migration did not preserve expected token in .agents/AGENTS.md: $token"
+            }
+        }
+
+        $contextText = Get-Content -LiteralPath $contextPath -Raw
+        foreach ($token in @("中文 mixed memory marker", "ERROR_PATH_NOT_FOUND", "src/app.py", "Get-FooBar", "CustomThing")) {
+            if ($contextText -notlike ("*{0}*" -f $token)) {
+                throw "Language migration changed or dropped custom context token: $token"
+            }
+        }
+
+        $templateSpecPath = Join-PathParts $projectDir "docs" "specs" "_templates" "spec-lite.md"
+        $templateSpecText = Get-Content -LiteralPath $templateSpecPath -Raw
+        if ($templateSpecText -notlike ("*{0}*" -f $ExpectedTargetMarker)) {
+            throw "Language migration did not replace exact source spec template with the target language template."
+        }
+
+        return [ordered]@{
+            project = $projectDir
+            source_language = $SourceLanguage
+            target_language = $TargetLanguage
+            analyzed = [int]$analysis.summary.total
+            writes = [int]$plan.summary.writes
+            manual_review = [int]$plan.summary.manual_review
+            mixed_language = [int]$analysis.summary.mixed_language
+            proposal = $proposalPath
+            backup = $backupDir
+            result = [string]$apply.apply_result.result
+            validated = [bool]$validate.validation.valid
+        }
+    }
+
+    $migrationEvidence = @()
+    $migrationEvidence += Invoke-LanguageMigrationFixture -Name "language-migration-en-to-zh-cn" -SourceLanguage "en" -TargetLanguage "zh-CN" -ExpectedTargetMarker "项目记忆语言：简体中文。" -ExerciseMissingBackupFailure
+    $migrationEvidence += Invoke-LanguageMigrationFixture -Name "language-migration-zh-cn-to-en" -SourceLanguage "zh-CN" -TargetLanguage "en" -ExpectedTargetMarker "Project memory language: English."
+
+    $script:evidence.language_migration = [ordered]@{
+        fixtures = @($migrationEvidence)
+    }
+
+    Add-Check "conservative language migration" "PASS" "Conservative en/zh-CN migration covers analyze, proposal, backup, apply, validate, mixed memory, and project-specific preservation." $evidence.language_migration
+}
+catch {
+    Add-Check "conservative language migration" "FAIL" $_.Exception.Message
 }
 
 try {
