@@ -73,6 +73,26 @@ Use these labels for agent-assisted maintenance:
 Additional scope or risk labels may be added later if the maintenance load
 justifies them.
 
+## Issue Triage Label Sync
+
+The `Issue triage label sync` workflow mirrors the explicit
+`Human Triage Decision` checklist in agent candidate issues into triage labels.
+It does not make triage decisions. A maintainer records the decision in the
+issue body, and automation keeps metadata consistent.
+
+The workflow only runs for issues labeled `source:agent`. When exactly one
+decision is checked:
+
+- `Accepted` adds `triage:accepted`.
+- `Rejected` adds `triage:rejected`.
+- `Deferred` adds `triage:deferred`.
+- `Needs human investigation` adds `triage:needs-human`.
+
+The workflow removes conflicting `triage:*` labels and stale issue-level
+`review:needs-human` after a clear decision is recorded. If multiple decisions
+are checked, it fails without changing labels so the maintainer can correct the
+issue body.
+
 ## Issue Requirements
 
 Agent candidate issues should include:

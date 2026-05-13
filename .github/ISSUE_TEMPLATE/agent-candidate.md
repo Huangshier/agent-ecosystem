@@ -45,6 +45,8 @@ assignees: ""
 
 ## Human Triage Decision
 
+<!-- The issue triage label sync workflow mirrors exactly one checked decision into triage labels. Leave only one checked. -->
+
 - [ ] Accepted
 - [ ] Rejected
 - [ ] Deferred

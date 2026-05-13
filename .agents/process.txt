@@ -2,10 +2,10 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
-  - #32, add file-based `en` and `zh-CN` engineering-memory templates.
-- Active public branch: `issue-32-file-based-memory-templates`.
+  - #42, add issue triage label sync workflow.
+- Active public branch: `issue-42-triage-label-sync`.
 - Active public spec:
-  `docs/specs/file-based-memory-templates/spec.md`.
+  `docs/specs/issue-triage-label-sync/spec.md`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -36,20 +36,17 @@ Completed
 - PR #40 clarified `project-bootstrap` operating modes and closed issue #33;
   local `main` was fast-forwarded to merge commit
   `19656e5f92264a960c8e6ac6039debd97166c10f`.
+- PR #41 added file-based `en` and `zh-CN` project memory templates and closed
+  issue #32; local `main` is at merge commit
+  `354b857087169a794ec1bca71258d3213f4e805f`.
 - Repository ruleset `protect-main` protects the default branch with required
   pull requests, release validation checks, conversation resolution, deletion
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Commit, push, and open a draft PR that references `Fixes #32`.
-- #32 implementation and local validation are complete:
-  - file-based project memory templates exist for `en` and `zh-CN`;
-  - `set_project_language.ps1` reads templates from files instead of embedded
-    scaffold strings;
-  - missing `zh-CN` template files fall back to English with fallback metadata;
-  - bootstrap lock metadata records language template fallbacks;
-  - docs and release validation were updated;
-  - local release validation passed with `PASS=37 FAIL=0 WARN=0 DEFERRED=0`.
+- Implement and validate issue #42.
+- Push `issue-42-triage-label-sync` and open a draft PR that references
+  `Fixes #42`.
 - Keep #30 conservative language migration apply for a separate later PR.
 - Do not merge directly to `main`.
 

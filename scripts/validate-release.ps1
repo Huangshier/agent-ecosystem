@@ -917,6 +917,65 @@ catch {
 }
 
 try {
+    $triageWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-label-sync.yml"
+    $governance = Get-FileText -RelativePath "docs/agent-governance.md"
+    $issueTemplate = Get-FileText -RelativePath ".github/ISSUE_TEMPLATE/agent-candidate.md"
+    $triageExpectations = [ordered]@{
+        ".github/workflows/issue-triage-label-sync.yml" = @(
+            "issues:",
+            "issues: write",
+            "contents: read",
+            "source:agent",
+            "Human Triage Decision",
+            "triage:accepted",
+            "triage:rejected",
+            "triage:deferred",
+            "triage:needs-human",
+            "review:needs-human",
+            "core.setFailed"
+        )
+        "docs/agent-governance.md" = @(
+            "Issue Triage Label Sync",
+            "mirrors the explicit",
+            "does not make triage decisions",
+            "source:agent",
+            "review:needs-human"
+        )
+        ".github/ISSUE_TEMPLATE/agent-candidate.md" = @(
+            "issue triage label sync workflow",
+            "Leave only one checked"
+        )
+    }
+
+    $triageMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $triageExpectations.Keys) {
+        $text = switch ($relativePath) {
+            ".github/workflows/issue-triage-label-sync.yml" { $triageWorkflow }
+            "docs/agent-governance.md" { $governance }
+            default { $issueTemplate }
+        }
+        foreach ($token in $triageExpectations[$relativePath]) {
+            if ($text -notlike ("*{0}*" -f $token)) {
+                $triageMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    if ($triageMissing.Count -gt 0) {
+        Add-Check "issue triage label sync" "FAIL" "Issue triage label sync workflow or docs are incomplete." @($triageMissing.ToArray())
+    }
+    else {
+        Add-Check "issue triage label sync" "PASS" "Agent candidate issue triage decisions are mirrored to labels by a scoped workflow." ([ordered]@{
+            workflow = ".github/workflows/issue-triage-label-sync.yml"
+            docs = @("docs/agent-governance.md", ".github/ISSUE_TEMPLATE/agent-candidate.md")
+        })
+    }
+}
+catch {
+    Add-Check "issue triage label sync" "FAIL" $_.Exception.Message
+}
+
+try {
     $shellStrategy = Get-FileText -RelativePath "docs/shell-strategy.md"
     $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
     $workflow = Get-FileText -RelativePath ".github/workflows/release-validation.yml"
