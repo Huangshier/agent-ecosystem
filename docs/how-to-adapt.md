@@ -50,6 +50,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-boo
 ```
 
 The script does not infer chat language by itself.
+The supported project memory template languages are `en` and `zh-CN` only;
+English is the fallback. This is a scaffold-language feature, not
+arbitrary-language i18n.
 
 For an existing project, treat bootstrap as a conservative refresh:
 

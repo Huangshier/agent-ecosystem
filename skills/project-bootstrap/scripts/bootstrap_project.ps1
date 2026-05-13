@@ -637,6 +637,10 @@ $lockData = [ordered]@{
     language_backup_count = if ($null -ne $languageResult) { [int]$languageResult.backup_count } else { 0 }
     language_backup_dir = if ($null -ne $languageResult) { [string]$languageResult.backup_dir } else { "" }
     language_backup_paths = if ($null -ne $languageResult) { @($languageResult.backup_paths) } else { @() }
+    language_template_root = if ($null -ne $languageResult) { [string]$languageResult.template_root } else { "" }
+    language_template_warnings = if ($null -ne $languageResult) { @($languageResult.template_warnings) } else { @() }
+    language_template_fallback_count = if ($null -ne $languageResult) { [int]$languageResult.fallback_count } else { 0 }
+    language_template_fallback_paths = if ($null -ne $languageResult) { @($languageResult.fallback_paths) } else { @() }
     project_language = $projectLanguageValue
 }
 
@@ -667,6 +671,12 @@ if ($null -ne $evidenceReport) {
 }
 if ($null -ne $languageResult) {
     Write-Output ("Project language: {0} ({1} files written, {2} skipped)" -f [string]$languageResult.project_language, [int]$languageResult.files_written, [int]$languageResult.files_skipped)
+    if ([int]$languageResult.fallback_count -gt 0) {
+        Write-Output ("Project language template fallbacks: {0}" -f [int]$languageResult.fallback_count)
+        foreach ($fallbackPath in @($languageResult.fallback_paths)) {
+            Write-Output ("  - {0}" -f [string]$fallbackPath)
+        }
+    }
     if ([int]$languageResult.backup_count -gt 0) {
         Write-Output ("Language scaffold backups written: {0} ({1})" -f [int]$languageResult.backup_count, [string]$languageResult.backup_dir)
     }

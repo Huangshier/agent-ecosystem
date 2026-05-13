@@ -1863,6 +1863,8 @@ try {
         "docs/roadmap/evolution-plan.md",
         "knowledge-hub/templates/project-root/AGENTS.md",
         "knowledge-hub/templates/project-agent/AGENTS.md",
+        "skills/project-bootstrap/templates/project-memory/en/project-root/AGENTS.md",
+        "skills/project-bootstrap/templates/project-memory/en/project-agent/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md",
         "skills/project-bootstrap/scripts/set_project_language.ps1",
@@ -1911,6 +1913,8 @@ try {
     $hotMemoryExists = $false
     $bootstrapLanguagePolicyPresent = $false
     $autoWriteEvidence = @()
+    $fileTemplateEvidence = @()
+    $fallbackEvidence = @()
     $smokeEvidence = @($evidence.runtime_smoke | Where-Object {
         if ($null -eq $_) {
             return $false
@@ -2007,21 +2011,114 @@ try {
         }
     }
 
+    function Test-ProjectMemoryTemplateFiles {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeDir
+        )
+
+        $templateRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "templates" "project-memory"
+        $requiredRelativePaths = @(
+            "project-root/AGENTS.md",
+            "project-root/docs/specs/README.md",
+            "project-root/docs/specs/_templates/spec-lite.md",
+            "project-root/docs/specs/_templates/tasks-lite.md",
+            "project-agent/AGENTS.md",
+            "project-agent/process.txt",
+            "project-agent/plan.md",
+            "project-agent/notes.md",
+            "project-agent/commands/README.md",
+            "project-agent/context/README.md",
+            "project-agent/context/tech/README.md",
+            "project-agent/context/business/README.md",
+            "project-agent/context/experience/README.md",
+            "project-agent/context/experience/cases/README.md",
+            "project-agent/context/experience/cases/case_template.md"
+        )
+
+        $missing = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($language in @("en", "zh-CN")) {
+            foreach ($relativePath in $requiredRelativePaths) {
+                $templatePath = Join-PathParts $templateRoot $language $relativePath
+                if (-not (Test-Path -LiteralPath $templatePath)) {
+                    $missing.Add("$language/$relativePath")
+                }
+            }
+        }
+
+        if ($missing.Count -gt 0) {
+            throw ("Project memory file templates are missing: {0}" -f ($missing.ToArray() -join "; "))
+        }
+
+        return [ordered]@{
+            template_root = $templateRoot
+            languages = @("en", "zh-CN")
+            checked_files_per_language = @($requiredRelativePaths)
+        }
+    }
+
+    function Test-ProjectLanguageTemplateFallback {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeDir
+        )
+
+        $sourceTemplateRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "templates" "project-memory"
+        $fallbackTemplateRoot = Join-PathParts $scratchRootFull "language-template-fallback-root"
+        Copy-Item -LiteralPath $sourceTemplateRoot -Destination $fallbackTemplateRoot -Recurse -Force
+
+        $removedTemplate = Join-PathParts $fallbackTemplateRoot "zh-CN" "project-agent" "notes.md"
+        Remove-Item -LiteralPath $removedTemplate -Force
+
+        $projectDir = Join-PathParts $scratchRootFull "language-template-fallback-project"
+        New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+        Assert-PathInsideRoot -Path $projectDir -Root $scratchRootFull
+
+        $languageScript = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "scripts" "set_project_language.ps1"
+        $jsonText = & $languageScript -ProjectDir $projectDir -ProjectLanguage "zh-CN" -TemplateRoot $fallbackTemplateRoot
+        $result = $jsonText | ConvertFrom-Json
+
+        if ([int]$result.fallback_count -lt 1) {
+            throw "Missing zh-CN template did not report a fallback."
+        }
+        if (".agents/notes.md" -notin @($result.fallback_paths)) {
+            throw "Missing zh-CN notes template did not fall back for .agents/notes.md."
+        }
+
+        $notesPath = Join-PathParts $projectDir ".agents" "notes.md"
+        $notesText = Get-Content -LiteralPath $notesPath -Raw
+        if ($notesText -notlike "*Project memory language: English.*") {
+            throw "Fallback notes file did not use the English template."
+        }
+
+        return [ordered]@{
+            template_root = $fallbackTemplateRoot
+            project = $projectDir
+            removed_template = "zh-CN/project-agent/notes.md"
+            fallback_count = [int]$result.fallback_count
+            fallback_paths = @($result.fallback_paths)
+        }
+    }
+
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
+        $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $recommendedCopyRuntime
         $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
         $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+        $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $recommendedCopyRuntime
     }
 
     $script:evidence.language_policy = [ordered]@{
         project_language_policy_present = [bool]$languagePolicyPresent
         bootstrap_hot_memory_present = [bool]$hotMemoryExists
         bootstrap_project_language_policy_present = [bool]$bootstrapLanguagePolicyPresent
+        file_template_sources = @($fileTemplateEvidence)
         auto_language_write_behavior = if ($autoWriteEvidence.Count -gt 0) { "passed" } else { "not_checked" }
         auto_language_write_projects = @($autoWriteEvidence)
+        missing_template_fallback = @($fallbackEvidence)
     }
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         Add-Check "language policy templates" "PASS" "Project Language Policy is present in repo and bootstrap output; bootstrap hot memory files are present." $evidence.language_policy
+        Add-Check "file-based memory template sources" "PASS" "English and Simplified Chinese project memory templates exist as files for root, hot memory, context, commands, and spec scaffolds." @($fileTemplateEvidence)
         Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap can write English and Simplified Chinese project memory scaffolds when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
+        Add-Check "missing language template fallback" "PASS" "A missing Simplified Chinese template file falls back to the English template with fallback metadata." @($fallbackEvidence)
     }
     else {
         Add-Check "language policy templates" "FAIL" "Language policy or bootstrap hot memory check failed." $evidence.language_policy

@@ -1,0 +1,65 @@
+# 工作说明
+
+项目记忆语言：简体中文。
+
+- **Title（标题）**:
+- **Slug（标识）**:
+- **Status（状态）**: Draft / Active / Done / Archived
+- **Owner（负责人）**:
+- **Updated（更新时间）**:
+
+## 1. Summary（摘要）
+- 本次要构建、修改或调查什么？
+
+## 2. 当前上下文
+- 相关代码路径、二进制、文档、产物或观察到的行为。
+- 已确认的现有实现事实。
+
+## 3. 目标
+- 清晰列出完成结果。
+
+## 4. 非目标
+- 明确本工作项不覆盖的边界。
+
+## 5. 约束
+- 环境、兼容性、工具、时间、安全或接口约束。
+- 范围控制：不要纳入目标之外的无关重构、清理或行为变更。
+
+## 6. 假设
+- 尚待证实但当前用于推进的假设。
+
+## 7. 风险
+- 可能失败或需要 fallback 的事项。
+
+## 8. 方案
+- 计划方向、实现轮廓或分析方法。
+
+## 9. 验收与证据
+- 如何验证结果。
+- 完成时应留下什么证据或输出。
+- 如果验收检查被跳过或暂不可用，必须先记录原因，再声明完成。
+
+## 10. 循环契约
+- 只在需要重复执行直到变量或条件满足时使用。
+- **Variable（变量）**:
+- **Source of truth（事实来源）**:
+- **Check command（检查命令）**:
+- **Pass predicate（通过条件）**:
+- **Iteration action（迭代动作）**:
+- **State record（状态记录）**:
+- **Limits（限制）**:
+- **Abort conditions（中止条件）**:
+
+## 11. 执行契约
+- 多阶段工作需要 agent 在每个已验证阶段后继续时使用。
+- **Autonomy level（自主级别）**: ask-before-each-phase / autonomous-until-blocked / bounded-autonomous
+- **Phase list（阶段列表）**:
+  - P01:
+  - P02:
+  - P03:
+- **Continue rule（继续规则）**:
+- **Stop rule（停止规则）**: 包含 scope drift、unrelated refactor、skipped acceptance checks、安全/权限阻塞和无法消解的真实歧义。
+- **State record（状态记录）**:
+
+## 12. 开放问题
+- 仍可能阻塞或改变执行方向的问题。
