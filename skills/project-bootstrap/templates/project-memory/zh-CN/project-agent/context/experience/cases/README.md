@@ -11,10 +11,10 @@
 
 ## 格式
 新案例使用 `case_template.md`。每个案例文件应包含：
-- **Keywords**：用于索引匹配。
-- **Symptoms**：保留准确错误文本。
-- **Root Cause**：引用具体代码或配置。
-- **Prevention Rule**：可执行或可检查的预防规则。
+- **Keywords（关键词）**：用于索引匹配。
+- **Symptoms（症状）**：保留准确错误文本。
+- **Root Cause（根因）**：引用具体代码或配置。
+- **Prevention Rule（预防规则）**：可执行或可检查的预防规则。
 
 ## 搜索
 排障时先用错误文本、模块名或工具名扫描文件名和 Keywords。

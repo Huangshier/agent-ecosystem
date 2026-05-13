@@ -2,13 +2,13 @@
 
 项目记忆语言：简体中文。
 
-- **Title**:
-- **Slug**:
-- **Status**: Draft / Active / Done / Archived
-- **Owner**:
-- **Updated**:
+- **Title（标题）**:
+- **Slug（标识）**:
+- **Status（状态）**: Draft / Active / Done / Archived
+- **Owner（负责人）**:
+- **Updated（更新时间）**:
 
-## 1. 摘要
+## 1. Summary（摘要）
 - 本次要构建、修改或调查什么？
 
 ## 2. 当前上下文
@@ -41,25 +41,25 @@
 
 ## 10. 循环契约
 - 只在需要重复执行直到变量或条件满足时使用。
-- **Variable**:
-- **Source of truth**:
-- **Check command**:
-- **Pass predicate**:
-- **Iteration action**:
-- **State record**:
-- **Limits**:
-- **Abort conditions**:
+- **Variable（变量）**:
+- **Source of truth（事实来源）**:
+- **Check command（检查命令）**:
+- **Pass predicate（通过条件）**:
+- **Iteration action（迭代动作）**:
+- **State record（状态记录）**:
+- **Limits（限制）**:
+- **Abort conditions（中止条件）**:
 
 ## 11. 执行契约
 - 多阶段工作需要 agent 在每个已验证阶段后继续时使用。
-- **Autonomy level**: ask-before-each-phase / autonomous-until-blocked / bounded-autonomous
-- **Phase list**:
+- **Autonomy level（自主级别）**: ask-before-each-phase / autonomous-until-blocked / bounded-autonomous
+- **Phase list（阶段列表）**:
   - P01:
   - P02:
   - P03:
-- **Continue rule**:
-- **Stop rule**: 包含 scope drift、unrelated refactor、skipped acceptance checks、安全/权限阻塞和无法消解的真实歧义。
-- **State record**:
+- **Continue rule（继续规则）**:
+- **Stop rule（停止规则）**: 包含 scope drift、unrelated refactor、skipped acceptance checks、安全/权限阻塞和无法消解的真实歧义。
+- **State record（状态记录）**:
 
 ## 12. 开放问题
 - 仍可能阻塞或改变执行方向的问题。
