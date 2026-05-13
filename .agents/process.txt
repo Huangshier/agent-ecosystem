@@ -1,8 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.4.1`.
-- Active issue: #51 template language directory convergence.
-- Active public branch: `codex/issue-51-template-language-convergence`.
+- Current published public release is `v0.4.2`.
+- Active issue: #53 release records normalization for `v0.4.1` and `v0.4.2`.
+- Active public branch: `codex/issue-53-release-records`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -16,31 +16,36 @@ Current State
 Completed
 - `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.4.0`, and `v0.4.1` have been
   published as GitHub Releases.
+- `v0.4.2` has been published as a GitHub Release.
 - Public `scripts/validate-release.ps1` is the reusable release gate.
 - Release validation workflow has passed on Windows PowerShell 5.1, Windows
   PowerShell 7, Ubuntu, and macOS for prior release heads.
 - PR #50 released v0.4.1 and moved project-memory language templates under
   `knowledge-hub/templates/project-memory/`.
-- Issue #51 was opened on 2026-05-13:
-  https://github.com/Huangshier/agent-ecosystem/issues/51
-- Issue #51 implementation has moved the template model to
+- Issue #51 moved the template model to
   `knowledge-hub/templates/languages/en|zh-CN/project-root|project-agent` and
   the matching bundled snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/`.
-- PR #52 is open as a draft for #51:
+- PR #52 was merged and released as `v0.4.2`:
   https://github.com/Huangshier/agent-ecosystem/pull/52
 - Local requested validation for #51 passed:
   - `git diff --check`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
+- Stabilization issues are open:
+  - #53 normalize `v0.4.1` / `v0.4.2` release records.
+  - #54 audit legacy template-path references.
+  - #55 document the post-`v0.4.2` upgrade path for existing `.agents` projects.
+  - #56 define domain-pack governance lifecycle without enabling expansion
+    (deferred).
+  - #57 prepare the `v0.4.3` stabilization release.
 
 Next Actions
-- Wait for maintainer review on draft PR #52.
-- Address review feedback if requested.
+- Finish issue #53 release-record updates, validate locally, and open a draft PR.
 - Do not push directly to `main`.
 
 Blocking Issues
 - No active blockers.
 
 Last Updated
-- 2026-05-13
+- 2026-05-14

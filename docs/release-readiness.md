@@ -1,12 +1,15 @@
 # Release Readiness
 
-Status: `v0.4.0` public release.
+Status: `v0.4.2` public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
 maintenance issues into the normal release flow. `v0.3.1` was published as a
-public stabilization release. `v0.4.0` delivers the conservative `en` / `zh-CN`
-engineering-memory language migration workflow, completing issue #30.
+public stabilization release. `v0.4.0` delivered the conservative `en` /
+`zh-CN` engineering-memory language migration workflow, completing issue #30.
+`v0.4.1` consolidated project-memory template authority, and `v0.4.2`
+converged the template model to language-scoped project-root and project-agent
+directories.
 
 ## Completed
 
@@ -89,12 +92,27 @@ engineering-memory language migration workflow, completing issue #30.
 - Public release notes are present at `docs/releases/v0.3.0.md`.
 - Public release notes are present at `docs/releases/v0.3.1.md`.
 - Public release notes are present at `docs/releases/v0.4.0.md`.
+- Public release notes are present at `docs/releases/v0.4.1.md`.
+- Public release notes are present at `docs/releases/v0.4.2.md`.
 - Conservative `en` / `zh-CN` language migration is complete: Phase 1
   deterministic scaffold migration and Phase 2 narrative migration from
   manual-review artifacts. Issue #30 is closed.
 - Final hosted CI release validation for the published `v0.4.0` main passed on
   Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
+- Project-memory template authority was consolidated in `v0.4.1`: public
+  templates moved under `knowledge-hub/templates/project-memory/`, the bundled
+  project-bootstrap snapshot was synchronized, and the standalone
+  `skills/project-bootstrap/templates/project-memory/` tree was removed.
+- Final hosted CI release validation for the published `v0.4.1` main passed on
+  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25801192289
+- Language-scoped template directory convergence was published in `v0.4.2`:
+  public templates and bundled snapshots now use
+  `templates/languages/en|zh-CN/project-root|project-agent`.
+- Final hosted CI release validation for the published `v0.4.2` main passed on
+  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25809635716
 - Current README and `README.zh-CN.md` describe the project as a Workflow
   Kernel with an explicit extension model and non-runtime boundaries.
 - Release process guidance includes a lightweight Public Reader Review checklist.
@@ -105,6 +123,12 @@ engineering-memory language migration workflow, completing issue #30.
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25598098034
 - GitHub Release `v0.3.1` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.3.1
+- GitHub Release `v0.4.0` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.0
+- GitHub Release `v0.4.1` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.1
+- GitHub Release `v0.4.2` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.2
 - Hub initialization now leaves template hubs as ordinary directories unless
   `-InitializeGit` or `-CommitInitial` is explicitly supplied.
 - Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
@@ -211,3 +235,5 @@ The release validator now covers:
 - v0.3.0 release notes coverage
 - v0.3.1 release notes coverage
 - v0.4.0 release notes coverage
+- v0.4.1 release notes coverage
+- v0.4.2 release notes coverage
