@@ -2,10 +2,11 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
-  - #42, add issue triage label sync workflow.
-- Active public branch: `issue-42-triage-label-sync`.
+  - #44, improve base AGENTS templates for lean startup context and PR-ready
+    workflow guidance.
+- Active public branch: `issue-44-agents-template-guidance`.
 - Active public spec:
-  `docs/specs/issue-triage-label-sync/spec.md`.
+  `docs/specs/agents-template-startup-guidance/spec.md`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -14,6 +15,9 @@ Current State
 - GitHub App `agent-ecosystem-bot` is the configured automation identity for
   this repository. Do not store App auth material or local-only paths in this
   public repository.
+- Repository ruleset `protect-main` protects the default branch. Do not change
+  rulesets, branch protection, hooks, runners, App auth, main protection, or
+  repository settings for #44.
 
 Completed
 - `v0.1.0`, `v0.2.0`, `v0.3.0`, and `v0.3.1` have been published as GitHub
@@ -30,22 +34,17 @@ Completed
 - PR #35 protected project memory upgrades and closed issues #29 and #31.
 - PR #37 added the PR-ready / phase-close engineering-memory sync gate and
   closed issue #36.
-- PR #39 added validation scratch pruning and closed issue #38; local `main`
-  was fast-forwarded to the merge commit and the old #38 topic branch was
-  cleaned locally and remotely.
-- PR #40 clarified `project-bootstrap` operating modes and closed issue #33;
-  local `main` was fast-forwarded to merge commit
-  `19656e5f92264a960c8e6ac6039debd97166c10f`.
+- PR #39 added validation scratch pruning and closed issue #38.
+- PR #40 clarified `project-bootstrap` operating modes and closed issue #33.
 - PR #41 added file-based `en` and `zh-CN` project memory templates and closed
-  issue #32; local `main` is at merge commit
-  `354b857087169a794ec1bca71258d3213f4e805f`.
-- Repository ruleset `protect-main` protects the default branch with required
-  pull requests, release validation checks, conversation resolution, deletion
-  blocking, force-push blocking, and no bypass actors.
+  issue #32.
+- PR #43 added issue triage label sync and closed issue #42.
 
 Next Actions
-- Wait for PR #43 hosted release validation run `25776495732`.
-- Keep draft PR #43 open for maintainer review; it references `Fixes #42`.
+- Commit the #44 scoped implementation, push the branch, and open a draft PR.
+- After the PR opens, wait for hosted release validation and record check
+  evidence in the PR conversation; do not add a memory-only follow-up commit
+  solely to refresh state or hosted-check timestamps unless explicitly approved.
 - Keep #30 conservative language migration apply for a separate later PR.
 - Do not merge directly to `main`.
 

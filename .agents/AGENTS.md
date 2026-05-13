@@ -57,6 +57,18 @@ When the user's request is semantically broad or underspecified, do a short read
 
 After exploration, proceed only when the goal, scope, non-goals, and validation path are clear. Ask a concise question when ambiguity is about product intent, success criteria, destructive/high-impact actions, external systems, or incompatible interpretations. Make reversible implementation choices yourself once intent is clear.
 
+## Project Commands
+Use documented project commands before inventing new ones. Discovery order:
+
+1. Project docs such as `README.md`, `CONTRIBUTING.md`, `docs/`, and release notes.
+2. Tooling surfaces such as package scripts, Makefiles, task runners, and CI workflows.
+3. `.agents/commands/README.md` and any workflow cards under `.agents/commands/`.
+
+Use `.agents/commands/` for reusable high-frequency workflows such as setup, format/lint, test, build, release validation, and review checklists. Each command card should be short and include purpose, when to use it, prerequisites, commands, expected evidence, and safety notes for external side effects.
+
+## Large Issue Planning
+For large, high-blast-radius, or multi-area issues, produce an implementation plan before editing. When the plan would create an oversized PR, propose a reviewable PR split and keep each phase tied to acceptance evidence.
+
 ## Delivery Protocol & Working Loop
 For implementation tasks that produce repository changes, a complete unit of work may include the relevant parts of the following sequence:
 
@@ -71,7 +83,7 @@ For implementation tasks that produce repository changes, a complete unit of wor
 6. **Session Wrap-up**: For substantial sessions, when the user asks for memory cleanup, handoff, reflection, or next-session preparation, use the active runtime's skill discovery mechanism to find a relevant memory-governance or session-wrap-up workflow. There is no reliable automatic session-end hook, so do not assume this step runs unless it is requested or explicitly part of the project workflow. If no suitable workflow is available, manually update `.agents/process.txt`, record confirmed findings in `.agents/notes.md`, and store reusable lessons in `.agents/context/experience/`.
 
 ## PR-Ready And Phase-Close Memory Sync Gate
-Before an agent marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight memory sync gate.
+Before an agent opens a pull request, marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight public engineering memory sync gate.
 
 This gate is a workflow checklist, not a Git hook, repository ruleset, or branch-protection change. Ordinary intermediate commits do not require a full engineering-memory sync; update only the files needed for the work at that point.
 
@@ -83,7 +95,7 @@ Checklist:
 4. Update `.agents/process.txt` when active issues, PRs, blockers, branch state, or next actions changed.
 5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.
 6. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
-7. Record hosted check results once at the relevant boundary. Do not create an endless loop of memory-only commits just to chase the latest hosted-check timestamp.
+7. Record hosted check results once at the relevant boundary. After a PR has been opened, do not push memory-only commits solely to refresh state or hosted-check timestamps unless explicitly approved.
 8. Confirm the gate did not introduce unrelated refactors, pre-commit hooks, repository ruleset changes, or changes outside the accepted issue scope.
 
 ## Tooling Constraints
@@ -103,7 +115,7 @@ Checklist:
 1. This file and root `AGENTS.md`
 2. Hot memory: `.agents/process.txt` and `.agents/plan.md`
 3. Warm memory: active `docs/specs/<slug>/spec.md` and `tasks.md`
-4. Cold memory: `.agents/context/*` and `.agents/notes.md`, opened only by matching summary/keywords or task relevance
+4. Cold memory: `.agents/context/README.md` and indexes first, then only matching `.agents/context/**` entries and `.agents/notes.md` by Summary, Keywords, or task relevance
 
 ## Project Work Packages
 For work that should remain discoverable after the current session, store the canonical description under `docs/specs/`:
