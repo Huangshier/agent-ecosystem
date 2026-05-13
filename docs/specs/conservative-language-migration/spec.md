@@ -12,8 +12,10 @@
 - The workflow must be proposal-first and backup-first, using file-based target
   language templates as structural baselines without overwriting
   project-specialized memory.
-- This PR is intended to be reviewable as one phase: CLI workflow, fixtures,
-  docs, validation, and public engineering-memory sync.
+- PR #46 completed Phase 1: deterministic conservative migration scaffold,
+  backup/proposal/apply/validate flow, and manual-review routing.
+- The current follow-up implements Phase 2: narrative migration from retained
+  manual-review artifacts back into target-language engineering memory.
 
 ## 2. Current Context
 - Issue #33 is complete via PR #40: `project-bootstrap` operating modes now
@@ -28,6 +30,9 @@
 - `set_project_language.ps1` can write first-session scaffolds from language
   templates, but established project memory must not be treated as a scaffold
   overwrite.
+- PR #46 merged on 2026-05-13 at
+  `ee327e75aa35bd38c7495a019eaa932f4f9395f2`; #30 remains open for Phase 2
+  narrative migration.
 
 ## 3. Goals
 - Support conservative migration from `en` to `zh-CN`.
@@ -40,6 +45,12 @@
 - Preserve project-specific content by keeping it unchanged, merging it into a
   target-language scaffold with explicit manual-review routing, or marking it
   for manual review in the proposal.
+- Read Phase 1 `.agents/language-migration/<timestamp>/manual-review/`
+  artifacts and generate a second narrative proposal.
+- Route stable facts, active plan, process state, reusable lessons, and durable
+  specs back to the appropriate target-language engineering-memory surfaces.
+- Apply narrative output only after review, backup, source hash checks, and
+  target hash checks.
 - Add release-validation fixtures for both directions, mixed memory,
   project-specific preservation, untranslated command/path/API/error text, and
   proposal/backup requirements before apply.
@@ -60,6 +71,11 @@
   AI translation services.
 - Project-specific content that cannot be safely translated deterministically
   must be preserved and routed to manual review instead of being dropped.
+- Narrative migration may draft conservative target-language prose for ordinary
+  narrative text, but actions remain unapproved by default and must be reviewed
+  before apply.
+- Hot memory updates must stay concise; long source content remains in
+  proposal/manual-review artifacts or durable memory surfaces.
 - Scope control: do not include unrelated refactors, cleanup, or behavior
   changes outside #30.
 
@@ -72,6 +88,8 @@
 - Customized files can be migrated conservatively by keeping target-language
   structural scaffolding where available and preserving the original
   project-specific body in a manual-review section or migration artifact.
+- A deterministic phrase-level narrative draft is useful as a review starting
+  point, but not sufficient as unattended translation.
 
 ## 7. Risks
 - A deterministic helper may be mistaken for full automatic translation if docs
@@ -80,6 +98,9 @@
   still need human language cleanup.
 - Scanning `docs/specs/**` and `.agents/context/**` can find many files; the
   proposal must stay concise while retaining enough detail for review.
+- Narrative proposal actions could re-inflate hot memory if they copy whole
+  source artifacts; hot-memory proposals must be concise and backed by durable
+  artifacts.
 
 ## 8. Proposed Approach
 - Add `skills/project-bootstrap/scripts/language_migration.ps1` with
@@ -110,6 +131,17 @@
 - Validate mode checks proposal/result/backup metadata, per-action output
   hashes, manual-review source hash records, and verifies that project language
   metadata was updated to the target language after apply.
+- Narrative plan mode reads retained manual-review artifacts and writes
+  `.agents/language-migration/<timestamp>/narrative-proposal.json` with actions
+  unapproved by default.
+- Narrative apply mode checks the narrative proposal, backup, source artifact
+  hashes, and current target file hashes before writing reviewed narrative
+  sections.
+- Narrative validation checks result metadata, source artifacts, backup, target
+  review markers, and source hash records.
+- Narrative routing maps stable facts to durable technical context, active
+  plan/process state to concise hot memory updates, reusable lessons to
+  `.agents/context/experience/`, and durable specs to `docs/specs/`.
 - Extend release validation with fixture projects for both directions and the
   safety invariants requested by #30.
 
@@ -129,6 +161,9 @@
   - Commands, paths, API names, filenames, commit types, raw errors, and code
     symbols remain unchanged.
   - Apply requires an existing proposal and backup.
+  - Phase 2 narrative proposal/apply/validate reads manual-review artifacts,
+    covers stable facts, active plan, process state, reusable lessons, and
+    durable specs, and keeps protected literals unchanged.
 - PR body links #30, notes dependencies on #33/#32/#44, and states that this is
   a deterministic conservative scaffold with manual-review routing, not
   unattended translation of project-specific narrative.
@@ -145,6 +180,11 @@ Current evidence:
 - PR #46 blocking concerns were addressed on 2026-05-13 and revalidated with
   `git diff --check` plus `scripts/validate-release.ps1` reporting
   `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- Phase 2 validation evidence will be recorded after the new narrative
+  fixtures pass on this branch.
+- Phase 2 validation passed on 2026-05-13 with `git diff --check` and
+  `scripts/validate-release.ps1` reporting
+  `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## 10. Loop Contract
 - Not required. This is a bounded implementation and validation change.
@@ -159,6 +199,8 @@ Current evidence:
   - P03: Update docs, skill guidance, and validation fixtures.
   - P04: Run validation, sync public engineering memory, commit, push, and open
     a draft PR for #30.
+  - P05: Implement narrative migration from Phase 1 manual-review artifacts,
+    update docs/fixtures/memory, commit, push, and open a draft PR.
 - **Continue rule**: Continue while changes stay within #30, remain
   deterministic and backup/proposal-first, and required validations are
   available.

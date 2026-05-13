@@ -74,6 +74,9 @@ Optional flags:
 - `-PlanLanguageMigration -SourceLanguage en|zh-CN -TargetLanguage en|zh-CN`: write a reviewable language migration proposal and create the required backup before apply.
 - `-ApplyLanguageMigration -MigrationPlan <proposal.json>`: apply approved language migration actions after review, requiring the proposal and recorded backup.
 - `-ValidateLanguageMigration -MigrationPlan <proposal.json>`: validate result metadata, backup presence, migration metadata, per-action output hashes, and manual-review source hash records.
+- `-PlanNarrativeMigration -MigrationPlan <proposal.json>`: read Phase 1 manual-review artifacts and write a second narrative proposal with actions unapproved by default.
+- `-ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>`: apply reviewed narrative actions only after proposal, backup, source hash, and target hash checks.
+- `-ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>`: validate narrative result metadata, source artifacts, backup, and review markers.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
@@ -81,7 +84,7 @@ Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
 - Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested.
 - Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review.
-- Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration.
+- Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration. Use `-PlanNarrativeMigration`, `-ApplyNarrativeMigration`, and `-ValidateNarrativeMigration` as the follow-up review step for manual-review artifacts.
 - Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. This is not a language migration path and remains backup-first.
 
 Standalone language update:
@@ -175,6 +178,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyLanguageMigration -MigrationPlan <proposal.json>
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanNarrativeMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
 ```
 
 Simplified Chinese to English reverses the source and target languages.
@@ -189,6 +195,10 @@ Behavior:
 - Customized project content is preserved verbatim in manual-review sections,
   routed to manual-review artifacts for concise hot memory, or preserved
   unchanged when no matching target template exists.
+- Narrative migration reads those manual-review artifacts, creates a second
+  proposal with stable facts, active plan, process state, reusable lessons, and
+  durable specs routed to the right memory surfaces, and leaves actions
+  unapproved until a reviewer accepts or edits the draft text.
 - Commands, paths, API names, filenames, commit types, raw errors, and code
   symbols remain in their original form because project-specific content is not
   machine-translated.

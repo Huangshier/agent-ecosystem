@@ -12,6 +12,9 @@ param(
     [switch]$PlanLanguageMigration,
     [switch]$ApplyLanguageMigration,
     [switch]$ValidateLanguageMigration,
+    [switch]$PlanNarrativeMigration,
+    [switch]$ApplyNarrativeMigration,
+    [switch]$ValidateNarrativeMigration,
     [switch]$SkipMemoryUpgradeAnalysis,
     [string]$UpgradePlan = "",
     [string]$MigrationPlan = "",
@@ -36,13 +39,13 @@ if ($AutoUpgrade.IsPresent -and $SkipMemoryUpgradeAnalysis.IsPresent) {
 }
 
 $languageMigrationModeCount = 0
-foreach ($modeSwitch in @($AnalyzeLanguageMigration, $PlanLanguageMigration, $ApplyLanguageMigration, $ValidateLanguageMigration)) {
+foreach ($modeSwitch in @($AnalyzeLanguageMigration, $PlanLanguageMigration, $ApplyLanguageMigration, $ValidateLanguageMigration, $PlanNarrativeMigration, $ApplyNarrativeMigration, $ValidateNarrativeMigration)) {
     if ($modeSwitch.IsPresent) {
         $languageMigrationModeCount++
     }
 }
 if ($languageMigrationModeCount -gt 1) {
-    throw "Choose only one language migration mode: -AnalyzeLanguageMigration, -PlanLanguageMigration, -ApplyLanguageMigration, or -ValidateLanguageMigration."
+    throw "Choose only one language migration mode: -AnalyzeLanguageMigration, -PlanLanguageMigration, -ApplyLanguageMigration, -ValidateLanguageMigration, -PlanNarrativeMigration, -ApplyNarrativeMigration, or -ValidateNarrativeMigration."
 }
 if ($languageMigrationModeCount -gt 0 -and $memoryUpgradeModeCount -gt 0) {
     throw "Language migration modes cannot be combined with legacy memory upgrade modes."
@@ -401,7 +404,7 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) {
 }
 
 $languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
-if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent) {
+if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent -or $PlanNarrativeMigration.IsPresent -or $ApplyNarrativeMigration.IsPresent -or $ValidateNarrativeMigration.IsPresent) {
     if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
         throw "Language migration helper not found: $languageMigrationScript"
     }
@@ -412,8 +415,14 @@ if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or
         & $languageMigrationScript -ProjectDir $ProjectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
     } elseif ($ApplyLanguageMigration.IsPresent) {
         & $languageMigrationScript -ProjectDir $ProjectDir -Mode Apply -MigrationPlan $MigrationPlan
-    } else {
+    } elseif ($ValidateLanguageMigration.IsPresent) {
         & $languageMigrationScript -ProjectDir $ProjectDir -Mode Validate -MigrationPlan $MigrationPlan
+    } elseif ($PlanNarrativeMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode PlanNarrative -MigrationPlan $MigrationPlan
+    } elseif ($ApplyNarrativeMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode ApplyNarrative -MigrationPlan $MigrationPlan
+    } else {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode ValidateNarrative -MigrationPlan $MigrationPlan
     }
     return
 }

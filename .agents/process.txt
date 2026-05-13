@@ -4,7 +4,7 @@ Current State
 - Active public maintenance issue:
   - #30, support conservative `en` / `zh-CN` project-memory language
     migration.
-- Active public branch: `issue-30-conservative-language-migration`.
+- Active public branch: `issue-30-narrative-language-migration`.
 - Active public spec:
   `docs/specs/conservative-language-migration/spec.md`.
 - Public engineering memory is English-first.
@@ -40,6 +40,9 @@ Completed
   issue #32.
 - PR #43 added issue triage label sync and closed issue #42.
 - PR #45 improved base AGENTS templates and closed issue #44.
+- PR #46 added deterministic conservative language migration scaffolding plus
+  manual-review routing for #30 Phase 1. It merged on 2026-05-13 at
+  `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
 - For #30, local validation passed on 2026-05-13:
   `git diff --check` and
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
@@ -50,13 +53,24 @@ Completed
   source content routes to migration manual-review artifacts; validate performs
   per-action output/hash checks. Revalidation passed with `PASS=40 FAIL=0
   WARN=0 DEFERRED=0`.
+- #30 Phase 1 is complete. Phase 2 remains open: narrative migration from
+  manual-review artifacts back into target-language engineering memory, with
+  stable facts, active plans, process state, reusable lessons, and durable specs
+  routed to the right memory surfaces.
+- #30 Phase 2 implementation is complete locally on
+  `issue-30-narrative-language-migration`: narrative proposals are generated
+  from Phase 1 manual-review artifacts, actions are unapproved by default,
+  apply checks proposal/backup/source hash/target hash, and validation covers
+  both `en` -> `zh-CN` and `zh-CN` -> `en`.
+- Local validation passed on 2026-05-13:
+  `git diff --check` and
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
+  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 Next Actions
-- Push the #30 scoped PR #46 review-fix commit if it has not already been
-  pushed, then keep PR #46 draft and wait for maintainer review.
-- PR body validation evidence and conservative completion scope have been
-  updated; do not add a memory-only follow-up commit solely to refresh state or
-  hosted-check timestamps.
+- Commit and push `issue-30-narrative-language-migration`.
+- Open a draft PR for #30 Phase 2; do not mark ready for review until
+  maintainer review.
 - Do not merge directly to `main`.
 
 Blocking Issues

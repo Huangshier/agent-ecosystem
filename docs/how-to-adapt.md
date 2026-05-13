@@ -68,6 +68,10 @@ For an existing project, treat bootstrap as a conservative refresh:
   then `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan
   <proposal.json>`, and `-ValidateLanguageMigration -MigrationPlan
   <proposal.json>`.
+- For retained manual-review artifacts, continue with
+  `-PlanNarrativeMigration -MigrationPlan <proposal.json>`, review and approve
+  the generated `narrative-proposal.json`, then run
+  `-ApplyNarrativeMigration` and `-ValidateNarrativeMigration`.
 - `-ForceResetScaffold` is only for intentionally discarding scaffold
   customizations. It warns and backs up first, but it is not a conservative
   language migration path.
