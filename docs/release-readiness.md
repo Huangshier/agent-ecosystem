@@ -137,6 +137,9 @@ directories.
 - Validation scratch retention can be inspected with
   `scripts/prune-validation-scratch.ps1`, which is dry-run by default and only
   prunes evidence-marked validation run directories when `-Apply` is supplied.
+- Existing project upgrade guidance documents the post-`v0.4.2`
+  language-scoped template model, conservative upgrade flow, local memory
+  preservation, and old path handling.
 
 ## Required Before Future Publishing
 
@@ -239,3 +242,4 @@ The release validator now covers:
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
 - legacy template-path reference audit coverage
+- existing project upgrade path coverage

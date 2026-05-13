@@ -5,6 +5,8 @@ without copying this repository's private workflow.
 
 For a continuous first-use path from an empty project, see the
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md).
+For projects that already have `.agents` memory, use the
+[existing project upgrade path](existing-project-upgrade.md).
 
 ## 1. Install A Runtime
 
@@ -57,6 +59,8 @@ arbitrary-language i18n.
 For an existing project, treat bootstrap as a conservative refresh:
 
 - Default bootstrap copies missing scaffold files and preserves existing memory.
+- For the full post-`v0.4.2` flow, use the
+  [existing project upgrade path](existing-project-upgrade.md).
 - Use `-RefreshUnmodifiedTemplates` only when you want files that still match
   the previous installed template hash to pick up newer templates.
 - Do not use reset language for memory migration. Use the Analyze, Plan, Apply,

@@ -148,6 +148,7 @@ $requiredFiles = @(
     "scripts/validation/release-test-helper.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
+    "docs/existing-project-upgrade.md",
     "docs/how-to-adapt.md",
     "docs/language-policy.md",
     "docs/release-process.md",
@@ -258,6 +259,45 @@ try {
 }
 catch {
     Add-Check "legacy template path references" "FAIL" $_.Exception.Message
+}
+
+try {
+    $upgradeGuide = Get-FileText -RelativePath "docs/existing-project-upgrade.md"
+    $adaptGuide = Get-FileText -RelativePath "docs/how-to-adapt.md"
+    $bootstrapReadme = Get-FileText -RelativePath "skills/project-bootstrap/README.md"
+    $upgradeTokens = @(
+        "language-scoped project-memory templates",
+        "templates/languages/<language>/project-root|project-agent",
+        "project-specific memory",
+        ".agents/context/experience",
+        ".agents/context/patterns",
+        ".agents/context/standards",
+        "analyze -> plan -> backup -> apply -> validate",
+        "Do not recreate legacy template directories",
+        "ApplyMemoryUpgrade",
+        "Validate"
+    )
+    $missingUpgradeTokens = @($upgradeTokens | Where-Object { $upgradeGuide -notlike "*$_*" })
+    $missingLinks = @()
+    if ($adaptGuide -notlike "*existing project upgrade path*") {
+        $missingLinks += "docs/how-to-adapt.md missing existing project upgrade path link."
+    }
+    if ($bootstrapReadme -notlike "*docs/existing-project-upgrade.md*") {
+        $missingLinks += "skills/project-bootstrap/README.md missing existing project upgrade guide link."
+    }
+
+    if ($missingUpgradeTokens.Count -gt 0 -or $missingLinks.Count -gt 0) {
+        Add-Check "existing project upgrade path" "FAIL" "Existing project upgrade guidance is incomplete." ([ordered]@{
+            missing_tokens = @($missingUpgradeTokens)
+            missing_links = @($missingLinks)
+        })
+    }
+    else {
+        Add-Check "existing project upgrade path" "PASS" "Existing project upgrade guidance covers language-scoped templates, memory preservation, conservative flow, old path handling, and validation."
+    }
+}
+catch {
+    Add-Check "existing project upgrade path" "FAIL" $_.Exception.Message
 }
 
 try {
