@@ -52,11 +52,14 @@ scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and
 `docs/specs/`.
 
 Project memory scaffolds are backed by tracked file templates under
-`skills/project-bootstrap/templates/project-memory/`. The only first-class
-template languages are `en` and `zh-CN`; this is not arbitrary-language i18n.
-English remains the public default and fallback language. If a `zh-CN` template
-file is missing, the helper falls back to the matching English template and
-reports fallback metadata so validation can flag the gap.
+`knowledge-hub/templates/project-memory/` as the repository authority, with a
+bundled runtime snapshot under
+`skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/`.
+The only first-class template languages are `en` and `zh-CN`; this is not
+arbitrary-language i18n. English remains the public default and fallback
+language. If a `zh-CN` template file is missing, the helper falls back to the
+matching English template and reports fallback metadata so validation can flag
+the gap.
 
 For established project memory, changing the project memory language is a
 conservative migration task, not a scaffold overwrite. Bootstrap preserves

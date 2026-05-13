@@ -173,19 +173,27 @@ $requiredDirs = @(
     "skills/workflow-spec-lite",
     "skills/memory-governance",
     "knowledge-hub/templates",
+    "knowledge-hub/templates/project-memory/en",
+    "knowledge-hub/templates/project-memory/zh-CN",
     "knowledge-hub/scripts",
     "knowledge-hub/knowledge/experience",
     "knowledge-hub/knowledge/patterns",
     "knowledge-hub/knowledge/standards",
-    "knowledge-hub/knowledge/domain-packs"
+    "knowledge-hub/knowledge/domain-packs",
+    "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en",
+    "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/zh-CN"
 )
 $missingDirs = @($requiredDirs | Where-Object { -not (Test-RequiredPath -RelativePath $_ -Directory) })
+$forbiddenDirs = @(
+    "skills/project-bootstrap/templates/project-memory"
+)
+$presentForbiddenDirs = @($forbiddenDirs | Where-Object { Test-RequiredPath -RelativePath $_ -Directory })
 
-if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0) {
-    Add-Check "public structure" "PASS" "Required release files, skills, docs, and knowledge hub paths exist."
+if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0 -and $presentForbiddenDirs.Count -eq 0) {
+    Add-Check "public structure" "PASS" "Required release files, skills, docs, knowledge hub paths, and project-memory authority paths exist; legacy standalone project-memory templates are absent."
 }
 else {
-    Add-Check "public structure" "FAIL" "Required public paths are missing." ([ordered]@{ files = $missingFiles; directories = $missingDirs })
+    Add-Check "public structure" "FAIL" "Required public paths are missing or forbidden legacy paths are present." ([ordered]@{ files = $missingFiles; directories = $missingDirs; forbidden_directories = $presentForbiddenDirs })
 }
 
 try {
@@ -890,22 +898,28 @@ try {
         "AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
         "knowledge-hub/templates/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
-        "skills/project-bootstrap/templates/project-memory/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
-        "skills/project-bootstrap/templates/project-memory/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
+        "knowledge-hub/templates/project-memory/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "knowledge-hub/templates/project-memory/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
     }
     $agentGuidanceFiles = [ordered]@{
         ".agents/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "knowledge-hub/templates/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "skills/project-bootstrap/templates/project-memory/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "skills/project-bootstrap/templates/project-memory/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+        "knowledge-hub/templates/project-memory/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "knowledge-hub/templates/project-memory/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
     }
     $commandGuidanceFiles = [ordered]@{
         ".agents/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
         "knowledge-hub/templates/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
-        "skills/project-bootstrap/templates/project-memory/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
-        "skills/project-bootstrap/templates/project-memory/zh-CN/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "高频、可复用的项目工作流命令", "不要凭空发明命令", "预期通过/失败证据")
+        "knowledge-hub/templates/project-memory/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "knowledge-hub/templates/project-memory/zh-CN/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "高频、可复用的项目工作流命令", "不要凭空发明命令", "预期通过/失败证据")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/zh-CN/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "高频、可复用的项目工作流命令", "不要凭空发明命令", "预期通过/失败证据")
     }
 
     $guidanceExpectations = [ordered]@{}
@@ -2278,10 +2292,12 @@ try {
         "docs/roadmap/evolution-plan.md",
         "knowledge-hub/templates/project-root/AGENTS.md",
         "knowledge-hub/templates/project-agent/AGENTS.md",
-        "skills/project-bootstrap/templates/project-memory/en/project-root/AGENTS.md",
-        "skills/project-bootstrap/templates/project-memory/en/project-agent/AGENTS.md",
+        "knowledge-hub/templates/project-memory/en/project-root/AGENTS.md",
+        "knowledge-hub/templates/project-memory/en/project-agent/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-root/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-agent/AGENTS.md",
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en/project-root/AGENTS.md",
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/en/project-agent/AGENTS.md",
         "skills/project-bootstrap/scripts/set_project_language.ps1",
         "skills/project-context-gate/SKILL.md",
         "scripts/validate-release.ps1"
@@ -2431,7 +2447,9 @@ try {
             [Parameter(Mandatory = $true)][string]$RuntimeDir
         )
 
-        $templateRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "templates" "project-memory"
+        $authorityRoot = Join-PathParts $RuntimeDir "knowledge-hub" "templates" "project-memory"
+        $snapshotRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "assets" "knowledge-hub-template" "templates" "project-memory"
+        $legacyRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "templates" "project-memory"
         $requiredRelativePaths = @(
             "project-root/AGENTS.md",
             "project-root/docs/specs/README.md",
@@ -2451,21 +2469,38 @@ try {
         )
 
         $missing = New-Object 'System.Collections.Generic.List[string]'
+        $mismatched = New-Object 'System.Collections.Generic.List[string]'
         foreach ($language in @("en", "zh-CN")) {
             foreach ($relativePath in $requiredRelativePaths) {
-                $templatePath = Join-PathParts $templateRoot $language $relativePath
-                if (-not (Test-Path -LiteralPath $templatePath)) {
-                    $missing.Add("$language/$relativePath")
+                $authorityPath = Join-PathParts $authorityRoot $language $relativePath
+                $snapshotPath = Join-PathParts $snapshotRoot $language $relativePath
+                if (-not (Test-Path -LiteralPath $authorityPath)) {
+                    $missing.Add("authority/$language/$relativePath")
+                }
+                if (-not (Test-Path -LiteralPath $snapshotPath)) {
+                    $missing.Add("snapshot/$language/$relativePath")
+                }
+                if ((Test-Path -LiteralPath $authorityPath) -and (Test-Path -LiteralPath $snapshotPath)) {
+                    $authorityHash = (Get-FileHash -LiteralPath $authorityPath -Algorithm SHA256).Hash
+                    $snapshotHash = (Get-FileHash -LiteralPath $snapshotPath -Algorithm SHA256).Hash
+                    if ($authorityHash -ne $snapshotHash) {
+                        $mismatched.Add("$language/$relativePath")
+                    }
                 }
             }
         }
+        if (Test-Path -LiteralPath $legacyRoot) {
+            $missing.Add("legacy standalone project-memory directory should not exist: $legacyRoot")
+        }
 
-        if ($missing.Count -gt 0) {
-            throw ("Project memory file templates are missing: {0}" -f ($missing.ToArray() -join "; "))
+        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0) {
+            throw ("Project memory file templates are missing, mismatched, or legacy paths remain. Missing: {0}; mismatched: {1}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "))
         }
 
         return [ordered]@{
-            template_root = $templateRoot
+            authority_root = $authorityRoot
+            bundled_snapshot_root = $snapshotRoot
+            legacy_root_absent = -not (Test-Path -LiteralPath $legacyRoot)
             languages = @("en", "zh-CN")
             checked_files_per_language = @($requiredRelativePaths)
         }
@@ -2476,7 +2511,7 @@ try {
             [Parameter(Mandatory = $true)][string]$RuntimeDir
         )
 
-        $sourceTemplateRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "templates" "project-memory"
+        $sourceTemplateRoot = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "assets" "knowledge-hub-template" "templates" "project-memory"
         $fallbackTemplateRoot = Join-PathParts $scratchRootFull "language-template-fallback-root"
         Copy-Item -LiteralPath $sourceTemplateRoot -Destination $fallbackTemplateRoot -Recurse -Force
 

@@ -7,18 +7,24 @@
 
 ## Repository Layout
 - Global hub: `%USERPROFILE%\.agents\knowledge-hub`
-- Shared templates: `templates/project-root/` and `templates/project-agent/`
+- Shared templates: `templates/project-root/`, `templates/project-agent/`,
+  and `templates/project-memory/<language>/`
 - Project lock: `<project>/.agents/hub.lock.json`
 
 ## Update Rules
-1. Treat `assets/knowledge-hub-template/` in the `project-bootstrap` skill repository as the editable source for shared templates.
-2. Sync those changes into the global hub with `scripts/init_hub.ps1 -Overwrite`.
-3. Commit changes in the hub repository after reviewing the synced diff.
-4. Re-run project bootstrap for target projects.
-5. Use default non-overwrite mode for safe upgrades.
-6. Use overwrite mode only when intentionally replacing local template files.
-7. Treat `<hub>/knowledge/experience/index.json` as generated hub state, not the canonical template source. Rebuild it from the installed hub contents after syncs or manual repair.
-8. Keep long-lived project artifacts such as `docs/specs/_templates/` under `templates/project-root/`; bootstrap must install the full project-root tree, not only `AGENTS.md`.
+1. Treat `knowledge-hub/templates/project-memory/<language>/` as the
+   authoritative source for project-memory language templates.
+2. Keep `assets/knowledge-hub-template/templates/project-memory/<language>/`
+   synchronized as the bundled runtime snapshot used by the bootstrap skill.
+3. Treat the remaining `assets/knowledge-hub-template/` shared templates as the
+   bundled source for ordinary hub bootstrap assets.
+4. Sync those changes into the global hub with `scripts/init_hub.ps1 -Overwrite`.
+5. Commit changes in the hub repository after reviewing the synced diff.
+6. Re-run project bootstrap for target projects.
+7. Use default non-overwrite mode for safe upgrades.
+8. Use overwrite mode only when intentionally replacing local template files.
+9. Treat `<hub>/knowledge/experience/index.json` as generated hub state, not the canonical template source. Rebuild it from the installed hub contents after syncs or manual repair.
+10. Keep long-lived project artifacts such as `docs/specs/_templates/` under `templates/project-root/`; bootstrap must install the full project-root tree, not only `AGENTS.md`.
 
 ## Lock Validation Workflow
 1. Run `scripts/check_hub_lock.ps1 -ProjectDir <project_path>` before assuming a project's pinned hub matches the installed hub.
