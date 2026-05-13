@@ -6,6 +6,12 @@
 - **Owner**: Codex
 - **Updated**: 2026-05-13
 
+> Historical note: this work package records the migration away from legacy
+> template paths. References to `templates/project-root`,
+> `templates/project-agent`, `templates/project-memory`, or
+> `skills/project-bootstrap/templates/project-memory/` describe removed legacy
+> state or negative validation, not current public template guidance.
+
 ## 1. Summary
 - Converge template directories after v0.4.1 so the repository exposes one
   language-scoped template entry model:

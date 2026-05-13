@@ -4,6 +4,12 @@
 - **Status**: Active
 - **Updated**: 2026-05-13
 
+> Historical note: this task plan records the migration away from legacy
+> template paths. References to `templates/project-root`,
+> `templates/project-agent`, `templates/project-memory`, or
+> `skills/project-bootstrap/templates/project-memory/` describe removed legacy
+> state or negative validation, not current public template guidance.
+
 ## Tasks
 
 - [x] T01: Create public issue, branch, and work package.

@@ -4,6 +4,11 @@
 - **Status**: Active
 - **Updated**: 2026-05-13
 
+> Historical note: this task plan records the intermediate `v0.4.1` authority
+> layout. References to `templates/project-memory` or
+> `skills/project-bootstrap/templates/project-memory/` are legacy history after
+> `v0.4.2`, not current public template guidance.
+
 ## Tasks
 
 - [x] T01: Create implementation branch and record issue scope.

@@ -4,6 +4,10 @@
 - **Status**: Active
 - **Updated**: 2026-05-13
 
+> Historical note: this task plan predates the `v0.4.2` language-scoped
+> template model. References to `skills/project-bootstrap/templates/project-memory/`
+> are legacy history, not current public template guidance.
+
 ## Tasks
 
 - [x] T01: Sync main and confirm issue dependency state

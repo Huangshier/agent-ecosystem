@@ -106,6 +106,7 @@ developer maintenance tooling after the kernel base flow is stable.
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
 - [Shell strategy](docs/shell-strategy.md)
+- [Template path reference audit](docs/template-path-reference-audit.md)
 - [v0.4.2 release notes](docs/releases/v0.4.2.md)
 - [v0.4.1 release notes](docs/releases/v0.4.1.md)
 - [v0.4.0 release notes](docs/releases/v0.4.0.md)

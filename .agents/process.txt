@@ -1,8 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.4.2`.
-- Active issue: #53 release records normalization for `v0.4.1` and `v0.4.2`.
-- Active public branch: `codex/issue-53-release-records`.
+- Active issue: #54 legacy template-path reference audit.
+- Active public branch: `codex/issue-54-legacy-template-path-audit`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -20,8 +20,8 @@ Completed
 - Public `scripts/validate-release.ps1` is the reusable release gate.
 - Release validation workflow has passed on Windows PowerShell 5.1, Windows
   PowerShell 7, Ubuntu, and macOS for prior release heads.
-- PR #50 released v0.4.1 and moved project-memory language templates under
-  `knowledge-hub/templates/project-memory/`.
+- PR #50 released v0.4.1 and moved project-memory language templates into the
+  intermediate v0.4.1 authority layout.
 - Issue #51 moved the template model to
   `knowledge-hub/templates/languages/en|zh-CN/project-root|project-agent` and
   the matching bundled snapshot under
@@ -41,7 +41,8 @@ Completed
   - #57 prepare the `v0.4.3` stabilization release.
 
 Next Actions
-- Finish issue #53 release-record updates, validate locally, and open a draft PR.
+- Finish issue #54 legacy template-path reference audit, validate locally, and
+  open a stacked draft PR.
 - Do not push directly to `main`.
 
 Blocking Issues

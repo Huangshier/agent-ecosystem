@@ -100,7 +100,8 @@ directories.
 - Final hosted CI release validation for the published `v0.4.0` main passed on
   Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
-- Project-memory template authority was consolidated in `v0.4.1`: public
+- Historical `v0.4.1` release state: project-memory template authority was
+  consolidated in `v0.4.1`. At that point, public
   templates moved under `knowledge-hub/templates/project-memory/`, the bundled
   project-bootstrap snapshot was synchronized, and the standalone
   `skills/project-bootstrap/templates/project-memory/` tree was removed.
@@ -237,3 +238,4 @@ The release validator now covers:
 - v0.4.0 release notes coverage
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
+- legacy template-path reference audit coverage

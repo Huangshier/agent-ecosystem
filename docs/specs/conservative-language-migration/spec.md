@@ -6,6 +6,10 @@
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-13
 
+> Historical note: this work package predates the `v0.4.2` language-scoped
+> template model. References to `skills/project-bootstrap/templates/project-memory/`
+> are legacy history, not current public template guidance.
+
 ## 1. Summary
 - Implement issue #30 by adding a conservative `en` / `zh-CN` project-memory
   migration workflow.
