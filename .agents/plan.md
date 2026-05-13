@@ -1,41 +1,32 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/project-memory-template-authority/spec.md` (Active)
+- `docs/specs/template-language-directory-convergence/spec.md` (Active)
 
 Current Task
-- Implement issue #49: refactor project-memory template authority to
-  `knowledge-hub/templates/project-memory/`, update bundled bootstrap assets,
-  remove the standalone `skills/project-bootstrap/templates/project-memory/`
-  tree, validate, and keep draft PR #50 ready for maintainer review.
+- Address narrow follow-up fixes on draft PR #52 for issue #51.
 
 Session Status
-- Working branch: `codex/issue-49-project-memory-authority`.
-- Issue #49 body and maintainer review note have been read.
-- Work package created under
-  `docs/specs/project-memory-template-authority/`.
-- Template authority move, script updates, document updates, and release
-  validation updates are implemented.
-- Release validation passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- PR #50 is open as a draft:
-  https://github.com/Huangshier/agent-ecosystem/pull/50
-- Current PR head SHA:
-  `54b2498366a611589638f1e8aac68c73c95c7b30`.
-- Hosted Release validation passed for the current head on Windows PowerShell
-  5.1, Windows PowerShell 7, Ubuntu, and macOS:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160
+- Working branch: `codex/issue-51-template-language-convergence`.
+- Issue #51 is open:
+  https://github.com/Huangshier/agent-ecosystem/issues/51
+- Template authority and bundled snapshot have been moved to the new language
+  layout.
+- `bootstrap_project.ps1`, `set_project_language.ps1`,
+  `language_migration.ps1`, `init_hub.ps1`, `check_hub_lock.ps1`, docs, and
+  release validation have been updated for the new structure.
+- Requested local checks passed:
+  - `git diff --check`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
+    with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
+- PR #52 is open as a draft:
+  https://github.com/Huangshier/agent-ecosystem/pull/52
 
 Next Work
-- Wait for maintainer review on draft PR #50.
+- Wait for maintainer review on draft PR #52.
 - Address review feedback if requested.
-- When approved, prepare PR #50 for ready-for-review; do not merge from this
-  session.
 
 Notes
 - Durable task state lives in
-  `docs/specs/project-memory-template-authority/tasks.md`.
-- Do not store private mappings, local paths, automation identity material, or
-  private audit findings here.
-- Do not push directly to `main`; do not expand this work to #30 migration
-  apply behavior.
-- Keep PR #50 as draft until maintainer explicitly approves ready-for-review.
+  `docs/specs/template-language-directory-convergence/tasks.md`.
+- Do not push directly to `main`; do not merge the draft PR from this session.

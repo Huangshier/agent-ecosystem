@@ -1,8 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.4.0`.
-- Active issue: #49 project-memory template authority refactor.
-- Active public branch: `codex/issue-49-project-memory-authority`.
+- Current published public release is `v0.4.1`.
+- Active issue: #51 template language directory convergence.
+- Active public branch: `codex/issue-51-template-language-convergence`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -14,53 +14,29 @@ Current State
 - Repository ruleset `protect-main` protects the default branch.
 
 Completed
-- `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, and `v0.4.0` have been published as GitHub
-  Releases.
+- `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.4.0`, and `v0.4.1` have been
+  published as GitHub Releases.
 - Public `scripts/validate-release.ps1` is the reusable release gate.
 - Release validation workflow has passed on Windows PowerShell 5.1, Windows
-  PowerShell 7, Ubuntu, and macOS.
-- PR #20 added minimal agent governance docs/templates and closed issue #19.
-- PR #24 normalized `v0.3.1` release readiness evidence and closed issue #21.
-- PR #26 documented the installed GitHub App identity and closed issue #25.
-- PR #28 added the end-to-end minimal project adoption walkthrough and closed
-  issue #22.
-- PR #34 documented validation-tier policy and closed issue #27.
-- PR #35 protected project memory upgrades and closed issues #29 and #31.
-- PR #37 added the PR-ready / phase-close engineering-memory sync gate and
-  closed issue #36.
-- PR #39 added validation scratch pruning and closed issue #38.
-- PR #40 clarified `project-bootstrap` operating modes and closed issue #33.
-- PR #41 added file-based `en` and `zh-CN` project memory templates and closed
-  issue #32.
-- PR #43 added issue triage label sync and closed issue #42.
-- PR #45 improved base AGENTS templates and closed issue #44.
-- PR #46 added deterministic conservative language migration scaffolding plus
-  manual-review routing for #30 Phase 1. Merged on 2026-05-13 at
-  `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
-- PR #47 added narrative language migration for #30 Phase 2. Merged on
-  2026-05-13 at `2beb8285803abe17daaea1d2eac590cb91d2aef0`.
-- Issue #30 closed on 2026-05-13. Conservative `en` / `zh-CN`
-  engineering-memory language migration is complete.
-- PR #48 released v0.4.0. Merged on 2026-05-13 at
-  `1736f9c82208977ad1cb78f312ecf0c0b64d4e34`.
-- Issue #49 implementation branch has moved project-memory language templates
-  to `knowledge-hub/templates/project-memory/`, synchronized the bundled
-  project-bootstrap snapshot, removed
-  `skills/project-bootstrap/templates/project-memory/`, and updated validation.
-- Local release validation for #49 passed:
-  `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- PR #50 is open as a draft for #49:
-  https://github.com/Huangshier/agent-ecosystem/pull/50
-- PR #50 current head SHA:
-  `54b2498366a611589638f1e8aac68c73c95c7b30`.
-- Hosted Release validation succeeded for that head on Windows PowerShell 5.1,
-  Windows PowerShell 7, Ubuntu, and macOS:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160
+  PowerShell 7, Ubuntu, and macOS for prior release heads.
+- PR #50 released v0.4.1 and moved project-memory language templates under
+  `knowledge-hub/templates/project-memory/`.
+- Issue #51 was opened on 2026-05-13:
+  https://github.com/Huangshier/agent-ecosystem/issues/51
+- Issue #51 implementation has moved the template model to
+  `knowledge-hub/templates/languages/en|zh-CN/project-root|project-agent` and
+  the matching bundled snapshot under
+  `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/`.
+- PR #52 is open as a draft for #51:
+  https://github.com/Huangshier/agent-ecosystem/pull/52
+- Local requested validation for #51 passed:
+  - `git diff --check`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
+    with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
 
 Next Actions
-- Wait for maintainer review on draft PR #50.
+- Wait for maintainer review on draft PR #52.
 - Address review feedback if requested.
-- After maintainer approval, move PR #50 toward ready-for-review.
 - Do not push directly to `main`.
 
 Blocking Issues

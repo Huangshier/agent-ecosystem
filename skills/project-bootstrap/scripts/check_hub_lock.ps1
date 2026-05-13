@@ -53,10 +53,15 @@ function Get-GitValue {
 
 function Get-TemplateTreeHash {
     param(
-        [string]$HubRoot
+        [string]$HubRoot,
+        [string]$ProjectLanguage = "en"
     )
 
-    $templateRoot = Join-PathParts $HubRoot "templates"
+    if ([string]::IsNullOrWhiteSpace($ProjectLanguage)) {
+        $ProjectLanguage = "en"
+    }
+
+    $templateRoot = Join-PathParts $HubRoot "templates" "languages" $ProjectLanguage
     $projectRootTemplate = Join-PathParts $templateRoot "project-root"
     $projectAgentTemplate = Join-PathParts $templateRoot "project-agent"
     $records = @()
@@ -145,13 +150,18 @@ foreach ($project in $ProjectDir) {
     $currentBranch = Get-GitValue -RepoDir $effectiveHubDir -GitArgs @("rev-parse", "--abbrev-ref", "HEAD")
     $currentCommit = Get-GitValue -RepoDir $effectiveHubDir -GitArgs @("rev-parse", "--verify", "HEAD")
     $currentDirty = -not [string]::IsNullOrWhiteSpace((Get-GitValue -RepoDir $effectiveHubDir -GitArgs @("status", "--porcelain")))
-    $currentTemplateHash = Get-TemplateTreeHash -HubRoot $effectiveHubDir
+    $lockedProjectLanguage = Get-TrimmedString -Value $lock.project_language
+    if ([string]::IsNullOrWhiteSpace($lockedProjectLanguage)) {
+        $lockedProjectLanguage = "en"
+    }
+    $currentTemplateHash = Get-TemplateTreeHash -HubRoot $effectiveHubDir -ProjectLanguage $lockedProjectLanguage
 
     Write-Output ("Resolved hub dir: {0}" -f $effectiveHubDir)
     Write-Output ("Current hub remote: {0}" -f $currentRemote)
     Write-Output ("Current hub branch: {0}" -f $currentBranch)
     Write-Output ("Current hub commit: {0}" -f $currentCommit)
     Write-Output ("Current hub dirty: {0}" -f $currentDirty)
+    Write-Output ("Template language: {0}" -f $lockedProjectLanguage)
     Write-Output ("Current template hash: {0}" -f $currentTemplateHash)
 
     $differences = @()
