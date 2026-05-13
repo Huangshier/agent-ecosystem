@@ -1058,7 +1058,10 @@ function Get-NarrativeRoute {
     if ($normalized.StartsWith("docs/specs/")) {
         return [ordered]@{ category = "durable_specs"; target_relative_path = $normalized }
     }
-    return [ordered]@{ category = "stable_facts"; target_relative_path = $normalized }
+    if ($normalized.StartsWith(".agents/")) {
+        return [ordered]@{ category = "project_rules"; target_relative_path = $normalized }
+    }
+    return [ordered]@{ category = "manual_review_only"; target_relative_path = $normalized }
 }
 
 function Convert-NarrativeText {
@@ -1204,7 +1207,7 @@ function Write-NarrativeProposal {
     Ensure-Dir -Path $narrativeDir
     $actions = New-Object 'System.Collections.Generic.List[object]'
 
-    foreach ($artifact in @(Get-ChildItem -LiteralPath $manualReviewDir -Recurse -File | Sort-Object FullName)) {
+    foreach ($artifact in @(Get-ChildItem -LiteralPath $manualReviewDir -Recurse -File -Force | Sort-Object FullName)) {
         $sourceRelative = Get-ManualReviewRelativePath -ProposalDir $baseProposalDir -ArtifactPath $artifact.FullName
         $route = Get-NarrativeRoute -RelativePath $sourceRelative
         $sourceText = Get-ManualReviewSourceText -ArtifactPath $artifact.FullName
@@ -1245,6 +1248,8 @@ function Write-NarrativeProposal {
         process_state = @($actionArray | Where-Object { [string]$_.category -eq "process_state" }).Count
         reusable_lessons = @($actionArray | Where-Object { [string]$_.category -eq "reusable_lessons" }).Count
         durable_specs = @($actionArray | Where-Object { [string]$_.category -eq "durable_specs" }).Count
+        project_rules = @($actionArray | Where-Object { [string]$_.category -eq "project_rules" }).Count
+        manual_review_only = @($actionArray | Where-Object { [string]$_.category -eq "manual_review_only" }).Count
         approved = 0
     }
 
@@ -1281,6 +1286,8 @@ function Write-NarrativeProposal {
     $lines += "- Active plan and process state route to concise hot memory updates."
     $lines += "- Reusable lessons route to `.agents/context/experience/`."
     $lines += "- Durable specs route to `docs/specs/`."
+    $lines += "- Project rules (other `.agents/` paths) stay in place; confirm routing before apply."
+    $lines += "- Unknown paths are flagged `manual_review_only`; confirm target and category before apply."
     $lines += ""
     $lines += "## Safety Rules"
     $lines += "- This is a deterministic narrative draft, not unattended perfect translation."
