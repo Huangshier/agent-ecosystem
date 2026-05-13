@@ -153,6 +153,7 @@ $requiredFiles = @(
     "docs/release-process.md",
     "docs/release-readiness.md",
     "docs/shell-strategy.md",
+    "docs/template-path-reference-audit.md",
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "docs/releases/v0.3.0.md",
@@ -207,6 +208,56 @@ if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0 -and $presentForbidd
 }
 else {
     Add-Check "public structure" "FAIL" "Required public paths are missing or forbidden legacy paths are present." ([ordered]@{ files = $missingFiles; directories = $missingDirs; forbidden_directories = $presentForbiddenDirs })
+}
+
+try {
+    $legacyReferencePattern = 'templates/project-root|templates/project-agent|templates/project-memory|project-bootstrap/templates/project-memory'
+    $allowedLegacyReferenceFiles = @(
+        "CHANGELOG.md",
+        "docs/release-readiness.md",
+        "docs/releases/v0.4.1.md",
+        "docs/releases/v0.4.2.md",
+        "docs/template-path-reference-audit.md",
+        "scripts/validate-release.ps1",
+        "skills/project-bootstrap/scripts/init_hub.ps1"
+    )
+    $legacyMatches = New-Object 'System.Collections.Generic.List[object]'
+    $unexpectedLegacyMatches = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($file in @(Get-GitFiles)) {
+        foreach ($match in @(Get-LineMatches -RelativePath $file -Pattern $legacyReferencePattern)) {
+            $legacyMatches.Add([object]$match)
+            $isAllowed = $false
+
+            if ($file -in $allowedLegacyReferenceFiles) {
+                $isAllowed = $true
+            }
+            elseif ($file -like "docs/specs/*") {
+                $fileText = Get-FileText -RelativePath $file
+                $isAllowed = ($fileText -match "Historical note:" -and $fileText -match "(legacy|superseded|removed|negative validation)")
+            }
+
+            if (-not $isAllowed) {
+                $unexpectedLegacyMatches.Add([object]$match)
+            }
+        }
+    }
+
+    $script:evidence.legacy_template_references = [ordered]@{
+        total_matches = $legacyMatches.Count
+        unexpected_matches = @($unexpectedLegacyMatches.ToArray())
+        allowed_files = @($allowedLegacyReferenceFiles)
+    }
+
+    if ($unexpectedLegacyMatches.Count -gt 0) {
+        Add-Check "legacy template path references" "FAIL" "Legacy template path references appeared outside allowed validator, remediation, or marked historical records." @($unexpectedLegacyMatches.ToArray())
+    }
+    else {
+        Add-Check "legacy template path references" "PASS" ("Legacy template path references are limited to validator/remediation logic or marked historical records ({0} matches)." -f $legacyMatches.Count) $evidence.legacy_template_references
+    }
+}
+catch {
+    Add-Check "legacy template path references" "FAIL" $_.Exception.Message
 }
 
 try {

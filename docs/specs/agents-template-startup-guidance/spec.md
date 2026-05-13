@@ -6,6 +6,11 @@
 - **Owner**: Agent
 - **Updated**: 2026-05-13
 
+> Historical note: this work package predates the `v0.4.2` language-scoped
+> template model. References to `templates/project-root`,
+> `templates/project-agent`, and `skills/project-bootstrap/templates/project-memory/`
+> are legacy history, not current public template guidance.
+
 ## 1. Summary
 - Implement issue #44 by tightening the base project-bootstrap AGENTS templates and related mirrored guidance so generated projects encourage lean startup context, documented project commands, PR-ready memory sync, and reviewable planning for large issues.
 

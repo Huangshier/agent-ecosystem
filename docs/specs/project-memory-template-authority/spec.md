@@ -6,6 +6,12 @@
 - **Owner**: Codex
 - **Updated**: 2026-05-13
 
+> Historical note: this work package records the intermediate `v0.4.1`
+> authority layout. References to `templates/project-root`,
+> `templates/project-agent`, `templates/project-memory`, and
+> `skills/project-bootstrap/templates/project-memory/` are legacy history after
+> `v0.4.2`, not current public template guidance.
+
 ## 1. Summary
 - Refactor project-memory template ownership for issue #49 so
   `knowledge-hub/templates/project-memory/en|zh-CN/**` is the authority,
