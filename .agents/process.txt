@@ -1,8 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.4.2`.
-- Active issue: #55 existing project upgrade path after `v0.4.2`.
-- Active public branch: `codex/issue-55-existing-project-upgrade-path`.
+- Active issue: #57 `v0.4.3` stabilization release prep.
+- Active public branch: `codex/issue-57-v0.4.3-release-prep`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -39,10 +39,14 @@ Completed
   - #56 define domain-pack governance lifecycle without enabling expansion
     (deferred).
   - #57 prepare the `v0.4.3` stabilization release.
+- Draft stabilization PR stack:
+  - #58 for issue #53, base `main`.
+  - #59 for issue #54, base `codex/issue-53-release-records`.
+  - #60 for issue #55, base `codex/issue-54-legacy-template-path-audit`.
 
 Next Actions
-- Finish issue #55 existing project upgrade guidance, validate locally, and
-  open a stacked draft PR.
+- Finish issue #57 release-prep metadata, validate locally, and open the final
+  stacked draft PR for maintainer review.
 - Do not push directly to `main`.
 
 Blocking Issues
