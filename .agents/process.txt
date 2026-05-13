@@ -27,14 +27,16 @@ Completed
   `knowledge-hub/templates/languages/en|zh-CN/project-root|project-agent` and
   the matching bundled snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/`.
+- PR #52 is open as a draft for #51:
+  https://github.com/Huangshier/agent-ecosystem/pull/52
 - Local requested validation for #51 passed:
   - `git diff --check`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
 
 Next Actions
-- Commit the #51 implementation, push the topic branch, and open a draft PR.
-- After the draft PR exists, wait for maintainer review.
+- Wait for maintainer review on draft PR #52.
+- Address review feedback if requested.
 - Do not push directly to `main`.
 
 Blocking Issues

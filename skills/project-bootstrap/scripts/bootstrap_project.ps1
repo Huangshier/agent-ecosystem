@@ -103,8 +103,24 @@ function Normalize-RelativePath {
     return (($Path -replace "\\", "/").TrimStart("/"))
 }
 
+function Join-CodePoints {
+    param([int[]]$CodePoints)
+    return -join ($CodePoints | ForEach-Object { [char]$_ })
+}
+
 function Resolve-BootstrapProjectLanguage {
     param([string]$Language)
+
+    $zhAliases = @(
+        "zh",
+        "zh-cn",
+        "zh-hans",
+        "chinese",
+        "simplified-chinese",
+        "simplified chinese",
+        (Join-CodePoints @(0x4E2D, 0x6587)),
+        (Join-CodePoints @(0x7B80, 0x4F53, 0x4E2D, 0x6587))
+    )
 
     if ([string]::IsNullOrWhiteSpace($Language)) {
         return "en"
@@ -114,7 +130,7 @@ function Resolve-BootstrapProjectLanguage {
     if ($normalized -in @("en", "en-us", "english")) {
         return "en"
     }
-    if ($normalized -in @("zh", "zh-cn", "zh-hans", "chinese", "simplified-chinese", "simplified chinese")) {
+    if ($normalized -in $zhAliases) {
         return "zh-CN"
     }
 

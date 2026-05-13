@@ -43,10 +43,12 @@
   - Notes: `git diff --check` passed. Release validation passed with
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] T06: Commit, push topic branch, and open draft PR.
+- [x] T06: Commit, push topic branch, and open draft PR.
   - Scope: only #51 implementation and required public memory/spec updates.
   - Validation: draft PR exists with issue link; no direct push to `main`.
-  - Notes:
+  - Notes: PR #52 is open as draft at
+    https://github.com/Huangshier/agent-ecosystem/pull/52. Release validation
+    passed locally with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## Task-to-Spec Notes
 - Plain bootstrap must map to the `en` language templates.
@@ -86,9 +88,10 @@
   - Validation: `git diff --check`; release validation command.
   - Continue / stop decision: Continue; requested checks passed.
 
-- [ ] P05: Complete phase 5 and record validation.
+- [x] P05: Complete phase 5 and record validation.
   - Goal: Draft PR is opened from the topic branch.
   - Inputs: validated working tree changes.
   - Outputs: commit, pushed branch, draft PR.
   - Validation: PR URL and branch status.
-  - Continue / stop decision:
+  - Continue / stop decision: Stop implementation; PR #52 is draft and waiting
+    for maintainer review or follow-up feedback.

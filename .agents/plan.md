@@ -4,10 +4,7 @@ Active Spec
 - `docs/specs/template-language-directory-convergence/spec.md` (Active)
 
 Current Task
-- Implement issue #51: converge template directories to
-  `templates/languages/<language>/project-root|project-agent`, remove the old
-  `project-root`, `project-agent`, and `project-memory` template entry trees,
-  update scripts/docs/release validation, and open a draft PR.
+- Address narrow follow-up fixes on draft PR #52 for issue #51.
 
 Session Status
 - Working branch: `codex/issue-51-template-language-convergence`.
@@ -22,10 +19,12 @@ Session Status
   - `git diff --check`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
+- PR #52 is open as a draft:
+  https://github.com/Huangshier/agent-ecosystem/pull/52
 
 Next Work
-- Inspect final diff, commit, push the topic branch, and open a draft PR for
-  #51.
+- Wait for maintainer review on draft PR #52.
+- Address review feedback if requested.
 
 Notes
 - Durable task state lives in
