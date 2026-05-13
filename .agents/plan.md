@@ -15,16 +15,19 @@ Session Status
   conservative migration; avoid arbitrary-language i18n and unattended
   translation claims.
 - Implementation and release validation are complete.
-- `git diff --check` passed.
+- PR #46 review blocking concerns have been addressed locally while keeping
+  scope limited to issue #30 conservative language migration.
+- `git diff --check` passed after the blocking-concern fixes.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- PR-ready memory sync is complete before PR creation.
+  passed after the blocking-concern fixes with `PASS=40 FAIL=0 WARN=0
+  DEFERRED=0`.
+- PR body validation evidence and conservative completion scope have been
+  updated while keeping PR #46 draft.
 
 Next Work
-- Inspect the final diff, commit the scoped #30 changes, push the branch, and
-  open a draft PR.
-- After PR creation, do not add a memory-only follow-up commit solely to refresh
-  memory state or hosted-check timestamps unless explicitly approved.
+- Push the scoped PR #46 review-fix commit if needed.
+- Keep PR #46 draft; do not merge or mark ready for review. Wait for maintainer
+  review after the pushed fix commit.
 
 Notes
 - Durable task state lives in

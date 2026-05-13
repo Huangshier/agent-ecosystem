@@ -400,6 +400,24 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) {
     throw "Project directory does not exist: $ProjectDir"
 }
 
+$languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
+if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent) {
+    if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
+        throw "Language migration helper not found: $languageMigrationScript"
+    }
+
+    if ($AnalyzeLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Analyze -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
+    } elseif ($PlanLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
+    } elseif ($ApplyLanguageMigration.IsPresent) {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Apply -MigrationPlan $MigrationPlan
+    } else {
+        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Validate -MigrationPlan $MigrationPlan
+    }
+    return
+}
+
 $templateRoot = Join-PathParts $HubDir "templates"
 $projectRootTemplate = Join-PathParts $templateRoot "project-root"
 $projectAgentTemplate = Join-PathParts $templateRoot "project-agent"
@@ -717,22 +735,7 @@ if ($null -ne $languageResult) {
 Write-Output "Lock file: $lockPath"
 
 $memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"
-$languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
-if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent) {
-    if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
-        throw "Language migration helper not found: $languageMigrationScript"
-    }
-
-    if ($AnalyzeLanguageMigration.IsPresent) {
-        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Analyze -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
-    } elseif ($PlanLanguageMigration.IsPresent) {
-        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Plan -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage
-    } elseif ($ApplyLanguageMigration.IsPresent) {
-        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Apply -MigrationPlan $MigrationPlan
-    } else {
-        & $languageMigrationScript -ProjectDir $ProjectDir -Mode Validate -MigrationPlan $MigrationPlan
-    }
-} elseif ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent -or $AutoUpgrade.IsPresent) {
+if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyMemoryUpgrade.IsPresent -or $AutoUpgrade.IsPresent) {
     if (-not (Test-Path -LiteralPath $memoryUpgradeScript)) {
         throw "Memory upgrade helper not found: $memoryUpgradeScript"
     }

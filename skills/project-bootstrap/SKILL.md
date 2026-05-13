@@ -73,7 +73,7 @@ Optional flags:
 - `-AnalyzeLanguageMigration -SourceLanguage en|zh-CN -TargetLanguage en|zh-CN`: inspect existing project memory for conservative language migration without editing memory.
 - `-PlanLanguageMigration -SourceLanguage en|zh-CN -TargetLanguage en|zh-CN`: write a reviewable language migration proposal and create the required backup before apply.
 - `-ApplyLanguageMigration -MigrationPlan <proposal.json>`: apply approved language migration actions after review, requiring the proposal and recorded backup.
-- `-ValidateLanguageMigration -MigrationPlan <proposal.json>`: validate result metadata, backup presence, migration metadata, and manual-review markers.
+- `-ValidateLanguageMigration -MigrationPlan <proposal.json>`: validate result metadata, backup presence, migration metadata, per-action output hashes, and manual-review source hash records.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
@@ -186,8 +186,9 @@ Behavior:
 - Apply mode requires the proposal and recorded backup, then refuses to write if
   a planned source file changed after planning.
 - Exact source-template matches are replaced with target-language templates.
-- Customized project content is preserved verbatim in manual-review sections or
-  preserved unchanged when no matching target template exists.
+- Customized project content is preserved verbatim in manual-review sections,
+  routed to manual-review artifacts for concise hot memory, or preserved
+  unchanged when no matching target template exists.
 - Commands, paths, API names, filenames, commit types, raw errors, and code
   symbols remain in their original form because project-specific content is not
   machine-translated.

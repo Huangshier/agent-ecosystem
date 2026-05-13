@@ -40,9 +40,9 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `language_migration.ps1 -Mode Analyze -SourceLanguage en -TargetLanguage zh-CN` reports planned actions without editing memory.
 - `language_migration.ps1 -Mode Plan -SourceLanguage en -TargetLanguage zh-CN` writes a reviewable proposal under `.agents/language-migration/` and creates a backup under `.agents/_backup/language-migration-<timestamp>/`.
 - `language_migration.ps1 -Mode Apply -MigrationPlan <proposal.json>` requires the proposal and recorded backup, refuses changed source hashes, and applies only approved actions.
-- `language_migration.ps1 -Mode Validate -MigrationPlan <proposal.json>` checks result metadata, backup presence, migration metadata, and manual-review markers.
+- `language_migration.ps1 -Mode Validate -MigrationPlan <proposal.json>` checks result metadata, backup presence, migration metadata, per-action output hashes, and manual-review source hash records.
 - The same flow supports `zh-CN` to `en` by reversing `SourceLanguage` and `TargetLanguage`.
-- Target language templates are structural baselines. Customized project content is preserved verbatim, merged into a manual-review section, or left unchanged for manual review; the helper does not claim perfect unattended translation.
+- Target language templates are structural baselines. Customized project content is preserved verbatim, merged into a manual-review section, routed to a manual-review artifact for concise hot memory, or left unchanged for manual review; the helper does not claim perfect unattended translation.
 
 ## Operating Modes
 - Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.

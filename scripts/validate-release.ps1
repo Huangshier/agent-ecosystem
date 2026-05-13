@@ -1563,6 +1563,9 @@ try {
         & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -ProjectLanguage $SourceLanguage -SkipMemoryUpgradeAnalysis | Out-Host
 
         $agentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
+        $planPath = Join-PathParts $projectDir ".agents" "plan.md"
+        $processPath = Join-PathParts $projectDir ".agents" "process.txt"
+        $notesPath = Join-PathParts $projectDir ".agents" "notes.md"
         $contextPath = Join-PathParts $projectDir ".agents" "context" "experience" "migration-mixed.md"
         $specDir = Join-PathParts $projectDir "docs" "specs" "migration-custom-work"
         $specPath = Join-PathParts $specDir "spec.md"
@@ -1571,6 +1574,9 @@ try {
 
         $tokenLine = "Keep command git status, path src/app.py, API Get-FooBar, filename AGENTS.md, commit type feat, raw error ERROR_PATH_NOT_FOUND, and code symbol CustomThing unchanged."
         Add-Content -LiteralPath $agentGuidePath -Value ("`n## Custom API Notes`n- {0}" -f $tokenLine)
+        Add-Content -LiteralPath $planPath -Value ("`n## Long Running Plan`n- Hot memory source token: {0}" -f $tokenLine)
+        Add-Content -LiteralPath $processPath -Value ("`n## Long Running Process`n- Hot memory process token: {0}" -f $tokenLine)
+        Add-Content -LiteralPath $notesPath -Value ("`n## Stable Facts`n- Hot memory notes token: {0}" -f $tokenLine)
         Set-Content -LiteralPath $contextPath -Value @(
             "## Summary",
             "- Mixed language validation entry.",
@@ -1588,9 +1594,18 @@ try {
             "- $tokenLine"
         ) -Encoding UTF8
 
+        $lockPath = Join-PathParts $projectDir ".agents" "hub.lock.json"
+        $lockHashBeforeAnalyze = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash
         $bootstrapAnalyzeOutput = @(& $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -AnalyzeLanguageMigration -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage 3>&1)
         if (@($bootstrapAnalyzeOutput | Where-Object { $_ -match '^Language migration analyze:' }).Count -lt 1) {
             throw "Bootstrap language migration analyze routing did not call the helper."
+        }
+        if (@($bootstrapAnalyzeOutput | Where-Object { $_ -match '^Project bootstrap complete\.' }).Count -gt 0) {
+            throw "Bootstrap language migration analyze ran the normal bootstrap write path."
+        }
+        $lockHashAfterAnalyze = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash
+        if ($lockHashBeforeAnalyze -ne $lockHashAfterAnalyze) {
+            throw "Bootstrap language migration analyze modified .agents/hub.lock.json."
         }
 
         $analysis = & $languageMigrationScript -ProjectDir $projectDir -Mode Analyze -SourceLanguage $SourceLanguage -TargetLanguage $TargetLanguage -Json | ConvertFrom-Json
@@ -1619,6 +1634,18 @@ try {
         }
         if ([int]$plan.summary.template_replacements -lt 1) {
             throw "Language migration Plan did not identify source template replacements."
+        }
+        if ([int]$plan.summary.hot_memory_routes -lt 3) {
+            throw "Language migration Plan did not route customized hot memory to manual-review artifacts."
+        }
+
+        $otherProjectDir = Join-PathParts $scratchRootFull ("{0}-wrong-project" -f $Name)
+        New-Item -ItemType Directory -Force -Path $otherProjectDir | Out-Null
+        Assert-ApplyFails -ExpectedToken "project mismatch" -Command {
+            & $languageMigrationScript -ProjectDir $otherProjectDir -Mode Apply -MigrationPlan $proposalPath -Json
+        }
+        Assert-ApplyFails -ExpectedToken "project mismatch" -Command {
+            & $languageMigrationScript -ProjectDir $otherProjectDir -Mode Validate -MigrationPlan $proposalPath -Json
         }
 
         if ($ExerciseMissingBackupFailure.IsPresent) {
@@ -1654,6 +1681,31 @@ try {
         foreach ($token in @($ExpectedTargetMarker, "language-migration:manual-review-source begin", "git status", "src/app.py", "Get-FooBar", "AGENTS.md", "feat", "ERROR_PATH_NOT_FOUND", "CustomThing")) {
             if ($agentGuide -notlike ("*{0}*" -f $token)) {
                 throw "Language migration did not preserve expected token in .agents/AGENTS.md: $token"
+            }
+        }
+
+        foreach ($hotPath in @($planPath, $processPath, $notesPath)) {
+            $hotText = Get-Content -LiteralPath $hotPath -Raw
+            if ($hotText -notlike ("*{0}*" -f $ExpectedTargetMarker)) {
+                throw "Language migration did not write target marker to hot memory file: $hotPath"
+            }
+            if ($hotText -like "*language-migration:manual-review-source begin*" -or $hotText -like "*Hot memory source token*" -or $hotText -like "*Hot memory process token*" -or $hotText -like "*Hot memory notes token*") {
+                throw "Language migration inflated hot memory instead of routing source content to an artifact: $hotPath"
+            }
+        }
+
+        $hotArtifacts = @($apply.apply_result.actions | Where-Object { [string]$_.action -eq "route-hot-memory-manual-review" })
+        if ($hotArtifacts.Count -lt 3) {
+            throw "Language migration Apply did not record hot memory manual-review artifacts."
+        }
+        foreach ($hotArtifact in $hotArtifacts) {
+            $artifactPath = [string]$hotArtifact.manual_review_artifact
+            if ([string]::IsNullOrWhiteSpace($artifactPath) -or -not (Test-Path -LiteralPath $artifactPath)) {
+                throw "Language migration hot memory manual-review artifact is missing."
+            }
+            $artifactText = Get-Content -LiteralPath $artifactPath -Raw
+            if ($artifactText -notlike "*language-migration:manual-review-source begin*" -or $artifactText -notlike "*ERROR_PATH_NOT_FOUND*" -or $artifactText -notlike "*source_hash_sha256:*") {
+                throw "Language migration hot memory artifact did not preserve source review evidence."
             }
         }
 

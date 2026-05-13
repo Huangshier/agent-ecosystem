@@ -43,6 +43,18 @@ function Normalize-RelativePath {
     return (($Path -replace "\\", "/").TrimStart("/"))
 }
 
+function Get-ComparableFullPath {
+    param([string]$Path)
+    return ([System.IO.Path]::GetFullPath($Path)).TrimEnd([char[]]"\/")
+}
+
+function Test-HotMemoryPath {
+    param([string]$RelativePath)
+
+    $normalized = Normalize-RelativePath -Path $RelativePath
+    return ($normalized -in @(".agents/plan.md", ".agents/process.txt", ".agents/notes.md"))
+}
+
 function Read-Utf8Text {
     param([string]$Path)
     $encoding = New-Object System.Text.UTF8Encoding($false, $true)
@@ -296,6 +308,12 @@ function New-MigrationAction {
         $reason = "File is missing and target language template exists."
         $writes_file = $true
         $approved = $true
+    } elseif ($exists -and $null -ne $targetTemplate -and (Test-HotMemoryPath -RelativePath $RelativePath)) {
+        $action = "route-hot-memory-manual-review"
+        $reason = "Hot memory has project-specific content; write the concise target template and route original content to a manual-review artifact."
+        $writes_file = $true
+        $manualReview = $true
+        $approved = $true
     } elseif ($exists -and $null -ne $targetTemplate) {
         $action = "merge-with-manual-review"
         $reason = "Existing file has project-specific content; write target template and preserve original content in a manual-review section."
@@ -354,6 +372,7 @@ function Get-MigrationAnalysis {
         template_replacements = @($actionArray | Where-Object { [string]$_.action -eq "replace-template" }).Count
         target_template_additions = @($actionArray | Where-Object { [string]$_.action -eq "add-target-template" }).Count
         merge_with_manual_review = @($actionArray | Where-Object { [string]$_.action -eq "merge-with-manual-review" }).Count
+        hot_memory_routes = @($actionArray | Where-Object { [string]$_.action -eq "route-hot-memory-manual-review" }).Count
     }
 
     return [ordered]@{
@@ -463,6 +482,7 @@ function Write-MigrationProposal {
     $lines += "## Safety Rules"
     $lines += "- Target language templates are structural baselines, not overwrite authority."
     $lines += "- Project-specific content is preserved verbatim or routed to manual review."
+    $lines += "- Hot memory files are kept concise; their original source content is routed to manual-review artifacts instead of being appended back into hot memory."
     $lines += "- Commands, paths, API names, filenames, commit types, raw errors, and code symbols remain unchanged because customized content is not machine-translated."
     $lines += "- Apply mode refuses to write when this proposal or the recorded backup is missing."
     $lines += "- Apply mode refuses to write when a planned source file hash changed after planning."
@@ -492,6 +512,7 @@ function Add-ManualReviewSection {
     param(
         [string]$TargetTemplateText,
         [string]$SourceText,
+        [string]$SourceHash,
         [string]$SourceLanguageCode,
         [string]$TargetLanguageCode
     )
@@ -510,10 +531,40 @@ function Add-ManualReviewSection {
     }
     $lines += ""
     $lines += "<!-- language-migration:manual-review-source begin -->"
-    $lines += ("<!-- source_language: {0}; target_language: {1} -->" -f $SourceLanguageCode, $TargetLanguageCode)
+    $lines += ("<!-- source_language: {0}; target_language: {1}; source_hash_sha256: {2} -->" -f $SourceLanguageCode, $TargetLanguageCode, $SourceHash)
     $lines += $SourceText.TrimEnd()
     $lines += "<!-- language-migration:manual-review-source end -->"
     return ($lines -join "`r`n") + "`r`n"
+}
+
+function Write-ManualReviewArtifact {
+    param(
+        [string]$ProposalDir,
+        [string]$RelativePath,
+        [string]$SourceText,
+        [string]$SourceHash,
+        [string]$SourceLanguageCode,
+        [string]$TargetLanguageCode
+    )
+
+    $artifactPath = Join-PathParts $ProposalDir "manual-review" $RelativePath
+    Ensure-Dir -Path (Split-Path -Parent $artifactPath)
+
+    $lines = @()
+    $lines += "# Language Migration Manual Review Source"
+    $lines += ""
+    $lines += ("- Path: {0}" -f $RelativePath)
+    $lines += ("- Source language: {0}" -f $SourceLanguageCode)
+    $lines += ("- Target language: {0}" -f $TargetLanguageCode)
+    $lines += ("- Source hash SHA256: {0}" -f $SourceHash)
+    $lines += ""
+    $lines += "<!-- language-migration:manual-review-source begin -->"
+    $lines += ("<!-- source_language: {0}; target_language: {1}; source_hash_sha256: {2} -->" -f $SourceLanguageCode, $TargetLanguageCode, $SourceHash)
+    $lines += $SourceText.TrimEnd()
+    $lines += "<!-- language-migration:manual-review-source end -->"
+
+    Write-Utf8TextWithBom -Path $artifactPath -Content ((($lines -join "`r`n") + "`r`n"))
+    return $artifactPath
 }
 
 function Read-MigrationPlan {
@@ -536,6 +587,19 @@ function Assert-PlanBackupReady {
     $backupDir = [string]$Plan.backup_dir
     if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
         throw "Migration apply requires an existing backup directory recorded in the proposal."
+    }
+}
+
+function Assert-PlanProjectMatchesCurrentProject {
+    param(
+        $Plan,
+        [string]$CurrentProjectDir
+    )
+
+    $plannedProject = Get-ComparableFullPath -Path ([string]$Plan.project)
+    $currentProject = Get-ComparableFullPath -Path $CurrentProjectDir
+    if (-not [string]::Equals($plannedProject, $currentProject, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ("Migration plan project mismatch. Current ProjectDir '{0}' does not match proposal project '{1}'." -f $currentProject, $plannedProject)
     }
 }
 
@@ -615,6 +679,7 @@ function Apply-MigrationPlan {
     $written = 0
     $manualReview = 0
     $appliedActions = New-Object 'System.Collections.Generic.List[object]'
+    $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
 
     foreach ($action in @($Plan.actions)) {
         $relative = [string]$action.relative_path
@@ -631,6 +696,7 @@ function Apply-MigrationPlan {
                 relative_path = $relative
                 action = $actionName
                 result = "skipped-unapproved"
+                final_hash_sha256 = Get-FileTextSha256 -Path $path
             }) | Out-Null
             continue
         }
@@ -647,6 +713,7 @@ function Apply-MigrationPlan {
                 relative_path = $relative
                 action = $actionName
                 result = "written-target-template"
+                final_hash_sha256 = Get-FileTextSha256 -Path $path
             }) | Out-Null
             continue
         }
@@ -660,8 +727,9 @@ function Apply-MigrationPlan {
             if (Test-Path -LiteralPath $path) {
                 $sourceText = Read-Utf8Text -Path $path
             }
+            $sourceHash = Get-TextSha256 -Text $sourceText
             $targetText = Read-Utf8Text -Path $targetTemplatePath
-            $merged = Add-ManualReviewSection -TargetTemplateText $targetText -SourceText $sourceText -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
+            $merged = Add-ManualReviewSection -TargetTemplateText $targetText -SourceText $sourceText -SourceHash $sourceHash -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
             Ensure-Dir -Path (Split-Path -Parent $path)
             Write-Utf8TextWithBom -Path $path -Content $merged
             $written++
@@ -669,6 +737,33 @@ function Apply-MigrationPlan {
                 relative_path = $relative
                 action = $actionName
                 result = "written-target-template-with-manual-review-source"
+                source_hash_sha256 = $sourceHash
+                final_hash_sha256 = Get-FileTextSha256 -Path $path
+            }) | Out-Null
+            continue
+        }
+
+        if ($actionName -eq "route-hot-memory-manual-review") {
+            $targetTemplatePath = [string]$action.target_template_path
+            if ([string]::IsNullOrWhiteSpace($targetTemplatePath) -or -not (Test-Path -LiteralPath $targetTemplatePath)) {
+                throw "Missing target template for $relative"
+            }
+            $sourceText = ""
+            if (Test-Path -LiteralPath $path) {
+                $sourceText = Read-Utf8Text -Path $path
+            }
+            $sourceHash = Get-TextSha256 -Text $sourceText
+            $artifactPath = Write-ManualReviewArtifact -ProposalDir $proposalDir -RelativePath $relative -SourceText $sourceText -SourceHash $sourceHash -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
+            Ensure-Dir -Path (Split-Path -Parent $path)
+            Write-Utf8TextWithBom -Path $path -Content (Read-Utf8Text -Path $targetTemplatePath)
+            $written++
+            $appliedActions.Add([ordered]@{
+                relative_path = $relative
+                action = $actionName
+                result = "written-target-template-source-routed-to-artifact"
+                manual_review_artifact = $artifactPath
+                source_hash_sha256 = $sourceHash
+                final_hash_sha256 = Get-FileTextSha256 -Path $path
             }) | Out-Null
             continue
         }
@@ -677,10 +772,10 @@ function Apply-MigrationPlan {
             relative_path = $relative
             action = $actionName
             result = "preserved"
+            final_hash_sha256 = Get-FileTextSha256 -Path $path
         }) | Out-Null
     }
 
-    $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
     $resultJson = Join-Path $proposalDir "result.json"
     $resultMarkdown = Join-Path $proposalDir "result.md"
 
@@ -735,6 +830,8 @@ function Validate-MigrationPlan {
     $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
     $resultJson = Join-Path $proposalDir "result.json"
     $lockPath = Join-PathParts $root ".agents" "hub.lock.json"
+    $result = $null
+    $resultActions = @()
 
     if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
         $valid = $false
@@ -743,6 +840,13 @@ function Validate-MigrationPlan {
     if (-not (Test-Path -LiteralPath $resultJson)) {
         $valid = $false
         $findings.Add([ordered]@{ severity = "error"; code = "missing_result"; message = "Migration result.json is missing."; path = $resultJson }) | Out-Null
+    } else {
+        $result = Get-Content -LiteralPath $resultJson -Raw | ConvertFrom-Json
+        $resultActions = @($result.actions)
+        if ($resultActions.Count -ne @($Plan.actions).Count) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "result_action_count_mismatch"; message = "result.json action count does not match proposal action count."; path = $resultJson }) | Out-Null
+        }
     }
     if (-not (Test-Path -LiteralPath $lockPath)) {
         $valid = $false
@@ -757,19 +861,114 @@ function Validate-MigrationPlan {
             $valid = $false
             $findings.Add([ordered]@{ severity = "error"; code = "missing_migration_metadata"; message = "Lock file lacks language_migration metadata."; path = $lockPath }) | Out-Null
         }
+        elseif ([string]$lock.language_migration.result -ne $resultJson) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "wrong_migration_result_path"; message = "Lock language_migration result path does not match the proposal result."; path = $lockPath }) | Out-Null
+        }
     }
 
-    foreach ($action in @($Plan.actions | Where-Object { [string]$_.action -eq "merge-with-manual-review" -and [bool]$_.approved })) {
-        $path = Join-PathParts $root ([string]$action.relative_path)
-        if (-not (Test-Path -LiteralPath $path)) {
-            $valid = $false
-            $findings.Add([ordered]@{ severity = "error"; code = "missing_merged_file"; message = "Merged manual-review file is missing."; path = $path }) | Out-Null
+    $planActions = @($Plan.actions)
+    for ($index = 0; $index -lt $planActions.Count; $index++) {
+        $action = $planActions[$index]
+        $resultAction = $null
+        if ($index -lt $resultActions.Count) {
+            $resultAction = $resultActions[$index]
+        }
+
+        $relative = [string]$action.relative_path
+        $actionName = [string]$action.action
+        $path = Join-PathParts $root $relative
+        $plannedSourceHash = [string]$action.current_hash_sha256
+        $targetTemplateHash = [string]$action.target_template_hash_sha256
+
+        if ($null -ne $resultAction) {
+            if ([string]$resultAction.relative_path -ne $relative -or [string]$resultAction.action -ne $actionName) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "result_action_mismatch"; message = "result.json action does not match the proposal action at the same index."; path = $relative }) | Out-Null
+            }
+        }
+
+        if ($actionName -eq "replace-template" -or $actionName -eq "add-target-template") {
+            if ([bool]$action.approved) {
+                $currentHash = Get-FileTextSha256 -Path $path
+                if ($currentHash -ne $targetTemplateHash) {
+                    $valid = $false
+                    $findings.Add([ordered]@{ severity = "error"; code = "target_template_hash_mismatch"; message = "Template write result does not match the planned target template hash."; path = $path }) | Out-Null
+                }
+            }
             continue
         }
-        $text = Read-Utf8Text -Path $path
-        if ($text -notlike "*language-migration:manual-review-source begin*") {
+
+        if ($actionName -eq "merge-with-manual-review" -and [bool]$action.approved) {
+            if (-not (Test-Path -LiteralPath $path)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_merged_file"; message = "Merged manual-review file is missing."; path = $path }) | Out-Null
+                continue
+            }
+            $text = Read-Utf8Text -Path $path
+            if ($text -notlike "*language-migration:manual-review-source begin*") {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_manual_review_marker"; message = "Merged file lacks manual-review source marker."; path = $path }) | Out-Null
+            }
+            if ($text -notlike ("*source_hash_sha256: {0}*" -f $plannedSourceHash)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "manual_review_source_hash_mismatch"; message = "Merged file does not record the planned source content hash."; path = $path }) | Out-Null
+            }
+            if ($null -ne $resultAction -and [string]$resultAction.source_hash_sha256 -ne $plannedSourceHash) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "result_source_hash_mismatch"; message = "result.json does not record the planned source content hash."; path = $relative }) | Out-Null
+            }
+            continue
+        }
+
+        if ($actionName -eq "route-hot-memory-manual-review" -and [bool]$action.approved) {
+            $currentHash = Get-FileTextSha256 -Path $path
+            if ($currentHash -ne $targetTemplateHash) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "hot_memory_template_hash_mismatch"; message = "Hot memory file does not match the planned concise target template."; path = $path }) | Out-Null
+            }
+            if ((Test-Path -LiteralPath $path) -and (Read-Utf8Text -Path $path) -like "*language-migration:manual-review-source begin*") {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "hot_memory_manual_review_inlined"; message = "Hot memory file contains an inline manual-review source section."; path = $path }) | Out-Null
+            }
+
+            $artifactPath = ""
+            if ($null -ne $resultAction) {
+                $artifactPath = [string]$resultAction.manual_review_artifact
+            }
+            if ([string]::IsNullOrWhiteSpace($artifactPath) -or -not (Test-Path -LiteralPath $artifactPath)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_hot_memory_artifact"; message = "Hot memory source content was not routed to a manual-review artifact."; path = $artifactPath }) | Out-Null
+            } else {
+                $artifactText = Read-Utf8Text -Path $artifactPath
+                if ($artifactText -notlike "*language-migration:manual-review-source begin*" -or $artifactText -notlike ("*source_hash_sha256: {0}*" -f $plannedSourceHash)) {
+                    $valid = $false
+                    $findings.Add([ordered]@{ severity = "error"; code = "hot_memory_artifact_hash_mismatch"; message = "Hot memory manual-review artifact does not record the planned source content hash."; path = $artifactPath }) | Out-Null
+                }
+            }
+            continue
+        }
+
+        if ($actionName -eq "preserve-manual-review") {
+            $currentHash = Get-FileTextSha256 -Path $path
+            if ($currentHash -ne $plannedSourceHash) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "preserved_hash_mismatch"; message = "Preserve-manual-review action changed the file hash."; path = $path }) | Out-Null
+            }
+        }
+    }
+
+    foreach ($action in @($Plan.actions | Where-Object { [bool]$_.exists })) {
+        $backupPath = Join-PathParts $backupDir ([string]$action.relative_path)
+        if (-not (Test-Path -LiteralPath $backupPath)) {
             $valid = $false
-            $findings.Add([ordered]@{ severity = "error"; code = "missing_manual_review_marker"; message = "Merged file lacks manual-review source marker."; path = $path }) | Out-Null
+            $findings.Add([ordered]@{ severity = "error"; code = "missing_backup_file"; message = "Backup is missing a source file recorded in the proposal."; path = $backupPath }) | Out-Null
+            continue
+        }
+        $backupHash = Get-FileTextSha256 -Path $backupPath
+        if ($backupHash -ne [string]$action.current_hash_sha256) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "backup_hash_mismatch"; message = "Backup source hash does not match the proposal."; path = $backupPath }) | Out-Null
         }
     }
 
@@ -799,6 +998,7 @@ $payload = $null
 
 if ($Mode -eq "Apply" -or $Mode -eq "Validate") {
     $plan = Read-MigrationPlan -PlanPath $MigrationPlan
+    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
     if ($Mode -eq "Apply") {
         $applyResult = Apply-MigrationPlan -Plan $plan
         $payload = [ordered]@{

@@ -77,14 +77,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\s
 Use `-SourceLanguage zh-CN -TargetLanguage en` for the reverse direction. Plan
 mode writes a reviewable proposal and creates the backup required by apply.
 Apply mode refuses to write if the proposal, backup, or planned source hashes no
-longer match.
+longer match. Apply and validate also refuse a proposal whose recorded project
+path differs from the current `-ProjectDir`.
 
 The file templates are structural baselines for scaffold generation, language
 updates, and conservative migration planning. They are not a reason to replace
 customized project memory with generic scaffolds. Exact source-template matches
 can be replaced with target-language templates. Project-specific narrative that
 cannot be safely migrated deterministically is preserved verbatim and routed to
-manual review instead of being silently translated or dropped.
+manual review instead of being silently translated or dropped. Concise hot
+memory files route original source content to migration artifacts instead of
+appending the full source back into `.agents/plan.md`,
+`.agents/process.txt`, or `.agents/notes.md`.
 
 Memory governance and upgrade diagnostics recognize English discovery headings
 and localized Simplified Chinese equivalents for context discovery metadata.

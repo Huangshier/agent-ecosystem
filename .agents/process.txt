@@ -44,12 +44,19 @@ Completed
   `git diff --check` and
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
   with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #46 review blocking concerns were addressed locally on 2026-05-13:
+  language migration analyze now bypasses normal bootstrap writes; apply and
+  validate reject mismatched `-ProjectDir` / proposal project paths; hot memory
+  source content routes to migration manual-review artifacts; validate performs
+  per-action output/hash checks. Revalidation passed with `PASS=40 FAIL=0
+  WARN=0 DEFERRED=0`.
 
 Next Actions
-- Commit the #30 scoped implementation, push the branch, and open a draft PR.
-- After the PR opens, wait for maintainer review; do not add a memory-only
-  follow-up commit solely to refresh state or hosted-check timestamps unless
-  explicitly approved.
+- Push the #30 scoped PR #46 review-fix commit if it has not already been
+  pushed, then keep PR #46 draft and wait for maintainer review.
+- PR body validation evidence and conservative completion scope have been
+  updated; do not add a memory-only follow-up commit solely to refresh state or
+  hosted-check timestamps.
 - Do not merge directly to `main`.
 
 Blocking Issues

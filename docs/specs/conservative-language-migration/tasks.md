@@ -40,8 +40,10 @@
   - Scope: Active spec/tasks plus `.agents/process.txt`, `.agents/plan.md`,
     and stable notes if needed.
   - Validation: `git diff --check` passed; full release validator passed;
-    staged diff inspection pending before commit.
-  - Notes: Stop after draft PR creation for maintainer review.
+    PR #46 blocking-concern fixes revalidated on 2026-05-13 with
+    `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+  - Notes: Draft PR #46 remains the review vehicle; completion scope should
+    stay conservative and avoid unattended-translation claims.
 
 ## Task-to-Spec Notes
 - The first PR is planned as a complete #30 implementation for deterministic
@@ -80,6 +82,6 @@
   - Goal: Produce draft PR and stop for maintainer review.
   - Inputs: Validated diff and public memory sync.
   - Outputs: Commit, pushed branch, draft PR.
-  - Validation: `git diff --check` and release validator passed; PR URL
-    pending.
+  - Validation: `git diff --check` and release validator passed; PR #46 review
+    blocking concerns were addressed and revalidated.
   - Continue / stop decision: Stop after draft PR creation.

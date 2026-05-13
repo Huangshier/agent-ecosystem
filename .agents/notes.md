@@ -94,3 +94,6 @@
 - Issue #30 conservative language migration implementation passed local
   validation on 2026-05-13 with `git diff --check` and
   `scripts/validate-release.ps1` reporting `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #46 blocking-concern fixes for issue #30 passed local validation on
+  2026-05-13 with `git diff --check` and `scripts/validate-release.ps1`
+  reporting `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.

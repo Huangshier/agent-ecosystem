@@ -64,14 +64,14 @@
   changes outside #30.
 
 ## 6. Assumptions
-- A first reviewable PR can complete #30 if it provides the deterministic
-  conservative workflow, documents the manual-review boundary, and validates the
+- A first reviewable PR can deliver the deterministic conservative migration
+  scaffold for #30 if it documents the manual-review boundary and validates the
   required safety properties.
 - Known scaffold/template text can be migrated by replacing matching source
   templates with the corresponding target template.
 - Customized files can be migrated conservatively by keeping target-language
   structural scaffolding where available and preserving the original
-  project-specific body in a manual-review section.
+  project-specific body in a manual-review section or migration artifact.
 
 ## 7. Risks
 - A deterministic helper may be mistaken for full automatic translation if docs
@@ -100,10 +100,16 @@
 - For exact source-template matches, apply writes the target template.
 - For customized files with a target template, apply writes the target template
   plus a clearly labeled project-specific source-content manual-review section.
+- For customized hot memory files, apply writes the concise target template and
+  routes the original source content to a manual-review artifact under
+  `.agents/language-migration/`.
 - For files without a target template, apply preserves the file unchanged and
   records manual review.
-- Validate mode checks proposal/result/backup metadata and verifies that project
-  language metadata was updated to the target language after apply.
+- Apply and Validate reject a proposal whose recorded project path differs from
+  the current `-ProjectDir`.
+- Validate mode checks proposal/result/backup metadata, per-action output
+  hashes, manual-review source hash records, and verifies that project language
+  metadata was updated to the target language after apply.
 - Extend release validation with fixture projects for both directions and the
   safety invariants requested by #30.
 
@@ -115,11 +121,17 @@
   - `en` project memory to `zh-CN` conservative migration.
   - `zh-CN` project memory to `en` conservative migration.
   - Mixed memory and project-specific content preservation.
+  - Read-only analyze through the bootstrap wrapper.
+  - Project path mismatch rejection for Apply and Validate.
+  - Concise hot memory with source content routed to manual-review artifacts.
+  - Per-action validation for template writes, manual-review source hashes,
+    preserved files, result actions, and backups.
   - Commands, paths, API names, filenames, commit types, raw errors, and code
     symbols remain unchanged.
   - Apply requires an existing proposal and backup.
-- PR body links #30, notes dependencies on #33/#32/#44, and states whether this
-  fully closes #30 or is a staged implementation.
+- PR body links #30, notes dependencies on #33/#32/#44, and states that this is
+  a deterministic conservative scaffold with manual-review routing, not
+  unattended translation of project-specific narrative.
 - Skipped or unavailable checks must be recorded before completion.
 
 Current evidence:
@@ -127,7 +139,12 @@ Current evidence:
   validation.
 - Full release validation includes a `conservative language migration` check
   covering both migration directions, mixed memory, project-specific
-  preservation, proposal-first apply, and backup-first apply.
+  preservation, read-only analyze, project path mismatch rejection, hot memory
+  artifact routing, per-action validation, proposal-first apply, and
+  backup-first apply.
+- PR #46 blocking concerns were addressed on 2026-05-13 and revalidated with
+  `git diff --check` plus `scripts/validate-release.ps1` reporting
+  `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## 10. Loop Contract
 - Not required. This is a bounded implementation and validation change.
@@ -153,5 +170,5 @@ Current evidence:
   `.agents/plan.md`, and `.agents/process.txt`.
 
 ## 12. Open Questions
-- None blocking. The PR will document that project-specific narrative may be
+- None blocking. The PR will document that project-specific narrative is
   preserved and routed to manual review instead of automatically translated.
