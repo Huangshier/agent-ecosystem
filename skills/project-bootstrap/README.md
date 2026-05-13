@@ -7,7 +7,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `scripts/init_hub.ps1`: initialize global knowledge-hub template repo and minimal runtime scripts
 - `scripts/bootstrap_project.ps1`: install/update project `.agents` scaffold; auto-initializes a missing hub template set from bundled assets
 - `scripts/set_project_language.ps1`: write first-session project memory language scaffolds when an agent/workflow supplies the language
-- `scripts/language_migration.ps1`: analyze, plan, apply, and validate conservative `en` / `zh-CN` project memory language migration
+- `scripts/language_migration.ps1`: analyze, plan, apply, and validate conservative `en` / `zh-CN` project memory language migration, including Phase 2 narrative proposals from manual-review artifacts
 - `scripts/memory_upgrade.ps1`: analyze, plan, and apply legacy project memory upgrades
 - `scripts/check_hub_lock.ps1`: compare project `hub.lock.json` against the installed hub git state
 - `scripts/promote_experience.ps1`: compatibility copy; prefer `knowledge-hub/scripts/promote_experience.ps1` for routine hub maintenance
@@ -41,8 +41,11 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `language_migration.ps1 -Mode Plan -SourceLanguage en -TargetLanguage zh-CN` writes a reviewable proposal under `.agents/language-migration/` and creates a backup under `.agents/_backup/language-migration-<timestamp>/`.
 - `language_migration.ps1 -Mode Apply -MigrationPlan <proposal.json>` requires the proposal and recorded backup, refuses changed source hashes, and applies only approved actions.
 - `language_migration.ps1 -Mode Validate -MigrationPlan <proposal.json>` checks result metadata, backup presence, migration metadata, per-action output hashes, and manual-review source hash records.
+- `language_migration.ps1 -Mode PlanNarrative -MigrationPlan <proposal.json>` reads Phase 1 `.agents/language-migration/<timestamp>/manual-review/` artifacts and writes a second, unapproved-by-default narrative proposal.
+- `language_migration.ps1 -Mode ApplyNarrative -MigrationPlan <narrative-proposal.json>` applies only reviewed narrative actions after checking the proposal, backup, source artifact hashes, and target file hashes.
+- `language_migration.ps1 -Mode ValidateNarrative -MigrationPlan <narrative-proposal.json>` validates the narrative result, source artifacts, backup, and review markers.
 - The same flow supports `zh-CN` to `en` by reversing `SourceLanguage` and `TargetLanguage`.
-- Target language templates are structural baselines. Customized project content is preserved verbatim, merged into a manual-review section, routed to a manual-review artifact for concise hot memory, or left unchanged for manual review; the helper does not claim perfect unattended translation.
+- Target language templates are structural baselines. Customized project content is preserved verbatim, merged into a manual-review section, routed to a manual-review artifact for concise hot memory, or left unchanged for manual review. The narrative phase creates deterministic translation drafts for ordinary prose, routes stable facts, active plan, process state, reusable lessons, and durable specs to the right memory surfaces, and still requires review before apply.
 
 ## Operating Modes
 - Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.

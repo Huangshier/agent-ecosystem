@@ -1574,9 +1574,9 @@ try {
 
         $tokenLine = "Keep command git status, path src/app.py, API Get-FooBar, filename AGENTS.md, commit type feat, raw error ERROR_PATH_NOT_FOUND, and code symbol CustomThing unchanged."
         Add-Content -LiteralPath $agentGuidePath -Value ("`n## Custom API Notes`n- {0}" -f $tokenLine)
-        Add-Content -LiteralPath $planPath -Value ("`n## Long Running Plan`n- Hot memory source token: {0}" -f $tokenLine)
-        Add-Content -LiteralPath $processPath -Value ("`n## Long Running Process`n- Hot memory process token: {0}" -f $tokenLine)
-        Add-Content -LiteralPath $notesPath -Value ("`n## Stable Facts`n- Hot memory notes token: {0}" -f $tokenLine)
+        Add-Content -LiteralPath $planPath -Value ("`n## Active Plan`n- The active rollout is paused until review.`n- Hot memory source token: {0}" -f $tokenLine)
+        Add-Content -LiteralPath $processPath -Value ("`n## Process State`n- Record the validated deployment fact.`n- Hot memory process token: {0}" -f $tokenLine)
+        Add-Content -LiteralPath $notesPath -Value ("`n## Stable Facts`n- Project uses feature flags.`n- Hot memory notes token: {0}" -f $tokenLine)
         Set-Content -LiteralPath $contextPath -Value @(
             "## Summary",
             "- Mixed language validation entry.",
@@ -1584,12 +1584,14 @@ try {
             "## Keywords",
             "- language migration, mixed memory",
             "",
+            "- Keep this lesson for future migrations.",
             "- 中文 mixed memory marker with ERROR_PATH_NOT_FOUND and src/app.py.",
             "- $tokenLine"
         ) -Encoding UTF8
         Set-Content -LiteralPath $specPath -Value @(
             "# Custom Migration Work",
             "",
+            "- The durable spec remains active.",
             "- Project-specific durable spec content must remain available.",
             "- $tokenLine"
         ) -Encoding UTF8
@@ -1722,6 +1724,58 @@ try {
             throw "Language migration did not replace exact source spec template with the target language template."
         }
 
+        $narrativePlan = & $languageMigrationScript -ProjectDir $projectDir -Mode PlanNarrative -MigrationPlan $proposalPath -Json | ConvertFrom-Json
+        $narrativeProposalPath = [string]$narrativePlan.proposal
+        if ([string]::IsNullOrWhiteSpace($narrativeProposalPath) -or -not (Test-Path -LiteralPath $narrativeProposalPath)) {
+            throw "Narrative language migration did not create narrative-proposal.json."
+        }
+        foreach ($category in @("stable_facts", "active_plan", "process_state", "reusable_lessons", "durable_specs")) {
+            if (@($narrativePlan.actions | Where-Object { [string]$_.category -eq $category }).Count -lt 1) {
+                throw "Narrative language migration did not route category: $category"
+            }
+        }
+        $narrativeProposal = Get-Content -LiteralPath $narrativeProposalPath -Raw | ConvertFrom-Json
+        foreach ($action in @($narrativeProposal.actions)) {
+            $action.approved = $true
+        }
+        $narrativeProposal | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $narrativeProposalPath -Encoding UTF8
+
+        $narrativeApply = & $languageMigrationScript -ProjectDir $projectDir -Mode ApplyNarrative -MigrationPlan $narrativeProposalPath -Json | ConvertFrom-Json
+        if ([int]$narrativeApply.apply_result.files_written -lt 5) {
+            throw "Narrative language migration did not apply routed narrative actions."
+        }
+        $narrativeValidate = & $languageMigrationScript -ProjectDir $projectDir -Mode ValidateNarrative -MigrationPlan $narrativeProposalPath -Json | ConvertFrom-Json
+        if (-not [bool]$narrativeValidate.validation.valid) {
+            throw "Narrative language migration did not validate."
+        }
+
+        $stableFactsPath = Join-PathParts $projectDir ".agents" "context" "tech" "language-migration-stable-facts.md"
+        $stableFactsText = Get-Content -LiteralPath $stableFactsPath -Raw
+        $planNarrativeText = Get-Content -LiteralPath $planPath -Raw
+        $processNarrativeText = Get-Content -LiteralPath $processPath -Raw
+        $contextNarrativeText = Get-Content -LiteralPath $contextPath -Raw
+        $specNarrativeText = Get-Content -LiteralPath $specPath -Raw
+        foreach ($textAndToken in @(
+            @($stableFactsText, "language-migration:narrative begin"),
+            @($planNarrativeText, "language-migration:narrative begin"),
+            @($processNarrativeText, "language-migration:narrative begin"),
+            @($contextNarrativeText, "language-migration:narrative begin"),
+            @($specNarrativeText, "language-migration:narrative begin"),
+            @($stableFactsText, "feature flags"),
+            @($contextNarrativeText, "ERROR_PATH_NOT_FOUND"),
+            @($specNarrativeText, "CustomThing")
+        )) {
+            if ([string]$textAndToken[0] -notlike ("*{0}*" -f [string]$textAndToken[1])) {
+                throw "Narrative language migration missing expected token: $($textAndToken[1])"
+            }
+        }
+        if ($TargetLanguage -eq "zh-CN" -and $stableFactsText -notlike "*项目使用 feature flags。*") {
+            throw "Narrative language migration did not draft zh-CN stable facts text."
+        }
+        if ($TargetLanguage -eq "en" -and $stableFactsText -notlike "*Project uses feature flags.*") {
+            throw "Narrative language migration did not draft English stable facts text."
+        }
+
         return [ordered]@{
             project = $projectDir
             source_language = $SourceLanguage
@@ -1733,7 +1787,10 @@ try {
             proposal = $proposalPath
             backup = $backupDir
             result = [string]$apply.apply_result.result
+            narrative_proposal = $narrativeProposalPath
+            narrative_result = [string]$narrativeApply.apply_result.result
             validated = [bool]$validate.validation.valid
+            narrative_validated = [bool]$narrativeValidate.validation.valid
         }
     }
 
@@ -1745,7 +1802,7 @@ try {
         fixtures = @($migrationEvidence)
     }
 
-    Add-Check "conservative language migration" "PASS" "Conservative en/zh-CN migration covers analyze, proposal, backup, apply, validate, mixed memory, and project-specific preservation." $evidence.language_migration
+    Add-Check "conservative language migration" "PASS" "Conservative en/zh-CN migration covers analyze, proposal, backup, apply, validate, narrative proposal routing, mixed memory, and project-specific preservation." $evidence.language_migration
 }
 catch {
     Add-Check "conservative language migration" "FAIL" $_.Exception.Message

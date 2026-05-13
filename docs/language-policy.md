@@ -72,6 +72,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\s
 powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
 powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyLanguageMigration -MigrationPlan <proposal.json>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanNarrativeMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
 ```
 
 Use `-SourceLanguage zh-CN -TargetLanguage en` for the reverse direction. Plan
@@ -79,6 +82,13 @@ mode writes a reviewable proposal and creates the backup required by apply.
 Apply mode refuses to write if the proposal, backup, or planned source hashes no
 longer match. Apply and validate also refuse a proposal whose recorded project
 path differs from the current `-ProjectDir`.
+
+The narrative follow-up reads retained manual-review artifacts and creates a
+second proposal. It routes stable facts to durable context, active plan and
+process state to concise hot memory updates, reusable lessons to
+`.agents/context/experience/`, and durable specs to `docs/specs/`. Narrative
+actions are unapproved by default; review the proposed target-language text
+before applying it.
 
 The file templates are structural baselines for scaffold generation, language
 updates, and conservative migration planning. They are not a reason to replace

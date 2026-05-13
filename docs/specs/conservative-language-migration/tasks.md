@@ -36,19 +36,32 @@
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
   - Notes: Fixtures are deterministic and local-only.
 
-- [ ] T05: PR-ready memory sync, validation, commit, push, draft PR
+- [x] T05: PR-ready memory sync, validation, commit, push, draft PR
   - Scope: Active spec/tasks plus `.agents/process.txt`, `.agents/plan.md`,
     and stable notes if needed.
   - Validation: `git diff --check` passed; full release validator passed;
     PR #46 blocking-concern fixes revalidated on 2026-05-13 with
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-  - Notes: Draft PR #46 remains the review vehicle; completion scope should
-    stay conservative and avoid unattended-translation claims.
+  - Notes: PR #46 merged on 2026-05-13 as #30 Phase 1. Completion scope is
+    deterministic conservative language migration scaffold plus manual-review
+    routing, not unattended narrative translation.
+
+- [x] T06: Implement Phase 2 narrative migration
+  - Scope: Extend `language_migration.ps1`, `bootstrap_project.ps1`, docs, and
+    release validation fixtures so Phase 1 manual-review artifacts can produce
+    a second reviewable narrative proposal, then apply approved narrative
+    outputs back into the correct target-language engineering-memory surfaces.
+  - Validation: `git diff --check` passed; `scripts/validate-release.ps1`
+    passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+  - Notes: Keep support limited to `en` / `zh-CN`; preserve commands, paths,
+    API names, filenames, commit types, raw errors, and code symbols verbatim;
+    keep hot memory concise.
 
 ## Task-to-Spec Notes
-- The first PR is planned as a complete #30 implementation for deterministic
-  conservative migration, with explicit manual-review routing for customized
-  narrative that cannot be safely translated without human or LLM review.
+- PR #46 completed #30 Phase 1: deterministic conservative migration scaffold
+  with explicit manual-review routing for customized narrative.
+- #30 Phase 2 remains incomplete until routed narrative content can be proposed,
+  reviewed, applied, and validated.
 
 ## Conditional Loop Tasks
 - Not applicable.
@@ -78,10 +91,23 @@
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue.
 
-- [ ] P04: Complete phase 4 and record validation
+- [x] P04: Complete phase 4 and record validation
   - Goal: Produce draft PR and stop for maintainer review.
   - Inputs: Validated diff and public memory sync.
   - Outputs: Commit, pushed branch, draft PR.
   - Validation: `git diff --check` and release validator passed; PR #46 review
     blocking concerns were addressed and revalidated.
-  - Continue / stop decision: Stop after draft PR creation.
+  - Continue / stop decision: Complete; PR #46 merged on 2026-05-13.
+
+- [x] P05: Complete Phase 2 narrative migration and record validation
+  - Goal: Convert Phase 1 manual-review artifacts into a second proposal that
+    routes narrative content by memory surface and applies only reviewed output.
+  - Inputs: `.agents/language-migration/<timestamp>/manual-review/` source
+    artifacts, Phase 1 proposal/result metadata, and target-language memory
+    files.
+  - Outputs: Narrative proposal/result metadata, concise hot memory updates,
+    routed context/spec updates, docs, and release validation fixtures.
+  - Validation: `git diff --check` and release validator passed with
+    `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+  - Continue / stop decision: Implementation complete; stop after opening a
+    draft Phase 2 PR.

@@ -4,30 +4,31 @@ Active Spec
 - `docs/specs/conservative-language-migration/spec.md` (Active)
 
 Current Task
-- Resolve issue #30 with a conservative `en` / `zh-CN` project-memory
-  migration workflow.
+- Finalize issue #30 Phase 2 draft PR: narrative migration for `en` /
+  `zh-CN` project-memory language migration.
 
 Session Status
-- Branch `issue-30-conservative-language-migration` is active.
-- `main` was synchronized to `origin/main` before branching.
-- Issues #30, #32, #33, and #44 plus related merged PRs were inspected.
-- PR split decision: implement one scoped draft PR for deterministic
-  conservative migration; avoid arbitrary-language i18n and unattended
-  translation claims.
-- Implementation and release validation are complete.
-- PR #46 review blocking concerns have been addressed locally while keeping
-  scope limited to issue #30 conservative language migration.
-- `git diff --check` passed after the blocking-concern fixes.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  passed after the blocking-concern fixes with `PASS=40 FAIL=0 WARN=0
-  DEFERRED=0`.
-- PR body validation evidence and conservative completion scope have been
-  updated while keeping PR #46 draft.
+- Branch `issue-30-narrative-language-migration` was created from latest
+  `origin/main` after PR #46 merged.
+- PR #46 merged on 2026-05-13 at merge commit
+  `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
+- #30 Phase 1 is complete: deterministic conservative language migration
+  scaffold plus manual-review routing.
+- Phase 1 intentionally does not claim unattended perfect translation of
+  project-specific narrative content.
+- Phase 2 implementation is complete locally: manual-review artifacts now feed
+  an unapproved-by-default narrative proposal, reviewed narrative actions can be
+  applied after backup/source/target hash checks, and validation covers both
+  directions.
+- Local validation passed on 2026-05-13:
+  `git diff --check` and
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
+  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 Next Work
-- Push the scoped PR #46 review-fix commit if needed.
-- Keep PR #46 draft; do not merge or mark ready for review. Wait for maintainer
-  review after the pushed fix commit.
+- Commit and push `issue-30-narrative-language-migration`.
+- Open a draft PR for #30 Phase 2.
+- Do not merge directly to `main`.
 
 Notes
 - Durable task state lives in

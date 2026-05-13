@@ -1,6 +1,6 @@
 param(
     [string]$ProjectDir = (Get-Location).Path,
-    [ValidateSet("Analyze", "Plan", "Apply", "Validate")]
+    [ValidateSet("Analyze", "Plan", "Apply", "Validate", "PlanNarrative", "ApplyNarrative", "ValidateNarrative")]
     [string]$Mode = "Analyze",
     [string]$SourceLanguage = "",
     [string]$TargetLanguage = "",
@@ -692,10 +692,16 @@ function Apply-MigrationPlan {
         }
 
         if (-not $approved) {
+            $artifactPath = ""
+            if ([bool]$action.manual_review -and (Test-Path -LiteralPath $path)) {
+                $sourceText = Read-Utf8Text -Path $path
+                $artifactPath = Write-ManualReviewArtifact -ProposalDir $proposalDir -RelativePath $relative -SourceText $sourceText -SourceHash (Get-TextSha256 -Text $sourceText) -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
+            }
             $appliedActions.Add([ordered]@{
                 relative_path = $relative
                 action = $actionName
                 result = "skipped-unapproved"
+                manual_review_artifact = $artifactPath
                 final_hash_sha256 = Get-FileTextSha256 -Path $path
             }) | Out-Null
             continue
@@ -730,6 +736,7 @@ function Apply-MigrationPlan {
             $sourceHash = Get-TextSha256 -Text $sourceText
             $targetText = Read-Utf8Text -Path $targetTemplatePath
             $merged = Add-ManualReviewSection -TargetTemplateText $targetText -SourceText $sourceText -SourceHash $sourceHash -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
+            $artifactPath = Write-ManualReviewArtifact -ProposalDir $proposalDir -RelativePath $relative -SourceText $sourceText -SourceHash $sourceHash -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
             Ensure-Dir -Path (Split-Path -Parent $path)
             Write-Utf8TextWithBom -Path $path -Content $merged
             $written++
@@ -737,6 +744,7 @@ function Apply-MigrationPlan {
                 relative_path = $relative
                 action = $actionName
                 result = "written-target-template-with-manual-review-source"
+                manual_review_artifact = $artifactPath
                 source_hash_sha256 = $sourceHash
                 final_hash_sha256 = Get-FileTextSha256 -Path $path
             }) | Out-Null
@@ -768,10 +776,16 @@ function Apply-MigrationPlan {
             continue
         }
 
+        $artifactPath = ""
+        if ($actionName -eq "preserve-manual-review" -and (Test-Path -LiteralPath $path)) {
+            $sourceText = Read-Utf8Text -Path $path
+            $artifactPath = Write-ManualReviewArtifact -ProposalDir $proposalDir -RelativePath $relative -SourceText $sourceText -SourceHash (Get-TextSha256 -Text $sourceText) -SourceLanguageCode ([string]$Plan.source_language) -TargetLanguageCode ([string]$Plan.target_language)
+        }
         $appliedActions.Add([ordered]@{
             relative_path = $relative
             action = $actionName
             result = "preserved"
+            manual_review_artifact = $artifactPath
             final_hash_sha256 = Get-FileTextSha256 -Path $path
         }) | Out-Null
     }
@@ -918,6 +932,14 @@ function Validate-MigrationPlan {
                 $valid = $false
                 $findings.Add([ordered]@{ severity = "error"; code = "result_source_hash_mismatch"; message = "result.json does not record the planned source content hash."; path = $relative }) | Out-Null
             }
+            $artifactPath = ""
+            if ($null -ne $resultAction) {
+                $artifactPath = [string]$resultAction.manual_review_artifact
+            }
+            if ([string]::IsNullOrWhiteSpace($artifactPath) -or -not (Test-Path -LiteralPath $artifactPath)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_manual_review_artifact"; message = "Merged manual-review source was not also routed to an artifact."; path = $artifactPath }) | Out-Null
+            }
             continue
         }
 
@@ -955,6 +977,14 @@ function Validate-MigrationPlan {
                 $valid = $false
                 $findings.Add([ordered]@{ severity = "error"; code = "preserved_hash_mismatch"; message = "Preserve-manual-review action changed the file hash."; path = $path }) | Out-Null
             }
+            $artifactPath = ""
+            if ($null -ne $resultAction) {
+                $artifactPath = [string]$resultAction.manual_review_artifact
+            }
+            if ([bool]$action.manual_review -and ([string]::IsNullOrWhiteSpace($artifactPath) -or -not (Test-Path -LiteralPath $artifactPath))) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_preserve_manual_review_artifact"; message = "Preserved manual-review source was not routed to an artifact."; path = $artifactPath }) | Out-Null
+            }
         }
     }
 
@@ -976,6 +1006,487 @@ function Validate-MigrationPlan {
         valid = [bool]$valid
         findings = @($findings.ToArray())
         backup_dir = $backupDir
+        result = $resultJson
+    }
+}
+
+function Get-ManualReviewSourceText {
+    param([string]$ArtifactPath)
+
+    $text = Read-Utf8Text -Path $ArtifactPath
+    $begin = "<!-- language-migration:manual-review-source begin -->"
+    $end = "<!-- language-migration:manual-review-source end -->"
+    $beginIndex = $text.IndexOf($begin, [System.StringComparison]::Ordinal)
+    $endIndex = $text.IndexOf($end, [System.StringComparison]::Ordinal)
+    if ($beginIndex -lt 0 -or $endIndex -lt 0 -or $endIndex -le $beginIndex) {
+        throw "Manual-review artifact is missing source markers: $ArtifactPath"
+    }
+
+    $sourceStart = $beginIndex + $begin.Length
+    $source = $text.Substring($sourceStart, $endIndex - $sourceStart)
+    $source = [regex]::Replace($source, '^\s*<!--\s*source_language:.*?-->\s*', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    return $source.Trim()
+}
+
+function Get-ManualReviewRelativePath {
+    param(
+        [string]$ProposalDir,
+        [string]$ArtifactPath
+    )
+
+    $manualRoot = Join-PathParts $ProposalDir "manual-review"
+    $relative = Normalize-RelativePath -Path ([System.IO.Path]::GetFullPath($ArtifactPath).Substring(([System.IO.Path]::GetFullPath($manualRoot)).Length).TrimStart([char[]]"\/"))
+    return $relative
+}
+
+function Get-NarrativeRoute {
+    param([string]$RelativePath)
+
+    $normalized = Normalize-RelativePath -Path $RelativePath
+    if ($normalized -eq ".agents/plan.md") {
+        return [ordered]@{ category = "active_plan"; target_relative_path = ".agents/plan.md" }
+    }
+    if ($normalized -eq ".agents/process.txt") {
+        return [ordered]@{ category = "process_state"; target_relative_path = ".agents/process.txt" }
+    }
+    if ($normalized -eq ".agents/notes.md") {
+        return [ordered]@{ category = "stable_facts"; target_relative_path = ".agents/context/tech/language-migration-stable-facts.md" }
+    }
+    if ($normalized.StartsWith(".agents/context/experience/")) {
+        return [ordered]@{ category = "reusable_lessons"; target_relative_path = $normalized }
+    }
+    if ($normalized.StartsWith("docs/specs/")) {
+        return [ordered]@{ category = "durable_specs"; target_relative_path = $normalized }
+    }
+    return [ordered]@{ category = "stable_facts"; target_relative_path = $normalized }
+}
+
+function Convert-NarrativeText {
+    param(
+        [string]$Text,
+        [string]$SourceLanguageCode,
+        [string]$TargetLanguageCode
+    )
+
+    $result = $Text
+    $pairs = @()
+    $zhStableFacts = Join-CodePoints @(0x7A33, 0x5B9A, 0x4E8B, 0x5B9E)
+    $zhActivePlan = Join-CodePoints @(0x5F53, 0x524D, 0x8BA1, 0x5212)
+    $zhProcessState = Join-CodePoints @(0x6D41, 0x7A0B, 0x72B6, 0x6001)
+    $zhReusableLessons = Join-CodePoints @(0x53EF, 0x590D, 0x7528, 0x7ECF, 0x9A8C)
+    $zhDurableSpecs = Join-CodePoints @(0x6301, 0x4E45, 0x89C4, 0x683C)
+    $zhCurrentState = Join-CodePoints @(0x5F53, 0x524D, 0x72B6, 0x6001)
+    $zhCurrentTask = Join-CodePoints @(0x5F53, 0x524D, 0x4EFB, 0x52A1)
+    $zhNextWork = Join-CodePoints @(0x4E0B, 0x4E00, 0x6B65, 0x5DE5, 0x4F5C)
+    $zhNextActions = Join-CodePoints @(0x4E0B, 0x4E00, 0x6B65, 0x884C, 0x52A8)
+    $zhBlockingIssues = Join-CodePoints @(0x963B, 0x585E, 0x95EE, 0x9898)
+    $zhProjectUses = Join-CodePoints @(0x9879, 0x76EE, 0x4F7F, 0x7528, 0x0020)
+    $zhPeriod = Join-CodePoints @(0x3002)
+    $zhCurrent = Join-CodePoints @(0x5F53, 0x524D, 0x0020)
+    $zhPausedReview = Join-CodePoints @(0x0020, 0x6682, 0x505C, 0xFF0C, 0x7B49, 0x5F85, 0x0020)
+    $zhRecordValidated = Join-CodePoints @(0x8BB0, 0x5F55, 0x5DF2, 0x9A8C, 0x8BC1, 0x7684, 0x0020)
+    $zhFactPeriod = Join-CodePoints @(0x0020, 0x4E8B, 0x5B9E, 0x3002)
+    $zhKeepLesson = Join-CodePoints @(0x4FDD, 0x7559, 0x8FD9, 0x6761, 0x0020)
+    $zhForFuture = Join-CodePoints @(0x0020, 0x4F9B, 0x540E, 0x7EED, 0x0020)
+    $zhReusePeriod = Join-CodePoints @(0x0020, 0x590D, 0x7528, 0x3002)
+    $zhDurable = Join-CodePoints @(0x6301, 0x4E45, 0x0020)
+    $zhStillActive = Join-CodePoints @(0x0020, 0x4ECD, 0x5904, 0x4E8E, 0x0020)
+    $zhStatePeriod = Join-CodePoints @(0x0020, 0x72B6, 0x6001, 0x3002)
+    $zhNarrativeTarget = Join-CodePoints @(0x53D9, 0x8FF0, 0x6027, 0x6587, 0x672C, 0x4F7F, 0x7528, 0x76EE, 0x6807, 0x8BED, 0x8A00, 0x3002)
+    $zhKeep = Join-CodePoints @(0x4FDD, 0x6301, 0x0020)
+    $zhAnd = Join-CodePoints @(0x0020, 0x548C, 0x0020)
+    $zhOriginalPeriod = Join-CodePoints @(0x0020, 0x539F, 0x6587, 0x3002)
+    if ($SourceLanguageCode -eq "en" -and $TargetLanguageCode -eq "zh-CN") {
+        $pairs = @(
+            @("Stable Facts", $zhStableFacts),
+            @("Active Plan", $zhActivePlan),
+            @("Process State", $zhProcessState),
+            @("Reusable Lessons", $zhReusableLessons),
+            @("Reusable Lesson", $zhReusableLessons),
+            @("Durable Specs", $zhDurableSpecs),
+            @("Durable Spec", $zhDurableSpecs),
+            @("Current State", $zhCurrentState),
+            @("Current Task", $zhCurrentTask),
+            @("Next Work", $zhNextWork),
+            @("Next Actions", $zhNextActions),
+            @("Blocking Issues", $zhBlockingIssues),
+            @("Project uses feature flags.", ($zhProjectUses + "feature flags" + $zhPeriod)),
+            @("The active rollout is paused until review.", ($zhCurrent + "rollout" + $zhPausedReview + "review" + $zhPeriod)),
+            @("Record the validated deployment fact.", ($zhRecordValidated + "deployment" + $zhFactPeriod)),
+            @("Keep this lesson for future migrations.", ($zhKeepLesson + "lesson" + $zhForFuture + "migration" + $zhReusePeriod)),
+            @("The durable spec remains active.", ($zhDurable + "spec" + $zhStillActive + "active" + $zhStatePeriod)),
+            @("Use the target language for narrative text.", $zhNarrativeTarget),
+            @("Keep commands and paths unchanged.", ($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod))
+        )
+    } elseif ($SourceLanguageCode -eq "zh-CN" -and $TargetLanguageCode -eq "en") {
+        $pairs = @(
+            @($zhStableFacts, "Stable Facts"),
+            @($zhActivePlan, "Active Plan"),
+            @($zhProcessState, "Process State"),
+            @($zhReusableLessons, "Reusable Lessons"),
+            @($zhDurableSpecs, "Durable Specs"),
+            @($zhCurrentState, "Current State"),
+            @($zhCurrentTask, "Current Task"),
+            @($zhNextWork, "Next Work"),
+            @($zhNextActions, "Next Actions"),
+            @($zhBlockingIssues, "Blocking Issues"),
+            @(($zhProjectUses + "feature flags" + $zhPeriod), "Project uses feature flags."),
+            @(($zhCurrent + "rollout" + $zhPausedReview + "review" + $zhPeriod), "The active rollout is paused until review."),
+            @(($zhRecordValidated + "deployment" + $zhFactPeriod), "Record the validated deployment fact."),
+            @(($zhKeepLesson + "lesson" + $zhForFuture + "migration" + $zhReusePeriod), "Keep this lesson for future migrations."),
+            @(($zhDurable + "spec" + $zhStillActive + "active" + $zhStatePeriod), "The durable spec remains active."),
+            @($zhNarrativeTarget, "Use the target language for narrative text."),
+            @(($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod), "Keep commands and paths unchanged.")
+        )
+    } else {
+        throw "Unsupported narrative migration direction. Supported values: en, zh-CN."
+    }
+
+    foreach ($pair in $pairs) {
+        $result = $result.Replace([string]$pair[0], [string]$pair[1])
+    }
+    return $result.Trim()
+}
+
+function Get-ConciseHotMemoryText {
+    param([string]$Text)
+
+    $lines = @($Text -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($lines.Count -le 12) {
+        return ($lines -join "`r`n")
+    }
+    $selected = @($lines | Select-Object -First 12)
+    $selected += "- Additional narrative remains in the narrative proposal for manual routing."
+    return ($selected -join "`r`n")
+}
+
+function New-NarrativeBackup {
+    param(
+        [string]$Root,
+        [array]$Actions,
+        [string]$Stamp
+    )
+
+    $backupDir = Join-PathParts $Root ".agents" "_backup" ("language-migration-narrative-{0}" -f $Stamp)
+    Ensure-Dir -Path $backupDir
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($action in @($Actions)) {
+        $relative = [string]$action.target_relative_path
+        $source = Join-PathParts $Root $relative
+        if (-not (Test-Path -LiteralPath $source)) {
+            continue
+        }
+        $destination = Join-PathParts $backupDir $relative
+        Ensure-Dir -Path (Split-Path -Parent $destination)
+        Copy-Item -LiteralPath $source -Destination $destination -Force
+        $records.Add([ordered]@{ relative_path = $relative; backup_path = $destination }) | Out-Null
+    }
+    return [ordered]@{
+        backup_dir = $backupDir
+        records = @($records.ToArray())
+    }
+}
+
+function Write-NarrativeProposal {
+    param(
+        [string]$Root,
+        $BasePlan
+    )
+
+    $baseProposalDir = Split-Path -Parent ([string]$MigrationPlan)
+    $manualReviewDir = Join-PathParts $baseProposalDir "manual-review"
+    if (-not (Test-Path -LiteralPath $manualReviewDir)) {
+        throw "Narrative migration requires Phase 1 manual-review artifacts: $manualReviewDir"
+    }
+
+    $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+    $narrativeDir = Join-PathParts $Root ".agents" "language-migration" $stamp
+    Ensure-Dir -Path $narrativeDir
+    $actions = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($artifact in @(Get-ChildItem -LiteralPath $manualReviewDir -Recurse -File | Sort-Object FullName)) {
+        $sourceRelative = Get-ManualReviewRelativePath -ProposalDir $baseProposalDir -ArtifactPath $artifact.FullName
+        $route = Get-NarrativeRoute -RelativePath $sourceRelative
+        $sourceText = Get-ManualReviewSourceText -ArtifactPath $artifact.FullName
+        $sourceHash = Get-TextSha256 -Text $sourceText
+        $targetRelative = [string]$route.target_relative_path
+        $targetPath = Join-PathParts $Root $targetRelative
+        $targetHash = Get-FileTextSha256 -Path $targetPath
+        $proposedText = Convert-NarrativeText -Text $sourceText -SourceLanguageCode ([string]$BasePlan.source_language) -TargetLanguageCode ([string]$BasePlan.target_language)
+        if (Test-HotMemoryPath -RelativePath $targetRelative) {
+            $proposedText = Get-ConciseHotMemoryText -Text $proposedText
+        }
+
+        $actions.Add([ordered]@{
+            source_artifact = $artifact.FullName
+            source_relative_path = $sourceRelative
+            source_hash_sha256 = $sourceHash
+            category = [string]$route.category
+            target_relative_path = $targetRelative
+            target_hash_sha256 = $targetHash
+            approved = $false
+            proposed_target_text = $proposedText
+            protected_tokens_note = "Review before apply. Commands, paths, API names, filenames, commit types, raw errors, and code symbols must remain unchanged."
+        }) | Out-Null
+    }
+
+    $actionArray = @($actions.ToArray())
+    if ($actionArray.Count -lt 1) {
+        throw "Narrative migration found no manual-review artifacts to propose."
+    }
+
+    $backup = New-NarrativeBackup -Root $Root -Actions $actionArray -Stamp $stamp
+    $proposalJson = Join-Path $narrativeDir "narrative-proposal.json"
+    $proposalMarkdown = Join-Path $narrativeDir "narrative-proposal.md"
+    $summary = [ordered]@{
+        total = $actionArray.Count
+        stable_facts = @($actionArray | Where-Object { [string]$_.category -eq "stable_facts" }).Count
+        active_plan = @($actionArray | Where-Object { [string]$_.category -eq "active_plan" }).Count
+        process_state = @($actionArray | Where-Object { [string]$_.category -eq "process_state" }).Count
+        reusable_lessons = @($actionArray | Where-Object { [string]$_.category -eq "reusable_lessons" }).Count
+        durable_specs = @($actionArray | Where-Object { [string]$_.category -eq "durable_specs" }).Count
+        approved = 0
+    }
+
+    $payload = [ordered]@{
+        schema_version = 1
+        proposal_type = "language-migration-narrative"
+        created_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+        project = $Root
+        source_language = [string]$BasePlan.source_language
+        target_language = [string]$BasePlan.target_language
+        base_proposal = [string]$MigrationPlan
+        base_result = (Join-Path $baseProposalDir "result.json")
+        backup_dir = [string]$backup.backup_dir
+        backup_paths = @($backup.records)
+        proposal_markdown = $proposalMarkdown
+        summary = $summary
+        actions = @($actionArray)
+    }
+    $payload | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $proposalJson -Encoding UTF8
+
+    $lines = @()
+    $lines += "# Language Migration Narrative Proposal"
+    $lines += ""
+    $lines += "- Project: $Root"
+    $lines += "- Source language: $($BasePlan.source_language)"
+    $lines += "- Target language: $($BasePlan.target_language)"
+    $lines += "- Base proposal: $MigrationPlan"
+    $lines += "- Backup: $($backup.backup_dir)"
+    $lines += "- Proposal JSON: $proposalJson"
+    $lines += "- Mode: review before apply; actions are unapproved by default"
+    $lines += ""
+    $lines += "## Routing"
+    $lines += "- Stable facts route to durable technical context."
+    $lines += "- Active plan and process state route to concise hot memory updates."
+    $lines += "- Reusable lessons route to `.agents/context/experience/`."
+    $lines += "- Durable specs route to `docs/specs/`."
+    $lines += ""
+    $lines += "## Safety Rules"
+    $lines += "- This is a deterministic narrative draft, not unattended perfect translation."
+    $lines += "- Review and edit `proposed_target_text`, then set `approved` to `true` before apply."
+    $lines += "- Apply refuses missing backup, changed source artifacts, and changed target files."
+    $lines += "- Keep commands, paths, API names, filenames, commit types, raw errors, and code symbols unchanged."
+    $lines += ""
+    $lines += "## Actions"
+    foreach ($action in $actionArray) {
+        $lines += ("- `{0}` -> `{1}` ({2}; approved: false)" -f [string]$action.source_relative_path, [string]$action.target_relative_path, [string]$action.category)
+        $lines += ("  - Source hash: {0}" -f [string]$action.source_hash_sha256)
+    }
+    Set-Content -LiteralPath $proposalMarkdown -Value $lines -Encoding UTF8
+
+    return [ordered]@{
+        proposal = $proposalJson
+        proposal_markdown = $proposalMarkdown
+        backup_dir = [string]$backup.backup_dir
+        summary = $summary
+        actions = @($actionArray)
+    }
+}
+
+function Read-NarrativePlan {
+    param([string]$PlanPath)
+
+    if ([string]::IsNullOrWhiteSpace($PlanPath) -or -not (Test-Path -LiteralPath $PlanPath)) {
+        throw "Narrative migration plan is required and must point to narrative-proposal.json."
+    }
+    $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
+    if ([int]$plan.schema_version -ne 1 -or [string]$plan.proposal_type -ne "language-migration-narrative") {
+        throw "Unsupported narrative migration proposal."
+    }
+    return $plan
+}
+
+function Assert-NarrativePlanReady {
+    param($Plan)
+
+    $backupDir = [string]$Plan.backup_dir
+    if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
+        throw "Narrative migration apply requires an existing backup directory recorded in the proposal."
+    }
+    foreach ($action in @($Plan.actions)) {
+        $sourceArtifact = [string]$action.source_artifact
+        if ([string]::IsNullOrWhiteSpace($sourceArtifact) -or -not (Test-Path -LiteralPath $sourceArtifact)) {
+            throw "Narrative migration source artifact is missing: $sourceArtifact"
+        }
+        $sourceHash = Get-TextSha256 -Text (Get-ManualReviewSourceText -ArtifactPath $sourceArtifact)
+        if ($sourceHash -ne [string]$action.source_hash_sha256) {
+            throw "Narrative migration source artifact changed after proposal: $sourceArtifact"
+        }
+        $targetPath = Join-PathParts ([string]$Plan.project) ([string]$action.target_relative_path)
+        $targetHash = Get-FileTextSha256 -Path $targetPath
+        if ($targetHash -ne [string]$action.target_hash_sha256) {
+            throw "Narrative migration target changed after proposal: $targetPath"
+        }
+    }
+}
+
+function Add-NarrativeSection {
+    param(
+        [string]$ExistingText,
+        [string]$Body,
+        [string]$SourceHash,
+        [string]$Category,
+        [string]$TargetLanguageCode
+    )
+
+    $zhHeading = Join-CodePoints @(0x8BED, 0x8A00, 0x8FC1, 0x79FB, 0x53D9, 0x8FF0, 0x63D0, 0x6848)
+    $heading = if ($TargetLanguageCode -eq "zh-CN") { "## $zhHeading" } else { "## Language Migration Narrative Proposal" }
+    $lines = @()
+    if (-not [string]::IsNullOrWhiteSpace($ExistingText)) {
+        $lines += $ExistingText.TrimEnd()
+        $lines += ""
+    }
+    $lines += $heading
+    $lines += ""
+    $lines += "<!-- language-migration:narrative begin -->"
+    $lines += ("<!-- category: {0}; source_hash_sha256: {1} -->" -f $Category, $SourceHash)
+    $lines += $Body.TrimEnd()
+    $lines += "<!-- language-migration:narrative end -->"
+    return ($lines -join "`r`n") + "`r`n"
+}
+
+function Apply-NarrativeMigrationPlan {
+    param($Plan)
+
+    Assert-NarrativePlanReady -Plan $Plan
+    $root = [string]$Plan.project
+    $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
+    $resultJson = Join-Path $proposalDir "narrative-result.json"
+    $resultMarkdown = Join-Path $proposalDir "narrative-result.md"
+    $written = 0
+    $resultActions = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($action in @($Plan.actions)) {
+        $targetRelative = [string]$action.target_relative_path
+        $targetPath = Join-PathParts $root $targetRelative
+        if (-not [bool]$action.approved) {
+            $resultActions.Add([ordered]@{
+                target_relative_path = $targetRelative
+                category = [string]$action.category
+                result = "skipped-unapproved"
+                final_hash_sha256 = Get-FileTextSha256 -Path $targetPath
+            }) | Out-Null
+            continue
+        }
+
+        $existing = ""
+        if (Test-Path -LiteralPath $targetPath) {
+            $existing = Read-Utf8Text -Path $targetPath
+        }
+        $merged = Add-NarrativeSection -ExistingText $existing -Body ([string]$action.proposed_target_text) -SourceHash ([string]$action.source_hash_sha256) -Category ([string]$action.category) -TargetLanguageCode ([string]$Plan.target_language)
+        Ensure-Dir -Path (Split-Path -Parent $targetPath)
+        Write-Utf8TextWithBom -Path $targetPath -Content $merged
+        $written++
+        $resultActions.Add([ordered]@{
+            target_relative_path = $targetRelative
+            category = [string]$action.category
+            result = "written-narrative-section"
+            source_hash_sha256 = [string]$action.source_hash_sha256
+            final_hash_sha256 = Get-FileTextSha256 -Path $targetPath
+        }) | Out-Null
+    }
+
+    $result = [ordered]@{
+        schema_version = 1
+        result_type = "language-migration-narrative"
+        applied_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+        project = $root
+        source_language = [string]$Plan.source_language
+        target_language = [string]$Plan.target_language
+        proposal = [string]$MigrationPlan
+        backup_dir = [string]$Plan.backup_dir
+        files_written = [int]$written
+        actions = @($resultActions.ToArray())
+    }
+    $result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $resultJson -Encoding UTF8
+    Set-Content -LiteralPath $resultMarkdown -Value @(
+        "# Language Migration Narrative Result",
+        "",
+        "- Project: $root",
+        "- Proposal: $MigrationPlan",
+        "- Backup: $($Plan.backup_dir)",
+        "- Files written: $written",
+        "",
+        "Only approved narrative actions were applied."
+    ) -Encoding UTF8
+
+    return [ordered]@{
+        result = $resultJson
+        result_markdown = $resultMarkdown
+        backup_dir = [string]$Plan.backup_dir
+        files_written = [int]$written
+        actions = @($resultActions.ToArray())
+    }
+}
+
+function Validate-NarrativeMigrationPlan {
+    param($Plan)
+
+    $valid = $true
+    $findings = New-Object 'System.Collections.Generic.List[object]'
+    $root = [string]$Plan.project
+    $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
+    $resultJson = Join-Path $proposalDir "narrative-result.json"
+    if ([string]::IsNullOrWhiteSpace([string]$Plan.backup_dir) -or -not (Test-Path -LiteralPath ([string]$Plan.backup_dir))) {
+        $valid = $false
+        $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_backup"; message = "Recorded narrative backup directory is missing."; path = [string]$Plan.backup_dir }) | Out-Null
+    }
+    if (-not (Test-Path -LiteralPath $resultJson)) {
+        $valid = $false
+        $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_result"; message = "Narrative result.json is missing."; path = $resultJson }) | Out-Null
+    }
+    foreach ($action in @($Plan.actions)) {
+        $targetPath = Join-PathParts $root ([string]$action.target_relative_path)
+        $sourceArtifact = [string]$action.source_artifact
+        if (-not (Test-Path -LiteralPath $sourceArtifact)) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_source"; message = "Narrative source artifact is missing."; path = $sourceArtifact }) | Out-Null
+            continue
+        }
+        $sourceHash = Get-TextSha256 -Text (Get-ManualReviewSourceText -ArtifactPath $sourceArtifact)
+        if ($sourceHash -ne [string]$action.source_hash_sha256) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "narrative_source_hash_mismatch"; message = "Narrative source hash changed after proposal."; path = $sourceArtifact }) | Out-Null
+        }
+        if ([bool]$action.approved) {
+            if (-not (Test-Path -LiteralPath $targetPath)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_target"; message = "Approved narrative target was not written."; path = $targetPath }) | Out-Null
+                continue
+            }
+            $targetText = Read-Utf8Text -Path $targetPath
+            if ($targetText -notlike "*language-migration:narrative begin*" -or $targetText -notlike ("*source_hash_sha256: {0}*" -f [string]$action.source_hash_sha256)) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_marker"; message = "Approved narrative target lacks review marker or source hash."; path = $targetPath }) | Out-Null
+            }
+        }
+    }
+
+    return [ordered]@{
+        valid = [bool]$valid
+        findings = @($findings.ToArray())
+        backup_dir = [string]$Plan.backup_dir
         result = $resultJson
     }
 }
@@ -1022,6 +1533,49 @@ if ($Mode -eq "Apply" -or $Mode -eq "Validate") {
                 $payload | ConvertTo-Json -Depth 10
             }
             throw "Language migration validation failed."
+        }
+    }
+} elseif ($Mode -eq "PlanNarrative") {
+    $basePlan = Read-MigrationPlan -PlanPath $MigrationPlan
+    Assert-PlanProjectMatchesCurrentProject -Plan $basePlan -CurrentProjectDir $ProjectDirFull
+    $proposal = Write-NarrativeProposal -Root $ProjectDirFull -BasePlan $basePlan
+    $payload = [ordered]@{
+        project = $ProjectDirFull
+        mode = $Mode
+        source_language = [string]$basePlan.source_language
+        target_language = [string]$basePlan.target_language
+        summary = $proposal.summary
+        proposal = [string]$proposal.proposal
+        proposal_markdown = [string]$proposal.proposal_markdown
+        backup_dir = [string]$proposal.backup_dir
+        actions = @($proposal.actions)
+    }
+} elseif ($Mode -eq "ApplyNarrative" -or $Mode -eq "ValidateNarrative") {
+    $plan = Read-NarrativePlan -PlanPath $MigrationPlan
+    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
+    if ($Mode -eq "ApplyNarrative") {
+        $applyResult = Apply-NarrativeMigrationPlan -Plan $plan
+        $payload = [ordered]@{
+            project = [string]$plan.project
+            mode = $Mode
+            source_language = [string]$plan.source_language
+            target_language = [string]$plan.target_language
+            apply_result = $applyResult
+        }
+    } else {
+        $validation = Validate-NarrativeMigrationPlan -Plan $plan
+        $payload = [ordered]@{
+            project = [string]$plan.project
+            mode = $Mode
+            source_language = [string]$plan.source_language
+            target_language = [string]$plan.target_language
+            validation = $validation
+        }
+        if (-not [bool]$validation.valid) {
+            if ($Json.IsPresent) {
+                $payload | ConvertTo-Json -Depth 10
+            }
+            throw "Language migration narrative validation failed."
         }
     }
 } else {
