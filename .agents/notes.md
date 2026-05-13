@@ -87,3 +87,13 @@
   #42. It adds a scoped issue-label synchronization workflow for explicit
   human triage checklist decisions; #30 migration implementation remains out
   of scope.
+- PR #45 `[codex] Improve AGENTS startup templates` merged on 2026-05-13 and
+  closed issue #44. It added Project Commands, large-issue planning / PR split,
+  PR-ready memory sync, and no post-PR memory-only commit guidance to base
+  templates.
+- Issue #30 conservative language migration implementation passed local
+  validation on 2026-05-13 with `git diff --check` and
+  `scripts/validate-release.ps1` reporting `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #46 blocking-concern fixes for issue #30 passed local validation on
+  2026-05-13 with `git diff --check` and `scripts/validate-release.ps1`
+  reporting `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.

@@ -2,11 +2,11 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
-  - #44, improve base AGENTS templates for lean startup context and PR-ready
-    workflow guidance.
-- Active public branch: `issue-44-agents-template-guidance`.
+  - #30, support conservative `en` / `zh-CN` project-memory language
+    migration.
+- Active public branch: `issue-30-conservative-language-migration`.
 - Active public spec:
-  `docs/specs/agents-template-startup-guidance/spec.md`.
+  `docs/specs/conservative-language-migration/spec.md`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -39,13 +39,24 @@ Completed
 - PR #41 added file-based `en` and `zh-CN` project memory templates and closed
   issue #32.
 - PR #43 added issue triage label sync and closed issue #42.
+- PR #45 improved base AGENTS templates and closed issue #44.
+- For #30, local validation passed on 2026-05-13:
+  `git diff --check` and
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
+  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #46 review blocking concerns were addressed locally on 2026-05-13:
+  language migration analyze now bypasses normal bootstrap writes; apply and
+  validate reject mismatched `-ProjectDir` / proposal project paths; hot memory
+  source content routes to migration manual-review artifacts; validate performs
+  per-action output/hash checks. Revalidation passed with `PASS=40 FAIL=0
+  WARN=0 DEFERRED=0`.
 
 Next Actions
-- Commit the #44 scoped implementation, push the branch, and open a draft PR.
-- After the PR opens, wait for hosted release validation and record check
-  evidence in the PR conversation; do not add a memory-only follow-up commit
-  solely to refresh state or hosted-check timestamps unless explicitly approved.
-- Keep #30 conservative language migration apply for a separate later PR.
+- Push the #30 scoped PR #46 review-fix commit if it has not already been
+  pushed, then keep PR #46 draft and wait for maintainer review.
+- PR body validation evidence and conservative completion scope have been
+  updated; do not add a memory-only follow-up commit solely to refresh state or
+  hosted-check timestamps.
 - Do not merge directly to `main`.
 
 Blocking Issues

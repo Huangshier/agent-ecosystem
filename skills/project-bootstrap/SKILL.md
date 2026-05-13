@@ -70,6 +70,10 @@ Optional flags:
 - `-PlanMemoryUpgrade`: generate a reviewable `.agents/upgrade/<timestamp>/proposal.md`.
 - `-ApplyMemoryUpgrade -UpgradePlan <path>`: after user review, back up and normalize hot memory files according to the proposal.
 - `-AutoUpgrade`: when the caller has explicitly approved memory normalization, analyze candidates, create the default proposal, apply it, and print the proposal, backup, and result paths.
+- `-AnalyzeLanguageMigration -SourceLanguage en|zh-CN -TargetLanguage en|zh-CN`: inspect existing project memory for conservative language migration without editing memory.
+- `-PlanLanguageMigration -SourceLanguage en|zh-CN -TargetLanguage en|zh-CN`: write a reviewable language migration proposal and create the required backup before apply.
+- `-ApplyLanguageMigration -MigrationPlan <proposal.json>`: apply approved language migration actions after review, requiring the proposal and recorded backup.
+- `-ValidateLanguageMigration -MigrationPlan <proposal.json>`: validate result metadata, backup presence, migration metadata, per-action output hashes, and manual-review source hash records.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
@@ -77,7 +81,7 @@ Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
 - Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested.
 - Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review.
-- Conservative memory migration: use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` after review. This is the safe path for existing project memory that needs normalization or migration.
+- Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration.
 - Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. This is not a language migration path and remains backup-first.
 
 Standalone language update:
@@ -158,6 +162,39 @@ Behavior:
 - Auto-upgrade mode runs Analyze first, then Plan and Apply only when findings exist.
 - Durable multi-stage work should move into `docs/specs/`; `.agents` remains session-local.
 
+## Step 6: Migrate Project Memory Language
+
+Use this when an established project needs to move between the two supported
+engineering-memory template languages without discarding project-specific
+memory.
+
+English to Simplified Chinese:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyLanguageMigration -MigrationPlan <proposal.json>
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+```
+
+Simplified Chinese to English reverses the source and target languages.
+
+Behavior:
+- Analyze mode is read-only.
+- Plan mode writes `.agents/language-migration/<timestamp>/proposal.json` and
+  `proposal.md`, and creates `.agents/_backup/language-migration-<timestamp>/`.
+- Apply mode requires the proposal and recorded backup, then refuses to write if
+  a planned source file changed after planning.
+- Exact source-template matches are replaced with target-language templates.
+- Customized project content is preserved verbatim in manual-review sections,
+  routed to manual-review artifacts for concise hot memory, or preserved
+  unchanged when no matching target template exists.
+- Commands, paths, API names, filenames, commit types, raw errors, and code
+  symbols remain in their original form because project-specific content is not
+  machine-translated.
+- This is not arbitrary-language i18n and does not claim perfect unattended
+  translation.
+
 ## Operating Rules
 
 - Prefer pinned sync via `hub.lock.json` instead of dynamically reading live global state.
@@ -168,8 +205,8 @@ Behavior:
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
 - Do not use bootstrap as a routine session-end promotion step. Cross-project experience promotion is a `knowledge-hub/scripts` maintenance action; bootstrap only installs the project guidance that points agents toward that hub workflow.
 - Treat `-OverwriteTemplates` as deprecated compatibility wording. Prefer `-RefreshUnmodifiedTemplates` for safe refreshes and `-ForceResetScaffold` only for explicit reset scenarios.
-- Legacy memory upgrades should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
-- File-based `en` and `zh-CN` templates are the structural baseline for future conservative language migration, but migration apply behavior belongs to a separate work item.
+- Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
+- File-based `en` and `zh-CN` templates are the structural baseline for conservative language migration, not overwrite authority for customized project memory.
 
 ## References
 

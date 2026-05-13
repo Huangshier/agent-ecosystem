@@ -1,28 +1,36 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/agents-template-startup-guidance/spec.md` (Active)
+- `docs/specs/conservative-language-migration/spec.md` (Active)
 
 Current Task
-- Resolve issue #44: improve base AGENTS templates for lean startup context,
-  project commands, PR-ready memory sync guidance, and large-issue planning.
+- Resolve issue #30 with a conservative `en` / `zh-CN` project-memory
+  migration workflow.
 
 Session Status
-- Branch `issue-44-agents-template-guidance` is active.
+- Branch `issue-30-conservative-language-migration` is active.
+- `main` was synchronized to `origin/main` before branching.
+- Issues #30, #32, #33, and #44 plus related merged PRs were inspected.
+- PR split decision: implement one scoped draft PR for deterministic
+  conservative migration; avoid arbitrary-language i18n and unattended
+  translation claims.
 - Implementation and release validation are complete.
-- `git diff --check` passed.
+- PR #46 review blocking concerns have been addressed locally while keeping
+  scope limited to issue #30 conservative language migration.
+- `git diff --check` passed after the blocking-concern fixes.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  passed with `PASS=39 FAIL=0 WARN=0 DEFERRED=0`.
-- PR-ready memory sync is complete before PR creation.
-- Issue #30 remains out of scope.
+  passed after the blocking-concern fixes with `PASS=40 FAIL=0 WARN=0
+  DEFERRED=0`.
+- PR body validation evidence and conservative completion scope have been
+  updated while keeping PR #46 draft.
 
 Next Work
-- Commit the scoped #44 changes.
-- Push the branch and open a draft PR.
-- After PR creation, do not add a memory-only follow-up commit solely to refresh
-  memory state or hosted-check timestamps unless explicitly approved.
+- Push the scoped PR #46 review-fix commit if needed.
+- Keep PR #46 draft; do not merge or mark ready for review. Wait for maintainer
+  review after the pushed fix commit.
 
 Notes
-- Durable task state lives in `docs/specs/agents-template-startup-guidance/tasks.md`.
+- Durable task state lives in
+  `docs/specs/conservative-language-migration/tasks.md`.
 - Do not store private mappings, local paths, automation identity material, or
   private audit findings here.
