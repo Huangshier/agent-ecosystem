@@ -2,11 +2,10 @@ Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.3.1`.
 - Active public maintenance issue:
-  - #33, clarify `project-bootstrap` operating modes and weaken dangerous
-    overwrite semantics.
-- Active public branch: `issue-33-bootstrap-operating-modes`.
+  - #32, add file-based `en` and `zh-CN` engineering-memory templates.
+- Active public branch: `issue-32-file-based-memory-templates`.
 - Active public spec:
-  `docs/specs/bootstrap-operating-modes/spec.md`.
+  `docs/specs/file-based-memory-templates/spec.md`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -34,26 +33,28 @@ Completed
 - PR #39 added validation scratch pruning and closed issue #38; local `main`
   was fast-forwarded to the merge commit and the old #38 topic branch was
   cleaned locally and remotely.
+- PR #40 clarified `project-bootstrap` operating modes and closed issue #33;
+  local `main` was fast-forwarded to merge commit
+  `19656e5f92264a960c8e6ac6039debd97166c10f`.
 - Repository ruleset `protect-main` protects the default branch with required
   pull requests, release validation checks, conversation resolution, deletion
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Commit, push, and open a draft PR that references `Fixes #33`.
-- #33 implementation and local validation are complete:
-  - bootstrap modes distinguish initialize, refresh, conservative migration, and
-    force reset;
-  - `-OverwriteTemplates` is isolated as a warning-emitting compatibility alias;
-  - existing project memory stays out of overwrite behavior by default;
-  - force/reset paths are warning-heavy and backup-first;
-  - docs, script hints, and release validation were updated;
-  - local release validation passed with `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
-- Keep #32 file-based templates and #30 conservative language migration for
-  separate later PRs.
+- Commit, push, and open a draft PR that references `Fixes #32`.
+- #32 implementation and local validation are complete:
+  - file-based project memory templates exist for `en` and `zh-CN`;
+  - `set_project_language.ps1` reads templates from files instead of embedded
+    scaffold strings;
+  - missing `zh-CN` template files fall back to English with fallback metadata;
+  - bootstrap lock metadata records language template fallbacks;
+  - docs and release validation were updated;
+  - local release validation passed with `PASS=37 FAIL=0 WARN=0 DEFERRED=0`.
+- Keep #30 conservative language migration apply for a separate later PR.
 - Do not merge directly to `main`.
 
 Blocking Issues
 - No active blockers.
 
 Last Updated
-- 2026-05-12
+- 2026-05-13

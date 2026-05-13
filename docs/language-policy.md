@@ -51,12 +51,23 @@ language into `.agents/AGENTS.md` and localizes the initial project memory
 scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and
 `docs/specs/`.
 
+Project memory scaffolds are backed by tracked file templates under
+`skills/project-bootstrap/templates/project-memory/`. The only first-class
+template languages are `en` and `zh-CN`; this is not arbitrary-language i18n.
+English remains the public default and fallback language. If a `zh-CN` template
+file is missing, the helper falls back to the matching English template and
+reports fallback metadata so validation can flag the gap.
+
 For established project memory, changing the project memory language is a
 conservative migration task, not a scaffold overwrite. Bootstrap preserves
 existing files by default; migration work should follow a backup, analyze,
 plan, review, apply, and validate flow. Force reset options are only for
 intentional scaffold reset scenarios where project-specific memory can be
 discarded.
+
+The file templates are structural baselines for scaffold generation, language
+updates, and future conservative migration planning. They are not a reason to
+replace customized project memory with generic scaffolds.
 
 Memory governance and upgrade diagnostics recognize English discovery headings
 and localized Simplified Chinese equivalents for context discovery metadata.
