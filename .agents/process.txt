@@ -1,12 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.3.1`.
-- Active public maintenance issue:
-  - #30, support conservative `en` / `zh-CN` project-memory language
-    migration.
-- Active public branch: `issue-30-narrative-language-migration`.
-- Active public spec:
-  `docs/specs/conservative-language-migration/spec.md`.
+- Current published public release is `v0.3.1`; `v0.4.0` release in progress.
+- No active open issues for the current release scope.
+- Active public branch: `release-v0.4.0`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -15,9 +11,7 @@ Current State
 - GitHub App `agent-ecosystem-bot` is the configured automation identity for
   this repository. Do not store App auth material or local-only paths in this
   public repository.
-- Repository ruleset `protect-main` protects the default branch. Do not change
-  rulesets, branch protection, hooks, runners, App auth, main protection, or
-  repository settings for #44.
+- Repository ruleset `protect-main` protects the default branch.
 
 Completed
 - `v0.1.0`, `v0.2.0`, `v0.3.0`, and `v0.3.1` have been published as GitHub
@@ -41,37 +35,20 @@ Completed
 - PR #43 added issue triage label sync and closed issue #42.
 - PR #45 improved base AGENTS templates and closed issue #44.
 - PR #46 added deterministic conservative language migration scaffolding plus
-  manual-review routing for #30 Phase 1. It merged on 2026-05-13 at
+  manual-review routing for #30 Phase 1. Merged on 2026-05-13 at
   `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
-- For #30, local validation passed on 2026-05-13:
-  `git diff --check` and
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- PR #46 review blocking concerns were addressed locally on 2026-05-13:
-  language migration analyze now bypasses normal bootstrap writes; apply and
-  validate reject mismatched `-ProjectDir` / proposal project paths; hot memory
-  source content routes to migration manual-review artifacts; validate performs
-  per-action output/hash checks. Revalidation passed with `PASS=40 FAIL=0
-  WARN=0 DEFERRED=0`.
-- #30 Phase 1 is complete. Phase 2 remains open: narrative migration from
-  manual-review artifacts back into target-language engineering memory, with
-  stable facts, active plans, process state, reusable lessons, and durable specs
-  routed to the right memory surfaces.
-- #30 Phase 2 implementation is complete locally on
-  `issue-30-narrative-language-migration`: narrative proposals are generated
-  from Phase 1 manual-review artifacts, actions are unapproved by default,
-  apply checks proposal/backup/source hash/target hash, and validation covers
-  both `en` -> `zh-CN` and `zh-CN` -> `en`.
-- Local validation passed on 2026-05-13:
-  `git diff --check` and
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #47 added narrative language migration for #30 Phase 2. Merged on
+  2026-05-13 at `2beb8285803abe17daaea1d2eac590cb91d2aef0`.
+- Issue #30 closed on 2026-05-13. Conservative `en` / `zh-CN`
+  engineering-memory language migration is complete.
+- Hosted release validation passed on main for v0.4.0:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
 
 Next Actions
-- Commit and push `issue-30-narrative-language-migration`.
-- Open a draft PR for #30 Phase 2; do not mark ready for review until
-  maintainer review.
-- Do not merge directly to `main`.
+- Merge release-v0.4.0 PR, tag v0.4.0, publish GitHub Release.
+- Clean up merged branches: `issue-30-conservative-language-migration`,
+  `issue-30-narrative-language-migration`.
+- Do not push directly to `main`.
 
 Blocking Issues
 - No active blockers.

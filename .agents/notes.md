@@ -97,3 +97,11 @@
 - PR #46 blocking-concern fixes for issue #30 passed local validation on
   2026-05-13 with `git diff --check` and `scripts/validate-release.ps1`
   reporting `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #47 `[codex] Add narrative language migration` merged on 2026-05-13 at
+  `2beb8285803abe17daaea1d2eac590cb91d2aef0`, closing issue #30. Hosted release
+  validation run `25795197326` passed on Windows PowerShell 5.1, Windows pwsh,
+  Ubuntu pwsh, and macOS pwsh.
+- Issue #30 `Feature: support conservative en/zh-CN engineering-memory language
+  migration` closed on 2026-05-13 with `state_reason=completed`.
+- The latest published public release is `v0.3.1`; `v0.4.0` release preparation
+  is in progress on branch `release-v0.4.0`.

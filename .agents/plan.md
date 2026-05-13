@@ -1,34 +1,25 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/conservative-language-migration/spec.md` (Active)
+- `docs/specs/conservative-language-migration/spec.md` (Complete)
 
 Current Task
-- Finalize issue #30 Phase 2 draft PR: narrative migration for `en` /
-  `zh-CN` project-memory language migration.
+- v0.4.0 release preparation and publication.
 
 Session Status
-- Branch `issue-30-narrative-language-migration` was created from latest
-  `origin/main` after PR #46 merged.
-- PR #46 merged on 2026-05-13 at merge commit
+- Issue #30 is complete: Phase 1 (PR #46) and Phase 2 (PR #47) merged.
+- PR #46 merged on 2026-05-13 at
   `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
-- #30 Phase 1 is complete: deterministic conservative language migration
-  scaffold plus manual-review routing.
-- Phase 1 intentionally does not claim unattended perfect translation of
-  project-specific narrative content.
-- Phase 2 implementation is complete locally: manual-review artifacts now feed
-  an unapproved-by-default narrative proposal, reviewed narrative actions can be
-  applied after backup/source/target hash checks, and validation covers both
-  directions.
-- Local validation passed on 2026-05-13:
-  `git diff --check` and
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #47 merged on 2026-05-13 at
+  `2beb8285803abe17daaea1d2eac590cb91d2aef0`.
+- Issue #30 closed on 2026-05-13.
+- Hosted release validation passed on main at
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
+- Local validation: `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 Next Work
-- Commit and push `issue-30-narrative-language-migration`.
-- Open a draft PR for #30 Phase 2.
-- Do not merge directly to `main`.
+- Complete v0.4.0 release PR, merge, tag, and publish.
+- After release, clean up merged branches.
 
 Notes
 - Durable task state lives in
