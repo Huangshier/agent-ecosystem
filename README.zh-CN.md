@@ -73,6 +73,7 @@ developer maintenance tooling。
 - [Architecture](docs/architecture.md)
 - [Agent governance](docs/agent-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
+- [Existing project upgrade path](docs/existing-project-upgrade.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
