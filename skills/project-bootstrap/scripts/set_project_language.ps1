@@ -233,12 +233,12 @@ if (-not (Test-Path -LiteralPath $ProjectDirFull)) {
 
 if ([string]::IsNullOrWhiteSpace($TemplateRoot)) {
     $skillRoot = Split-Path -Parent $PSScriptRoot
-    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "project-memory"
+    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "languages"
 }
 
 $TemplateRootFull = [System.IO.Path]::GetFullPath($TemplateRoot)
 if (-not (Test-Path -LiteralPath $TemplateRootFull)) {
-    throw "Project memory template root does not exist: $TemplateRootFull"
+    throw "Project language template root does not exist: $TemplateRootFull"
 }
 
 $resolved = Resolve-ProjectLanguage -Language $ProjectLanguage

@@ -12,15 +12,15 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `scripts/check_hub_lock.ps1`: compare project `hub.lock.json` against the installed hub git state
 - `scripts/promote_experience.ps1`: compatibility copy; prefer `knowledge-hub/scripts/promote_experience.ps1` for routine hub maintenance
 - `scripts/rebuild_experience_index.ps1`: compatibility copy used by hub initialization; prefer `knowledge-hub/scripts/rebuild_experience_index.ps1` after manual hub edits
-- `assets/knowledge-hub-template/templates/project-memory/en/`: bundled English project memory template snapshot used for language setup and fallback
-- `assets/knowledge-hub-template/templates/project-memory/zh-CN/`: bundled Simplified Chinese project memory template snapshot used for language setup
+- `assets/knowledge-hub-template/templates/languages/en/`: bundled English project memory template snapshot used for default bootstrap, language setup, and fallback
+- `assets/knowledge-hub-template/templates/languages/zh-CN/`: bundled Simplified Chinese project memory template snapshot used for language setup
 - `references/maintenance-model.md`: long-term maintenance model
-- `assets/knowledge-hub-template/templates/project-root/`: root-level committed docs and scaffolds, including `docs/specs/_templates/`
+- `assets/knowledge-hub-template/templates/languages/<language>/project-root/`: root-level committed docs and scaffolds, including `docs/specs/_templates/`
 
 ## Lock Metadata
 - `bootstrap_project.ps1` writes hub git metadata plus `template_tree_hash_sha256`.
 - `init_hub.ps1` leaves the hub as an ordinary directory unless `-InitializeGit` or `-CommitInitial` is supplied.
-- When `-ProjectLanguage` is supplied, the lock records the normalized project language.
+- The lock records the normalized project language; plain bootstrap records `en`.
 - When language templates are missing, the lock records fallback warnings and paths; English is the fallback template language.
 - `check_hub_lock.ps1` compares the template hash when present and fails on dirty hub state, so uncommitted hub changes are not treated as reproducible pins.
 
@@ -57,10 +57,10 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Project Memory Templates
 - `en` and `zh-CN` are the only first-class project memory template languages.
-- English remains the public default and fallback language.
-- The authoritative source lives under `knowledge-hub/templates/project-memory/<language>/`.
-- The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/project-memory/<language>/`.
-- Template files under `assets/knowledge-hub-template/templates/project-memory/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
-- Template files under `assets/knowledge-hub-template/templates/project-memory/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
+- English remains the public default and fallback language. Plain bootstrap is equivalent to `-ProjectLanguage en`.
+- The authoritative source lives under `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
+- The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
+- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
+- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
 - The templates are structural baselines for scaffold generation, language updates, and future conservative migration planning. They do not authorize overwriting project-specialized memory.
 - Conservative language migration uses these templates to replace exact source-template matches and to frame customized content for manual review without dropping it.

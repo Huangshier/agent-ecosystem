@@ -113,6 +113,32 @@ function Sync-File {
     return "skipped"
 }
 
+function Remove-LegacyTemplateDirs {
+    param([string]$Root)
+
+    $removed = 0
+    foreach ($relative in @(
+        "templates/project-root",
+        "templates/project-agent",
+        "templates/project-memory"
+    )) {
+        $target = Join-PathParts $Root $relative
+        if (-not (Test-Path -LiteralPath $target)) {
+            continue
+        }
+
+        $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd([char[]]"\/")
+        $targetFull = [System.IO.Path]::GetFullPath($target)
+        if (-not $targetFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove legacy template directory outside hub: $targetFull"
+        }
+
+        Remove-Item -LiteralPath $targetFull -Recurse -Force
+        $removed++
+    }
+    return $removed
+}
+
 $skillRoot = Split-Path -Parent $PSScriptRoot
 $templateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template"
 $rebuildScript = Join-PathParts $PSScriptRoot "rebuild_experience_index.ps1"
@@ -133,6 +159,7 @@ if ($Overwrite.IsPresent -and (Test-Path -LiteralPath $indexPath)) {
 }
 
 $sync = Sync-Tree -SourceRoot $templateRoot -DestinationRoot $HubDir -AllowOverwrite $Overwrite.IsPresent
+$legacyTemplateDirsRemoved = Remove-LegacyTemplateDirs -Root $HubDir
 
 $runtimeScriptCopied = 0
 $runtimeScriptUpdated = 0
@@ -182,4 +209,5 @@ if (($null -ne $git) -and $shouldInitializeGit) {
 
 Write-Output "Hub ready: $HubDir"
 Write-Output ("Files copied: {0}, updated: {1}, skipped: {2}" -f $sync.copied, $sync.updated, $sync.skipped)
+Write-Output ("Legacy template directories removed: {0}" -f $legacyTemplateDirsRemoved)
 Write-Output ("Runtime scripts copied: {0}, updated: {1}, skipped: {2}" -f $runtimeScriptCopied, $runtimeScriptUpdated, $runtimeScriptSkipped)

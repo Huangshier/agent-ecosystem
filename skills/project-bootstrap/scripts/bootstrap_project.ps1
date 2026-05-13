@@ -20,10 +20,11 @@ param(
     [string]$MigrationPlan = "",
     [string]$SourceLanguage = "",
     [string]$TargetLanguage = "",
-    [string]$ProjectLanguage = ""
+    [string]$ProjectLanguage = "en"
 )
 
 $ErrorActionPreference = "Stop"
+$projectLanguageWasProvided = $PSBoundParameters.ContainsKey("ProjectLanguage")
 
 $memoryUpgradeModeCount = 0
 foreach ($modeSwitch in @($AnalyzeMemoryUpgrade, $PlanMemoryUpgrade, $ApplyMemoryUpgrade, $AutoUpgrade)) {
@@ -50,7 +51,7 @@ if ($languageMigrationModeCount -gt 1) {
 if ($languageMigrationModeCount -gt 0 -and $memoryUpgradeModeCount -gt 0) {
     throw "Language migration modes cannot be combined with legacy memory upgrade modes."
 }
-if ($languageMigrationModeCount -gt 0 -and -not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
+if ($languageMigrationModeCount -gt 0 -and $projectLanguageWasProvided -and -not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
     throw "Do not combine -ProjectLanguage first-session scaffold writes with language migration modes. Use -SourceLanguage and -TargetLanguage."
 }
 
@@ -100,6 +101,24 @@ function Ensure-Dir {
 function Normalize-RelativePath {
     param([string]$Path)
     return (($Path -replace "\\", "/").TrimStart("/"))
+}
+
+function Resolve-BootstrapProjectLanguage {
+    param([string]$Language)
+
+    if ([string]::IsNullOrWhiteSpace($Language)) {
+        return "en"
+    }
+
+    $normalized = $Language.Trim().ToLowerInvariant()
+    if ($normalized -in @("en", "en-us", "english")) {
+        return "en"
+    }
+    if ($normalized -in @("zh", "zh-cn", "zh-hans", "chinese", "simplified-chinese", "simplified chinese")) {
+        return "zh-CN"
+    }
+
+    throw "Unsupported project language: $Language. Supported values: en, en-US, English, zh-CN, zh-Hans, Chinese, Chinese aliases for Simplified Chinese."
 }
 
 function Test-ProtectedMemoryPath {
@@ -427,9 +446,10 @@ if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or
     return
 }
 
-$templateRoot = Join-PathParts $HubDir "templates"
-$projectRootTemplate = Join-PathParts $templateRoot "project-root"
-$projectAgentTemplate = Join-PathParts $templateRoot "project-agent"
+$projectLanguageCode = Resolve-BootstrapProjectLanguage -Language $ProjectLanguage
+$templateRoot = Join-PathParts $HubDir "templates" "languages"
+$projectRootTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-root"
+$projectAgentTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-agent"
 
 $missingTemplateFolders = @()
 if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
@@ -610,14 +630,15 @@ if ($null -ne $git) {
 $templateTreeHash = Get-TemplateTreeHash -ProjectRootTemplate $projectRootTemplate -ProjectAgentTemplate $projectAgentTemplate
 
 $languageResult = $null
-if (-not [string]::IsNullOrWhiteSpace($ProjectLanguage)) {
+if (-not [string]::IsNullOrWhiteSpace($projectLanguageCode)) {
     $languageScript = Join-PathParts $PSScriptRoot "set_project_language.ps1"
     if (-not (Test-Path -LiteralPath $languageScript)) {
         throw "Project language helper not found: $languageScript"
     }
     $languageParams = @{
         ProjectDir = $ProjectDir
-        ProjectLanguage = $ProjectLanguage
+        ProjectLanguage = $projectLanguageCode
+        TemplateRoot = $templateRoot
     }
     if (-not $hadExistingProjectMemory) {
         $languageParams.OverwriteScaffold = $true
@@ -671,8 +692,8 @@ $lockData = [ordered]@{
     hub_branch = $hubBranch
     hub_commit = $hubCommit
     hub_dirty = [bool]$hubDirty
-    template_source = "templates/project-root + templates/project-agent"
-    language_template_source = if ($null -ne $languageResult) { "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory" } else { "" }
+    template_source = "templates/languages/$projectLanguageCode/project-root + templates/languages/$projectLanguageCode/project-agent"
+    language_template_source = if ($null -ne $languageResult) { "templates/languages" } else { "" }
     template_tree_hash_sha256 = $templateTreeHash
     bootstrap_operation_mode = $bootstrapOperationMode
     template_mode = $templateMode

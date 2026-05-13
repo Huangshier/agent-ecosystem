@@ -150,14 +150,14 @@ function Get-LanguageTemplateMap {
 
     $languageRoot = Join-PathParts $Root $LanguageCode
     if (-not (Test-Path -LiteralPath $languageRoot)) {
-        throw "Missing project-memory template language root: $languageRoot"
+        throw "Missing project language template root: $languageRoot"
     }
 
     $map = @{}
     foreach ($section in @("project-root", "project-agent")) {
         $sectionRoot = Join-PathParts $languageRoot $section
         if (-not (Test-Path -LiteralPath $sectionRoot)) {
-            throw "Missing project-memory template section: $sectionRoot"
+            throw "Missing project language template section: $sectionRoot"
         }
 
         Get-ChildItem -LiteralPath $sectionRoot -Recurse -File | Sort-Object FullName | ForEach-Object {
@@ -1505,11 +1505,11 @@ if (-not (Test-Path -LiteralPath $ProjectDirFull)) {
 
 if ([string]::IsNullOrWhiteSpace($TemplateRoot)) {
     $skillRoot = Split-Path -Parent $PSScriptRoot
-    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "project-memory"
+    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "languages"
 }
 $TemplateRootFull = [System.IO.Path]::GetFullPath($TemplateRoot)
 if (-not (Test-Path -LiteralPath $TemplateRootFull)) {
-    throw "Project memory template root does not exist: $TemplateRootFull"
+    throw "Project language template root does not exist: $TemplateRootFull"
 }
 
 $payload = $null

@@ -55,11 +55,11 @@ Default behavior:
 - Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Use` guidance from the hub template so projects know when to search the global experience index and when to keep lessons local.
-- Install the full `templates/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
+- Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
 - When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
 - Language scaffolds are loaded from the bundled hub snapshot under
-  `skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/<language>/`.
-- Supported project memory template languages are `en` and `zh-CN` only. English remains the default and fallback.
+  `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.
+- Supported project memory template languages are `en` and `zh-CN` only. English remains the default and fallback; plain bootstrap is equivalent to `-ProjectLanguage en`.
 - If a `zh-CN` template file is missing, the language helper falls back to the matching English template and reports fallback metadata. Treat that as a validation finding to fix, not as a reason to overwrite project-specific memory.
 
 Optional flags:
@@ -97,7 +97,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language
 Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional reset scenarios. It backs up existing files before rewriting initial memory scaffold files. For established project memory, use conservative migration instead of treating language selection as scaffold overwrite.
 
 The standalone helper reads file templates from the bundled hub snapshot under
-`skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/`
+`skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/`
 by default. `-TemplateRoot` is available for validation fixtures and controlled
 template-source tests.
 
@@ -211,7 +211,7 @@ Behavior:
 
 - Prefer pinned sync via `hub.lock.json` instead of dynamically reading live global state.
 - Treat project `.agents` as a local overlay. Shared templates are defaults, not hard constraints.
-- Treat `templates/project-root/` as the home for long-lived project docs that should be committed with source, including `docs/specs/` scaffolds.
+- Treat `templates/languages/<language>/project-root/` as the home for long-lived project docs that should be committed with source, including `docs/specs/` scaffolds.
 - Use `check_hub_lock.ps1` when you need to verify whether a project's pin has drifted from the installed hub.
 - Promote stable cross-project practices into the hub template, not per-project runtime files.
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
@@ -220,9 +220,10 @@ Behavior:
 - Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
 - File-based `en` and `zh-CN` templates are the structural baseline for conservative language migration, not overwrite authority for customized project memory.
 - The authoritative source for project-memory templates in this repository is
-  `knowledge-hub/templates/project-memory/<language>/`. The bundled
-  `assets/knowledge-hub-template/templates/project-memory/<language>/` tree is
-  the runtime snapshot used by `set_project_language.ps1` and language
+  `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
+  The bundled
+  `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`
+  tree is the runtime snapshot used by `set_project_language.ps1` and language
   migration helpers.
 
 ## References
