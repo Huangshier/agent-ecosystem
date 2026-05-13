@@ -49,11 +49,18 @@ Completed
   `skills/project-bootstrap/templates/project-memory/`, and updated validation.
 - Local release validation for #49 passed:
   `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #50 is open as a draft for #49:
+  https://github.com/Huangshier/agent-ecosystem/pull/50
+- PR #50 current head SHA:
+  `54b2498366a611589638f1e8aac68c73c95c7b30`.
+- Hosted Release validation succeeded for that head on Windows PowerShell 5.1,
+  Windows PowerShell 7, Ubuntu, and macOS:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160
 
 Next Actions
-- Run explicit `git diff --check`.
-- Commit and push `codex/issue-49-project-memory-authority`.
-- Open a draft PR for #49 with `Fixes #49` in the body.
+- Wait for maintainer review on draft PR #50.
+- Address review feedback if requested.
+- After maintainer approval, move PR #50 toward ready-for-review.
 - Do not push directly to `main`.
 
 Blocking Issues

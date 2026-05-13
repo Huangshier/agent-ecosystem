@@ -44,10 +44,16 @@
   - Notes: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] T06: Commit, push topic branch, and open draft PR.
+- [x] T06: Commit, push topic branch, and open draft PR.
   - Scope: only #49 implementation and required public memory/spec updates.
-  - Validation: draft PR exists with `Fixes #49` in the body.
-  - Notes:
+  - Validation: draft PR exists with `Fixes #49` in the body; hosted Release
+    validation succeeded for the PR head.
+  - Notes: PR #50 is open as draft at
+    https://github.com/Huangshier/agent-ecosystem/pull/50. Current head SHA is
+    `54b2498366a611589638f1e8aac68c73c95c7b30`. Hosted Release validation
+    succeeded on Windows PowerShell 5.1, Windows PowerShell 7, Ubuntu, and
+    macOS via run
+    https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160.
 
 ## Task-to-Spec Notes
 - This issue deliberately avoids changing #30 migration apply behavior.
@@ -78,9 +84,13 @@
   - Validation: `git diff --check`; `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`.
   - Continue / stop decision: Continue; release validation passed with
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- [ ] P04: Complete phase 4 and record validation.
+- [x] P04: Complete phase 4 and record validation.
   - Goal: Draft PR is opened from the topic branch.
   - Inputs: validated working tree changes.
   - Outputs: commit, pushed branch, draft PR.
-  - Validation: PR URL and branch status.
-  - Continue / stop decision:
+  - Validation: PR #50 exists at
+    https://github.com/Huangshier/agent-ecosystem/pull/50, remains draft, and
+    hosted Release validation succeeded for head
+    `54b2498366a611589638f1e8aac68c73c95c7b30`.
+  - Continue / stop decision: Stop implementation. PR #50 is draft and waiting
+    for maintainer review or later ready-for-review approval.

@@ -60,7 +60,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - English remains the public default and fallback language.
 - The authoritative source lives under `knowledge-hub/templates/project-memory/<language>/`.
 - The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/project-memory/<language>/`.
-- Template files under `templates/project-memory/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
-- Template files under `templates/project-memory/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
+- Template files under `assets/knowledge-hub-template/templates/project-memory/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
+- Template files under `assets/knowledge-hub-template/templates/project-memory/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
 - The templates are structural baselines for scaffold generation, language updates, and future conservative migration planning. They do not authorize overwriting project-specialized memory.
 - Conservative language migration uses these templates to replace exact source-template matches and to frame customized content for manual review without dropping it.
