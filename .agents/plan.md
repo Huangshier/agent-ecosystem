@@ -36,7 +36,8 @@ Next Work
 - [x] Run `git diff --check`.
 - [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
   (`PASS=38 FAIL=0 WARN=0 DEFERRED=0`).
-- [ ] Commit, push, and open a draft PR for #42.
+- [x] Commit, push, and open draft PR #43 for #42.
+- [ ] Wait for hosted release validation run `25776495732`.
 
 Notes
 - Do not store private mappings, local paths, automation identity material, or

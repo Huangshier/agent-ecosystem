@@ -26,10 +26,10 @@
   - Validation: local release validation checks required workflow/doc strings.
   - Notes: Added `issue triage label sync` release validation check.
 
-- [ ] T05: Validate and publish PR
+- [x] T05: Validate and publish PR
   - Scope: local validation, commit, push, draft PR.
   - Validation: `git diff --check`; full local release validation.
-  - Notes: Local `git diff --check` passed; full local release validation passed with `PASS=38 FAIL=0 WARN=0 DEFERRED=0`.
+  - Notes: Local `git diff --check` passed; full local release validation passed with `PASS=38 FAIL=0 WARN=0 DEFERRED=0`; draft PR #43 opened.
 
 ## Task-to-Spec Notes
 
@@ -52,9 +52,9 @@
   - Validation: `git diff --check`; Node regex smoke; full local release validation `PASS=38 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to publish phase.
 
-- [ ] P03: Run local validation, commit, push branch, and open draft PR
+- [x] P03: Run local validation, commit, push branch, and open draft PR
   - Goal: Publish reviewable change for maintainer review.
   - Inputs: completed local diff.
-  - Outputs: pushed branch and draft PR.
-  - Validation: local checks pass and PR exists.
-  - Continue / stop decision:
+  - Outputs: pushed branch `issue-42-triage-label-sync` and draft PR #43.
+  - Validation: local checks passed; hosted release validation run `25776495732` started.
+  - Continue / stop decision: Stop for maintainer review after hosted checks finish.

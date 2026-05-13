@@ -44,9 +44,8 @@ Completed
   blocking, force-push blocking, and no bypass actors.
 
 Next Actions
-- Implement and validate issue #42.
-- Push `issue-42-triage-label-sync` and open a draft PR that references
-  `Fixes #42`.
+- Wait for PR #43 hosted release validation run `25776495732`.
+- Keep draft PR #43 open for maintainer review; it references `Fixes #42`.
 - Keep #30 conservative language migration apply for a separate later PR.
 - Do not merge directly to `main`.
 

@@ -83,3 +83,7 @@
 - The `protect-main` repository ruleset protects the default branch with
   required pull requests, required release validation checks, conversation
   resolution, deletion blocking, force-push blocking, and no bypass actors.
+- PR #43 `ci: add issue triage label sync` was opened as a draft PR for issue
+  #42. It adds a scoped issue-label synchronization workflow for explicit
+  human triage checklist decisions; #30 migration implementation remains out
+  of scope.
