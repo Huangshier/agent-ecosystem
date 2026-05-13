@@ -1,12 +1,12 @@
 # Release Readiness
 
-Status: `v0.3.1` public release.
+Status: `v0.4.0` public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
-maintenance issues into the normal release flow. `v0.3.1` has been published
-as a public stabilization release for the public adoption surface, release
-metadata, maintainer reader review, and GitHub Actions runtime versions.
+maintenance issues into the normal release flow. `v0.3.1` was published as a
+public stabilization release. `v0.4.0` delivers the conservative `en` / `zh-CN`
+engineering-memory language migration workflow, completing issue #30.
 
 ## Completed
 
@@ -32,6 +32,9 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
 - Release process guidance is available at `docs/release-process.md`.
 - Latest local hardened release validation passed with 40 checks passing, no
   failures, warnings, or deferred checks.
+- Narrative migration plan/apply/validate from Phase 1 manual-review artifacts
+  is covered by the release validator, including hash verification, category
+  routing, and unapproved-by-default behavior.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
@@ -85,6 +88,13 @@ metadata, maintainer reader review, and GitHub Actions runtime versions.
   knowledge hub and language policy.
 - Public release notes are present at `docs/releases/v0.3.0.md`.
 - Public release notes are present at `docs/releases/v0.3.1.md`.
+- Public release notes are present at `docs/releases/v0.4.0.md`.
+- Conservative `en` / `zh-CN` language migration is complete: Phase 1
+  deterministic scaffold migration and Phase 2 narrative migration from
+  manual-review artifacts. Issue #30 is closed.
+- Final hosted CI release validation for the published `v0.4.0` main passed on
+  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
 - Current README and `README.zh-CN.md` describe the project as a Workflow
   Kernel with an explicit extension model and non-runtime boundaries.
 - Release process guidance includes a lightweight Public Reader Review checklist.
@@ -189,7 +199,7 @@ The release validator now covers:
   overwrite warnings, and backup-first force reset
 - conservative project-memory language migration coverage for both `en` to
   `zh-CN` and `zh-CN` to `en`, mixed memory, project-specific preservation,
-  proposal-first apply, and backup-first apply
+  proposal-first apply, backup-first apply, and narrative migration routing
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
 - validation scratch retention pruning dry-run/apply behavior
@@ -200,3 +210,4 @@ The release validator now covers:
 - bilingual public/private routing documentation coverage
 - v0.3.0 release notes coverage
 - v0.3.1 release notes coverage
+- v0.4.0 release notes coverage

@@ -6,6 +6,20 @@ All notable public changes are summarized here.
 
 No unreleased public changes.
 
+## v0.4.0 - 2026-05-13
+
+- Added conservative `en` / `zh-CN` engineering-memory language migration with
+  analyze, plan, proposal, backup, apply, and validate modes.
+- Added Phase 2 narrative migration that reads retained manual-review artifacts
+  and routes stable facts, active plan, process state, reusable lessons, and
+  durable specs to the correct target-language engineering-memory surfaces.
+- Added narrative proposal workflow with unapproved-by-default actions,
+  hash-verified apply, and full validation coverage.
+- Added release validation fixtures for both migration directions, mixed memory,
+  project-specific preservation, hot-memory artifact routing, and narrative
+  migration routing.
+- Closed issue #30.
+
 ## v0.3.1 - 2026-05-09
 
 - Clarified the public README and Chinese entrypoint around the Workflow Kernel
