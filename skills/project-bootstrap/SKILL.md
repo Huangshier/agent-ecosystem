@@ -57,7 +57,8 @@ Default behavior:
 - Install the shared `Global Experience Use` guidance from the hub template so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
 - When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
-- Language scaffolds are loaded from `skills/project-bootstrap/templates/project-memory/<language>/`.
+- Language scaffolds are loaded from the bundled hub snapshot under
+  `skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/<language>/`.
 - Supported project memory template languages are `en` and `zh-CN` only. English remains the default and fallback.
 - If a `zh-CN` template file is missing, the language helper falls back to the matching English template and reports fallback metadata. Treat that as a validation finding to fix, not as a reason to overwrite project-specific memory.
 
@@ -95,9 +96,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language
 
 Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional reset scenarios. It backs up existing files before rewriting initial memory scaffold files. For established project memory, use conservative migration instead of treating language selection as scaffold overwrite.
 
-The standalone helper reads file templates from
-`skills/project-bootstrap/templates/project-memory/` by default. `-TemplateRoot`
-is available for validation fixtures and controlled template-source tests.
+The standalone helper reads file templates from the bundled hub snapshot under
+`skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory/`
+by default. `-TemplateRoot` is available for validation fixtures and controlled
+template-source tests.
 
 ## Step 2.5: Memory Upgrade Decision
 
@@ -217,6 +219,11 @@ Behavior:
 - Treat `-OverwriteTemplates` as deprecated compatibility wording. Prefer `-RefreshUnmodifiedTemplates` for safe refreshes and `-ForceResetScaffold` only for explicit reset scenarios.
 - Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
 - File-based `en` and `zh-CN` templates are the structural baseline for conservative language migration, not overwrite authority for customized project memory.
+- The authoritative source for project-memory templates in this repository is
+  `knowledge-hub/templates/project-memory/<language>/`. The bundled
+  `assets/knowledge-hub-template/templates/project-memory/<language>/` tree is
+  the runtime snapshot used by `set_project_language.ps1` and language
+  migration helpers.
 
 ## References
 

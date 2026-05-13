@@ -1505,7 +1505,7 @@ if (-not (Test-Path -LiteralPath $ProjectDirFull)) {
 
 if ([string]::IsNullOrWhiteSpace($TemplateRoot)) {
     $skillRoot = Split-Path -Parent $PSScriptRoot
-    $TemplateRoot = Join-PathParts $skillRoot "templates" "project-memory"
+    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "project-memory"
 }
 $TemplateRootFull = [System.IO.Path]::GetFullPath($TemplateRoot)
 if (-not (Test-Path -LiteralPath $TemplateRootFull)) {

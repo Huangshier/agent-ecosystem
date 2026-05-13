@@ -1,8 +1,8 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.3.1`; `v0.4.0` release in progress.
-- No active open issues for the current release scope.
-- Active public branch: `release-v0.4.0`.
+- Current published public release is `v0.4.0`.
+- Active issue: #49 project-memory template authority refactor.
+- Active public branch: `codex/issue-49-project-memory-authority`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -14,7 +14,7 @@ Current State
 - Repository ruleset `protect-main` protects the default branch.
 
 Completed
-- `v0.1.0`, `v0.2.0`, `v0.3.0`, and `v0.3.1` have been published as GitHub
+- `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, and `v0.4.0` have been published as GitHub
   Releases.
 - Public `scripts/validate-release.ps1` is the reusable release gate.
 - Release validation workflow has passed on Windows PowerShell 5.1, Windows
@@ -41,13 +41,26 @@ Completed
   2026-05-13 at `2beb8285803abe17daaea1d2eac590cb91d2aef0`.
 - Issue #30 closed on 2026-05-13. Conservative `en` / `zh-CN`
   engineering-memory language migration is complete.
-- Hosted release validation passed on main for v0.4.0:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
+- PR #48 released v0.4.0. Merged on 2026-05-13 at
+  `1736f9c82208977ad1cb78f312ecf0c0b64d4e34`.
+- Issue #49 implementation branch has moved project-memory language templates
+  to `knowledge-hub/templates/project-memory/`, synchronized the bundled
+  project-bootstrap snapshot, removed
+  `skills/project-bootstrap/templates/project-memory/`, and updated validation.
+- Local release validation for #49 passed:
+  `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #50 is open as a draft for #49:
+  https://github.com/Huangshier/agent-ecosystem/pull/50
+- PR #50 current head SHA:
+  `54b2498366a611589638f1e8aac68c73c95c7b30`.
+- Hosted Release validation succeeded for that head on Windows PowerShell 5.1,
+  Windows PowerShell 7, Ubuntu, and macOS:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160
 
 Next Actions
-- Merge release-v0.4.0 PR, tag v0.4.0, publish GitHub Release.
-- Clean up merged branches: `issue-30-conservative-language-migration`,
-  `issue-30-narrative-language-migration`.
+- Wait for maintainer review on draft PR #50.
+- Address review feedback if requested.
+- After maintainer approval, move PR #50 toward ready-for-review.
 - Do not push directly to `main`.
 
 Blocking Issues

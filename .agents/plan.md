@@ -1,28 +1,41 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/conservative-language-migration/spec.md` (Complete)
+- `docs/specs/project-memory-template-authority/spec.md` (Active)
 
 Current Task
-- v0.4.0 release preparation and publication.
+- Implement issue #49: refactor project-memory template authority to
+  `knowledge-hub/templates/project-memory/`, update bundled bootstrap assets,
+  remove the standalone `skills/project-bootstrap/templates/project-memory/`
+  tree, validate, and keep draft PR #50 ready for maintainer review.
 
 Session Status
-- Issue #30 is complete: Phase 1 (PR #46) and Phase 2 (PR #47) merged.
-- PR #46 merged on 2026-05-13 at
-  `ee327e75aa35bd38c7495a019eaa932f4f9395f2`.
-- PR #47 merged on 2026-05-13 at
-  `2beb8285803abe17daaea1d2eac590cb91d2aef0`.
-- Issue #30 closed on 2026-05-13.
-- Hosted release validation passed on main at
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
-- Local validation: `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- Working branch: `codex/issue-49-project-memory-authority`.
+- Issue #49 body and maintainer review note have been read.
+- Work package created under
+  `docs/specs/project-memory-template-authority/`.
+- Template authority move, script updates, document updates, and release
+  validation updates are implemented.
+- Release validation passed with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+- PR #50 is open as a draft:
+  https://github.com/Huangshier/agent-ecosystem/pull/50
+- Current PR head SHA:
+  `54b2498366a611589638f1e8aac68c73c95c7b30`.
+- Hosted Release validation passed for the current head on Windows PowerShell
+  5.1, Windows PowerShell 7, Ubuntu, and macOS:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160
 
 Next Work
-- Complete v0.4.0 release PR, merge, tag, and publish.
-- After release, clean up merged branches.
+- Wait for maintainer review on draft PR #50.
+- Address review feedback if requested.
+- When approved, prepare PR #50 for ready-for-review; do not merge from this
+  session.
 
 Notes
 - Durable task state lives in
-  `docs/specs/conservative-language-migration/tasks.md`.
+  `docs/specs/project-memory-template-authority/tasks.md`.
 - Do not store private mappings, local paths, automation identity material, or
   private audit findings here.
+- Do not push directly to `main`; do not expand this work to #30 migration
+  apply behavior.
+- Keep PR #50 as draft until maintainer explicitly approves ready-for-review.

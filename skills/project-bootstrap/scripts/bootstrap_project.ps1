@@ -672,6 +672,7 @@ $lockData = [ordered]@{
     hub_commit = $hubCommit
     hub_dirty = [bool]$hubDirty
     template_source = "templates/project-root + templates/project-agent"
+    language_template_source = if ($null -ne $languageResult) { "skills/project-bootstrap/assets/knowledge-hub-template/templates/project-memory" } else { "" }
     template_tree_hash_sha256 = $templateTreeHash
     bootstrap_operation_mode = $bootstrapOperationMode
     template_mode = $templateMode
