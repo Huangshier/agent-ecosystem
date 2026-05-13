@@ -1,0 +1,85 @@
+name: Issue triage label sync
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: Sync human triage labels
+    if: contains(github.event.issue.labels.*.name, 'source:agent')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mirror checklist decision to labels
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || "";
+            const sectionMatch = body.match(/##\s*Human Triage Decision\s*([\s\S]*?)(?:\n##\s+|$)/i);
+
+            if (!sectionMatch) {
+              core.info("No Human Triage Decision section found; leaving labels unchanged.");
+              return;
+            }
+
+            const section = sectionMatch[1];
+            const decisions = [
+              { key: "accepted", label: "triage:accepted", pattern: /-\s*\[[xX]\]\s*Accepted\b/ },
+              { key: "rejected", label: "triage:rejected", pattern: /-\s*\[[xX]\]\s*Rejected\b/ },
+              { key: "deferred", label: "triage:deferred", pattern: /-\s*\[[xX]\]\s*Deferred\b/ },
+              { key: "needs-human", label: "triage:needs-human", pattern: /-\s*\[[xX]\]\s*Needs human investigation\b/ },
+            ];
+
+            const checked = decisions.filter((decision) => decision.pattern.test(section));
+            if (checked.length === 0) {
+              core.info("No checked human triage decision found; leaving labels unchanged.");
+              return;
+            }
+
+            if (checked.length > 1) {
+              core.setFailed(`Multiple human triage decisions are checked: ${checked.map((item) => item.key).join(", ")}. Please leave exactly one checked decision.`);
+              return;
+            }
+
+            const desired = checked[0].label;
+            const currentLabels = issue.labels.map((label) => label.name);
+            const labelsToRemove = decisions
+              .map((decision) => decision.label)
+              .filter((label) => label !== desired);
+            labelsToRemove.push("review:needs-human");
+
+            for (const label of labelsToRemove) {
+              if (!currentLabels.includes(label)) {
+                continue;
+              }
+
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                name: label,
+              });
+              core.info(`Removed stale label: ${label}`);
+            }
+
+            if (!currentLabels.includes(desired)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [desired],
+              });
+              core.info(`Added label: ${desired}`);
+            } else {
+              core.info(`Desired label already present: ${desired}`);
+            }

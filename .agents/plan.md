@@ -1,7 +1,9 @@
 # Active Plan
 
 Active Spec
-- `docs/specs/file-based-memory-templates/spec.md` (Active)
+- `docs/specs/issue-triage-label-sync/spec.md` (Active)
+- Completed reference:
+  `docs/specs/file-based-memory-templates/spec.md` (Done via PR #41)
 - Completed reference:
   `docs/specs/bootstrap-operating-modes/spec.md` (Done via PR #40)
 - Completed reference:
@@ -16,32 +18,28 @@ Active Spec
   `docs/specs/minimal-project-adoption-walkthrough/spec.md` (Done)
 
 Current Task
-- Resolve issue #32: add file-based `en` and `zh-CN` engineering-memory
-  templates for project-bootstrap scaffold generation and language setup.
+- Resolve issue #42: add an issue triage label sync workflow.
 
 Session Status
-- PR #40 has been merged and issue #33 is closed as completed.
-- Local `main` has been fast-forwarded to PR #40 merge commit
-  `19656e5f92264a960c8e6ac6039debd97166c10f`.
-- Issue #32 has been re-read and is accepted for this implementation pass.
-- Issue #30 has been re-read and remains out of scope for this PR.
-- Branch `issue-32-file-based-memory-templates` is active.
+- PR #41 has been merged and issue #32 is closed as completed.
+- Local `main` is clean and matches `origin/main`.
+- Issue #42 has been created and accepted for this implementation pass.
+- Issue #30 remains out of scope for this PR.
+- Branch `issue-42-triage-label-sync` is active.
 
 Next Work
-- [x] Sync public `main` after PR #40.
-- [x] Confirm #33 is closed as completed and PR #40 is merged.
-- [x] Re-read #32 and #30 and confirm #30 remains out of scope.
-- [x] Create #32 branch and work package.
-- [x] Add file-based `en` and `zh-CN` memory template trees.
-- [x] Update language setup to load templates from files with `zh-CN` to `en`
-  fallback warnings.
-- [x] Update docs and release validation coverage.
+- [x] Create accepted issue #42.
+- [x] Create #42 branch and work package.
+- [x] Add issue triage label sync workflow.
+- [x] Update governance docs and issue template.
+- [x] Update release validation coverage.
 - [x] Run `git diff --check`.
 - [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-  (`PASS=37 FAIL=0 WARN=0 DEFERRED=0`).
-- [ ] Commit, push, and open a draft PR for #32.
+  (`PASS=38 FAIL=0 WARN=0 DEFERRED=0`).
+- [x] Commit, push, and open draft PR #43 for #42.
+- [ ] Wait for hosted release validation run `25776495732`.
 
 Notes
 - Do not store private mappings, local paths, automation identity material, or
   private audit findings here.
-- Do not implement #32 or #30 in the #33 PR.
+- Do not implement #30 in this PR.
