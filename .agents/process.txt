@@ -1,8 +1,10 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
 - Current published public release is `v0.4.2`.
-- Active issue: #55 existing project upgrade path after `v0.4.2`.
-- Active public branch: `codex/issue-55-existing-project-upgrade-path`.
+- Active work: restore #59 legacy template path audit and #60 existing project
+  upgrade path content onto `main` after stacked PRs were merged into non-main
+  base branches.
+- Active public branch: `codex/restore-stabilization-audit-upgrade-docs`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -41,14 +43,13 @@ Completed
   - #57 prepare the `v0.4.3` stabilization release.
 
 Next Actions
-- Push the #60 documentation-accuracy fix after final diff review.
-- Update PR #60 body with the refreshed local validation evidence after push.
+- Validate the restore branch from current `origin/main`.
+- Open a draft PR to `main` titled
+  `[codex] Restore stabilization audit and upgrade docs on main`.
 - Do not push directly to `main`.
 
 Latest Local Validation
-- 2026-05-14: `git diff --check` passed.
-- 2026-05-14: `scripts/validate-release.ps1 -ScratchRoot <scratch>` passed
-  with `PASS=45 FAIL=0 WARN=0 DEFERRED=0`.
+- Pending for the restore branch.
 
 Blocking Issues
 - No active blockers.
