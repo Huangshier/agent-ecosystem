@@ -10,7 +10,7 @@ It is meant to be adapted: teams can start with the public kernel, then adjust
 their `.agents/` memory, specs, domain knowledge, and custom skills to fit their
 own project workflow.
 
-Current release: `v0.4.2`.
+Current release: `v0.4.3`.
 
 ## What It Is
 
@@ -108,6 +108,7 @@ developer maintenance tooling after the kernel base flow is stable.
 - [Release readiness](docs/release-readiness.md)
 - [Shell strategy](docs/shell-strategy.md)
 - [Template path reference audit](docs/template-path-reference-audit.md)
+- [v0.4.3 release notes](docs/releases/v0.4.3.md)
 - [v0.4.2 release notes](docs/releases/v0.4.2.md)
 - [v0.4.1 release notes](docs/releases/v0.4.1.md)
 - [v0.4.0 release notes](docs/releases/v0.4.0.md)

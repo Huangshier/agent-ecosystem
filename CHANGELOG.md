@@ -4,16 +4,17 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-Release-prep draft for `v0.4.3` stabilization. No release has been tagged or
-published from these changes.
+No public changes after `v0.4.3`.
 
-## v0.4.3 - Release prep draft
+## v0.4.3 - 2026-05-14
 
-- Prepared post-`v0.4.2` stabilization release records for maintainer review.
+- Published the post-`v0.4.2` stabilization release records.
 - Normalized `v0.4.1` and `v0.4.2` release records and validator coverage.
 - Added legacy template-path reference audit documentation and validation.
 - Added existing-project upgrade guidance for the post-`v0.4.2`
   language-scoped template model.
+- Recorded hosted release validation for tag target
+  `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`.
 - Kept `v0.5.0` expansion, new public domain packs, and `full` / `dev` profile
   behavior changes out of scope.
 

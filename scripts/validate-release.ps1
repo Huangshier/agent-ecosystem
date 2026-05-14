@@ -1344,26 +1344,43 @@ try {
     $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.3.md"
     $releaseTokens = @(
         "v0.4.3",
-        "release prep draft",
+        "public release",
         "post-convergence stabilization",
         "Issue #53",
         "Issue #54",
         "Issue #55",
         "Issue #56",
         "Issue #57",
+        "PR #63",
         "PASS=46 FAIL=0 WARN=0 DEFERRED=0",
-        "Do not tag or publish"
+        "25841179794",
+        "26072b7f8e25e2a5b1092b6af45d47ae1c43cac8",
+        "Published GitHub Release"
     )
     $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
     if ($missingReleaseTokens.Count -gt 0) {
-        Add-Check "v0.4.3 release prep notes" "FAIL" "Release-prep notes are missing required v0.4.3 summary tokens." @($missingReleaseTokens)
+        Add-Check "v0.4.3 release notes" "FAIL" "Release notes are missing required v0.4.3 published-release tokens." @($missingReleaseTokens)
     }
     else {
-        Add-Check "v0.4.3 release prep notes" "PASS" "v0.4.3 release-prep notes summarize stabilization scope, validation expectation, human decisions, and public boundary."
+        $staleReleasePrepTokens = @(
+            "release prep draft",
+            "This document is a draft",
+            "not a published release",
+            "Hosted release validation must pass on the draft PR",
+            "Before publishing",
+            "Do not tag or publish"
+        )
+        $staleReleasePrepMatches = @($staleReleasePrepTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($staleReleasePrepMatches.Count -gt 0) {
+            Add-Check "v0.4.3 release notes" "FAIL" "Release notes still contain release-prep-only wording after v0.4.3 publication." @($staleReleasePrepMatches)
+        }
+        else {
+            Add-Check "v0.4.3 release notes" "PASS" "v0.4.3 release notes summarize published stabilization scope, validation evidence, linked work, and public boundary."
+        }
     }
 }
 catch {
-    Add-Check "v0.4.3 release prep notes" "FAIL" $_.Exception.Message
+    Add-Check "v0.4.3 release notes" "FAIL" $_.Exception.Message
 }
 
 try {

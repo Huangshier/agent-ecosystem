@@ -1,7 +1,7 @@
 # Release Readiness
 
-Status: `v0.4.3` release-prep draft. Latest published public release:
-`v0.4.2`.
+Status: `v0.4.3` public release. Latest published public release:
+`v0.4.3`.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -10,8 +10,9 @@ public stabilization release. `v0.4.0` delivered the conservative `en` /
 `zh-CN` engineering-memory language migration workflow, completing issue #30.
 `v0.4.1` consolidated project-memory template authority, and `v0.4.2`
 converged the template model to language-scoped project-root and project-agent
-directories. `v0.4.3` is a stabilization release-prep draft for maintainer
-review; it has not been tagged or published.
+directories. `v0.4.3` was published as a stabilization release for release
+record normalization, legacy template-path audit coverage, and existing project
+upgrade guidance.
 
 ## Completed
 
@@ -96,7 +97,7 @@ review; it has not been tagged or published.
 - Public release notes are present at `docs/releases/v0.4.0.md`.
 - Public release notes are present at `docs/releases/v0.4.1.md`.
 - Public release notes are present at `docs/releases/v0.4.2.md`.
-- Release-prep notes are present at `docs/releases/v0.4.3.md`.
+- Public release notes are present at `docs/releases/v0.4.3.md`.
 - Conservative `en` / `zh-CN` language migration is complete: Phase 1
   deterministic scaffold migration and Phase 2 narrative migration from
   manual-review artifacts. Issue #30 is closed.
@@ -133,6 +134,8 @@ review; it has not been tagged or published.
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.1
 - GitHub Release `v0.4.2` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.2
+- GitHub Release `v0.4.3` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
 - Hub initialization now leaves template hubs as ordinary directories unless
   `-InitializeGit` or `-CommitInitial` is explicitly supplied.
 - Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
@@ -143,8 +146,12 @@ review; it has not been tagged or published.
 - Existing project upgrade guidance documents the post-`v0.4.2`
   language-scoped template model, conservative upgrade flow, local memory
   preservation, and old path handling.
-- `v0.4.3` release-prep local validation passed with
+- `v0.4.3` release validation passed with
   `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
+- Hosted Release validation for the published `v0.4.3` tag target
+  `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8` passed on Windows PowerShell 5.1,
+  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/25841179794
 
 ## Required Before Future Publishing
 
@@ -246,6 +253,6 @@ The release validator now covers:
 - v0.4.0 release notes coverage
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
-- v0.4.3 release prep notes coverage
+- v0.4.3 release notes coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage

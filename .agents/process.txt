@@ -1,10 +1,13 @@
 Current State
 - This repository is the public source repository for Agent Ecosystem.
-- Current published public release is `v0.4.2`.
-- Active issue: #57 `v0.4.3` stabilization release prep.
-- Active public branch: `codex/rebuild-v0.4.3-release-prep`.
-- Active PR: #63 `[codex] Rebuild v0.4.3 release-prep from main`, draft/open,
-  base `main`, replacement for stale old #61.
+- Current published public release is `v0.4.3`:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
+- Local `main`, `origin/main`, local tag `v0.4.3`, and remote tag `v0.4.3`
+  point to `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`.
+- Active local branch:
+  `codex/reconcile-v0.4.3-release-records`.
+- Active spec:
+  `docs/specs/v0-4-3-release-record-reconciliation/spec.md`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -16,67 +19,39 @@ Current State
 - Repository ruleset `protect-main` protects the default branch.
 
 Completed
-- `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.4.0`, and `v0.4.1` have been
-  published as GitHub Releases.
-- `v0.4.2` has been published as a GitHub Release.
-- Public `scripts/validate-release.ps1` is the reusable release gate.
-- Release validation workflow has passed on Windows PowerShell 5.1, Windows
-  PowerShell 7, Ubuntu, and macOS for prior release heads.
-- PR #50 released v0.4.1 and moved project-memory language templates into the
-  intermediate v0.4.1 authority layout.
-- Issue #51 moved the template model to
-  `knowledge-hub/templates/languages/en|zh-CN/project-root|project-agent` and
-  the matching bundled snapshot under
-  `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/`.
-- PR #52 was merged and released as `v0.4.2`:
-  https://github.com/Huangshier/agent-ecosystem/pull/52
-- Local requested validation for #51 passed:
-  - `git diff --check`
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
-    with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`
-- Stabilization issues are open:
-  - #53 normalize `v0.4.1` / `v0.4.2` release records.
-  - #54 audit legacy template-path references.
-  - #55 document the post-`v0.4.2` upgrade path for existing `.agents` projects.
-  - #56 define domain-pack governance lifecycle without enabling expansion
-    (deferred).
-  - #57 prepare the `v0.4.3` stabilization release.
-- PR #58 was squash-merged to `main` for issue #53.
-- PR #62 was squash-merged to `main` and restored the final issue #54 and #55
-  content that had previously landed only on stacked base branches.
-- PR #63 was opened as the replacement draft PR for issue #57 from current
-  `main`.
-- PR #63 hosted Release validation run `25839524056` passed on Windows
-  PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh for commit
-  `83efa36cf0bc2ef53e2682a9fb777974af364570`.
-- PR #63 body was refreshed with issue #57 validation, rollback/recovery,
-  public/private boundary, and human decision checklist sections.
-- PR #63 public `.agents/` refresh now preserves running/project-specific
-  memory while aligning template-like scaffolding files with current public
-  English templates. `.agents/AGENTS.md` intentionally retains the public repo
-  English-first and private-overlay boundary wording.
-- The old #61 draft branch is stale after #62 and must not be continued,
-  force-pushed, rebased, or merged.
+- `v0.1.0` through `v0.4.3` have been published as GitHub Releases.
+- PR #63 was merged on 2026-05-14 at
+  `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`.
+- Issue #57 was closed as completed on 2026-05-14.
+- GitHub Release `v0.4.3` is published, non-draft, and non-prerelease.
+- Hosted Release validation run `25841179794` passed for the `v0.4.3` tag
+  target on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
 
-Next Actions
-- Re-check hosted CI status for the latest PR #63 head after pushing the
-  template-scaffold refresh commit.
-- Wait for maintainer review / ready / merge decision.
-- Do not push directly to `main`.
+Current Work
+- Local release record reconciliation is complete on
+  `codex/reconcile-v0.4.3-release-records`.
+- Tracked release records and validator expectations now match the published
+  `v0.4.3` release state.
+- Public `.agents` state no longer treats PR #63, issue #57, or `v0.4.2` as the
+  active release status.
+- The closeout rule now states that tracked `.agents` files should not be
+  repeatedly updated only to chase per-push PR head CI timestamps.
 
 Latest Local Validation
-- Previous PR #63 head `83efa36cf0bc2ef53e2682a9fb777974af364570`:
-  `git diff --check` passed.
-- Previous PR #63 head `83efa36cf0bc2ef53e2682a9fb777974af364570`:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>`
+- `git diff --check` passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-v043-reconcile-validation-2"`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
-- Diff scope check found no `git tag`, `gh release`, release-create, or
-  direct `main` push command additions. #56 / `v0.5.0` mentions are limited to
-  deferred / non-goal wording and required validation text.
-- Current PR-body and memory refresh:
-  - `git diff --check` passed.
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>`
-    passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
+
+Open Public Issues / PRs
+- Open issues: #23 and #56, both deferred for later roadmap / domain-pack
+  governance work.
+- Open PRs: none.
+
+Next Actions
+- Review the local diff and decide whether to open or push a PR.
+- Do not push directly to `main`, move tags, publish or edit GitHub Releases,
+  close or edit issues, merge PRs, mark PRs ready for review, or change
+  repository settings without maintainer approval.
 
 Blocking Issues
 - No active blockers.
