@@ -4,7 +4,7 @@ Agent Ecosystem 是面向 agent-assisted software projects 的工作流内核。
 
 公开文档以英文优先；本文件是简体中文入口，帮助快速理解项目定位和采用方式。
 
-当前公开版本：`v0.4.2`。
+当前公开版本：`v0.4.3`。
 
 ## 它是什么
 
@@ -78,6 +78,7 @@ developer maintenance tooling。
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
 - [Template path reference audit](docs/template-path-reference-audit.md)
+- [v0.4.3 release notes](docs/releases/v0.4.3.md)
 - [v0.4.2 release notes](docs/releases/v0.4.2.md)
 - [v0.4.1 release notes](docs/releases/v0.4.1.md)
 - [v0.4.0 release notes](docs/releases/v0.4.0.md)

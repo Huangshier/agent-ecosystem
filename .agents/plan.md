@@ -1,35 +1,34 @@
 # Active Plan
 
 Active Spec
-- None. The active work is tracked by public issue #57 and this fresh
-  release-prep branch replaces the stale old #61 branch state.
+- `docs/specs/v0-4-3-release-record-reconciliation/spec.md`
+
+Current Branch
+- `codex/reconcile-v0.4.3-release-records`
 
 Current Task
-- PR #63 release-prep metadata and public engineering memory refresh now also
-  includes template-scaffold alignment while preserving running/project-specific
-  memory.
+- Local reconciliation of public release records and validator expectations with
+  the already published GitHub Release `v0.4.3` is complete.
 
 Session Status
-- Working branch: `codex/rebuild-v0.4.3-release-prep`.
-- Draft PR: #63 `[codex] Rebuild v0.4.3 release-prep from main`.
-- Current published public release is `v0.4.2`.
-- PR #58 and PR #62 have been squash-merged to `main`.
-- PR #62 restored the final #59 legacy template-path audit and #60 existing
-  project upgrade path content onto `main`.
-- PR #63 replaces the stale old #61 release-prep branch and is the active
-  review surface for issue #57.
-- The old #61 branch is stale and must not be continued, force-pushed, rebased,
-  or merged.
-- Issue #56 is deferred planning and has no implementation PR in this release
-  prep pass.
+- Release baseline confirmed:
+  - local `main`: `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`
+  - `origin/main`: `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`
+  - local tag `v0.4.3`: `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`
+  - remote tag `v0.4.3`: `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`
+- GitHub Release `v0.4.3` is published, non-draft, and non-prerelease.
+- Issue #57 is closed as completed; PR #63 is merged.
+- Open public PRs are empty.
+- Open public issues are #23 and #56, both deferred.
+- `git diff --check` passed.
+- Release validator passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
 
 Next Work
-- Wait for hosted Release validation on the latest PR #63 head after the
-  template-scaffold refresh commit is pushed.
-- Maintainer decision remains required before marking ready for review,
-  merging, tagging `v0.4.3`, or publishing a GitHub Release.
+- Await maintainer direction for PR/push. No remote mutation is authorized by
+  this local reconciliation pass.
 
 Notes
-- Do not push directly to `main`, merge PRs, tag releases, publish releases,
-  mark PRs ready for review, continue old #61, close issues, or change
-  repository settings.
+- Do not move tags, publish or edit GitHub Releases, close or edit issues, push
+  directly to `main`, merge PRs, mark PRs ready for review, or change repository
+  settings without explicit maintainer approval.
+- Do not use tracked `.agents` memory for repeated CI timestamp refresh commits.
