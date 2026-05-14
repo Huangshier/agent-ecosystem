@@ -162,6 +162,7 @@ $requiredFiles = @(
     "docs/releases/v0.4.0.md",
     "docs/releases/v0.4.1.md",
     "docs/releases/v0.4.2.md",
+    "docs/releases/v0.4.3.md",
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -1337,6 +1338,32 @@ try {
 }
 catch {
     Add-Check "v0.4.2 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.3.md"
+    $releaseTokens = @(
+        "v0.4.3",
+        "release prep draft",
+        "post-convergence stabilization",
+        "Issue #53",
+        "Issue #54",
+        "Issue #55",
+        "Issue #56",
+        "Issue #57",
+        "PASS=46 FAIL=0 WARN=0 DEFERRED=0",
+        "Do not tag or publish"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.3 release prep notes" "FAIL" "Release-prep notes are missing required v0.4.3 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.4.3 release prep notes" "PASS" "v0.4.3 release-prep notes summarize stabilization scope, validation expectation, human decisions, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.4.3 release prep notes" "FAIL" $_.Exception.Message
 }
 
 try {

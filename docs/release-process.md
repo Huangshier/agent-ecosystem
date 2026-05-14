@@ -86,6 +86,7 @@ The validator checks:
 - v0.4.0 release notes coverage
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
+- v0.4.3 release prep notes coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage
 
