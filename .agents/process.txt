@@ -3,6 +3,8 @@ Current State
 - Current published public release is `v0.4.2`.
 - Active issue: #57 `v0.4.3` stabilization release prep.
 - Active public branch: `codex/rebuild-v0.4.3-release-prep`.
+- Active PR: #63 `[codex] Rebuild v0.4.3 release-prep from main`, draft/open,
+  base `main`, replacement for stale old #61.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -42,22 +44,35 @@ Completed
 - PR #58 was squash-merged to `main` for issue #53.
 - PR #62 was squash-merged to `main` and restored the final issue #54 and #55
   content that had previously landed only on stacked base branches.
+- PR #63 was opened as the replacement draft PR for issue #57 from current
+  `main`.
+- PR #63 hosted Release validation run `25839524056` passed on Windows
+  PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh for commit
+  `83efa36cf0bc2ef53e2682a9fb777974af364570`.
+- PR #63 body was refreshed with issue #57 validation, rollback/recovery,
+  public/private boundary, and human decision checklist sections.
 - The old #61 draft branch is stale after #62 and must not be continued,
   force-pushed, rebased, or merged.
 
 Next Actions
-- Commit the validated issue #57 release-prep rebuild.
-- Push `codex/rebuild-v0.4.3-release-prep`.
-- Open a replacement draft PR to `main`.
+- Re-check hosted CI status for the latest PR #63 head after pushing the
+  memory-refresh commit.
+- Wait for maintainer review / ready / merge decision.
 - Do not push directly to `main`.
 
 Latest Local Validation
-- `git diff --check` passed.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1 -ScratchRoot <scratch>`
+- Previous PR #63 head `83efa36cf0bc2ef53e2682a9fb777974af364570`:
+  `git diff --check` passed.
+- Previous PR #63 head `83efa36cf0bc2ef53e2682a9fb777974af364570`:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
 - Diff scope check found no `git tag`, `gh release`, release-create, or
   direct `main` push command additions. #56 / `v0.5.0` mentions are limited to
   deferred / non-goal wording and required validation text.
+- Current PR-body and memory refresh:
+  - `git diff --check` passed.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>`
+    passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
 
 Blocking Issues
 - No active blockers.
