@@ -41,9 +41,14 @@ Completed
   - #57 prepare the `v0.4.3` stabilization release.
 
 Next Actions
-- Finish issue #55 existing project upgrade guidance, validate locally, and
-  open a stacked draft PR.
+- Push the #60 documentation-accuracy fix after final diff review.
+- Update PR #60 body with the refreshed local validation evidence after push.
 - Do not push directly to `main`.
+
+Latest Local Validation
+- 2026-05-14: `git diff --check` passed.
+- 2026-05-14: `scripts/validate-release.ps1 -ScratchRoot <scratch>` passed
+  with `PASS=45 FAIL=0 WARN=0 DEFERRED=0`.
 
 Blocking Issues
 - No active blockers.

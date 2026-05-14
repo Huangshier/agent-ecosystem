@@ -49,11 +49,19 @@ Preserve local content such as:
 
 Use a conservative analyze -> plan -> backup -> apply -> validate flow.
 
-1. Analyze the existing project without editing files.
+1. Analyze existing memory without editing files by calling the memory-upgrade
+   helper directly.
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -AnalyzeMemoryUpgrade
+   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\memory_upgrade.ps1 -ProjectDir <project> -Mode Analyze
    ```
+
+   The bootstrap wrapper also exposes `-AnalyzeMemoryUpgrade`, but it runs the
+   normal conservative bootstrap path before memory analysis. It may create
+   missing scaffold files and `.agents/hub.lock.json` before reporting memory
+   findings. Use the wrapper when a project also needs the current scaffold
+   baseline refreshed; use the direct helper when the analysis must be
+   memory-only and no-edit.
 
 2. Plan a reviewable upgrade proposal.
 
