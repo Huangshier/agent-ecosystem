@@ -6,6 +6,11 @@
 - **Owner**: Maintainer + agent
 - **Updated**: 2026-05-13
 
+> Historical note: this closed work package predates the `v0.4.2`
+> language-scoped template model. References to
+> `skills/project-bootstrap/templates/project-memory/` are legacy history, not
+> current public template guidance.
+
 ## 1. Summary
 - Add file-based `en` and `zh-CN` engineering-memory templates for project bootstrap.
 - Make those templates the structural source for scaffold generation, language updates, and future conservative migration planning.

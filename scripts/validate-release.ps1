@@ -148,11 +148,13 @@ $requiredFiles = @(
     "scripts/validation/release-test-helper.ps1",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
+    "docs/existing-project-upgrade.md",
     "docs/how-to-adapt.md",
     "docs/language-policy.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
     "docs/shell-strategy.md",
+    "docs/template-path-reference-audit.md",
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "docs/releases/v0.3.0.md",
@@ -207,6 +209,100 @@ if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0 -and $presentForbidd
 }
 else {
     Add-Check "public structure" "FAIL" "Required public paths are missing or forbidden legacy paths are present." ([ordered]@{ files = $missingFiles; directories = $missingDirs; forbidden_directories = $presentForbiddenDirs })
+}
+
+try {
+    $legacyReferencePattern = 'templates/project-root|templates/project-agent|templates/project-memory|project-bootstrap/templates/project-memory'
+    $allowedLegacyReferenceFiles = @(
+        "CHANGELOG.md",
+        "docs/release-readiness.md",
+        "docs/releases/v0.4.1.md",
+        "docs/releases/v0.4.2.md",
+        "docs/template-path-reference-audit.md",
+        "scripts/validate-release.ps1",
+        "skills/project-bootstrap/scripts/init_hub.ps1"
+    )
+    $legacyMatches = New-Object 'System.Collections.Generic.List[object]'
+    $unexpectedLegacyMatches = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($file in @(Get-GitFiles)) {
+        foreach ($match in @(Get-LineMatches -RelativePath $file -Pattern $legacyReferencePattern)) {
+            $legacyMatches.Add([object]$match)
+            $isAllowed = $false
+
+            if ($file -in $allowedLegacyReferenceFiles) {
+                $isAllowed = $true
+            }
+            elseif ($file -like "docs/specs/*") {
+                $fileText = Get-FileText -RelativePath $file
+                $isAllowed = ($fileText -match "Historical note:" -and $fileText -match "(legacy|superseded|removed|negative validation)")
+            }
+
+            if (-not $isAllowed) {
+                $unexpectedLegacyMatches.Add([object]$match)
+            }
+        }
+    }
+
+    $script:evidence.legacy_template_references = [ordered]@{
+        total_matches = $legacyMatches.Count
+        unexpected_matches = @($unexpectedLegacyMatches.ToArray())
+        allowed_files = @($allowedLegacyReferenceFiles)
+    }
+
+    if ($unexpectedLegacyMatches.Count -gt 0) {
+        Add-Check "legacy template path references" "FAIL" "Legacy template path references appeared outside allowed validator, remediation, or marked historical records." @($unexpectedLegacyMatches.ToArray())
+    }
+    else {
+        Add-Check "legacy template path references" "PASS" ("Legacy template path references are limited to validator/remediation logic or marked historical records ({0} matches)." -f $legacyMatches.Count) $evidence.legacy_template_references
+    }
+}
+catch {
+    Add-Check "legacy template path references" "FAIL" $_.Exception.Message
+}
+
+try {
+    $upgradeGuide = Get-FileText -RelativePath "docs/existing-project-upgrade.md"
+    $adaptGuide = Get-FileText -RelativePath "docs/how-to-adapt.md"
+    $bootstrapReadme = Get-FileText -RelativePath "skills/project-bootstrap/README.md"
+    $upgradeTokens = @(
+        "language-scoped project-memory templates",
+        "templates/languages/<language>/project-root|project-agent",
+        "project-specific memory",
+        ".agents/context/experience",
+        ".agents/context/patterns",
+        ".agents/context/standards",
+        "analyze -> plan -> backup -> apply -> validate",
+        "memory_upgrade.ps1",
+        "-Mode Analyze",
+        "-AnalyzeMemoryUpgrade",
+        "missing scaffold files",
+        "memory-only and no-edit",
+        "Do not recreate legacy template directories",
+        "ApplyMemoryUpgrade",
+        "Validate"
+    )
+    $missingUpgradeTokens = @($upgradeTokens | Where-Object { $upgradeGuide -notlike "*$_*" })
+    $missingLinks = @()
+    if ($adaptGuide -notlike "*existing project upgrade path*") {
+        $missingLinks += "docs/how-to-adapt.md missing existing project upgrade path link."
+    }
+    if ($bootstrapReadme -notlike "*docs/existing-project-upgrade.md*") {
+        $missingLinks += "skills/project-bootstrap/README.md missing existing project upgrade guide link."
+    }
+
+    if ($missingUpgradeTokens.Count -gt 0 -or $missingLinks.Count -gt 0) {
+        Add-Check "existing project upgrade path" "FAIL" "Existing project upgrade guidance is incomplete." ([ordered]@{
+            missing_tokens = @($missingUpgradeTokens)
+            missing_links = @($missingLinks)
+        })
+    }
+    else {
+        Add-Check "existing project upgrade path" "PASS" "Existing project upgrade guidance covers language-scoped templates, memory preservation, conservative flow, old path handling, and validation."
+    }
+}
+catch {
+    Add-Check "existing project upgrade path" "FAIL" $_.Exception.Message
 }
 
 try {

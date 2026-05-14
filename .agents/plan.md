@@ -1,24 +1,25 @@
 # Active Plan
 
 Active Spec
-- None. The active work is tracked by public issue #53.
+- None. The active work is a stacked-PR merge-state repair requested by the
+  maintainer.
 
 Current Task
-- Implement issue #53: normalize `v0.4.1` / `v0.4.2` public release records.
+- Restore #59 legacy template path audit and #60 existing project upgrade path
+  content onto current `origin/main` without continuing #61.
 
 Session Status
-- Working branch: `codex/issue-53-release-records`.
+- Working branch: `codex/restore-stabilization-audit-upgrade-docs`.
 - Current published public release is `v0.4.2`.
 - Stabilization issues #53 through #57 are open.
-- This branch updates README entrypoints, changelog, release readiness,
-  release process coverage, `v0.4.1` / `v0.4.2` release notes, and release
-  validation coverage for issue #53.
+- PR #58 was squash-merged to `main`; #59 and #60 were merged into stacked base
+  branches instead of `main`, so this branch restores their final reviewed
+  content on top of current `origin/main`.
 
 Next Work
 - Run `git diff --check`.
 - Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1 -ScratchRoot <scratch>`.
-- Commit, push the branch with the configured automation identity, and open a
-  draft PR for #53.
+- Commit, push this branch, and open the requested draft PR to `main`.
 
 Notes
 - Do not push directly to `main`, merge PRs, tag releases, publish releases, or

@@ -35,6 +35,8 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
 - `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
 - When ordinary bootstrap detects memory upgrade candidates, the skill workflow decides whether to auto-upgrade, ask first, or skip based on the user's stated intent.
+- For existing projects moving to the post-`v0.4.2` template model, see
+  `docs/existing-project-upgrade.md` before applying changes.
 
 ## Conservative Language Migration
 - `language_migration.ps1 -Mode Analyze -SourceLanguage en -TargetLanguage zh-CN` reports planned actions without editing memory.
