@@ -26,8 +26,8 @@
 - The initial public experience entry is a reindexed public-safe backfill.
   Its index metadata intentionally omits local source paths and private
   migration details.
-- The latest published public release is `v0.3.1`:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.3.1
+- The latest published public release is `v0.4.2`:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.2
 - Final `v0.3.1` main release validation run passed on 2026-05-09:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25598098034
 - `knowledge-hub/` is part of the `agent-ecosystem` repository tree. It is not
@@ -103,5 +103,11 @@
   Ubuntu pwsh, and macOS pwsh.
 - Issue #30 `Feature: support conservative en/zh-CN engineering-memory language
   migration` closed on 2026-05-13 with `state_reason=completed`.
-- The latest published public release is `v0.3.1`; `v0.4.0` release preparation
-  is in progress on branch `release-v0.4.0`.
+- `v0.4.0`, `v0.4.1`, and `v0.4.2` have been published as GitHub Releases.
+- PR #63 is the active draft release-prep PR for issue #57. It replaces the
+  stale old #61 branch; `v0.4.3` has not been tagged or published.
+- PR #63 public `.agents/` refresh treats `.agents/plan.md`,
+  `.agents/process.txt`, and `.agents/notes.md` as running/project-specific
+  memory while aligning template-like scaffold files to the current public
+  English project-agent templates. `.agents/AGENTS.md` keeps the public
+  repository's English-first and private-overlay boundary wording.

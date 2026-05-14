@@ -1,5 +1,7 @@
 # Commands Folder
 
+Project memory language: English.
+
 Use this folder for reusable high-frequency project workflows. It complements
 `.agents/AGENTS.md`: the agent guide says when to look here, and this folder
 records exact repeatable command flows.
