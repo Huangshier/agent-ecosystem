@@ -106,3 +106,8 @@
 - `v0.4.0`, `v0.4.1`, and `v0.4.2` have been published as GitHub Releases.
 - PR #63 is the active draft release-prep PR for issue #57. It replaces the
   stale old #61 branch; `v0.4.3` has not been tagged or published.
+- PR #63 public `.agents/` refresh treats `.agents/plan.md`,
+  `.agents/process.txt`, and `.agents/notes.md` as running/project-specific
+  memory while aligning template-like scaffold files to the current public
+  English project-agent templates. `.agents/AGENTS.md` keeps the public
+  repository's English-first and private-overlay boundary wording.

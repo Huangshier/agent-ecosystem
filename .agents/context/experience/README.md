@@ -1,5 +1,7 @@
 # Experience Context
 
+Project memory language: English.
+
 Store recurring pitfalls and proven fixes here.
 
 Keep each entry concise:

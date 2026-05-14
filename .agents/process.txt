@@ -51,12 +51,16 @@ Completed
   `83efa36cf0bc2ef53e2682a9fb777974af364570`.
 - PR #63 body was refreshed with issue #57 validation, rollback/recovery,
   public/private boundary, and human decision checklist sections.
+- PR #63 public `.agents/` refresh now preserves running/project-specific
+  memory while aligning template-like scaffolding files with current public
+  English templates. `.agents/AGENTS.md` intentionally retains the public repo
+  English-first and private-overlay boundary wording.
 - The old #61 draft branch is stale after #62 and must not be continued,
   force-pushed, rebased, or merged.
 
 Next Actions
 - Re-check hosted CI status for the latest PR #63 head after pushing the
-  memory-refresh commit.
+  template-scaffold refresh commit.
 - Wait for maintainer review / ready / merge decision.
 - Do not push directly to `main`.
 

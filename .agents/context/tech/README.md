@@ -1,5 +1,7 @@
 # Tech Context
 
+Project memory language: English.
+
 Store durable technical knowledge here.
 
 Suggested sections:

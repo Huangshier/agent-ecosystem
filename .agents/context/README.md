@@ -1,5 +1,7 @@
 # Context Routing
 
+Project memory language: English.
+
 Use this folder as the long-term memory base.
 
 - `tech/`: architecture, modules, build/deploy details, environment notes

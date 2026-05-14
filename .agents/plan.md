@@ -5,8 +5,9 @@ Active Spec
   release-prep branch replaces the stale old #61 branch state.
 
 Current Task
-- PR #63 release-prep metadata and public engineering memory refresh is ready
-  for maintainer review after local validation.
+- PR #63 release-prep metadata and public engineering memory refresh now also
+  includes template-scaffold alignment while preserving running/project-specific
+  memory.
 
 Session Status
 - Working branch: `codex/rebuild-v0.4.3-release-prep`.
@@ -24,7 +25,7 @@ Session Status
 
 Next Work
 - Wait for hosted Release validation on the latest PR #63 head after the
-  memory-refresh commit is pushed.
+  template-scaffold refresh commit is pushed.
 - Maintainer decision remains required before marking ready for review,
   merging, tagging `v0.4.3`, or publishing a GitHub Release.
 

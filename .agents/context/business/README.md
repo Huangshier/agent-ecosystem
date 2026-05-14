@@ -1,5 +1,7 @@
 # Business Context
 
+Project memory language: English.
+
 Store product rules and domain behavior here.
 
 Suggested sections:

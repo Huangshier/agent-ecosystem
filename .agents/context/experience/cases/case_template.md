@@ -1,5 +1,7 @@
 # [Problem Title]
 
+Project memory language: English.
+
 ## Summary
 [One or two sentences describing the reusable lesson and when it applies]
 

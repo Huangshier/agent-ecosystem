@@ -5,15 +5,16 @@ This repository uses project-level `.agents` memory files.
 Use this file as the primary working guide for agent sessions.
 
 ## Project Language Policy
+Project memory language: English.
+
 Project engineering memory for this public repository should be written in
 English by default.
-
 Community-facing documentation is English-first. Chinese documentation may live
 in `README.zh-CN.md` or under `docs/zh-CN/`.
-
 Keep file names, directory names, Markdown field labels, commands, paths, API
 names, and raw error text in English or in their original form.
-
+Keep public-facing artifacts in the language required by their target
+repository or audience.
 Do not store private migration mappings, local machine paths, sensitive audit
 findings, or personal overlay details in this repository. Those belong in the
 private overlay repository.
@@ -48,7 +49,7 @@ There are a small number of legitimate reasons to stop and ask the user:
 Illegitimate reasons include:
 
 - Asking about reversible implementation details. Make a reasonable choice, proceed, and adjust if evidence shows it was wrong
-- Asking "should I do the next step"—if the next step is part of the task, do it
+- Asking "should I do the next step" - if the next step is part of the task, do it
 - Dressing up a style choice you could have made yourself as "options for the user"
 - Ending with routine follow-up questions when the next step was already part of the requested work
 
@@ -56,6 +57,8 @@ Illegitimate reasons include:
 When the user's request is semantically broad or underspecified, do a short read-only exploration pass before editing. Examples include "optimize this", "clean this up", "migrate this", "fix the workflow", "look for problems", or requests without clear acceptance criteria.
 
 After exploration, proceed only when the goal, scope, non-goals, and validation path are clear. Ask a concise question when ambiguity is about product intent, success criteria, destructive/high-impact actions, external systems, or incompatible interpretations. Make reversible implementation choices yourself once intent is clear.
+
+Scope discipline: do not fold unrelated refactors, cleanup, or behavior changes into a work item unless they are explicit goals. If acceptance checks are skipped or unavailable, record that before claiming completion.
 
 ## Project Commands
 Use documented project commands before inventing new ones. Discovery order:
@@ -76,16 +79,12 @@ For implementation tasks that produce repository changes, a complete unit of wor
 2. **Implement & Verify**: Confirm the work meets the completion criteria and passes relevant validation for this project. Implement in small validated steps. Prefer deterministic, scriptable verification commands. Record blockers in `.agents/process.txt`.
 3. **Atomic Commit**: Commit only when the user asks for a commit or project policy clearly requires one. When committing in a git repository, inspect recent history with `git log` and match the repository's prevailing commit message format unless the user or project policy says otherwise.
 4. **The Push**: Push only when the user explicitly asks, or when established project workflow unambiguously requires it and remote access is available.
-5. **The Report**: After validation and any required commit/push steps, provide your report. If the task is review-only or blocked by environment or policy, report the blocker or findings clearly instead of pretending the task is complete. The report must contain:
-    * **What**: A summary of the changes.
-    * **Why**: The engineering rationale.
-    * **Tradeoffs**: Any compromises made.
-6. **Session Wrap-up**: For substantial sessions, when the user asks for memory cleanup, handoff, reflection, or next-session preparation, use the active runtime's skill discovery mechanism to find a relevant memory-governance or session-wrap-up workflow. There is no reliable automatic session-end hook, so do not assume this step runs unless it is requested or explicitly part of the project workflow. If no suitable workflow is available, manually update `.agents/process.txt`, record confirmed findings in `.agents/notes.md`, and store reusable lessons in `.agents/context/experience/`.
+5. **The Report**: After validation and any required commit/push steps, provide your report. If the task is review-only or blocked by environment or policy, report the blocker or findings clearly instead of pretending the task is complete.
 
 ## PR-Ready And Phase-Close Memory Sync Gate
-Before an agent opens a pull request, marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight public engineering memory sync gate.
+Before an agent opens a pull request, marks a pull request ready for review, hands off a non-draft pull request, or closes an implementation phase, it must run a lightweight engineering-memory sync gate.
 
-This gate is a workflow checklist, not a Git hook, repository ruleset, or branch-protection change. Ordinary intermediate commits do not require a full engineering-memory sync; update only the files needed for the work at that point.
+This gate is workflow guidance, not a Git hook, repository ruleset, or branch-protection change. Ordinary intermediate commits do not require a full engineering-memory sync; update only the files needed for the work at that point.
 
 Checklist:
 
@@ -102,15 +101,6 @@ Checklist:
 - **Non-Interactive**: Do not wait for ceremonial approval before routine reversible edits. Commit and push rules still follow the Delivery Protocol.
 - **Environment Aware**: When the project is a git repository, check `git status` before committing. Inspect unstaged changes with `git diff` and staged changes with `git diff --cached` to ensure no unintended files or hunks are included.
 
-## Delegation & Context Budget
-- **Optional Capability**: If the active runtime supports sub-agents, workers, or parallel delegates, use them selectively. Do not treat delegation as the default approach.
-- **Trigger Conditions**: Delegate only when a subtask is bounded, self-contained, and either can run in parallel or will materially reduce primary-context load during a long or complex task.
-- **Keep The Spine Local**: Keep core design decisions, critical-path integration, final verification, and user-facing reporting in the primary agent.
-- **Clear Ownership**: Assign each delegate a precise question, module, or file set. Avoid overlapping write scopes or duplicated investigation.
-- **Concise Returns**: Pull back only the result, changed files, verification performed, blockers, and remaining risks. Do not import full transcripts or raw logs into the main context unless they are necessary.
-- **Primary Agent Responsibility**: The primary agent remains responsible for integrating delegated work, validating correctness, and deciding what to present to the user.
-- **Fallback Without Delegates**: If sub-agents are unavailable, apply the same discipline by splitting work into phases and externalizing intermediate summaries into `.agents/plan.md`, `.agents/process.txt`, or `.agents/notes.md`.
-
 ## Context Load Order
 1. This file and root `AGENTS.md`
 2. Hot memory: `.agents/process.txt` and `.agents/plan.md`
@@ -126,32 +116,6 @@ Do not create `docs/specs/<slug>/plan.md`.
 Do not duplicate full `spec.md` or `tasks.md` contents into `.agents/plan.md`.
 
 For multi-phase work, write an Execution Contract in `spec.md`: autonomy level, phase list, continue rule, stop rule, and state record. If the continue rule passes after a phase, update state and continue to the next phase. Stop only when the stop rule is triggered.
-
-## Global Experience Discovery
-Global experience is an optional, on-demand lookup layer for reusable cross-project lessons. Do not preload it, and do not assume it is installed on every machine.
-
-Search the global experience index when an issue appears to come from a reusable workflow surface such as toolchains, host environment, shells, build systems, caches, ports, permissions, path handling, environment variables, or other recurring cross-project failures. The concrete trigger terms belong in the index entries, not in this template.
-
-Lookup procedure:
-1. If the configured global agent home has a `knowledge-hub/knowledge/experience/index.json` file, read it.
-2. Match observed error text, tool names, and symptoms against entry `keywords` first, then `title`.
-3. Open only the matched `.md` files and apply their Prevention Rule when it fits the current context.
-4. If the index is missing or no entry matches, continue with normal project-local diagnosis.
-
-When not to search: Issues that clearly depend on current repository business logic, hardware wiring, protocol implementation, or repo-specific module design.
-
-Promotion: Store lessons locally in `.agents/context/experience/` first. Mark reviewed reusable lessons with `Global candidate: Yes` or `Scope: Cross-project reusable`. Promote to the global hub only when the root cause is toolchain/host/workflow driven, the fix is repo-independent, and it can be stated as a stable prevention rule. Use the installed `knowledge-hub/scripts/promote_experience.ps1` workflow for hub-side promotion when available.
-
-## Global Skill Discovery
-Global skills may be installed under the configured global agent home, commonly `%USERPROFILE%\.agents` on Windows or `$HOME/.agents` on Unix-like hosts, and may be synchronized into agent-specific skill directories through the soft-link sync workflow. Availability is environment-dependent; this file is not the authoritative skill list.
-
-Skill loading procedure:
-1. Prefer the active runtime's skill registry when it is available.
-2. If needed, check the configured global agent home's `skills/<skill-name>/SKILL.md` or the active agent's synchronized skills directory.
-3. Load only skills whose metadata or instructions match the current task, or when the user explicitly names a skill.
-4. If a relevant skill is missing, continue with the best fallback and mention the missing capability only when it affects the result.
-
-Do not maintain a hard-coded skill table here. Default installation is handled by the ecosystem installer and synchronization scripts; each skill's own `SKILL.md` owns its trigger conditions and detailed workflow.
 
 ## Memory Routing
 - Stable technical facts: `.agents/context/tech/`
