@@ -273,6 +273,11 @@ try {
         ".agents/context/patterns",
         ".agents/context/standards",
         "analyze -> plan -> backup -> apply -> validate",
+        "memory_upgrade.ps1",
+        "-Mode Analyze",
+        "-AnalyzeMemoryUpgrade",
+        "missing scaffold files",
+        "memory-only and no-edit",
         "Do not recreate legacy template directories",
         "ApplyMemoryUpgrade",
         "Validate"
