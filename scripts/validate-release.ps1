@@ -157,6 +157,9 @@ $requiredFiles = @(
     "docs/releases/v0.2.0.md",
     "docs/releases/v0.3.0.md",
     "docs/releases/v0.3.1.md",
+    "docs/releases/v0.4.0.md",
+    "docs/releases/v0.4.1.md",
+    "docs/releases/v0.4.2.md",
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -1167,6 +1170,77 @@ try {
 }
 catch {
     Add-Check "v0.3.1 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.0.md"
+    $releaseTokens = @(
+        "v0.4.0",
+        "conservative",
+        "zh-CN",
+        "proposal-first",
+        "backup-first",
+        "narrative migration",
+        "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.0 release notes" "FAIL" "Release notes are missing required v0.4.0 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.4.0 release notes" "PASS" "v0.4.0 release notes summarize language migration, proposal/backup safety, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.4.0 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.1.md"
+    $releaseTokens = @(
+        "v0.4.1",
+        "project-memory template authority",
+        "knowledge-hub/templates/project-memory",
+        "bundled snapshot",
+        "skills/project-bootstrap/templates/project-memory",
+        "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.1 release notes" "FAIL" "Release notes are missing required v0.4.1 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.4.1 release notes" "PASS" "v0.4.1 release notes summarize template authority consolidation, bundled snapshot alignment, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.4.1 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.2.md"
+    $releaseTokens = @(
+        "v0.4.2",
+        "language-scoped model",
+        "templates/languages",
+        "project-root|project-agent",
+        "Plain bootstrap now defaults to English",
+        "minimal",
+        "recommended",
+        "full",
+        "dev",
+        "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.2 release notes" "FAIL" "Release notes are missing required v0.4.2 summary tokens." @($missingReleaseTokens)
+    }
+    else {
+        Add-Check "v0.4.2 release notes" "PASS" "v0.4.2 release notes summarize language-scoped template convergence, bootstrap behavior, validation expectation, and public boundary."
+    }
+}
+catch {
+    Add-Check "v0.4.2 release notes" "FAIL" $_.Exception.Message
 }
 
 try {

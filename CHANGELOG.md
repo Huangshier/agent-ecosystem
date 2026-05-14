@@ -6,6 +6,28 @@ All notable public changes are summarized here.
 
 No unreleased public changes.
 
+## v0.4.2 - 2026-05-13
+
+- Converged project-memory templates to the language-scoped
+  `templates/languages/<language>/project-root|project-agent` model under the
+  public knowledge hub and the bundled `project-bootstrap` snapshot.
+- Removed legacy top-level `templates/project-root`,
+  `templates/project-agent`, and `templates/project-memory` entry trees.
+- Updated bootstrap, language migration, hub initialization, hub-lock checks,
+  docs, and release validation for the converged layout.
+- Closed issue #51.
+
+## v0.4.1 - 2026-05-13
+
+- Consolidated project-memory template authority under
+  `knowledge-hub/templates/project-memory/en|zh-CN/**`.
+- Synchronized the bundled `project-bootstrap` knowledge-hub snapshot with the
+  public template authority.
+- Removed the standalone `skills/project-bootstrap/templates/project-memory/`
+  tree and updated helper scripts plus release validation for the new authority
+  model.
+- Closed issue #49.
+
 ## v0.4.0 - 2026-05-13
 
 - Added conservative `en` / `zh-CN` engineering-memory language migration with

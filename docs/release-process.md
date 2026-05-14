@@ -83,6 +83,9 @@ The validator checks:
 - v0.2.0 release notes coverage
 - v0.3.0 release notes coverage
 - v0.3.1 release notes coverage
+- v0.4.0 release notes coverage
+- v0.4.1 release notes coverage
+- v0.4.2 release notes coverage
 
 ## CI Gate
 
