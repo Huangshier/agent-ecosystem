@@ -156,6 +156,22 @@ Execution Contract fields:
 
 For `/goal` workflows, map the goal to the active spec/tasks before execution. After each phase, update the state record and continue to the next task when the continue rule passes; do not stop merely because one phase was completed.
 
+For `/goal`-style migration prompt generation, long-running autonomous
+execution, or any workflow that transfers behavior between repositories, record
+source evidence before producing or executing the prompt. The active spec/tasks
+or prompt notes must identify:
+
+- the source and reference repositories, documents, commits, issues, or local
+  artifacts that were actually read;
+- the target repository root and write authorization boundary;
+- the source facts that constrain the migration or generated prompt;
+- any missing source/reference evidence as a blocking open question.
+
+Do not generate a long-running `/goal` prompt from memory, naming conventions,
+or an assumed source repository alone. If the source or reference evidence is
+missing, stop before execution and ask for the missing evidence or a narrowed
+scope.
+
 When the user wants the agent to repeat a lightweight workflow until a variable, metric, build result, test result, device state, or other condition is satisfied, treat the work as `deep` unless it is clearly a one-shot check.
 
 Add a `Loop Contract` section to `spec.md` with:
