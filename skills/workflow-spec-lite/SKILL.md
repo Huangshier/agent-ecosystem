@@ -151,6 +151,16 @@ For high-risk work:
   implementation when those facts affect behavior or safety.
 - Acceptance criteria should name the evidence-backed facts that must be
   verified, not just the intended output.
+- When high-risk work involves schematic, pin-map, board-port, or power
+  sequencing facts, acceptance criteria should include an evidence-backed
+  mapping table or equivalent checklist for each safety-relevant signal or
+  rail: source evidence, target pin or net, active level, reset/default
+  behavior, power rail or domain, timing or sequencing constraint, and
+  verification method.
+- Any unknown required entry in that mapping is a blocking open question before
+  implementation. Evidence must come from inspected schematics, board files,
+  datasheets, source repositories, maintainer statements, or test output; do
+  not infer it from signal names, nearby unused pins, or prior variants.
 
 Examples of high-risk facts include destructive file operations, production
 target identifiers, access boundaries, electrical pin mapping, active levels,
