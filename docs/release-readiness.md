@@ -14,6 +14,12 @@ directories. `v0.4.3` was published as a stabilization release for release
 record normalization, legacy template-path audit coverage, and existing project
 upgrade guidance.
 
+## Post-v0.4.3 Main State
+
+Current `main` includes unreleased stabilization guardrail changes after the
+`v0.4.3` tag. The latest published public release remains `v0.4.3`; these
+changes are candidates for the next stabilization release or changelog batch.
+
 ## Completed
 
 - Workflow Kernel skills are present under `skills/`.

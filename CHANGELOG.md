@@ -4,7 +4,18 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-No public changes after `v0.4.3`.
+- Reconciled published `v0.4.3` release records after publication.
+- Added cross-project closeout write-scope guardrails for public/private
+  boundary control.
+- Added cross-workspace root verification and `/goal` source/reference evidence
+  guardrails.
+- Added a generic high-risk evidence gate for workflow-spec guidance.
+- Clarified project-bootstrap analyze, refresh, and project-memory language
+  semantics.
+- Expanded memory-scope discovery and language-governance guidance across
+  context gate and memory governance skills.
+- Closed out accepted stabilization engineering-memory state after PR #74.
+- Added PR base/stack safety guardrails and release-validation concurrency.
 
 ## v0.4.3 - 2026-05-14
 

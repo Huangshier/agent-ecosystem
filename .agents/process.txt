@@ -3,9 +3,9 @@ Current State
 - Current published public release is `v0.4.3`:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
 - Local `main` and `origin/main` point to
-  `c35c35917c2dce55260f400312a4a5e15cd00932`.
-- Active local branch for memory closeout:
-  `codex/post-merge-memory-closeout`.
+  `8049a3e0058b42a1ee58f74c643be1cd0ac101b9`.
+- Active local branch for PR/CI flow guardrails:
+  `codex/pr-ci-flow-guardrails`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
@@ -25,6 +25,7 @@ Completed
 - Original #71 remains a merged PR against the old stacked base; it was not
   reopened or reverted.
 - Open public PRs: none.
+- PR #76 merged the accepted stabilization memory closeout to `main`.
 
 Latest Validation
 - Final local release validation on `main`:
@@ -33,6 +34,11 @@ Latest Validation
 - `git diff --check` passed on final `main`.
 - Hosted Release validation on final `main` passed:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/26160716089
+- Hosted Release validation after PR #76 passed:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/26182173732
+- Local validation on `codex/pr-ci-flow-guardrails` passed:
+  `git diff --check` and full release validation
+  `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
 
 Open Public Issues
 - Deferred and still open:
@@ -41,9 +47,9 @@ Open Public Issues
   - #23 next-version roadmap and domain-pack governance.
 
 Next Actions
-- Commit this memory closeout branch locally.
-- If public memory closeout should land on protected `main`, publish this
-  branch by PR instead of pushing directly to `main`.
+- Publish `codex/pr-ci-flow-guardrails` for PR base guardrails and
+  release-validation concurrency, then merge after hosted checks pass.
+- After that PR lands, re-triage #67, #56, and #23.
 - Do not move tags, publish or edit GitHub Releases, close deferred issues, or
   change repository settings without explicit maintainer approval.
 

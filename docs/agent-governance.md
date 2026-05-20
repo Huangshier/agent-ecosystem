@@ -69,6 +69,8 @@ Use these labels for agent-assisted maintenance:
 - `triage:deferred`: valid but deferred.
 - `triage:needs-human`: needs maintainer judgment before implementation.
 - `review:needs-human`: requires human maintainer review before merge.
+- `stack:allowed`: permits an intentionally stacked pull request to target a
+  non-`main` base branch for review organization.
 
 Additional scope or risk labels may be added later if the maintenance load
 justifies them.
@@ -119,12 +121,21 @@ Agent-assisted pull requests should include:
 - scope control checks;
 - validation tier and evidence, using the tiers in
   [Release process](release-process.md#validation-tiers);
+- base branch and stack-safety declaration;
 - rollback plan;
 - human decision checklist.
 
 Documentation-only changes may mark rollback details as "revert this pull
 request." Changes to scripts, CI, installation, release metadata, or generated
 runtime behavior should include more specific rollback notes.
+
+By default, pull requests must target `main`. Stacked pull requests may be used
+for review organization only when the PR explicitly declares it is intentionally
+stacked and carries the `stack:allowed` label. A merged PR state alone does not
+prove content landed on `main`, especially after squash merges or stacked-base
+merges. Before merge, reviewers should confirm the base branch, expected files,
+and whether the PR replaces or supersedes another PR. After merge, verify the
+content reached `main` with a file-level compare or equivalent evidence.
 
 ## Repository Controls
 
@@ -133,6 +144,8 @@ The current repository control model is:
 - agent-created changes use feature branches;
 - `main` requires pull requests through the `protect-main` repository ruleset;
 - required release validation checks must pass before merge;
+- the `PR base guard` workflow fails pull requests that target a non-`main`
+  base without explicit stacked-PR markers;
 - conversations must be resolved before merge;
 - force pushes and branch deletion on the default branch are blocked;
 - the ruleset has no bypass actors;
