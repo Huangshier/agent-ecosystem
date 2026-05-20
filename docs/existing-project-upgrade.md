@@ -49,6 +49,12 @@ Preserve local content such as:
 
 Use a conservative analyze -> plan -> backup -> apply -> validate flow.
 
+Before running bootstrap wrapper refresh or analyze modes, determine the
+project memory language from the project's `.agents/AGENTS.md` or existing
+`.agents/hub.lock.json` `project_language` field. Pass that language explicitly
+with `-ProjectLanguage` when the wrapper may create missing scaffold or lock
+metadata. Do not infer project memory language from the current chat.
+
 1. Analyze existing memory without editing files by calling the memory-upgrade
    helper directly.
 

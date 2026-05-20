@@ -61,13 +61,20 @@ Default behavior:
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.
 - Supported project memory template languages are `en` and `zh-CN` only. English remains the default and fallback; plain bootstrap is equivalent to `-ProjectLanguage en`.
 - If a `zh-CN` template file is missing, the language helper falls back to the matching English template and reports fallback metadata. Treat that as a validation finding to fix, not as a reason to overwrite project-specific memory.
+- For existing projects, read the current project memory language from
+  `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass it explicitly with
+  `-ProjectLanguage` when using bootstrap wrapper refresh/analyze flows. Do not
+  infer project memory language from the current chat.
 
 Optional flags:
 - `-HubDir <path>`: custom hub location.
 - `-RefreshUnmodifiedTemplates`: refresh files that still match the previously installed template hash; preserve modified files for manual review.
 - `-OverwriteTemplates`: compatibility alias for `-RefreshUnmodifiedTemplates`. It emits a warning and does not overwrite modified project memory.
 - `-ForceResetScaffold`: explicit reset path for discarding scaffold customizations. It emits a warning, backs up existing files first, and cannot be combined with memory upgrade modes.
-- `-AnalyzeMemoryUpgrade`: after bootstrap, inspect legacy `.agents` memory and report issues without changing memory.
+- `-AnalyzeMemoryUpgrade`: after the normal conservative bootstrap wrapper
+  flow, inspect legacy `.agents` memory and report issues without changing
+  memory files. The wrapper may still create missing scaffold files or refresh
+  `.agents/hub.lock.json` before the memory analysis step.
 - `-PlanMemoryUpgrade`: generate a reviewable `.agents/upgrade/<timestamp>/proposal.md`.
 - `-ApplyMemoryUpgrade -UpgradePlan <path>`: after user review, back up and normalize hot memory files according to the proposal.
 - `-AutoUpgrade`: when the caller has explicitly approved memory normalization, analyze candidates, create the default proposal, apply it, and print the proposal, backup, and result paths.
@@ -83,7 +90,7 @@ Optional flags:
 
 Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
-- Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested.
+- Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested. Pass the project's current memory language explicitly when the project is not English-first or when lock metadata already records a language.
 - Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review.
 - Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration. Use `-PlanNarrativeMigration`, `-ApplyNarrativeMigration`, and `-ValidateNarrativeMigration` as the follow-up review step for manual-review artifacts.
 - Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. This is not a language migration path and remains backup-first.
@@ -149,6 +156,7 @@ Use this when re-running bootstrap in a project that already has old `.agents` m
 Recommended flow:
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memory_upgrade.ps1 -ProjectDir <project_path> -Mode Analyze
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeMemoryUpgrade
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanMemoryUpgrade
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
@@ -161,7 +169,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps
 ```
 
 Behavior:
-- Analyze mode is read-only.
+- Direct `memory_upgrade.ps1 -Mode Analyze` is the strict no-edit memory-only
+  analysis path.
+- Bootstrap wrapper `-AnalyzeMemoryUpgrade` runs the normal conservative
+  bootstrap refresh first, so it may write missing scaffold or lock metadata
+  before running the read-only memory analysis.
 - Plan mode writes a proposal for user review.
 - Apply mode requires a proposal path, backs up current memory under `.agents/_backup/<timestamp>/`, and normalizes hot memory (`process.txt`, `plan.md`, `notes.md`).
 - Auto-upgrade mode runs Analyze first, then Plan and Apply only when findings exist.
