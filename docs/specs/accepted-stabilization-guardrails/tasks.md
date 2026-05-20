@@ -61,36 +61,39 @@
   - Goal: Add cross-workspace root verification and `/goal` source evidence
     guardrails.
   - Inputs: #65 accepted issue body, excluding high-risk Phase A.
-  - Outputs: Draft PR #71:
+  - Outputs: Original draft PR #71:
     https://github.com/Huangshier/agent-ecosystem/pull/71
+    was accidentally merged into the stacked base branch instead of `main`;
+    replacement branch
+    `codex/issue-65-cross-workspace-goal-guardrails-main` targets `main`.
   - Validation: `git diff --check` passed; full local release validator passed
     with `PASS=46 FAIL=0 WARN=0 DEFERRED=0` using scratch root
     `$env:TEMP\agent-ecosystem-pr-b-65bc-validation`.
-  - Continue / stop decision: PR-B draft created; continue to P04.
+  - Continue / stop decision: Continue through the replacement PR before P04.
 
 - [ ] P04: Complete PR-C for #65 Phase A
   - Goal: Add a generic high-risk evidence gate without adding a domain pack.
   - Inputs: #65 accepted issue body, Phase A scope.
   - Outputs: draft PR-C.
   - Validation: `git diff --check`; full local release validator.
-  - Continue / stop decision: Continue to P05 after PR-C is pushed and opened
-    as a draft PR.
+  - Continue / stop decision: Continue to P05 after PR-C is based on latest
+    `main`, validated, and merged.
 
 - [ ] P05: Complete PR-D for #68
   - Goal: Clarify project-bootstrap analyze, refresh, and language semantics.
   - Inputs: #68 accepted issue body and existing project-bootstrap docs.
   - Outputs: draft PR-D.
   - Validation: `git diff --check`; full local release validator.
-  - Continue / stop decision: Continue to P06 after PR-D is pushed and opened
-    as a draft PR.
+  - Continue / stop decision: Continue to P06 after PR-D is based on latest
+    `main`, validated, and merged.
 
 - [ ] P06: Complete PR-E for #66
   - Goal: Close memory-scope discovery and language-governance gaps.
   - Inputs: #66 accepted issue body and #67 deferred boundary.
   - Outputs: draft PR-E.
   - Validation: `git diff --check`; full local release validator.
-  - Continue / stop decision: Continue to P07 after PR-E is pushed and opened
-    as a draft PR.
+  - Continue / stop decision: Continue to P07 after PR-E is based on latest
+    `main`, validated, and merged.
 
 - [ ] P07: Hand off draft PR sequence
   - Goal: Provide maintainers with the full PR list, base relationship,
