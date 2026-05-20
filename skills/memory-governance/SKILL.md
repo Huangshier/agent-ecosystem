@@ -86,6 +86,24 @@ Follow this exact sequence:
    - `process.txt` should not reintroduce archived detail.
    - Active `docs/specs/` files and `.agents` pointers should agree on the current work item.
 
+5a. Cross-repository closeout guardrail:
+   - Before writing outside the current repository, confirm the target
+     repository root and the specific public issue, spec, or pull request that
+     authorizes that write scope.
+   - Public repository writes require explicit public scope authorization. A
+     private retrospective, migration closeout, or multi-repository cleanup
+     does not by itself authorize new public repository files.
+   - If a public worktree is unexpectedly dirty during a private or
+     multi-repository closeout, report the changed paths and the suspected
+     source first. Do not commit, promote, or expand those changes until the
+     public scope is confirmed.
+   - Cross-project skill and process lessons default to the source project's
+     local memory or private retrospective. Promote them into the public
+     knowledge hub only through an explicit public issue/spec/PR path.
+   - Keep public `knowledge-hub/templates` kernel-safe. Do not add
+     domain-specific, private, authentication-material, or incubator templates
+     to the public template tree by default.
+
 6. Session Learning Extraction:
    Extract reusable lessons from errors corrected during the session.
    This step runs automatically as part of the full workflow.
@@ -160,6 +178,9 @@ A memory update is complete only when all conditions hold:
 6. If `docs/specs/` is in use, `.agents` files point to it instead of duplicating it.
 7. Cross-project experience is either promoted to the global hub or explicitly kept local for a repo-specific reason.
 8. Session correction events have been reviewed and deposited (or explicitly skipped).
+9. Any cross-repository closeout write has an explicit target repository root
+   and public issue/spec/PR authorization, and unexpected public worktree
+   changes were reported before promotion or commit.
 
 ## Next-Session Kickoff Template
 Use this template when the user asks for the first message of the next session:
