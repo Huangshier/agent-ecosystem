@@ -61,13 +61,12 @@
   - Goal: Add cross-workspace root verification and `/goal` source evidence
     guardrails.
   - Inputs: #65 accepted issue body, excluding high-risk Phase A.
-  - Outputs: `codex/issue-65-cross-workspace-goal-guardrails`, ready to push
-    and open as stacked draft PR-B with PR-A as base.
+  - Outputs: Draft PR #71:
+    https://github.com/Huangshier/agent-ecosystem/pull/71
   - Validation: `git diff --check` passed; full local release validator passed
     with `PASS=46 FAIL=0 WARN=0 DEFERRED=0` using scratch root
     `$env:TEMP\agent-ecosystem-pr-b-65bc-validation`.
-  - Continue / stop decision: Continue to P04 after PR-B is pushed and opened
-    as a draft PR; no stop rule triggered at implementation time.
+  - Continue / stop decision: PR-B draft created; continue to P04.
 
 - [ ] P04: Complete PR-C for #65 Phase A
   - Goal: Add a generic high-risk evidence gate without adding a domain pack.
