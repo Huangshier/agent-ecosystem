@@ -30,7 +30,11 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - Bootstrap does not own routine global experience promotion. It installs project scaffolds and upgrade helpers; the installed `knowledge-hub/scripts` directory is the runtime entrypoint for promoted experience.
 
 ## Legacy Memory Upgrade
-- `bootstrap_project.ps1 -AnalyzeMemoryUpgrade` reports old memory issues without editing memory.
+- `memory_upgrade.ps1 -Mode Analyze` is the strict no-edit memory-only
+  analysis path.
+- `bootstrap_project.ps1 -AnalyzeMemoryUpgrade` reports old memory issues
+  without editing memory files, but it is a wrapper flow: it may first refresh
+  missing scaffold files or `.agents/hub.lock.json`.
 - `bootstrap_project.ps1 -PlanMemoryUpgrade` writes a reviewable proposal under `.agents/upgrade/`.
 - `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
 - `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
@@ -51,7 +55,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Operating Modes
 - Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.
-- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory.
+- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. For existing non-English projects, read `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass the current project language explicitly.
 - Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review.
 - Compatibility overwrite: `-OverwriteTemplates` is retained as a warning-emitting alias for unmodified-template refresh. It is not a force reset.
 - Conservative memory migration: use Analyze, Plan, Apply, and Validate modes with reviewable proposals and backups. Use legacy memory upgrade modes for layout normalization, and language migration modes for `en` / `zh-CN` project memory language changes.
@@ -60,6 +64,9 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 ## Project Memory Templates
 - `en` and `zh-CN` are the only first-class project memory template languages.
 - English remains the public default and fallback language. Plain bootstrap is equivalent to `-ProjectLanguage en`.
+- The bootstrap helper does not infer project memory language from chat. Agents
+  and workflows should pass `-ProjectLanguage` from project rules or existing
+  lock metadata when refreshing or analyzing established projects.
 - The authoritative source lives under `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
 - The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
 - Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
