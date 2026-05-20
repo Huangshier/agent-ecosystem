@@ -113,3 +113,12 @@
   files are project-specific engineering memory, not canonical release records.
   Do not create repeated memory-only commits solely to refresh per-push hosted
   CI timestamps.
+- Accepted stabilization guardrails closed on 2026-05-20:
+  #70, #75, #72, #73, and #74 are merged to `main` at
+  `c35c35917c2dce55260f400312a4a5e15cd00932`. Issues #65, #66, #68, and #69
+  are closed as completed; #67, #56, and #23 remain deferred/open.
+- PR #71 was accidentally merged into the stacked base branch instead of
+  `main`. Replacement PR #75 landed the same #65 Phase B/C scope on `main`.
+- GitHub issue bodies and PR bodies using `Refs #...` do not auto-close issues.
+  Use `Closes #...` or `Fixes #...` when automatic closeout is intended, or
+  close manually after explicit authorization.
