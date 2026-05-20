@@ -16,6 +16,9 @@ Use progressive disclosure:
 - Hot memory: `.agents/process.txt` and `.agents/plan.md`; small enough to read during each context gate.
 - Warm memory: active `docs/specs/<slug>/spec.md` and `tasks.md`; read only for the active work package.
 - Cold memory: `.agents/context/*`, `.agents/notes.md`, and global experience; discover by summary/keywords and open only when relevant.
+- Memory-scope tasks should also list `docs/specs/**/spec.md`,
+  `docs/specs/**/tasks.md`, and `docs/specs/**/research.md` so non-active
+  long-lived work packages can be matched without preloading every body.
 
 ## Operating Model
 Apply this routing model every time:
@@ -57,6 +60,12 @@ Follow this exact sequence:
 - `.agents/plan.md`
 - `.agents/notes.md`
 - `.agents/context/` discovery files first, then specific context entries that match the cleanup or learning-deposit task
+- `.agents/commands/` discovery files when command guidance is part of the
+  memory-scope task
+- `docs/specs/**/spec.md`, `docs/specs/**/tasks.md`, and
+  `docs/specs/**/research.md` as a discovered file list; read only the active
+  work package and non-active work packages whose slug, Summary, Keywords, or
+  task relevance match the current memory change
 
 2. If `.agents/process.txt` or `.agents/plan.md` points to an active `docs/specs/<slug>/spec.md` or `tasks.md`, read those referenced files before rewriting memory.
 
@@ -85,6 +94,10 @@ Follow this exact sequence:
    - Decisions in `notes.md` must match `plan.md` and current code.
    - `process.txt` should not reintroduce archived detail.
    - Active `docs/specs/` files and `.agents` pointers should agree on the current work item.
+   - For project-memory language work, check the relevant hot memory, notes,
+     context cards, commands, and long-lived work packages for language-policy
+     consistency. Record intentional exceptions instead of silently translating
+     or dropping project-specific content.
 
 5a. Cross-repository closeout guardrail:
    - Before writing outside the current repository, confirm the target
@@ -181,6 +194,10 @@ A memory update is complete only when all conditions hold:
 9. Any cross-repository closeout write has an explicit target repository root
    and public issue/spec/PR authorization, and unexpected public worktree
    changes were reported before promotion or commit.
+10. For memory refresh, upgrade, language migration, or standardization tasks,
+    relevant `docs/specs` work packages and context cards were checked for
+    project-memory language consistency, or intentional exceptions were
+    recorded in the active spec/tasks or handoff.
 
 ## Next-Session Kickoff Template
 Use this template when the user asks for the first message of the next session:
