@@ -2,23 +2,21 @@
 
 - **Title**: Accepted Stabilization Guardrails
 - **Slug**: accepted-stabilization-guardrails
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
 - **Updated**: 2026-05-20
 
 ## 1. Summary
-- Execute the accepted public stabilization issues as a reviewable draft PR
-  sequence.
-- Keep each change public-safe, issue-scoped, and locally validated before it
-  is handed to maintainers.
-- Keep #67 deferred until the memory-scope surfaces and output contract are
-  clarified by #66.
+- Executed the accepted public stabilization issues as reviewable pull
+  requests and merged them to `main`.
+- Repaired the #71 stacked-base merge accident with replacement PR #75.
+- Kept #67, #56, and #23 deferred and out of scope.
 
 ## 2. Current Context
 - Repository: `Huangshier/agent-ecosystem`.
-- Baseline: `main` and `origin/main` at
-  `5e217c9549a8436ab8e8b1a10a6aa400be6d0466`.
-- Open pull requests were empty when this work started.
+- Final `main` and `origin/main`:
+  `c35c35917c2dce55260f400312a4a5e15cd00932`.
+- Open pull requests are empty after closeout.
 - Accepted issues in scope:
   - #69: closeout write-scope guardrails.
   - #65 Phase B/C: cross-workspace root verification and `/goal` source
@@ -29,12 +27,9 @@
 - Deferred issues remain out of scope: #67, #56, and #23.
 
 ## 3. Goals
-- Open PR-A through PR-E as draft pull requests.
-- Record the issue mapping, branch/base relationship, local validation, and
-  hosted check status for each PR.
-- Keep public `.agents` memory and this spec aligned at each PR-ready
-  boundary.
-- Preserve the public/private boundary and avoid adding domain-specific
+- Merged #70, #75, #72, #73, and #74 to `main`.
+- Closed #65, #66, #68, and #69 as completed.
+- Preserved the public/private boundary and avoided adding domain-specific
   incubator templates to the public kernel.
 
 ## 4. Non-Goals
@@ -45,63 +40,56 @@
 - Do not add private overlay content, local-only paths, authentication
   material, private audit notes, or domain-specific templates to this public
   repository.
-- Do not push `main`, merge PRs, close issues, mark PRs ready for review, tag,
-  publish a release, or change repository settings, secrets, rulesets, hooks,
-  or runners.
+- Do not implement #67, #56, #23, or README redesign follow-up as part of this
+  completed sequence.
+- Do not tag, publish a release, or change repository settings, secrets,
+  rulesets, hooks, or runners.
 
 ## 5. Constraints
 - Public repository artifacts are English-first.
-- Every repository diff must remain within the accepted issue scope for the
-  active PR.
-- Use issue branches and draft pull requests.
-- Stacked PRs are allowed when repeated edits to shared skill or memory files
-  would make independent branches harder to review.
-- Before opening or updating each draft PR, run:
+- Every repository diff remained within the accepted issue scope for the active
+  PR.
+- Issue branches and pull requests were used for all public writes.
+- Before opening or updating each PR, run:
   - `git diff --check`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1 -ScratchRoot <scratch>`
-- Hosted checks should be recorded when available. If they are unavailable or
-  still pending, record the observed state instead of creating memory-only
-  commits solely to refresh timestamps.
+- Hosted checks were recorded for merged PRs and final `main`.
 
 ## 6. Assumptions
-- The maintainer has accepted #69, #65, #68, and #66 for implementation.
-- The maintainer has authorized pushing public issue branches and creating
-  draft PRs.
-- Draft PR creation targets `Huangshier/agent-ecosystem`.
-- The full local release validator is the authoritative local regression gate
-  for these public skill and governance changes.
+- The maintainer authorized push, PR readiness, merge, and issue closeout for
+  the accepted sequence during incident repair.
+- The full local release validator remains the authoritative local regression
+  gate for these public skill and governance changes.
 
 ## 7. Risks
-- Multiple phases touch shared skill and memory files, so stacked PRs may be
-  clearer than independent branches.
+- Multiple phases touched shared skill and memory files, and tracked `.agents`
+  state churn made stacked-PR incident repair harder than necessary.
 - `/goal` source-evidence requirements must stay generic and must not rely on
   private reference material.
-- Hosted checks can be delayed or unavailable through the GitHub API; the PR
-  body must state the observed status.
+- Hosted pull request checks can fail to appear after retarget / force-push
+  until a new pull_request synchronize event changes the head SHA.
 - Public memory updates can drift into a second copy of this spec if they are
   not kept concise.
 
 ## 8. Proposed Approach
-- PR-A / #69 establishes the public execution state and closeout write-scope
-  guardrails.
-- PR-B / #65 Phase B/C adds cross-workspace root verification and `/goal`
-  source/reference evidence requirements.
-- PR-C / #65 Phase A adds a generic high-risk evidence gate.
-- PR-D / #68 clarifies project-bootstrap analyze, refresh, and language
-  semantics.
-- PR-E / #66 completes memory-scope discovery surfaces and quality gates.
+- #70 / #69 established closeout write-scope guardrails.
+- #75 replaced the accidentally stacked #71 merge and landed #65 Phase B/C on
+  `main`.
+- #72 landed #65 Phase A high-risk evidence gate on `main`.
+- #73 landed #68 bootstrap analyze semantics on `main`.
+- #74 landed #66 memory-scope language governance on `main`.
+- For #73 and #74 incident repair, each PR's net scoped diff was applied to
+  latest `main` instead of replaying old stacked `.agents` state commits.
 
 ## 9. Acceptance / Evidence
-- For each PR:
-  - branch is pushed and mapped to the target issue;
-  - draft PR exists with scope, non-goals, validation, and hosted-check status;
-  - branch/base relationship is recorded;
-  - `git diff --check` passes;
-  - full local release validation passes or the stop rule is triggered.
-- This spec and `tasks.md` record phase state.
-- Public `.agents/process.txt` and `.agents/plan.md` point to this active work
-  package without duplicating its checklist.
-- #67 remains deferred and unimplemented.
+- #70, #75, #72, #73, and #74 are merged to `main`.
+- #65, #66, #68, and #69 are closed as completed.
+- Final `git diff --check` passed.
+- Final local release validation passed with
+  `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
+- Final hosted Release validation passed on `main`:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/26160716089
+- #67, #56, and #23 remain deferred and unimplemented.
 
 ## 10. Loop Contract
 - Not applicable. This is a fixed PR sequence.
@@ -118,6 +106,9 @@
   - P05: open PR-D for #68 project-bootstrap analyze semantics.
   - P06: open PR-E for #66 memory-scope language governance.
   - P07: hand off the full draft PR sequence for maintainer review.
+  - P08: repair #71 stacked-base merge accident, merge the replacement PR, and
+    merge the remaining accepted PRs onto `main`.
+  - P09: memory-governance closeout.
 - **Continue rule**: Continue to the next phase when all of these conditions
   hold.
   - The current phase stays within accepted issue scope.
@@ -125,9 +116,8 @@
   - The issue branch is pushed and the draft PR is created.
   - Public and private phase state are updated.
 - **Stop rule**: Stop and hand off when any of these conditions occurs.
-  - Continuing would require pushing `main`, merging a PR, closing an issue,
-    marking a PR ready for review, tagging, releasing, or changing repository
-    settings, secrets, rulesets, hooks, or runners.
+  - Continuing would require tagging, releasing, changing repository settings,
+    secrets, rulesets, hooks, or runners, or force-pushing `main`.
   - Continuing would require implementing #67, #56, #23, or a README redesign.
   - Validator or hosted checks fail and cannot be fixed within the current
     issue scope.
@@ -139,4 +129,4 @@
   `.agents/process.txt`, and `.agents/plan.md`.
 
 ## 12. Open Questions
-- None blocking at creation time.
+- None. Accepted stabilization scope is complete.

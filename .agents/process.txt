@@ -3,74 +3,52 @@ Current State
 - Current published public release is `v0.4.3`:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
 - Local `main` and `origin/main` point to
-  `80858a4d88151714d5a5a7e85e91f12381c581fb`.
-- Active local branch:
-  `codex/issue-65-high-risk-evidence-gate`.
-- Active spec:
-  `docs/specs/accepted-stabilization-guardrails/spec.md`.
+  `c35c35917c2dce55260f400312a4a5e15cd00932`.
+- Active local branch for memory closeout:
+  `codex/post-merge-memory-closeout`.
 - Public engineering memory is English-first.
 - Private migration state, local source mappings, sensitive audit notes, and
   personal overlay details live outside this repository.
 - `knowledge-hub/` is tracked as a normal directory inside this repository, not
   as a nested Git repository or submodule.
-- GitHub App `agent-ecosystem-bot` is the configured automation identity for
-  this repository. Do not store App auth material or local-only paths in this
-  public repository.
 - Repository ruleset `protect-main` protects the default branch.
 
 Completed
-- `v0.1.0` through `v0.4.3` have been published as GitHub Releases.
-- PR #63 was merged on 2026-05-14 at
-  `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8`.
-- Issue #57 was closed as completed on 2026-05-14.
-- GitHub Release `v0.4.3` is published, non-draft, and non-prerelease.
-- Hosted Release validation run `25841179794` passed for the `v0.4.3` tag
-  target on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
-- PR #70 for #69 was merged to `main`.
-- Original PR #71 for #65 Phase B/C was accidentally merged into the stacked
-  base branch instead of `main`.
-- Replacement PR #75 for #65 Phase B/C was merged to `main`.
+- Accepted stabilization PR sequence is complete on `main`:
+  - #70 / #69 merged to `main` at `a013ad2`.
+  - Original #71 merged into the stacked base branch instead of `main`.
+  - Replacement #75 for #65 Phase B/C merged to `main` at `80858a4`.
+  - #72 for #65 Phase A merged to `main` at `a064290`.
+  - #73 for #68 merged to `main` at `666bf92`.
+  - #74 for #66 merged to `main` at `c35c359`.
+- Issues #65, #66, #68, and #69 are closed as completed.
+- Original #71 remains a merged PR against the old stacked base; it was not
+  reopened or reverted.
+- Open public PRs: none.
 
-Current Work
-- Active sequence:
-  `docs/specs/accepted-stabilization-guardrails/spec.md`.
-- PR-C / #65 Phase A is being restacked on
-  `codex/issue-65-high-risk-evidence-gate`.
-- Planned merge sequence from here: #65 Phase A, #68, then #66.
-- #67, #56, #23, and README redesign remain deferred and out of scope.
-
-Latest Local Validation
-- PR-A: `git diff --check` passed.
-- PR-A:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr-a-69-validation-2"`
+Latest Validation
+- Final local release validation on `main`:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-final-pr70-74-validation"`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
-- PR-B replacement: `git diff --check` passed.
-- PR-B replacement:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr71-replacement-validation"`
-  passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
-- PR-C previous stacked validation passed before restacking; local validation
-  must be rerun after the current rebase completes.
+- `git diff --check` passed on final `main`.
+- Hosted Release validation on final `main` passed:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/26160716089
 
-Open Public Issues / PRs
-- Open issues: #69, #68, #67, #66, #65, #56, and #23.
-- Accepted for this sequence: #69, #65, #68, and #66.
-- Deferred: #67, #56, and #23.
-- Open PRs:
-  - Draft PR #72 for #65 Phase A.
-  - Draft PR #73 for #68.
-  - Draft PR #74 for #66.
+Open Public Issues
+- Deferred and still open:
+  - #67 body-level project-memory language audit helper.
+  - #56 domain-pack governance lifecycle.
+  - #23 next-version roadmap and domain-pack governance.
 
 Next Actions
-- Finish restacking PR #72 onto latest `main`, preserving only Phase A scope.
-- Validate, force-push the #72 issue branch with lease, retarget PR #72 to
-  `main`, mark it ready, wait for hosted checks, and merge.
-- Then restack PR #73 and PR #74 onto latest `main` in order.
-- Do not push directly to `main`, move tags, publish or edit GitHub Releases,
-  close or edit issues, force-push `main`, or change repository settings
-  without maintainer approval.
+- Commit this memory closeout branch locally.
+- If public memory closeout should land on protected `main`, publish this
+  branch by PR instead of pushing directly to `main`.
+- Do not move tags, publish or edit GitHub Releases, close deferred issues, or
+  change repository settings without explicit maintainer approval.
 
 Blocking Issues
-- No active blockers.
+- None.
 
 Last Updated
 - 2026-05-20
