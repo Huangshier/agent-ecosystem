@@ -71,11 +71,17 @@
     `$env:TEMP\agent-ecosystem-pr-b-65bc-validation`.
   - Continue / stop decision: Continue through the replacement PR before P04.
 
-- [ ] P04: Complete PR-C for #65 Phase A
+- [x] P04: Complete PR-C for #65 Phase A
   - Goal: Add a generic high-risk evidence gate without adding a domain pack.
   - Inputs: #65 accepted issue body, Phase A scope.
-  - Outputs: draft PR-C.
-  - Validation: `git diff --check`; full local release validator.
+  - Outputs: `codex/issue-65-high-risk-evidence-gate`, ready to push and open
+    as PR-C. It is being restacked from the old stacked base to latest `main`
+    after replacement PR #75 merged.
+  - Validation: previous stacked `git diff --check` passed; previous full local
+    release validator passed
+    with `PASS=46 FAIL=0 WARN=0 DEFERRED=0` using scratch root
+    `$env:TEMP\agent-ecosystem-pr-c-65a-validation`; validation must be rerun
+    after restacking.
   - Continue / stop decision: Continue to P05 after PR-C is based on latest
     `main`, validated, and merged.
 
