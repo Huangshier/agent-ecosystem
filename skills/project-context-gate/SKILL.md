@@ -88,6 +88,24 @@ Before continuing work, summarize the current task constraints in a few lines:
 
 Use the capsule to guide the next implementation or verification step. Keep it short enough to refresh repeatedly during long sessions.
 
+### Step 3a: Verify Cross-Workspace Roots
+When work crosses repositories, sibling worktrees, generated workspaces, or
+private/public ownership boundaries, verify the intended root before editing:
+
+- Resolve the active root with `git rev-parse --show-toplevel` when the target
+  is a Git repository.
+- Record the current branch and `git status -sb` for the target root before
+  writing.
+- Compare the resolved root with the user request, active spec, or tool input.
+  If they disagree, stop and report the ambiguity.
+- After edits, rerun `git status -sb` from the resolved target root. If a new
+  nested or sibling path was created accidentally, stop and report the path
+  instead of expanding the diff to include it.
+- For public/private or multi-repository workflows, keep the authorization
+  boundary in the constraint capsule: which repository may be written, which
+  repository is read-only evidence, and which files or issue/spec/PR scope
+  authorize the write.
+
 ### Step 4: Re-run at Boundaries
 Repeat this gate:
 

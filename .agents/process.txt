@@ -3,9 +3,9 @@ Current State
 - Current published public release is `v0.4.3`:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
 - Local `main` and `origin/main` point to
-  `5e217c9549a8436ab8e8b1a10a6aa400be6d0466`.
+  `a013ad2aca3c97630a592d14f3b3d06cac5d94e2`.
 - Active local branch:
-  `codex/issue-69-closeout-write-scope-guardrails`.
+  `codex/issue-65-cross-workspace-goal-guardrails-main`.
 - Active spec:
   `docs/specs/accepted-stabilization-guardrails/spec.md`.
 - Public engineering memory is English-first.
@@ -30,10 +30,14 @@ Completed
 Current Work
 - Active sequence:
   `docs/specs/accepted-stabilization-guardrails/spec.md`.
-- PR-A / #69 local implementation is complete on
-  `codex/issue-69-closeout-write-scope-guardrails`.
-- Planned draft PR sequence:
-  #69, #65 Phase B/C, #65 Phase A, #68, then #66.
+- PR-A / #69 was merged to `main` as PR #70:
+  https://github.com/Huangshier/agent-ecosystem/pull/70
+- Original PR-B / #65 Phase B/C, PR #71, was accidentally merged into the
+  stacked base branch instead of `main`:
+  https://github.com/Huangshier/agent-ecosystem/pull/71
+- Current branch is the PR #71 replacement branch targeting `main`.
+- Planned merge sequence from here: #71 replacement, #65 Phase A, #68, then
+  #66.
 - #67, #56, #23, and README redesign remain deferred and out of scope.
 
 Latest Local Validation
@@ -41,21 +45,27 @@ Latest Local Validation
 - PR-A:
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr-a-69-validation-2"`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
+- PR-B: `git diff --check` passed.
+- PR-B:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr-b-65bc-validation"`
+  passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
 
 Open Public Issues / PRs
 - Open issues: #69, #68, #67, #66, #65, #56, and #23.
 - Accepted for this sequence: #69, #65, #68, and #66.
 - Deferred: #67, #56, and #23.
-- Open PRs: none.
+- Open PRs:
+  - Replacement PR for #65 Phase B/C is being prepared from
+    `codex/issue-65-cross-workspace-goal-guardrails-main`.
 
 Next Actions
-- Push `codex/issue-69-closeout-write-scope-guardrails` and open draft PR-A
-  for #69.
-- Continue to the next accepted issue phase after PR-A unless a stop rule
-  triggers.
+- Validate, push, open, mark ready, and merge the PR #71 replacement into
+  `main` under maintainer authorization for the incident fix.
+- Then rebase or replace PR-C / #65 Phase A, PR-D / #68, and PR-E / #66 onto
+  the latest `main` in order.
 - Do not push directly to `main`, move tags, publish or edit GitHub Releases,
-  close or edit issues, merge PRs, mark PRs ready for review, or change
-  repository settings without maintainer approval.
+  close or edit issues, force-push `main`, or change repository settings
+  without maintainer approval.
 
 Blocking Issues
 - No active blockers.
