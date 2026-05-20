@@ -77,6 +77,19 @@ Skip missing files without treating them as errors.
 
 Do not preload all project memory. Token use is controlled mostly by the project memory layout and what the agent chooses to open, not by this gate itself.
 
+For memory refresh, memory upgrade, language migration, standardization, or
+project-memory governance tasks, expand discovery without bulk loading:
+
+- List `.agents/context/**` and `.agents/commands/**` discovery files first,
+  then open only entries whose Summary, Keywords, filename, or task relevance
+  match the work.
+- List long-lived work packages under `docs/specs/**/spec.md`,
+  `docs/specs/**/tasks.md`, and `docs/specs/**/research.md`.
+- Read the active work package and any matching non-active work packages; do
+  not preload every spec body only because the task is memory-scoped.
+- Include `.agents/notes.md`, `.agents/hub.lock.json`, and project language
+  declarations when language consistency or scaffold provenance is in scope.
+
 ### Step 3: Produce a Constraint Capsule
 Before continuing work, summarize the current task constraints in a few lines:
 
@@ -85,6 +98,9 @@ Before continuing work, summarize the current task constraints in a few lines:
 - Project-specific rules that affect this task
 - Commit, push, and validation rules
 - Known blockers, risks, or required user actions
+- For memory-scoped tasks, the project-memory surfaces in scope, such as
+  `.agents` hot memory, notes, context cards, commands, and `docs/specs` work
+  packages.
 
 Use the capsule to guide the next implementation or verification step. Keep it short enough to refresh repeatedly during long sessions.
 
