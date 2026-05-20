@@ -3,9 +3,9 @@ Current State
 - Current published public release is `v0.4.3`:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
 - Local `main` and `origin/main` point to
-  `a013ad2aca3c97630a592d14f3b3d06cac5d94e2`.
+  `80858a4d88151714d5a5a7e85e91f12381c581fb`.
 - Active local branch:
-  `codex/issue-65-cross-workspace-goal-guardrails-main`.
+  `codex/issue-65-high-risk-evidence-gate`.
 - Active spec:
   `docs/specs/accepted-stabilization-guardrails/spec.md`.
 - Public engineering memory is English-first.
@@ -26,18 +26,17 @@ Completed
 - GitHub Release `v0.4.3` is published, non-draft, and non-prerelease.
 - Hosted Release validation run `25841179794` passed for the `v0.4.3` tag
   target on Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+- PR #70 for #69 was merged to `main`.
+- Original PR #71 for #65 Phase B/C was accidentally merged into the stacked
+  base branch instead of `main`.
+- Replacement PR #75 for #65 Phase B/C was merged to `main`.
 
 Current Work
 - Active sequence:
   `docs/specs/accepted-stabilization-guardrails/spec.md`.
-- PR-A / #69 was merged to `main` as PR #70:
-  https://github.com/Huangshier/agent-ecosystem/pull/70
-- Original PR-B / #65 Phase B/C, PR #71, was accidentally merged into the
-  stacked base branch instead of `main`:
-  https://github.com/Huangshier/agent-ecosystem/pull/71
-- Current branch is the PR #71 replacement branch targeting `main`.
-- Planned merge sequence from here: #71 replacement, #65 Phase A, #68, then
-  #66.
+- PR-C / #65 Phase A is being restacked on
+  `codex/issue-65-high-risk-evidence-gate`.
+- Planned merge sequence from here: #65 Phase A, #68, then #66.
 - #67, #56, #23, and README redesign remain deferred and out of scope.
 
 Latest Local Validation
@@ -45,24 +44,27 @@ Latest Local Validation
 - PR-A:
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr-a-69-validation-2"`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
-- PR-B: `git diff --check` passed.
-- PR-B:
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr-b-65bc-validation"`
+- PR-B replacement: `git diff --check` passed.
+- PR-B replacement:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot "$env:TEMP\agent-ecosystem-pr71-replacement-validation"`
   passed with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
+- PR-C previous stacked validation passed before restacking; local validation
+  must be rerun after the current rebase completes.
 
 Open Public Issues / PRs
 - Open issues: #69, #68, #67, #66, #65, #56, and #23.
 - Accepted for this sequence: #69, #65, #68, and #66.
 - Deferred: #67, #56, and #23.
 - Open PRs:
-  - Replacement PR for #65 Phase B/C is being prepared from
-    `codex/issue-65-cross-workspace-goal-guardrails-main`.
+  - Draft PR #72 for #65 Phase A.
+  - Draft PR #73 for #68.
+  - Draft PR #74 for #66.
 
 Next Actions
-- Validate, push, open, mark ready, and merge the PR #71 replacement into
-  `main` under maintainer authorization for the incident fix.
-- Then rebase or replace PR-C / #65 Phase A, PR-D / #68, and PR-E / #66 onto
-  the latest `main` in order.
+- Finish restacking PR #72 onto latest `main`, preserving only Phase A scope.
+- Validate, force-push the #72 issue branch with lease, retarget PR #72 to
+  `main`, mark it ready, wait for hosted checks, and merge.
+- Then restack PR #73 and PR #74 onto latest `main` in order.
 - Do not push directly to `main`, move tags, publish or edit GitHub Releases,
   close or edit issues, force-push `main`, or change repository settings
   without maintainer approval.

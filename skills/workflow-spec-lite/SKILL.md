@@ -135,6 +135,39 @@ The spec must capture:
 - how completion will be judged
 - how scope drift, unrelated refactors, and skipped acceptance checks will be handled before claiming completion
 
+### Step 3a: High-Risk Evidence Gate
+Before implementation, identify whether the work depends on facts where a
+wrong assumption can cause data loss, unsafe behavior, production impact,
+irreversible external side effects, or physical/electrical damage.
+
+For high-risk work:
+
+- Treat missing facts as blocking open questions, not as assumptions to fill
+  from names, nearby resources, prior variants, or convenience.
+- Record evidence sources in the spec before editing. Evidence can be a read
+  file, issue, design note, test output, trace, schematic, maintainer statement,
+  or other source that the agent actually inspected.
+- Put unresolved high-risk facts in `Open Questions` and stop before
+  implementation when those facts affect behavior or safety.
+- Acceptance criteria should name the evidence-backed facts that must be
+  verified, not just the intended output.
+- When high-risk work involves schematic, pin-map, board-port, or power
+  sequencing facts, acceptance criteria should include an evidence-backed
+  mapping table or equivalent checklist for each safety-relevant signal or
+  rail: source evidence, target pin or net, active level, reset/default
+  behavior, power rail or domain, timing or sequencing constraint, and
+  verification method.
+- Any unknown required entry in that mapping is a blocking open question before
+  implementation. Evidence must come from inspected schematics, board files,
+  datasheets, source repositories, maintainer statements, or test output; do
+  not infer it from signal names, nearby unused pins, or prior variants.
+
+Examples of high-risk facts include destructive file operations, production
+target identifiers, access boundaries, electrical pin mapping, active levels,
+reset lines, power rails, timing constraints, and power sequencing. This is
+generic evidence-gated workflow guidance; it is not a domain pack and does not
+authorize domain-specific implementation without source evidence.
+
 ### Step 4: Build Tasks Only When Needed
 Create `tasks.md` only on the `deep` path, or when the user explicitly asks for task decomposition.
 
@@ -218,6 +251,8 @@ Ordinary intermediate commits do not require a full engineering-memory sync. Kee
 - Prefer concise bullets over narrative prose.
 - Record assumptions explicitly instead of silently resolving ambiguity.
 - If the task is reverse engineering or research, evidence and open questions are first-class outputs.
+- If the task depends on high-risk facts, missing evidence is a blocking open
+  question before implementation.
 - For multi-phase execution, write an Execution Contract instead of relying on a vague "work through the plan" instruction.
 - For repeated execution, write a bounded loop contract instead of relying on a vague "continue until done" instruction.
 - Use `scripts/validate_spec.ps1` when you need a read-only check that a spec has the required goals, non-goals, risks, acceptance, and Execution Contract stop rule fields. The helper reports findings only; it does not rewrite the spec.
