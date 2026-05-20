@@ -57,14 +57,17 @@
   - Continue / stop decision: Continue to P03 after PR-A is pushed and opened
     as a draft PR; no stop rule triggered.
 
-- [ ] P03: Complete PR-B for #65 Phase B/C
+- [x] P03: Complete PR-B for #65 Phase B/C
   - Goal: Add cross-workspace root verification and `/goal` source evidence
     guardrails.
   - Inputs: #65 accepted issue body, excluding high-risk Phase A.
-  - Outputs: draft PR-B.
-  - Validation: `git diff --check`; full local release validator.
+  - Outputs: `codex/issue-65-cross-workspace-goal-guardrails`, ready to push
+    and open as stacked draft PR-B with PR-A as base.
+  - Validation: `git diff --check` passed; full local release validator passed
+    with `PASS=46 FAIL=0 WARN=0 DEFERRED=0` using scratch root
+    `$env:TEMP\agent-ecosystem-pr-b-65bc-validation`.
   - Continue / stop decision: Continue to P04 after PR-B is pushed and opened
-    as a draft PR.
+    as a draft PR; no stop rule triggered at implementation time.
 
 - [ ] P04: Complete PR-C for #65 Phase A
   - Goal: Add a generic high-risk evidence gate without adding a domain pack.
