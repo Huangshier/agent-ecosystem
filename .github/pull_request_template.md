@@ -31,6 +31,13 @@ Fixes #
 - [ ] Documentation updated if needed
 - [ ] Release metadata updated if needed
 
+## Base / Stack Safety
+
+- Target base branch: `main`
+- Is this intentionally stacked? yes/no
+- If yes, why is a non-main base required?
+- Before merge, confirm expected files will land on `main`.
+
 ## Validation
 
 - Validation tier:

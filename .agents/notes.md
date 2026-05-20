@@ -122,3 +122,10 @@
 - GitHub issue bodies and PR bodies using `Refs #...` do not auto-close issues.
   Use `Closes #...` or `Fixes #...` when automatic closeout is intended, or
   close manually after explicit authorization.
+- PR #76 `docs: close out accepted stabilization state` merged on 2026-05-20
+  at `8049a3e0058b42a1ee58f74c643be1cd0ac101b9`. Hosted Release validation run
+  `26182173732` passed on `main`.
+- The post-`v0.4.3` flow audit decision is to add PR base/stack guardrails and
+  release-validation concurrency first, without splitting CI. A future CI split
+  must preserve an always-run required check and update repository required
+  checks and release-process documentation together.

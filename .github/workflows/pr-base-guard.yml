@@ -1,0 +1,49 @@
+name: PR base guard
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  base-guard:
+    name: require main base unless stack allowed
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check pull request base
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map((label) => label.name);
+            const body = pr.body || "";
+
+            if (pr.base.ref === "main") {
+              core.info("PR targets main.");
+              return;
+            }
+
+            const hasStackLabel = labels.includes("stack:allowed");
+            const declaresStacked = /^\s*-\s*Is this intentionally stacked\?\s*yes\s*$/im.test(body);
+
+            if (hasStackLabel && declaresStacked) {
+              core.info(`PR intentionally targets non-main base ${pr.base.ref}.`);
+              return;
+            }
+
+            core.setFailed(
+              `PR base is ${pr.base.ref}, not main. Retarget to main, or add ` +
+                "`stack:allowed` and set `Is this intentionally stacked? yes` " +
+                "for an intentional stacked review PR."
+            );

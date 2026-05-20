@@ -103,6 +103,10 @@ validator with PowerShell 7+ (`pwsh`) on:
 It also runs the validator on `windows-latest` with Windows PowerShell 5.1
 (`shell: powershell`) to keep the Windows bare-machine path covered.
 
+The workflow uses GitHub Actions concurrency keyed by workflow and branch. New
+pushes to the same pull request branch cancel older in-progress validation runs,
+so review focuses on the latest commit without weakening coverage.
+
 Each job uploads the validator scratch directory as evidence. Treat CI failures
 as release blockers unless the maintainer explicitly records a platform-specific
 deferral for a pre-release calibration run.
@@ -114,6 +118,13 @@ and macOS runners.
 Deferred checks are allowed only when the capability does not exist yet. The
 release validator should report zero deferred checks for a publishable release
 unless a maintainer explicitly records a new deferral.
+
+The CI workflow is intentionally not split at this stage. Required hosted
+release validation remains a full hard gate for pull requests to `main`, and
+the workflow does not use workflow-level path filters because skipped required
+workflows can leave checks pending. Any future split must keep an always-run
+required check and update this process plus repository required-check settings
+in the same reviewed change.
 
 ## Public Reader Review
 
