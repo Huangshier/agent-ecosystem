@@ -138,8 +138,10 @@ metadata. Do not infer project memory language from the current chat.
 
 For project-memory language changes, use the conservative language migration
 Analyze, Plan, Apply, and Validate modes with explicit source and target
-languages. Review any manual-review artifacts before applying the narrative
-phase.
+languages. Phase 1 replaces templates and stages project-specific content;
+Phase 2 applies reviewed target-language narrative while preserving protected
+literals. Manual-review-only artifacts are reserved for uncertain or unsupported
+content, not the ordinary completion path.
 
 When review needs a standalone body-level language check, run:
 
@@ -148,7 +150,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-boo
 ```
 
 The audit is read-only. It reports likely body-language mismatches without
-translating or rewriting project memory.
+translating or rewriting project memory. The language migration validator uses
+the same audit evidence so blocking source-language leftovers prevent a
+completed migration claim.
 
 ## Handling Old Path References
 

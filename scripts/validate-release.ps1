@@ -2270,6 +2270,12 @@ try {
         if (-not [bool]$validate.validation.valid) {
             throw "Language migration Validate did not report a valid result."
         }
+        if ($validate.validation.PSObject.Properties.Name -notcontains "body_language_audit") {
+            throw "Language migration Validate did not include body-level audit evidence."
+        }
+        if ($SourceLanguage -eq "en" -and $TargetLanguage -eq "zh-CN" -and [bool]$validate.validation.completion_ready) {
+            throw "Phase 1 language migration validation claimed completion before reviewed narrative migration."
+        }
 
         $lockPath = Join-PathParts $projectDir ".agents" "hub.lock.json"
         $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
@@ -2349,6 +2355,12 @@ try {
         if (-not [bool]$narrativeValidate.validation.valid) {
             throw "Narrative language migration did not validate."
         }
+        if ($narrativeValidate.validation.PSObject.Properties.Name -notcontains "body_language_audit") {
+            throw "Narrative language migration validation did not include body-level audit evidence."
+        }
+        if (@($narrativeValidate.validation.findings | Where-Object { [string]$_.severity -eq "error" }).Count -gt 0) {
+            throw "Narrative language migration validation reported blocking errors after reviewed narrative apply."
+        }
 
         $stableFactsPath = Join-PathParts $projectDir ".agents" "context" "tech" "language-migration-stable-facts.md"
         $stableFactsText = Get-Content -LiteralPath $stableFactsPath -Raw
@@ -2377,6 +2389,19 @@ try {
             throw "Narrative language migration did not draft English stable facts text."
         }
 
+        if ($TargetLanguage -eq "zh-CN") {
+            $originalSpecText = Get-Content -LiteralPath $specPath -Raw
+            try {
+                Add-Content -LiteralPath $specPath -Value "`nThis leftover source-language paragraph should fail body-level audit validation before completion because ordinary migration must not leave long English narrative source text in the reviewed target memory file."
+                Assert-ApplyFails -ExpectedToken "narrative validation failed" -Command {
+                    & $languageMigrationScript -ProjectDir $projectDir -Mode ValidateNarrative -MigrationPlan $narrativeProposalPath -Json
+                }
+            }
+            finally {
+                Set-Content -LiteralPath $specPath -Value $originalSpecText -Encoding UTF8
+            }
+        }
+
         return [ordered]@{
             project = $projectDir
             source_language = $SourceLanguage
@@ -2390,6 +2415,7 @@ try {
             result = [string]$apply.apply_result.result
             narrative_proposal = $narrativeProposalPath
             narrative_result = [string]$narrativeApply.apply_result.result
+            body_language_audit_findings = [int]$narrativeValidate.validation.body_language_audit.summary.finding_count
             validated = [bool]$validate.validation.valid
             narrative_validated = [bool]$narrativeValidate.validation.valid
         }
@@ -2403,7 +2429,7 @@ try {
         fixtures = @($migrationEvidence)
     }
 
-    Add-Check "conservative language migration" "PASS" "Conservative en/zh-CN migration covers analyze, proposal, backup, apply, validate, narrative proposal routing, mixed memory, and project-specific preservation." $evidence.language_migration
+    Add-Check "conservative language migration" "PASS" "Conservative en/zh-CN migration covers analyze, proposal, backup, apply, reviewed narrative migration, protected literal preservation, body-level audit validation, and source-language leftover rejection." $evidence.language_migration
 }
 catch {
     Add-Check "conservative language migration" "FAIL" $_.Exception.Message

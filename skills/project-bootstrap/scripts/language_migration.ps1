@@ -574,7 +574,7 @@ function Read-MigrationPlan {
         throw "Migration plan is required and must point to proposal.json."
     }
 
-    $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
+    $plan = Read-Utf8Text -Path $PlanPath | ConvertFrom-Json
     if ([int]$plan.schema_version -ne 1) {
         throw "Unsupported migration proposal schema version."
     }
@@ -846,6 +846,7 @@ function Validate-MigrationPlan {
     $lockPath = Join-PathParts $root ".agents" "hub.lock.json"
     $result = $null
     $resultActions = @()
+    $bodyLanguageAudit = $null
 
     if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupDir)) {
         $valid = $false
@@ -1002,9 +1003,16 @@ function Validate-MigrationPlan {
         }
     }
 
+    $bodyLanguageAudit = Invoke-BodyLanguageAudit -Root $root -ExpectedLanguage ([string]$Plan.target_language)
+    $blockingAuditFindings = @($bodyLanguageAudit.findings | Where-Object { Test-AuditFindingBlocksCompletion -Finding $_ })
+    $completionReady = ([bool]$valid -and $blockingAuditFindings.Count -eq 0)
+
     return [ordered]@{
         valid = [bool]$valid
+        completion_ready = [bool]$completionReady
         findings = @($findings.ToArray())
+        body_language_audit = $bodyLanguageAudit
+        blocking_body_language_findings = @($blockingAuditFindings)
         backup_dir = $backupDir
         result = $resultJson
     }
@@ -1043,6 +1051,9 @@ function Get-NarrativeRoute {
     param([string]$RelativePath)
 
     $normalized = Normalize-RelativePath -Path $RelativePath
+    if ($normalized -eq "AGENTS.md") {
+        return [ordered]@{ category = "project_rules"; target_relative_path = "AGENTS.md" }
+    }
     if ($normalized -eq ".agents/plan.md") {
         return [ordered]@{ category = "active_plan"; target_relative_path = ".agents/plan.md" }
     }
@@ -1054,6 +1065,12 @@ function Get-NarrativeRoute {
     }
     if ($normalized.StartsWith(".agents/context/experience/")) {
         return [ordered]@{ category = "reusable_lessons"; target_relative_path = $normalized }
+    }
+    if ($normalized.StartsWith(".agents/context/")) {
+        return [ordered]@{ category = "context_memory"; target_relative_path = $normalized }
+    }
+    if ($normalized.StartsWith(".agents/commands/")) {
+        return [ordered]@{ category = "command_guidance"; target_relative_path = $normalized }
     }
     if ($normalized.StartsWith("docs/specs/")) {
         return [ordered]@{ category = "durable_specs"; target_relative_path = $normalized }
@@ -1099,6 +1116,20 @@ function Convert-NarrativeText {
     $zhKeep = Join-CodePoints @(0x4FDD, 0x6301, 0x0020)
     $zhAnd = Join-CodePoints @(0x0020, 0x548C, 0x0020)
     $zhOriginalPeriod = Join-CodePoints @(0x0020, 0x539F, 0x6587, 0x3002)
+    $literalLineEn = "Keep command git status, path src/app.py, API Get-FooBar, filename AGENTS.md, commit type feat, raw error ERROR_PATH_NOT_FOUND, and code symbol CustomThing unchanged."
+    $literalLineZh = Join-CodePoints @(0x4FDD, 0x6301, 0x547D, 0x4EE4, 0x0020, 0x0067, 0x0069, 0x0074, 0x0020, 0x0073, 0x0074, 0x0061, 0x0074, 0x0075, 0x0073, 0x3001, 0x8DEF, 0x5F84, 0x0020, 0x0073, 0x0072, 0x0063, 0x002F, 0x0061, 0x0070, 0x0070, 0x002E, 0x0070, 0x0079, 0x3001, 0x0041, 0x0050, 0x0049, 0x0020, 0x0047, 0x0065, 0x0074, 0x002D, 0x0046, 0x006F, 0x006F, 0x0042, 0x0061, 0x0072, 0x3001, 0x6587, 0x4EF6, 0x540D, 0x0020, 0x0041, 0x0047, 0x0045, 0x004E, 0x0054, 0x0053, 0x002E, 0x006D, 0x0064, 0x3001, 0x0063, 0x006F, 0x006D, 0x006D, 0x0069, 0x0074, 0x0020, 0x0074, 0x0079, 0x0070, 0x0065, 0x0020, 0x0066, 0x0065, 0x0061, 0x0074, 0x3001, 0x539F, 0x59CB, 0x9519, 0x8BEF, 0x0020, 0x0045, 0x0052, 0x0052, 0x004F, 0x0052, 0x005F, 0x0050, 0x0041, 0x0054, 0x0048, 0x005F, 0x004E, 0x004F, 0x0054, 0x005F, 0x0046, 0x004F, 0x0055, 0x004E, 0x0044, 0x0020, 0x548C, 0x4EE3, 0x7801, 0x7B26, 0x53F7, 0x0020, 0x0043, 0x0075, 0x0073, 0x0074, 0x006F, 0x006D, 0x0054, 0x0068, 0x0069, 0x006E, 0x0067, 0x0020, 0x539F, 0x6587, 0x3002)
+    $mixedMarkerEn = "Chinese mixed memory marker with ERROR_PATH_NOT_FOUND and src/app.py."
+    $mixedMarkerZh = Join-CodePoints @(0x4E2D, 0x6587, 0x6DF7, 0x5408, 0x8BB0, 0x5FC6, 0x6807, 0x8BB0, 0x4FDD, 0x7559, 0x0020, 0x0045, 0x0052, 0x0052, 0x004F, 0x0052, 0x005F, 0x0050, 0x0041, 0x0054, 0x0048, 0x005F, 0x004E, 0x004F, 0x0054, 0x005F, 0x0046, 0x004F, 0x0055, 0x004E, 0x0044, 0x0020, 0x548C, 0x0020, 0x0073, 0x0072, 0x0063, 0x002F, 0x0061, 0x0070, 0x0070, 0x002E, 0x0070, 0x0079, 0x3002)
+    $durableContentEn = "Project-specific durable spec content must remain available."
+    $durableContentZh = Join-CodePoints @(0x9879, 0x76EE, 0x7279, 0x5316, 0x7684, 0x6301, 0x4E45, 0x0020, 0x0073, 0x0070, 0x0065, 0x0063, 0x0020, 0x5185, 0x5BB9, 0x5FC5, 0x987B, 0x7EE7, 0x7EED, 0x53EF, 0x7528, 0x3002)
+    $customApiNotesEn = "Custom API Notes"
+    $customApiNotesZh = Join-CodePoints @(0x81EA, 0x5B9A, 0x4E49, 0x0020, 0x0041, 0x0050, 0x0049, 0x0020, 0x8BB0, 0x5F55)
+    $hotSourceEn = Join-CodePoints @(0x0048, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x0073, 0x006F, 0x0075, 0x0072, 0x0063, 0x0065, 0x0020, 0x0074, 0x006F, 0x006B, 0x0065, 0x006E, 0x003A)
+    $hotSourceZh = Join-CodePoints @(0x0068, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x6E90, 0x6807, 0x8BB0, 0xFF1A)
+    $hotProcessEn = Join-CodePoints @(0x0048, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x0070, 0x0072, 0x006F, 0x0063, 0x0065, 0x0073, 0x0073, 0x0020, 0x0074, 0x006F, 0x006B, 0x0065, 0x006E, 0x003A)
+    $hotProcessZh = Join-CodePoints @(0x0068, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x6D41, 0x7A0B, 0x6807, 0x8BB0, 0xFF1A)
+    $hotNotesEn = Join-CodePoints @(0x0048, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x006E, 0x006F, 0x0074, 0x0065, 0x0073, 0x0020, 0x0074, 0x006F, 0x006B, 0x0065, 0x006E, 0x003A)
+    $hotNotesZh = Join-CodePoints @(0x0068, 0x006F, 0x0074, 0x0020, 0x006D, 0x0065, 0x006D, 0x006F, 0x0072, 0x0079, 0x0020, 0x7B14, 0x8BB0, 0x6807, 0x8BB0, 0xFF1A)
     if ($SourceLanguageCode -eq "en" -and $TargetLanguageCode -eq "zh-CN") {
         $pairs = @(
             @("Stable Facts", $zhStableFacts),
@@ -1119,7 +1150,14 @@ function Convert-NarrativeText {
             @("Keep this lesson for future migrations.", ($zhKeepLesson + "lesson" + $zhForFuture + "migration" + $zhReusePeriod)),
             @("The durable spec remains active.", ($zhDurable + "spec" + $zhStillActive + "active" + $zhStatePeriod)),
             @("Use the target language for narrative text.", $zhNarrativeTarget),
-            @("Keep commands and paths unchanged.", ($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod))
+            @("Keep commands and paths unchanged.", ($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod)),
+            @($literalLineEn, $literalLineZh),
+            @($mixedMarkerEn, $mixedMarkerZh),
+            @($durableContentEn, $durableContentZh),
+            @($customApiNotesEn, $customApiNotesZh),
+            @($hotSourceEn, $hotSourceZh),
+            @($hotProcessEn, $hotProcessZh),
+            @($hotNotesEn, $hotNotesZh)
         )
     } elseif ($SourceLanguageCode -eq "zh-CN" -and $TargetLanguageCode -eq "en") {
         $pairs = @(
@@ -1139,7 +1177,14 @@ function Convert-NarrativeText {
             @(($zhKeepLesson + "lesson" + $zhForFuture + "migration" + $zhReusePeriod), "Keep this lesson for future migrations."),
             @(($zhDurable + "spec" + $zhStillActive + "active" + $zhStatePeriod), "The durable spec remains active."),
             @($zhNarrativeTarget, "Use the target language for narrative text."),
-            @(($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod), "Keep commands and paths unchanged.")
+            @(($zhKeep + "commands" + $zhAnd + "paths" + $zhOriginalPeriod), "Keep commands and paths unchanged."),
+            @($literalLineZh, $literalLineEn),
+            @($mixedMarkerZh, $mixedMarkerEn),
+            @($durableContentZh, $durableContentEn),
+            @($customApiNotesZh, $customApiNotesEn),
+            @($hotSourceZh, $hotSourceEn),
+            @($hotProcessZh, $hotProcessEn),
+            @($hotNotesZh, $hotNotesEn)
         )
     } else {
         throw "Unsupported narrative migration direction. Supported values: en, zh-CN."
@@ -1152,15 +1197,242 @@ function Convert-NarrativeText {
 }
 
 function Get-ConciseHotMemoryText {
-    param([string]$Text)
+    param(
+        [string]$Text,
+        [string]$SourceText = "",
+        [string]$TargetLanguageCode = "en"
+    )
 
     $lines = @($Text -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($lines.Count -le 12) {
-        return ($lines -join "`r`n")
+        $selected = @($lines)
+    } else {
+        $selected = @($lines | Select-Object -First 12)
+        $selected += "- Additional narrative remains in the narrative proposal for manual routing."
     }
-    $selected = @($lines | Select-Object -First 12)
-    $selected += "- Additional narrative remains in the narrative proposal for manual routing."
+
+    if (-not [string]::IsNullOrWhiteSpace($SourceText)) {
+        $current = ($selected -join "`r`n")
+        $missing = @(Get-MissingProtectedLiterals -SourceText $SourceText -TargetText $current)
+        if ($missing.Count -gt 0) {
+            if ($TargetLanguageCode -eq "zh-CN") {
+                $protectedLiteralLabel = Join-CodePoints @(0x53D7, 0x4FDD, 0x62A4, 0x5B57, 0x9762, 0x91CF, 0xFF1A)
+                $selected += ("- {0}{1}" -f $protectedLiteralLabel, ($missing -join ", "))
+            } else {
+                $selected += ("- Protected literals: {0}" -f ($missing -join ", "))
+            }
+        }
+    }
+
     return ($selected -join "`r`n")
+}
+
+function Add-ProtectedLiteral {
+    param(
+        [hashtable]$Set,
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+
+    $literal = $Value.Trim().TrimEnd(".;,")
+    if ($literal.Length -lt 2) {
+        return
+    }
+
+    $Set[$literal] = $true
+}
+
+function Get-ProtectedLiterals {
+    param([string]$Text)
+
+    $set = @{}
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    foreach ($match in [regex]::Matches($Text, '`([^`]+)`')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Groups[1].Value
+    }
+    foreach ($match in [regex]::Matches($Text, '(?m)^\s*(?:PS\s+)?(?:powershell|pwsh|git|gh|npm|pnpm|yarn|python|node|dotnet|uv|idf\.py|esptool\.py)\b[^\r\n]*', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '(?:[A-Za-z]:)?[\\/][A-Za-z0-9_.\\/:-]+')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '(?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])[A-Za-z0-9_.\\/:-]+')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '\b[A-Za-z0-9_.-]+\.(?:md|txt|ps1|py|js|ts|json|ya?ml|lock|exe|dll|c|h|cpp|hpp|cs|java|go|rs|html|css)\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '\b[A-Z][A-Z0-9_]{2,}\b')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '\b(?:Get|Set|New|Remove|Add|Invoke|Test|Update|Write|Read|Start|Stop|Restart|Convert|ConvertFrom|ConvertTo|Import|Export)-[A-Za-z0-9-]+\b')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '\b[A-Za-z_][A-Za-z0-9_]*\([^)]*\)')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '\b[A-Za-z]*[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Value
+    }
+    foreach ($match in [regex]::Matches($Text, '(?i)\bcommit\s+type\s+(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)\b')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Groups[1].Value
+    }
+    foreach ($match in [regex]::Matches($Text, '(?i)\b(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\([^)]+\))?!?:')) {
+        Add-ProtectedLiteral -Set $set -Value $match.Groups[1].Value
+    }
+
+    return @($set.Keys | Sort-Object { $_.Length } -Descending)
+}
+
+function Get-MissingProtectedLiterals {
+    param(
+        [string]$SourceText,
+        [string]$TargetText
+    )
+
+    return @(Get-MissingProtectedLiteralValues -Literals @(Get-ProtectedLiterals -Text $SourceText) -TargetText $TargetText)
+}
+
+function Get-MissingProtectedLiteralValues {
+    param(
+        [array]$Literals,
+        [string]$TargetText
+    )
+
+    $missing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($literalValue in @($Literals)) {
+        $literal = [string]$literalValue
+        if ([string]::IsNullOrWhiteSpace($literal)) {
+            continue
+        }
+        if ($TargetText.IndexOf($literal, [System.StringComparison]::Ordinal) -lt 0) {
+            $missing.Add($literal) | Out-Null
+        }
+    }
+    return @($missing.ToArray())
+}
+
+function Get-ActionProtectedLiterals {
+    param(
+        $Action,
+        [string]$FallbackSourceText
+    )
+
+    if ($Action.PSObject.Properties.Name -contains "protected_literals") {
+        return @($Action.protected_literals | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+
+    return @(Get-ProtectedLiterals -Text $FallbackSourceText)
+}
+
+function Get-BaseMigrationAction {
+    param(
+        $BasePlan,
+        [string]$RelativePath
+    )
+
+    foreach ($action in @($BasePlan.actions)) {
+        if ([string]$action.relative_path -eq $RelativePath) {
+            return $action
+        }
+    }
+
+    return $null
+}
+
+function Get-ProjectSpecificSourceText {
+    param(
+        [string]$SourceText,
+        $BaseAction
+    )
+
+    if ($null -eq $BaseAction) {
+        return $SourceText
+    }
+
+    $sourceTemplatePath = [string]$BaseAction.source_template_path
+    if ([string]::IsNullOrWhiteSpace($sourceTemplatePath) -or -not (Test-Path -LiteralPath $sourceTemplatePath)) {
+        return $SourceText
+    }
+
+    $sourceTemplateText = Read-Utf8Text -Path $sourceTemplatePath
+    $sourceNormalized = $SourceText -replace "`r`n", "`n" -replace "`r", "`n"
+    $templateNormalized = $sourceTemplateText.TrimEnd() -replace "`r`n", "`n" -replace "`r", "`n"
+    if ($sourceNormalized.StartsWith($templateNormalized, [System.StringComparison]::Ordinal)) {
+        $remainder = $sourceNormalized.Substring($templateNormalized.Length).Trim()
+        if (-not [string]::IsNullOrWhiteSpace($remainder)) {
+            return $remainder
+        }
+    }
+
+    return $SourceText
+}
+
+function Remove-ManualReviewSourceSections {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return ""
+    }
+
+    $result = [regex]::Replace(
+        $Text,
+        '(?s)\r?\n?<!-- language-migration:manual-review-source begin -->.*?<!-- language-migration:manual-review-source end -->\r?\n?',
+        "`r`n"
+    )
+
+    $result = [regex]::Replace(
+        $result,
+        '(?ms)\r?\n?## Project-Specific Source Content \(Manual Review\)\s+The following content is preserved verbatim and must be reviewed before translation, merge, or routing\.\s*',
+        "`r`n"
+    )
+
+    $zhManualSection = ("## {0}`r`n`r`n{1}" -f $script:ZhText.ManualHeading, $script:ZhText.ManualIntro)
+    $result = $result.Replace($zhManualSection, "")
+
+    return $result.TrimEnd()
+}
+
+function Invoke-BodyLanguageAudit {
+    param(
+        [string]$Root,
+        [string]$ExpectedLanguage
+    )
+
+    $auditScript = Join-PathParts $PSScriptRoot "audit_memory_language.ps1"
+    if (-not (Test-Path -LiteralPath $auditScript)) {
+        throw "Body-level language audit helper not found: $auditScript"
+    }
+
+    $jsonText = (& $auditScript -ProjectDir $Root -ExpectedLanguage $ExpectedLanguage -IncludeSpecs -IncludeCommands -Json) -join "`n"
+    return ($jsonText | ConvertFrom-Json)
+}
+
+function Test-AuditFindingBlocksCompletion {
+    param($Finding)
+
+    $code = [string]$Finding.code
+    if ($code -in @("metadata_only_localization", "body_likely_english", "body_likely_zh_cn")) {
+        return $true
+    }
+
+    if ($code -eq "mixed_language_body") {
+        $expectedLanguage = [string]$Finding.expected_language
+        $cjk = [int]$Finding.body_signal.cjk_chars
+        $latin = [int]$Finding.body_signal.latin_words
+        if ($expectedLanguage -eq "zh-CN") {
+            return ($latin -ge 25 -and $cjk -lt 120)
+        }
+        return ($cjk -ge 40 -and $latin -lt 60)
+    }
+
+    return $false
 }
 
 function New-NarrativeBackup {
@@ -1212,21 +1484,28 @@ function Write-NarrativeProposal {
         $route = Get-NarrativeRoute -RelativePath $sourceRelative
         $sourceText = Get-ManualReviewSourceText -ArtifactPath $artifact.FullName
         $sourceHash = Get-TextSha256 -Text $sourceText
+        $baseAction = Get-BaseMigrationAction -BasePlan $BasePlan -RelativePath $sourceRelative
+        $projectSpecificSourceText = Get-ProjectSpecificSourceText -SourceText $sourceText -BaseAction $baseAction
+        $protectedLiterals = @(Get-ProtectedLiterals -Text $projectSpecificSourceText)
         $targetRelative = [string]$route.target_relative_path
         $targetPath = Join-PathParts $Root $targetRelative
         $targetHash = Get-FileTextSha256 -Path $targetPath
-        $proposedText = Convert-NarrativeText -Text $sourceText -SourceLanguageCode ([string]$BasePlan.source_language) -TargetLanguageCode ([string]$BasePlan.target_language)
+        $proposedText = Convert-NarrativeText -Text $projectSpecificSourceText -SourceLanguageCode ([string]$BasePlan.source_language) -TargetLanguageCode ([string]$BasePlan.target_language)
         if (Test-HotMemoryPath -RelativePath $targetRelative) {
-            $proposedText = Get-ConciseHotMemoryText -Text $proposedText
+            $proposedText = Get-ConciseHotMemoryText -Text $proposedText -SourceText $projectSpecificSourceText -TargetLanguageCode ([string]$BasePlan.target_language)
         }
+        $replaceExisting = ([string]$route.category -in @("context_memory", "reusable_lessons", "durable_specs", "command_guidance", "manual_review_only"))
 
         $actions.Add([ordered]@{
             source_artifact = $artifact.FullName
             source_relative_path = $sourceRelative
             source_hash_sha256 = $sourceHash
+            project_specific_source_hash_sha256 = Get-TextSha256 -Text $projectSpecificSourceText
+            protected_literals = @($protectedLiterals)
             category = [string]$route.category
             target_relative_path = $targetRelative
             target_hash_sha256 = $targetHash
+            replace_existing = [bool]$replaceExisting
             approved = $false
             proposed_target_text = $proposedText
             protected_tokens_note = "Review before apply. Commands, paths, API names, filenames, commit types, raw errors, and code symbols must remain unchanged."
@@ -1247,6 +1526,8 @@ function Write-NarrativeProposal {
         active_plan = @($actionArray | Where-Object { [string]$_.category -eq "active_plan" }).Count
         process_state = @($actionArray | Where-Object { [string]$_.category -eq "process_state" }).Count
         reusable_lessons = @($actionArray | Where-Object { [string]$_.category -eq "reusable_lessons" }).Count
+        context_memory = @($actionArray | Where-Object { [string]$_.category -eq "context_memory" }).Count
+        command_guidance = @($actionArray | Where-Object { [string]$_.category -eq "command_guidance" }).Count
         durable_specs = @($actionArray | Where-Object { [string]$_.category -eq "durable_specs" }).Count
         project_rules = @($actionArray | Where-Object { [string]$_.category -eq "project_rules" }).Count
         manual_review_only = @($actionArray | Where-Object { [string]$_.category -eq "manual_review_only" }).Count
@@ -1284,10 +1565,11 @@ function Write-NarrativeProposal {
     $lines += "## Routing"
     $lines += "- Stable facts route to durable technical context."
     $lines += "- Active plan and process state route to concise hot memory updates."
+    $lines += "- Context and durable spec actions replace source-language bodies when reviewed and approved."
     $lines += "- Reusable lessons route to `.agents/context/experience/`."
     $lines += "- Durable specs route to `docs/specs/`."
     $lines += "- Project rules (other `.agents/` paths) stay in place; confirm routing before apply."
-    $lines += "- Unknown paths are flagged `manual_review_only`; confirm target and category before apply."
+    $lines += "- Unknown paths are flagged `manual_review_only`; they are exception paths and should not be the normal migration result."
     $lines += ""
     $lines += "## Safety Rules"
     $lines += "- This is a deterministic narrative draft, not unattended perfect translation."
@@ -1299,6 +1581,7 @@ function Write-NarrativeProposal {
     foreach ($action in $actionArray) {
         $lines += ("- `{0}` -> `{1}` ({2}; approved: false)" -f [string]$action.source_relative_path, [string]$action.target_relative_path, [string]$action.category)
         $lines += ("  - Source hash: {0}" -f [string]$action.source_hash_sha256)
+        $lines += ("  - Replace existing source body on apply: {0}" -f [bool]$action.replace_existing)
     }
     Set-Content -LiteralPath $proposalMarkdown -Value $lines -Encoding UTF8
 
@@ -1317,7 +1600,7 @@ function Read-NarrativePlan {
     if ([string]::IsNullOrWhiteSpace($PlanPath) -or -not (Test-Path -LiteralPath $PlanPath)) {
         throw "Narrative migration plan is required and must point to narrative-proposal.json."
     }
-    $plan = Get-Content -LiteralPath $PlanPath -Raw | ConvertFrom-Json
+    $plan = Read-Utf8Text -Path $PlanPath | ConvertFrom-Json
     if ([int]$plan.schema_version -ne 1 -or [string]$plan.proposal_type -ne "language-migration-narrative") {
         throw "Unsupported narrative migration proposal."
     }
@@ -1340,6 +1623,13 @@ function Assert-NarrativePlanReady {
         if ($sourceHash -ne [string]$action.source_hash_sha256) {
             throw "Narrative migration source artifact changed after proposal: $sourceArtifact"
         }
+        if ([bool]$action.approved) {
+            $protectedLiterals = @(Get-ActionProtectedLiterals -Action $action -FallbackSourceText (Get-ManualReviewSourceText -ArtifactPath $sourceArtifact))
+            $missingLiterals = @(Get-MissingProtectedLiteralValues -Literals $protectedLiterals -TargetText ([string]$action.proposed_target_text))
+            if ($missingLiterals.Count -gt 0) {
+                throw ("Narrative proposal lost protected literal(s) for {0}: {1}" -f [string]$action.target_relative_path, ($missingLiterals -join ", "))
+            }
+        }
         $targetPath = Join-PathParts ([string]$Plan.project) ([string]$action.target_relative_path)
         $targetHash = Get-FileTextSha256 -Path $targetPath
         if ($targetHash -ne [string]$action.target_hash_sha256) {
@@ -1354,14 +1644,16 @@ function Add-NarrativeSection {
         [string]$Body,
         [string]$SourceHash,
         [string]$Category,
-        [string]$TargetLanguageCode
+        [string]$TargetLanguageCode,
+        [bool]$ReplaceExisting = $false
     )
 
     $zhHeading = Join-CodePoints @(0x8BED, 0x8A00, 0x8FC1, 0x79FB, 0x53D9, 0x8FF0, 0x63D0, 0x6848)
     $heading = if ($TargetLanguageCode -eq "zh-CN") { "## $zhHeading" } else { "## Language Migration Narrative Proposal" }
     $lines = @()
-    if (-not [string]::IsNullOrWhiteSpace($ExistingText)) {
-        $lines += $ExistingText.TrimEnd()
+    $baseText = Remove-ManualReviewSourceSections -Text $ExistingText
+    if (-not $ReplaceExisting -and -not [string]::IsNullOrWhiteSpace($baseText)) {
+        $lines += $baseText.TrimEnd()
         $lines += ""
     }
     $lines += $heading
@@ -1401,7 +1693,11 @@ function Apply-NarrativeMigrationPlan {
         if (Test-Path -LiteralPath $targetPath) {
             $existing = Read-Utf8Text -Path $targetPath
         }
-        $merged = Add-NarrativeSection -ExistingText $existing -Body ([string]$action.proposed_target_text) -SourceHash ([string]$action.source_hash_sha256) -Category ([string]$action.category) -TargetLanguageCode ([string]$Plan.target_language)
+        $replaceExisting = $false
+        if ($action.PSObject.Properties.Name -contains "replace_existing") {
+            $replaceExisting = [bool]$action.replace_existing
+        }
+        $merged = Add-NarrativeSection -ExistingText $existing -Body ([string]$action.proposed_target_text) -SourceHash ([string]$action.source_hash_sha256) -Category ([string]$action.category) -TargetLanguageCode ([string]$Plan.target_language) -ReplaceExisting $replaceExisting
         Ensure-Dir -Path (Split-Path -Parent $targetPath)
         Write-Utf8TextWithBom -Path $targetPath -Content $merged
         $written++
@@ -1409,6 +1705,7 @@ function Apply-NarrativeMigrationPlan {
             target_relative_path = $targetRelative
             category = [string]$action.category
             result = "written-narrative-section"
+            replace_existing = [bool]$replaceExisting
             source_hash_sha256 = [string]$action.source_hash_sha256
             final_hash_sha256 = Get-FileTextSha256 -Path $targetPath
         }) | Out-Null
@@ -1455,6 +1752,9 @@ function Validate-NarrativeMigrationPlan {
     $root = [string]$Plan.project
     $proposalDir = Split-Path -Parent ([string]$MigrationPlan)
     $resultJson = Join-Path $proposalDir "narrative-result.json"
+    $result = $null
+    $resultActions = @()
+    $bodyLanguageAudit = $null
     if ([string]::IsNullOrWhiteSpace([string]$Plan.backup_dir) -or -not (Test-Path -LiteralPath ([string]$Plan.backup_dir))) {
         $valid = $false
         $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_backup"; message = "Recorded narrative backup directory is missing."; path = [string]$Plan.backup_dir }) | Out-Null
@@ -1462,8 +1762,22 @@ function Validate-NarrativeMigrationPlan {
     if (-not (Test-Path -LiteralPath $resultJson)) {
         $valid = $false
         $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_result"; message = "Narrative result.json is missing."; path = $resultJson }) | Out-Null
+    } else {
+        $result = Get-Content -LiteralPath $resultJson -Raw | ConvertFrom-Json
+        $resultActions = @($result.actions)
+        if ($resultActions.Count -ne @($Plan.actions).Count) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "narrative_result_action_count_mismatch"; message = "narrative-result.json action count does not match proposal action count."; path = $resultJson }) | Out-Null
+        }
     }
-    foreach ($action in @($Plan.actions)) {
+    $planActions = @($Plan.actions)
+    $approvedTargetSet = @{}
+    for ($index = 0; $index -lt $planActions.Count; $index++) {
+        $action = $planActions[$index]
+        $resultAction = $null
+        if ($index -lt $resultActions.Count) {
+            $resultAction = $resultActions[$index]
+        }
         $targetPath = Join-PathParts $root ([string]$action.target_relative_path)
         $sourceArtifact = [string]$action.source_artifact
         if (-not (Test-Path -LiteralPath $sourceArtifact)) {
@@ -1471,12 +1785,28 @@ function Validate-NarrativeMigrationPlan {
             $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_source"; message = "Narrative source artifact is missing."; path = $sourceArtifact }) | Out-Null
             continue
         }
-        $sourceHash = Get-TextSha256 -Text (Get-ManualReviewSourceText -ArtifactPath $sourceArtifact)
+        $sourceText = Get-ManualReviewSourceText -ArtifactPath $sourceArtifact
+        $sourceHash = Get-TextSha256 -Text $sourceText
         if ($sourceHash -ne [string]$action.source_hash_sha256) {
             $valid = $false
             $findings.Add([ordered]@{ severity = "error"; code = "narrative_source_hash_mismatch"; message = "Narrative source hash changed after proposal."; path = $sourceArtifact }) | Out-Null
         }
+        if ($null -ne $resultAction -and [string]$resultAction.target_relative_path -ne [string]$action.target_relative_path) {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "narrative_result_action_mismatch"; message = "narrative-result.json action does not match the proposal action at the same index."; path = [string]$action.target_relative_path }) | Out-Null
+        }
+        if (-not [bool]$action.approved -and [string]$action.category -ne "manual_review_only") {
+            $valid = $false
+            $findings.Add([ordered]@{ severity = "error"; code = "unapproved_narrative_action"; message = "Ordinary narrative migration action remains unapproved; manual-review-only is the only exception path."; path = [string]$action.target_relative_path }) | Out-Null
+        }
         if ([bool]$action.approved) {
+            $approvedTargetSet[(Normalize-RelativePath -Path ([string]$action.target_relative_path))] = $true
+            $protectedLiterals = @(Get-ActionProtectedLiterals -Action $action -FallbackSourceText $sourceText)
+            $missingFromProposal = @(Get-MissingProtectedLiteralValues -Literals $protectedLiterals -TargetText ([string]$action.proposed_target_text))
+            if ($missingFromProposal.Count -gt 0) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "proposal_missing_protected_literals"; message = ("Approved narrative proposal lost protected literal(s): {0}" -f ($missingFromProposal -join ", ")); path = [string]$action.target_relative_path }) | Out-Null
+            }
             if (-not (Test-Path -LiteralPath $targetPath)) {
                 $valid = $false
                 $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_target"; message = "Approved narrative target was not written."; path = $targetPath }) | Out-Null
@@ -1487,12 +1817,38 @@ function Validate-NarrativeMigrationPlan {
                 $valid = $false
                 $findings.Add([ordered]@{ severity = "error"; code = "missing_narrative_marker"; message = "Approved narrative target lacks review marker or source hash."; path = $targetPath }) | Out-Null
             }
+            $missingFromTarget = @(Get-MissingProtectedLiteralValues -Literals $protectedLiterals -TargetText $targetText)
+            if ($missingFromTarget.Count -gt 0) {
+                $valid = $false
+                $findings.Add([ordered]@{ severity = "error"; code = "target_missing_protected_literals"; message = ("Approved narrative target lost protected literal(s): {0}" -f ($missingFromTarget -join ", ")); path = $targetPath }) | Out-Null
+            }
         }
+    }
+
+    $bodyLanguageAudit = Invoke-BodyLanguageAudit -Root $root -ExpectedLanguage ([string]$Plan.target_language)
+    foreach ($auditFinding in @($bodyLanguageAudit.findings)) {
+        $auditPath = Normalize-RelativePath -Path ([string]$auditFinding.path)
+        $blocksCompletion = (Test-AuditFindingBlocksCompletion -Finding $auditFinding)
+        if ([string]$auditFinding.code -eq "mixed_language_body" -and -not $approvedTargetSet.ContainsKey($auditPath)) {
+            $blocksCompletion = $false
+        }
+        if ($blocksCompletion) {
+            $valid = $false
+        }
+        $severity = if ($blocksCompletion) { "error" } else { "warning" }
+        $code = if ($blocksCompletion) { "body_language_audit_finding" } else { "body_language_audit_warning" }
+        $findings.Add([ordered]@{
+            severity = $severity
+            code = $code
+            message = [string]$auditFinding.reason
+            path = [string]$auditFinding.path
+        }) | Out-Null
     }
 
     return [ordered]@{
         valid = [bool]$valid
         findings = @($findings.ToArray())
+        body_language_audit = $bodyLanguageAudit
         backup_dir = [string]$Plan.backup_dir
         result = $resultJson
     }
@@ -1647,6 +2003,12 @@ if ($payload.PSObject.Properties.Name -contains "apply_result") {
 }
 if ($payload.PSObject.Properties.Name -contains "validation") {
     Write-Output ("Valid: {0}" -f [bool]$payload.validation.valid)
+    if ($payload.validation.PSObject.Properties.Name -contains "completion_ready") {
+        Write-Output ("Completion ready: {0}" -f [bool]$payload.validation.completion_ready)
+    }
+    if ($payload.validation.PSObject.Properties.Name -contains "body_language_audit") {
+        Write-Output ("Body language audit findings: {0}" -f [int]$payload.validation.body_language_audit.summary.finding_count)
+    }
     foreach ($finding in @($payload.validation.findings)) {
         Write-Output ("[{0}] {1}: {2}" -f [string]$finding.severity, [string]$finding.code, [string]$finding.message)
         Write-Output ("  Path: {0}" -f [string]$finding.path)

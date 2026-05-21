@@ -104,12 +104,14 @@ Apply mode refuses to write if the proposal, backup, or planned source hashes no
 longer match. Apply and validate also refuse a proposal whose recorded project
 path differs from the current `-ProjectDir`.
 
-The narrative follow-up reads retained manual-review artifacts and creates a
-second proposal. It routes stable facts to durable context, active plan and
-process state to concise hot memory updates, reusable lessons to
+The narrative follow-up reads retained review artifacts and creates a second
+proposal. It routes stable facts to durable context, active plan and process
+state to concise hot memory updates, reusable lessons to
 `.agents/context/experience/`, and durable specs to `docs/specs/`. Narrative
 actions are unapproved by default; review the proposed target-language text
-before applying it.
+before applying it. The normal completion path applies reviewed narrative back
+to project memory while protected literals stay unchanged. Manual-review-only
+items are exception paths for uncertain or unsupported content.
 
 For review-only body-language checks, run the standalone audit helper:
 
@@ -119,7 +121,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\s
 
 The audit ignores `Summary` / `Keywords` discovery metadata, fenced code, and
 protected literals before reporting heuristic findings. It is read-only and
-does not translate or rewrite project memory.
+does not translate or rewrite project memory. Language migration validation
+records this audit evidence and treats blocking source-language leftovers as a
+completion failure.
 When using `-Json`, the output includes the resolved `project_dir`. Review or
 redact local paths before copying audit output into public issues, pull
 requests, or documents.

@@ -236,9 +236,10 @@ Behavior:
 - Apply mode requires the proposal and recorded backup, then refuses to write if
   a planned source file changed after planning.
 - Exact source-template matches are replaced with target-language templates.
-- Customized project content is first preserved safely in manual-review
-  sections, routed to manual-review artifacts for concise hot memory, or
-  preserved unchanged when no matching target template exists.
+- Customized project content is first backed up and staged for review; the
+  normal completion path applies reviewed target-language narrative back to the
+  right memory surface. Manual-review-only routing is an exception path for
+  uncertain or unsupported content, not the default migration result.
 - Narrative migration reads those manual-review artifacts, creates a second
   proposal with target-language narrative drafts, stable facts, active plan,
   process state, reusable lessons, and durable specs routed to the right memory
@@ -246,6 +247,9 @@ Behavior:
   draft text.
 - Commands, paths, API names, filenames, commit types, raw errors, and code
   symbols remain in their original form.
+- Validation uses the body-level language audit helper: Phase 1 validation can
+  be structurally valid while `completion_ready` remains false, and final
+  narrative validation rejects blocking source-language leftovers.
 - This is not arbitrary-language i18n and does not claim perfect unattended
   translation.
 
