@@ -100,6 +100,15 @@ Analyze, Plan, Apply, and Validate modes with explicit source and target
 languages. Review any manual-review artifacts before applying the narrative
 phase.
 
+When review needs a standalone body-level language check, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+```
+
+The audit is read-only. It reports likely body-language mismatches without
+translating or rewriting project memory.
+
 ## Handling Old Path References
 
 Classify old path references before editing:

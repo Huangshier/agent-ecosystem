@@ -246,6 +246,9 @@ The release validator now covers:
 - conservative project-memory language migration coverage for both `en` to
   `zh-CN` and `zh-CN` to `en`, mixed memory, project-specific preservation,
   proposal-first apply, backup-first apply, and narrative migration routing
+- read-only body-level project-memory language audit coverage for
+  metadata/body mismatches, fenced code, protected literals, and mixed
+  narrative fixtures
 - workflow-spec-lite validator positive/negative fixtures
 - anti-drift template and memory-governance coverage
 - validation scratch retention pruning dry-run/apply behavior

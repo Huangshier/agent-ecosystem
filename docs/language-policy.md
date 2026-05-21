@@ -98,6 +98,16 @@ process state to concise hot memory updates, reusable lessons to
 actions are unapproved by default; review the proposed target-language text
 before applying it.
 
+For review-only body-language checks, run the standalone audit helper:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+```
+
+The audit ignores `Summary` / `Keywords` discovery metadata, fenced code, and
+protected literals before reporting heuristic findings. It is read-only and
+does not translate or rewrite project memory.
+
 The file templates are structural baselines for scaffold generation, language
 updates, and conservative migration planning. They are not a reason to replace
 customized project memory with generic scaffolds. Exact source-template matches
