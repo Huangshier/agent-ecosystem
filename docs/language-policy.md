@@ -73,6 +73,19 @@ plan, review, apply, and validate flow. Force reset options are only for
 intentional scaffold reset scenarios where project-specific memory can be
 discarded.
 
+Intent matters:
+
+- Refresh or template upgrade preserves project-specific memory by default and
+  updates only missing or unmodified scaffold surfaces unless a reviewed
+  proposal says otherwise.
+- Language migration changes the project-memory language with target-language
+  templates and reviewed target-language narrative. Commands, paths, APIs,
+  filenames, raw errors, and code symbols stay in their original form.
+- Reset or reinitialize discards old scaffold customizations only when the
+  caller explicitly says old project memory may be discarded. Do not treat
+  refresh, upgrade, migrate, or casual reinitialization wording as reset
+  permission.
+
 The supported conservative language migration flow is explicit about direction:
 
 ```powershell

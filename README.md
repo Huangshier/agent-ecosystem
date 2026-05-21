@@ -123,6 +123,7 @@ tooling。当前不会额外启用 domain-pack content。生命周期和 profile
 
 - 从空项目开始：[Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - 适配到现有项目：[Existing project upgrade path](docs/existing-project-upgrade.md)
+- 刷新、迁移或重置工程记忆：[Existing project upgrade path](docs/existing-project-upgrade.md#intent-quick-reference)
 - 查看最小项目布局：[examples/minimal-project](examples/minimal-project/README.md)
 - 了解如何适配：[How to adapt](docs/how-to-adapt.md)
 - 维护项目记忆：[Language policy](docs/language-policy.md) 和

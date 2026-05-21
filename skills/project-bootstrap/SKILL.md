@@ -1,6 +1,6 @@
 ---
 name: project-bootstrap
-description: Initialize and maintain project-level `.agents` memory scaffolds from a global git-tracked knowledge hub at `%USERPROFILE%\\.agents\\knowledge-hub`. Use when creating a new project scaffold, refreshing shared templates with a pinned lock file (`.agents/hub.lock.json`), or standardizing cross-project AGENTS/context/plan/process/notes structures.
+description: Initialize and maintain project-level `.agents` memory scaffolds from a global git-tracked knowledge hub at `%USERPROFILE%\\.agents\\knowledge-hub`. Use when creating a new project scaffold, refreshing existing project memory, upgrading memory templates, migrating project memory language, refreshing shared templates with a pinned lock file (`.agents/hub.lock.json`), or standardizing cross-project AGENTS/context/plan/process/notes structures. Also use for requests such as 刷新旧工程记忆, 升级工程记忆模板, 迁移工程记忆语言到中文, 迁移工程记忆语言到英文, 重新初始化工程记忆, or 重置工程记忆模板.
 category: kernel
 stability: stable
 scope: cross-project
@@ -88,6 +88,20 @@ Optional flags:
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
+Intent semantics:
+- Refresh or template upgrade means preserve project-specific memory by
+  default. Refresh missing scaffolds, update files that still match old
+  template hashes when requested, and route modified project memory to review.
+- Language migration means move between the supported `en` and `zh-CN`
+  project-memory languages. The workflow uses target-language templates as
+  structural baselines, drafts target-language narrative for review, and keeps
+  protected literals such as commands, paths, APIs, filenames, raw errors, and
+  code symbols in their original form.
+- Reset or reinitialize means discard existing scaffold customizations only
+  when the caller explicitly asks not to preserve old project memory, for
+  example "do not keep old memory", "reset to the latest templates", or
+  "重新初始化工程记忆，不保留旧内容". Reset remains backup-first.
+
 Standalone body-level language audit:
 
 ```powershell
@@ -106,10 +120,10 @@ requests, or documents.
 
 Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
-- Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested. Pass the project's current memory language explicitly when the project is not English-first or when lock metadata already records a language.
-- Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review.
+- Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested. This is the conservative answer to "refresh old project memory" when the user has not asked to rewrite content. Pass the project's current memory language explicitly when the project is not English-first or when lock metadata already records a language.
+- Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review. This is a safe template upgrade, not a reset.
 - Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration. Use `-PlanNarrativeMigration`, `-ApplyNarrativeMigration`, and `-ValidateNarrativeMigration` as the follow-up review step for manual-review artifacts.
-- Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. This is not a language migration path and remains backup-first.
+- Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. Do not infer this from "refresh", "upgrade", "migrate", or "reinitialize" unless the caller also says old memory may be discarded. This is not a language migration path and remains backup-first.
 
 Standalone language update:
 
@@ -222,16 +236,16 @@ Behavior:
 - Apply mode requires the proposal and recorded backup, then refuses to write if
   a planned source file changed after planning.
 - Exact source-template matches are replaced with target-language templates.
-- Customized project content is preserved verbatim in manual-review sections,
-  routed to manual-review artifacts for concise hot memory, or preserved
-  unchanged when no matching target template exists.
+- Customized project content is first preserved safely in manual-review
+  sections, routed to manual-review artifacts for concise hot memory, or
+  preserved unchanged when no matching target template exists.
 - Narrative migration reads those manual-review artifacts, creates a second
-  proposal with stable facts, active plan, process state, reusable lessons, and
-  durable specs routed to the right memory surfaces, and leaves actions
-  unapproved until a reviewer accepts or edits the draft text.
+  proposal with target-language narrative drafts, stable facts, active plan,
+  process state, reusable lessons, and durable specs routed to the right memory
+  surfaces, and leaves actions unapproved until a reviewer accepts or edits the
+  draft text.
 - Commands, paths, API names, filenames, commit types, raw errors, and code
-  symbols remain in their original form because project-specific content is not
-  machine-translated.
+  symbols remain in their original form.
 - This is not arbitrary-language i18n and does not claim perfect unattended
   translation.
 
@@ -245,7 +259,7 @@ Behavior:
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
 - Do not use bootstrap as a routine session-end promotion step. Cross-project experience promotion is a `knowledge-hub/scripts` maintenance action; bootstrap only installs the project guidance that points agents toward that hub workflow.
 - Treat `-OverwriteTemplates` as deprecated compatibility wording. Prefer `-RefreshUnmodifiedTemplates` for safe refreshes and `-ForceResetScaffold` only for explicit reset scenarios.
-- Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not overwrite old project memory without an explicit apply step.
+- Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not hand-edit `.agents/**` in bulk or overwrite old project memory without an explicit apply step.
 - File-based `en` and `zh-CN` templates are the structural baseline for conservative language migration, not overwrite authority for customized project memory.
 - The authoritative source for project-memory templates in this repository is
   `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.

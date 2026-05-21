@@ -132,6 +132,7 @@ lifecycle and profile boundary.
 
 - Start from an empty project: [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - Adapt an existing project: [Existing project upgrade path](docs/existing-project-upgrade.md)
+- Refresh, migrate, or reset project memory: [Existing project upgrade path](docs/existing-project-upgrade.md#intent-quick-reference)
 - Inspect the smallest project layout: [examples/minimal-project](examples/minimal-project/README.md)
 - Learn the adaptation model: [How to adapt](docs/how-to-adapt.md)
 - Maintain project memory: [Language policy](docs/language-policy.md) and
