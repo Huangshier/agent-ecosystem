@@ -137,11 +137,26 @@ merges. Before merge, reviewers should confirm the base branch, expected files,
 and whether the PR replaces or supersedes another PR. After merge, verify the
 content reached `main` with a file-level compare or equivalent evidence.
 
+## Runtime Memory Boundary
+
+The root `.agents/` directory is checkout-local runtime memory for this
+repository. It may be useful while an agent is working in one local clone, but
+it is not a public fact source and must not be tracked in the public repository.
+
+Durable public state belongs in GitHub issues and pull requests,
+`docs/specs/**`, governance docs, release docs, changelog entries, release
+notes, or curated `knowledge-hub/knowledge/**` entries. `docs/specs/**` should
+record goals, non-goals, accepted scope, durable decisions, risks, acceptance
+criteria, and completed evidence. It should not preserve local branch status,
+waiting pull-request merge steps, pending hosted checks, branch publishing
+steps, or duplicate issue-label dashboards as long-lived state.
+
 ## Repository Controls
 
 The current repository control model is:
 
 - agent-created changes use feature branches;
+- root `.agents/` runtime memory is ignored and untracked;
 - `main` requires pull requests through the `protect-main` repository ruleset;
 - required release validation checks must pass before merge;
 - the `PR base guard` workflow fails pull requests that target a non-`main`

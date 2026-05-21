@@ -39,6 +39,10 @@ emits JSON evidence with `-Json`.
 The validator checks:
 
 - public repository structure and release documentation entrypoints
+- root `.agents/` runtime memory is not tracked, while generated/template
+  `.agents` paths remain allowed
+- public spec files avoid obvious volatile active-state records unless covered
+  by historical evidence, stop-rule, or retrospective allowlists
 - Workflow Kernel skill metadata
 - installer profile matrix for `minimal`, `recommended`, `full`, and `dev`
 - copy mode and default link/junction mode installs
@@ -188,3 +192,8 @@ gate.
 Public release records should describe the validation surface and final status.
 Do not include local machine paths, private repository mappings, raw sensitive
 audit findings, or private overlay details.
+
+Root `.agents/` files are local runtime memory and are not public release
+records. Public specs are durable work packages; use them for scope, decisions,
+acceptance evidence, and completed results rather than local checkout or pull
+request wait state.

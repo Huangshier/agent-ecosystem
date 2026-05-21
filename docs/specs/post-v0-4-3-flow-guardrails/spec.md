@@ -2,23 +2,24 @@
 
 - **Title**: Post-v0.4.3 Flow Guardrails
 - **Slug**: post-v0-4-3-flow-guardrails
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
-- **Updated**: 2026-05-20
+- **Updated**: 2026-05-21
 
 ## 1. Summary
-- Close the remaining post-`v0.4.3` process drift from the May 2026 audit.
-- Add lightweight pull request base/stack safety guardrails.
-- Add CI concurrency while keeping the current full hosted release validation
-  gate intact.
-- Re-triage deferred issues only after the state closeout, PR guardrails, and
-  CI concurrency changes have landed.
+- Closed the post-`v0.4.3` process drift from the May 2026 audit.
+- Added lightweight pull request base/stack safety guardrails.
+- Added CI concurrency while keeping the full hosted release validation gate
+  intact.
+- Recorded durable triage evidence after the guardrail work landed.
 
 ## 2. Current Context
 - Repository: `Huangshier/agent-ecosystem`.
 - Published release remains `v0.4.3`.
 - PR #76 closed out accepted stabilization engineering memory after #74.
-- Open deferred issues remain #67, #56, and #23.
+- PR #77 merged the PR base guardrails and release-validation concurrency work.
+- Issues #67, #56, #78, #79, and #80 are accepted public work items.
+- Issue #23 remains deferred for a later release-planning pass.
 - Existing `protect-main` ruleset requires pull requests and four release
   validation checks before merge.
 
@@ -28,7 +29,7 @@
   the PR is explicitly marked as an intentional stack.
 - Add release-validation concurrency so stale same-branch runs are canceled.
 - Record the decision not to split CI yet.
-- Refresh public changelog, release readiness, and engineering memory state.
+- Refresh public changelog and release readiness.
 - Re-triage #67, #56, and #23 after repository changes are merged.
 
 ## 4. Non-Goals
@@ -89,13 +90,12 @@
   - P03: Add CI concurrency and record the no-split decision.
   - P04: Validate, open, and merge the guardrail PR through required checks.
   - P05: Re-triage deferred issues #67, #56, and #23.
-- **Continue rule**: Continue to the next phase when repository changes stay
-  within this spec, validation passes, and required hosted checks pass.
-- **Stop rule**: Stop if a phase requires repository settings/ruleset changes,
-  release publication, tag movement, branch deletion, failed checks that cannot
-  be fixed in scope, or implementation of #67/#56/#23.
-- **State record**: `docs/specs/post-v0-4-3-flow-guardrails/tasks.md`,
-  `.agents/process.txt`, and `.agents/plan.md`.
+- **Continue rule**: Completed. Each phase advanced only after repository
+  changes stayed within this spec and validation evidence was available.
+- **Stop rule**: Completed without requiring repository settings/ruleset
+  changes, release publication, tag movement, branch deletion, or implementation
+  of #67/#56/#23.
+- **State record**: `docs/specs/post-v0-4-3-flow-guardrails/tasks.md`.
 
 ## 12. Open Questions
 - None for repository-file changes.

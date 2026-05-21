@@ -37,6 +37,8 @@ $evidence = [ordered]@{
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
     agent_template_guidance = [ordered]@{}
+    memory_boundary = [ordered]@{}
+    spec_state_boundary = [ordered]@{}
 }
 
 function Invoke-InstallerProfile {
@@ -210,6 +212,127 @@ if ($missingFiles.Count -eq 0 -and $missingDirs.Count -eq 0 -and $presentForbidd
 }
 else {
     Add-Check "public structure" "FAIL" "Required public paths are missing or forbidden legacy paths are present." ([ordered]@{ files = $missingFiles; directories = $missingDirs; forbidden_directories = $presentForbiddenDirs })
+}
+
+try {
+    $trackedRootAgentFiles = @(& git -C $repoRoot ls-files -- ".agents")
+    if ($LASTEXITCODE -ne 0) {
+        throw "git ls-files .agents failed."
+    }
+
+    $allAgentPathFiles = @(Get-GitFiles | Where-Object { $_ -match '(^|/)\.agents/' })
+    $allowedAgentPathFiles = @($allAgentPathFiles | Where-Object { $_ -notmatch '^\.agents/' })
+    $gitignoreText = Get-FileText -RelativePath ".gitignore"
+    $hasRootAgentsIgnore = $gitignoreText -match '(?m)^/\.agents/\s*$'
+
+    $script:evidence.memory_boundary = [ordered]@{
+        tracked_root_agents = @($trackedRootAgentFiles)
+        allowed_non_root_agents_count = $allowedAgentPathFiles.Count
+        has_root_anchored_ignore = [bool]$hasRootAgentsIgnore
+    }
+
+    if ($trackedRootAgentFiles.Count -gt 0 -or -not $hasRootAgentsIgnore) {
+        Add-Check "root agents runtime boundary" "FAIL" "Root .agents runtime memory must be ignored and untracked." $evidence.memory_boundary
+    }
+    else {
+        Add-Check "root agents runtime boundary" "PASS" "Root .agents runtime memory is untracked while non-root template, example, fixture, and generated .agents paths remain allowed." $evidence.memory_boundary
+    }
+}
+catch {
+    Add-Check "root agents runtime boundary" "FAIL" $_.Exception.Message
+}
+
+try {
+    $specVolatileRules = @(
+        [ordered]@{ name = "current_branch"; pattern = '(?i)\bCurrent Branch\b' },
+        [ordered]@{ name = "origin_main"; pattern = '(?i)\borigin/main\b' },
+        [ordered]@{ name = "hosted_checks_pending"; pattern = '(?i)\bhosted\b.*\bchecks?\b.*\bpending\b' },
+        [ordered]@{ name = "next_actions"; pattern = '(?i)\bNext Actions\b' },
+        [ordered]@{ name = "force_push"; pattern = '(?i)\bforce-?push(?:ing)?\b' },
+        [ordered]@{ name = "merge_this_pr"; pattern = '(?i)\bmerge\s+this\s+PR\b' },
+        [ordered]@{ name = "publish_branch"; pattern = '(?i)\bpublish\s+branch\b' }
+    )
+    $specStateAllowlist = @{
+        "docs/specs/accepted-stabilization-guardrails/spec.md" = @("origin_main", "force_push", "current_branch")
+        "docs/specs/accepted-stabilization-guardrails/tasks.md" = @("origin_main")
+        "docs/specs/bootstrap-auto-upgrade/spec.md" = @("force_push")
+        "docs/specs/file-based-memory-templates/tasks.md" = @("origin_main")
+        "docs/specs/hub-maintenance-hardening/spec.md" = @("force_push")
+        "docs/specs/project-memory-template-authority/tasks.md" = @("origin_main")
+        "docs/specs/v0-3-0-public-maintenance/spec.md" = @("origin_main", "force_push")
+        "docs/specs/v0-3-1-stabilization/spec.md" = @("force_push")
+        "docs/specs/v0-4-3-release-record-reconciliation/spec.md" = @("origin_main")
+    }
+
+    function Test-SpecStateLineAllowed {
+        param(
+            [Parameter(Mandatory = $true)][string]$LineText,
+            [Parameter(Mandatory = $true)][string]$RuleName
+        )
+
+        if ($LineText -match '(?i)\bStop rule\b|Historical note|retrospective|incident|Prevention rule') {
+            return $true
+        }
+        if ($RuleName -eq "force_push" -and $LineText -match '(?i)\bdo not\b|blocked|stop|recovery|retarget|requirement') {
+            return $true
+        }
+        if ($RuleName -eq "origin_main" -and $LineText -match '(?i)\bfinal\b|\bvalidation\b|\bevidence\b|\bcompleted\b|\bmerged\b|\bclosed\b|\bpublished\b|\btag\b') {
+            return $true
+        }
+        return $false
+    }
+
+    $specFiles = @(Get-GitFiles | Where-Object {
+        $_ -match '^docs/specs/.+/(spec|tasks)\.md$' -and $_ -notmatch '^docs/specs/_templates/'
+    })
+    $allowedSpecMatches = New-Object 'System.Collections.Generic.List[object]'
+    $unexpectedSpecMatches = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($file in $specFiles) {
+        foreach ($rule in $specVolatileRules) {
+            foreach ($match in @(Get-LineMatches -RelativePath $file -Pattern $rule.pattern)) {
+                $isAllowed = $false
+                if ($specStateAllowlist.ContainsKey($file) -and $rule.name -in @($specStateAllowlist[$file])) {
+                    $isAllowed = $true
+                }
+                elseif (Test-SpecStateLineAllowed -LineText ([string]$match.text) -RuleName ([string]$rule.name)) {
+                    $isAllowed = $true
+                }
+
+                $entry = [ordered]@{
+                    rule = [string]$rule.name
+                    path = [string]$match.path
+                    line = [int]$match.line
+                    text = [string]$match.text
+                    allowed = [bool]$isAllowed
+                }
+
+                if ($isAllowed) {
+                    $allowedSpecMatches.Add([object]$entry)
+                }
+                else {
+                    $unexpectedSpecMatches.Add([object]$entry)
+                }
+            }
+        }
+    }
+
+    $script:evidence.spec_state_boundary = [ordered]@{
+        scanned_files = $specFiles.Count
+        allowed_matches = @($allowedSpecMatches.ToArray())
+        unexpected_matches = @($unexpectedSpecMatches.ToArray())
+        allowlist_files = @($specStateAllowlist.Keys)
+    }
+
+    if ($unexpectedSpecMatches.Count -gt 0) {
+        Add-Check "spec state boundary" "FAIL" "Public specs contain volatile active-state language outside the historical evidence allowlist." @($unexpectedSpecMatches.ToArray())
+    }
+    else {
+        Add-Check "spec state boundary" "PASS" "Public specs keep volatile active-state patterns out of long-lived records or confine them to historical evidence, stop-rule, and retrospective allowlists." $evidence.spec_state_boundary
+    }
+}
+catch {
+    Add-Check "spec state boundary" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -1005,21 +1128,19 @@ catch {
 
 try {
     $rootGuidanceFiles = [ordered]@{
-        "AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
+        "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', 'Do not preload the full `.agents/context/` tree at startup.')
         "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
         "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
     }
     $agentGuidanceFiles = [ordered]@{
-        ".agents/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
     }
     $commandGuidanceFiles = [ordered]@{
-        ".agents/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
         "knowledge-hub/templates/languages/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
         "knowledge-hub/templates/languages/zh-CN/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "高频、可复用的项目工作流命令", "不要凭空发明命令", "预期通过/失败证据")
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
@@ -2221,6 +2342,7 @@ try {
     $catalogText = Get-FileText -RelativePath $catalogPath
     $catalogRequiredTokens = @(
         "knowledge/experience/windows-powershell-command-chaining.md",
+        "knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge/standards/public-knowledge-boundary.md",
         "knowledge/standards/bilingual-public-private-routing.md",
@@ -2230,6 +2352,7 @@ try {
 
     $metadataFiles = @(
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
+        "knowledge-hub/knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
         "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
@@ -2553,8 +2676,8 @@ catch {
 }
 
 try {
-    $agentGuide = Get-FileText -RelativePath ".agents/AGENTS.md"
-    $languagePolicyPresent = $agentGuide -match '(?m)^## Project Language Policy\s*$'
+    $repoGuide = Get-FileText -RelativePath "AGENTS.md"
+    $languagePolicyPresent = $repoGuide -match '(?m)^## Project Language Policy\s*$'
     $hotMemoryExists = $false
     $bootstrapLanguagePolicyPresent = $false
     $autoWriteEvidence = @()
@@ -2824,13 +2947,13 @@ try {
         missing_template_fallback = @($fallbackEvidence)
     }
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
-        Add-Check "language policy templates" "PASS" "Project Language Policy is present in repo and bootstrap output; bootstrap hot memory files are present." $evidence.language_policy
+        Add-Check "language policy templates" "PASS" "Project Language Policy is present in root guidance and bootstrap output; bootstrap hot memory files are generated in temporary projects." $evidence.language_policy
         Add-Check "file-based memory template sources" "PASS" "English and Simplified Chinese project memory templates exist as files for root, hot memory, context, commands, and spec scaffolds." @($fileTemplateEvidence)
         Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap can write English and Simplified Chinese project memory scaffolds when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
         Add-Check "missing language template fallback" "PASS" "A missing Simplified Chinese template file falls back to the English template with fallback metadata." @($fallbackEvidence)
     }
     else {
-        Add-Check "language policy templates" "FAIL" "Language policy or bootstrap hot memory check failed." $evidence.language_policy
+        Add-Check "language policy templates" "FAIL" "Language policy guidance or bootstrap hot memory generation check failed." $evidence.language_policy
     }
 }
 catch {

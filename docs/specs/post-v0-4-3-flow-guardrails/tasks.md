@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/post-v0-4-3-flow-guardrails/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-20
+- **Status**: Done
+- **Updated**: 2026-05-21
 
 ## Tasks
 
@@ -25,17 +25,19 @@
   - Notes: CI is not split in this change; required full release validation
     remains the merge gate.
 
-- [ ] T04: Validate, publish, and merge the repository-file PR
-  - Scope: `codex/pr-ci-flow-guardrails`.
-  - Validation: `git diff --check` passed; full local release validation passed
-    with `PASS=46 FAIL=0 WARN=0 DEFERRED=0`; hosted required checks pending.
-  - Notes: Local validator scratch root:
-    `$env:TEMP\agent-ecosystem-pr-ci-flow-guardrails-validation`.
+- [x] T04: Validate and merge the repository-file PR
+  - Scope: PR #77.
+  - Validation: local release validation passed with
+    `PASS=46 FAIL=0 WARN=0 DEFERRED=0`; hosted release validation passed before
+    merge.
+  - Notes: PR #77 landed the PR base guard and release-validation concurrency
+    changes on `main`.
 
-- [ ] T05: Re-triage deferred issues
+- [x] T05: Re-triage deferred issues
   - Scope: #67, #56, and #23 only.
-  - Validation: read back updated issue state.
-  - Notes: Do this only after T04 is merged.
+  - Validation: public issue state readback.
+  - Notes: #67 and #56 are accepted. #23 remains deferred for a later
+    release-planning pass.
 
 ## Task-to-Spec Notes
 - P1 and P2 are intentionally grouped because both update PR/CI workflow
