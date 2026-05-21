@@ -11,6 +11,10 @@ Use a domain pack when:
 Do not turn a domain pack into a skill until repeated usage shows a stable,
 scriptable workflow.
 
+Lifecycle, manifest, promotion, public-safety, validation, and profile-boundary
+rules are defined in
+[Domain pack governance](../../../docs/domain-pack-governance.md).
+
 ## Current Packs
 
 - [Embedded Core](embedded-core/catalog.md): public-safe embedded workflow

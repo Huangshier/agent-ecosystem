@@ -125,7 +125,8 @@ Current public profiles:
 
 `full` and `dev` are reserved for future installable public domain packs and
 developer maintenance tooling. They do not currently enable extra domain-pack
-content.
+content. See [Domain pack governance](docs/domain-pack-governance.md) for the
+lifecycle and profile boundary.
 
 ## Examples And Common Paths
 
@@ -140,6 +141,7 @@ content.
 
 - [Architecture](docs/architecture.md)
 - [Agent governance](docs/agent-governance.md)
+- [Domain pack governance](docs/domain-pack-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Existing project upgrade path](docs/existing-project-upgrade.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)

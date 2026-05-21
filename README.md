@@ -116,7 +116,8 @@ manifest 可能包含本机绝对路径，不应提交到项目仓库。
 - `dev`：当前安装内容与 `recommended` 相同。
 
 `full` 和 `dev` 预留给未来可安装的 public domain packs 和 developer maintenance
-tooling。当前不会额外启用 domain-pack content。
+tooling。当前不会额外启用 domain-pack content。生命周期和 profile 边界见
+[Domain pack governance](docs/domain-pack-governance.md)。
 
 ## 示例和常见任务路径
 
@@ -131,6 +132,7 @@ tooling。当前不会额外启用 domain-pack content。
 
 - [Architecture](docs/architecture.md)
 - [Agent governance](docs/agent-governance.md)
+- [Domain pack governance](docs/domain-pack-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Existing project upgrade path](docs/existing-project-upgrade.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)

@@ -72,14 +72,16 @@ Public domain packs start as Markdown knowledge bundles under
 `knowledge-hub/knowledge/domain-packs/`. A pack can describe reusable domain
 vocabulary, checklists, and boundaries, but it should not contain private
 environment assumptions or become a skill until repeated usage proves a stable
-workflow.
+workflow. The authoritative lifecycle, manifest, promotion, public-safety,
+validation, and profile-boundary rules live in
+[Domain pack governance](../domain-pack-governance.md).
 
 The first public scaffold is `embedded-core`, a public-safe embedded validation
 checklist. SDK-specific automation and private domain skills remain outside the
 public kernel.
 
-Promotion from a Markdown domain pack to a scriptable public skill should wait
-until all of these are true:
+Promotion from a Markdown domain pack to a scriptable public skill follows the
+domain-pack governance lifecycle. The minimum current gate is:
 
 - the workflow has been used successfully in at least two independent projects
   or by two independent maintainers
