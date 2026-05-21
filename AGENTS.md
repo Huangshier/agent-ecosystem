@@ -10,9 +10,12 @@ public fact source and is not tracked by this repository.
 
 Project memory language: English.
 
-Public documentation is English-first unless a file or issue explicitly targets
-another language. Keep commands, paths, APIs, file names, code identifiers, and
-raw error text in their original form.
+The root `README.md` is the chosen Simplified Chinese repository homepage, with
+`README.en.md` as the English entrypoint and `README.zh-CN.md` as a
+compatibility redirect. Deeper public documentation may remain English-first
+unless a file or issue explicitly targets another language. Keep commands,
+paths, APIs, file names, code identifiers, and raw error text in their original
+form.
 
 ## Startup Sources
 

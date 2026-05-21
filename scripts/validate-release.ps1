@@ -137,6 +137,7 @@ try {
 
 $requiredFiles = @(
     "README.md",
+    "README.en.md",
     "README.zh-CN.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -157,6 +158,7 @@ $requiredFiles = @(
     "docs/release-readiness.md",
     "docs/shell-strategy.md",
     "docs/template-path-reference-audit.md",
+    "docs/releases/README.md",
     "docs/releases/v0.1.0.md",
     "docs/releases/v0.2.0.md",
     "docs/releases/v0.3.0.md",
@@ -1191,7 +1193,8 @@ try {
         "examples/minimal-project/README.md" = @("Workflow Kernel", ".agents", "docs/specs")
         "examples/minimal-project/.agents/AGENTS.md" = @("Project Language Policy", "unrelated refactors", "skipped validation")
         "examples/minimal-project/docs/specs/example-work/spec.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Stop rule")
-        "README.md" = @("How to adapt", "Examples")
+        "README.md" = @("How to adapt", "Examples", "示例和常见任务路径")
+        "README.en.md" = @("How to adapt", "Examples", "Five-Minute Start")
     }
 
     $adoptionMissing = New-Object 'System.Collections.Generic.List[string]'
@@ -1215,6 +1218,80 @@ try {
 }
 catch {
     Add-Check "adoption surface" "FAIL" $_.Exception.Message
+}
+
+try {
+    $readmeZh = Get-FileText -RelativePath "README.md"
+    $readmeEn = Get-FileText -RelativePath "README.en.md"
+    $readmeCompat = Get-FileText -RelativePath "README.zh-CN.md"
+    $releaseIndex = Get-FileText -RelativePath "docs/releases/README.md"
+
+    $readmeExpectations = [ordered]@{
+        "README.md" = @(
+            "English: [README.en.md](README.en.md)",
+            "简体中文（当前）",
+            "一句话理解",
+            "5 分钟上手",
+            "分层模型",
+            "Profiles",
+            "示例和常见任务路径",
+            "Release notes",
+            "project-context-gate",
+            "workflow-spec-lite"
+        )
+        "README.en.md" = @(
+            "Simplified Chinese: [README.md](README.md)",
+            "One-Line Summary",
+            "Five-Minute Start",
+            "Layer Model",
+            "Profiles",
+            "Examples And Common Paths",
+            "Release notes",
+            "project-context-gate",
+            "workflow-spec-lite"
+        )
+        "README.zh-CN.md" = @(
+            "简体中文首页已迁移到 [README.md](README.md)",
+            "English version: [README.en.md](README.en.md)"
+        )
+        "docs/releases/README.md" = @(
+            "[v0.4.3](v0.4.3.md)",
+            "[v0.4.2](v0.4.2.md)",
+            "[v0.4.1](v0.4.1.md)",
+            "[v0.4.0](v0.4.0.md)",
+            "[v0.3.1](v0.3.1.md)",
+            "[v0.3.0](v0.3.0.md)",
+            "[v0.2.0](v0.2.0.md)",
+            "[v0.1.0](v0.1.0.md)"
+        )
+    }
+
+    $readmeMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $readmeExpectations.Keys) {
+        $text = switch ($relativePath) {
+            "README.md" { $readmeZh }
+            "README.en.md" { $readmeEn }
+            "README.zh-CN.md" { $readmeCompat }
+            default { $releaseIndex }
+        }
+        foreach ($token in $readmeExpectations[$relativePath]) {
+            if (-not $text.Contains($token)) {
+                $readmeMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    if ($readmeMissing.Count -gt 0) {
+        Add-Check "readme language entrypoints" "FAIL" "README or release index entrypoint assertions failed." @($readmeMissing.ToArray())
+    }
+    else {
+        Add-Check "readme language entrypoints" "PASS" "Simplified Chinese homepage, English mirror, compatibility redirect, and release index are wired." ([ordered]@{
+            checked_files = @($readmeExpectations.Keys)
+        })
+    }
+}
+catch {
+    Add-Check "readme language entrypoints" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -1281,11 +1358,13 @@ try {
     $releaseProcess = Get-FileText -RelativePath "docs/release-process.md"
     $workflow = Get-FileText -RelativePath ".github/workflows/release-validation.yml"
     $readme = Get-FileText -RelativePath "README.md"
+    $readmeEn = Get-FileText -RelativePath "README.en.md"
     $roadmap = Get-FileText -RelativePath "docs/roadmap/evolution-plan.md"
     $shellExpectations = [ordered]@{
         "docs/shell-strategy.md" = @("Windows PowerShell 5.1", "PowerShell 7+", "pwsh -NoProfile -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
         "docs/release-process.md" = @("Shell strategy", "Bash or Zsh wrappers", "canonical", ".ps1")
         "README.md" = @("Shell strategy")
+        "README.en.md" = @("Shell strategy")
         "docs/roadmap/evolution-plan.md" = @("Shell Direction", "Bash or Zsh wrappers are deferred", "canonical", ".ps1")
     }
     $shellMissing = New-Object 'System.Collections.Generic.List[string]'
@@ -1294,6 +1373,7 @@ try {
             "docs/shell-strategy.md" { $shellStrategy }
             "docs/release-process.md" { $releaseProcess }
             "README.md" { $readme }
+            "README.en.md" { $readmeEn }
             default { $roadmap }
         }
         foreach ($token in $shellExpectations[$relativePath]) {
@@ -2974,7 +3054,7 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
         "knowledge-hub/knowledge-catalog.md" = @("Bilingual Public/Private Routing", "language routing")
         "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" = @("Bilingual Public/Private Routing")
-        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Public templates remain English-first")
+        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Simplified Chinese repository homepage", "Public templates remain English-first")
         "docs/release-readiness.md" = @("Bilingual Public/Private Routing", "localized context discovery headings")
         "docs/release-process.md" = @("localized context discovery headings", "bilingual public/private routing")
     }
