@@ -1,7 +1,25 @@
 ﻿{
     "schema_version":  1,
-    "updated_at_utc":  "2026-05-07T17:19:48.1880151Z",
+    "updated_at_utc":  "2026-05-21T13:11:02.6210118Z",
     "entries":  [
+                    {
+                        "id":  "reindexed-stacked-pr-merge-incident-recovery-0c680f83",
+                        "promoted_at_utc":  "2026-05-21T13:08:46.1819852Z",
+                        "source_project":  "",
+                        "source_project_tag":  "",
+                        "source_relative_path":  "",
+                        "source_file":  "",
+                        "hash_sha256":  "0c680f83ec480574cc83205ed415ed6ca9c78ca787c7623338e29210351fb0ae",
+                        "title":  "Stacked PR Merge Incident Recovery",
+                        "keywords":  [
+                                         "stacked-pr",
+                                         "merge-incident",
+                                         "replacement-pr",
+                                         "pull-request-checks",
+                                         "agents-memory"
+                                     ],
+                        "hub_file":  "stacked-pr-merge-incident-recovery.md"
+                    },
                     {
                         "id":  "reindexed-windows-powershell-command-chaining-86598847",
                         "promoted_at_utc":  "2026-04-23T02:03:39.1417284Z",

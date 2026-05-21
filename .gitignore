@@ -5,10 +5,11 @@ tmp/
 *.log
 
 # Project memory runtime pins and caches
-.agents/hub.lock.json
-.agents/cache/
-.agents/_backup/
-.agents/upgrade/
+/.agents/
+/.agents/hub.lock.json
+/.agents/cache/
+/.agents/_backup/
+/.agents/upgrade/
 
 # Local migration notes that do not belong in the public repository
 docs/migration/local-*.md

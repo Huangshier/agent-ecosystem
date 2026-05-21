@@ -30,6 +30,11 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: PowerShell command chaining or host shell parsing behaves
     differently from expected.
+- [Stacked PR Merge Incident Recovery](knowledge/experience/stacked-pr-merge-incident-recovery.md)
+  - Maturity: verified
+  - Scope: cross-project
+  - Use when: a stacked pull request landed on a feature branch instead of the
+    default branch, or PR checks need recovery after retargeting.
 
 ### Patterns
 
