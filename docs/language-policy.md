@@ -2,8 +2,12 @@
 
 ## Public Documentation
 
-Public documentation is English-first. Translations may be provided in
-`README.zh-CN.md` or under `docs/zh-CN/`.
+`README.md` is the project's chosen Simplified Chinese repository homepage.
+`README.en.md` is the English entrypoint. `README.zh-CN.md` is kept as a
+compatibility redirect for older links.
+
+Deeper public documentation may remain English-first unless a file, issue, or
+translation effort explicitly targets another language.
 
 ## Conversation And Artifact Routing
 
@@ -13,8 +17,9 @@ instead of copying the conversation language automatically.
 
 For public/private workflows:
 
-- public community-facing docs, release notes, and knowledge hub entries stay
-  English-first unless they are explicit translations
+- root README routing follows the public documentation policy above
+- deeper public community-facing docs, release notes, and knowledge hub entries
+  may stay English-first unless they are explicit translations
 - private control docs and private memory follow the private repository's
   `.agents/AGENTS.md`
 - project-local memory follows the target project's `.agents/AGENTS.md`

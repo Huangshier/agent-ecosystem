@@ -119,8 +119,10 @@ release validation behavior.
 
 ## Language Policy
 
-Community-facing public documentation is English-first. Chinese documentation
-may live in `README.zh-CN.md` or `docs/zh-CN/`.
+The repository homepage is Simplified Chinese in `README.md`, with
+`README.en.md` as the English entrypoint and `README.zh-CN.md` kept as a
+compatibility redirect. Deeper public documentation may remain English-first
+unless a file or issue explicitly targets another language.
 
 Project memory language is project-local and should be declared in the
 project's `.agents/AGENTS.md` under a `Project Language Policy` section when
