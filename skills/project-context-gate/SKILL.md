@@ -1,6 +1,6 @@
 ---
 name: project-context-gate
-description: Load and refresh repository-level agent instructions before non-trivial project work. Use before starting implementation, debugging, migration, research, or multi-file edits in a repository; at phase boundaries after a commit when continuing; after context compaction/resume; and after user corrections that change project rules. Reads AGENTS.md, .agents/AGENTS.md, .agents/context, process.txt, plan.md, and active docs/specs files when present.
+description: Load and refresh repository-level agent instructions before non-trivial project work. Use before starting implementation, debugging, migration, research, memory refresh, memory template upgrade, project-memory language migration, or multi-file edits in a repository; at phase boundaries after a commit when continuing; after context compaction/resume; and after user corrections that change project rules. Reads AGENTS.md, .agents/AGENTS.md, .agents/context, process.txt, plan.md, and active docs/specs files when present. Also use for triggers such as 刷新旧工程记忆, 升级工程记忆模板, 迁移工程记忆语言到中文, and 迁移工程记忆语言到英文.
 category: kernel
 stability: stable
 scope: cross-project
@@ -31,6 +31,8 @@ Run the gate when:
 - starting a new non-trivial repository task or switching to a different objective
 - entering implementation/debugging/research/migration work after a purely conversational exchange
 - starting memory governance or any edit to `.agents/` project memory
+- handling memory refresh, memory template upgrade, project-memory language
+  migration, 刷新旧工程记忆, 升级工程记忆模板, or 迁移工程记忆语言到中文 / 英文
 - continuing after a commit into a new phase or follow-up task
 - resuming after context compaction, interruption, long pause, or user correction to project rules
 - crossing repositories, toolchains, or ownership boundaries
@@ -77,8 +79,9 @@ Skip missing files without treating them as errors.
 
 Do not preload all project memory. Token use is controlled mostly by the project memory layout and what the agent chooses to open, not by this gate itself.
 
-For memory refresh, memory upgrade, language migration, standardization, or
-project-memory governance tasks, expand discovery without bulk loading:
+For memory refresh, memory upgrade, language migration, reset/reinitialize,
+standardization, or project-memory governance tasks, expand discovery without
+bulk loading:
 
 - List `.agents/context/**` and `.agents/commands/**` discovery files first,
   then open only entries whose Summary, Keywords, filename, or task relevance
@@ -89,6 +92,10 @@ project-memory governance tasks, expand discovery without bulk loading:
   not preload every spec body only because the task is memory-scoped.
 - Include `.agents/notes.md`, `.agents/hub.lock.json`, and project language
   declarations when language consistency or scaffold provenance is in scope.
+- Classify intent before editing: refresh/upgrade preserves project-specific
+  memory, language migration changes template and narrative language while
+  preserving protected literals, and reset/reinitialize discards old memory only
+  when explicitly requested by the user.
 
 ### Step 3: Produce a Constraint Capsule
 Before continuing work, summarize the current task constraints in a few lines:

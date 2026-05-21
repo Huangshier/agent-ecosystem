@@ -55,13 +55,25 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - Target language templates are structural baselines. Customized project content is preserved verbatim, merged into a manual-review section, routed to a manual-review artifact for concise hot memory, or left unchanged for manual review. The narrative phase creates deterministic translation drafts for ordinary prose, routes stable facts, active plan, process state, reusable lessons, and durable specs to the right memory surfaces, and still requires review before apply.
 - Run `audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json` when review needs a standalone body-level audit. The helper is read-only and reports warning-level findings; it does not translate, rewrite, or approve memory changes.
 
+## Intent Semantics
+- Refresh or upgrade keeps project-specific memory by default. Missing
+  scaffolds may be added, and unmodified template matches may be updated, but
+  customized files are preserved or routed to review.
+- Language migration changes the project-memory language between `en` and
+  `zh-CN`. It combines target-language templates, reviewed narrative migration,
+  and protected literal preservation for commands, paths, APIs, filenames, raw
+  errors, and code symbols.
+- Reset or reinitialize is the destructive scaffold path. Use
+  `-ForceResetScaffold` only when the caller explicitly says old project memory
+  can be discarded, and keep the backup-first safety record.
+
 ## Operating Modes
 - Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.
-- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. For existing non-English projects, read `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass the current project language explicitly.
-- Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review.
+- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. This is the conservative response to "refresh old project memory" when the user has not asked to rewrite content. For existing non-English projects, read `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass the current project language explicitly.
+- Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review. This is a safe template upgrade, not a reset.
 - Compatibility overwrite: `-OverwriteTemplates` is retained as a warning-emitting alias for unmodified-template refresh. It is not a force reset.
 - Conservative memory migration: use Analyze, Plan, Apply, and Validate modes with reviewable proposals and backups. Use legacy memory upgrade modes for layout normalization, and language migration modes for `en` / `zh-CN` project memory language changes.
-- Explicit force reset: `-ForceResetScaffold` is the only reset path for intentionally discarding scaffold customizations. It warns, backs up first, and cannot be combined with memory upgrade modes.
+- Explicit force reset: `-ForceResetScaffold` is the only reset path for intentionally discarding scaffold customizations. Do not infer it from refresh, upgrade, migration, or reinitialization wording unless the caller also says old memory may be discarded. It warns, backs up first, and cannot be combined with memory upgrade modes.
 
 ## Project Memory Templates
 - `en` and `zh-CN` are the only first-class project memory template languages.

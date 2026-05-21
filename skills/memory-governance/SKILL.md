@@ -1,6 +1,6 @@
 ---
 name: memory-governance
-description: Normalize and maintain Agent memory files after implementation sessions, and extract reusable lessons from corrected errors. Use when you need to clean or update `.agents/notes.md`, `.agents/process.txt`, `.agents/plan.md`, or `.agents/context/*`; when memory files are bloated or duplicated; when you want stable facts separated from session logs; when you want a standardized next-session kickoff message; or when you want to reflect on session errors and deposit prevention rules.
+description: Normalize and maintain Agent memory files after implementation sessions, and extract reusable lessons from corrected errors. Use when you need to clean or update `.agents/notes.md`, `.agents/process.txt`, `.agents/plan.md`, or `.agents/context/*`; when memory files are bloated or duplicated; when you want stable facts separated from session logs; when you want a standardized next-session kickoff message; when refresh, upgrade, or language migration work touches project memory; or when you want to reflect on session errors and deposit prevention rules.
 category: kernel
 stability: stable
 scope: cross-project
@@ -19,6 +19,27 @@ Use progressive disclosure:
 - Memory-scope tasks should also list `docs/specs/**/spec.md`,
   `docs/specs/**/tasks.md`, and `docs/specs/**/research.md` so non-active
   long-lived work packages can be matched without preloading every body.
+
+## Refresh, Migration, And Reset Handoff
+
+Requests to refresh project memory, upgrade memory templates, migrate memory
+language, 刷新旧工程记忆, 升级工程记忆模板, or 迁移工程记忆语言 are not ordinary
+bulk-edit tasks.
+
+- Run `project-context-gate` first, then use `project-bootstrap` for the
+  proposal-first and backup-first workflow.
+- Do not hand-edit `.agents/**` in bulk and declare a refresh or migration
+  complete. Preserve customized project memory unless a reviewed proposal says
+  otherwise.
+- Treat refresh or template upgrade as preservation-oriented: update missing or
+  unmodified scaffold surfaces, and route modified project-specific content to
+  review.
+- Treat language migration as template replacement plus reviewed
+  target-language narrative, with commands, paths, APIs, filenames, raw errors,
+  and code symbols preserved in their original form.
+- Treat reset or reinitialize as destructive only when the user explicitly says
+  old memory can be discarded, such as "do not keep old project memory" or
+  "重新初始化工程记忆，不保留旧内容".
 
 ## Operating Model
 Apply this routing model every time:

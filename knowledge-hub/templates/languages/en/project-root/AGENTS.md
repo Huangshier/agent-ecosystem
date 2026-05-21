@@ -18,6 +18,12 @@ Core rules that apply even if `.agents/AGENTS.md` was not loaded:
 - Follow system, runtime, and explicit user instructions before project defaults.
 - Make routine reversible implementation choices yourself; stop for genuine ambiguity, destructive actions, external writes, missing credentials, or policy/safety risk.
 - For broad or underspecified requests, do read-only exploration first, then clarify goal/scope/validation before editing when needed.
+- Engineering memory refresh, template upgrade, and language migration are not
+  ordinary bulk file edits. Use the relevant skill/script workflow first:
+  refresh or upgrade preserves project-specific content, language migration
+  changes templates plus reviewed narrative while keeping protected literals in
+  their original form, and reset/reinitialize requires explicit permission to
+  discard old memory.
 - For non-trivial work, prefer a lightweight work package under `docs/specs/<slug>/` before implementation.
 - Keep `.agents/plan.md` session-local; do not duplicate full project specs or task lists there.
 - Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.

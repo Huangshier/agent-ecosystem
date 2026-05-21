@@ -45,6 +45,47 @@ Preserve local content such as:
 - Any project-specific commands, context indexes, or notes that do not exactly
   match the public scaffold.
 
+## Intent Quick Reference
+
+Use precise wording before choosing a tool mode:
+
+- Refresh or template upgrade: keep project-specific memory. Add missing
+  scaffolds, update files that still match old templates when requested, and
+  route customized files to review.
+- Language migration: change project memory between `en` and `zh-CN`. Use
+  target-language templates, review target-language narrative drafts, and keep
+  protected literals such as commands, paths, APIs, filenames, raw errors, and
+  code symbols in their original form.
+- Reset or reinitialize: discard scaffold customizations only when the caller
+  explicitly says old memory can be discarded. This is the `-ForceResetScaffold`
+  path, not the default meaning of refresh, upgrade, migrate, or reinitialize.
+
+Copyable prompts:
+
+```text
+Please conservatively refresh this project's memory templates. Preserve project-specific content and update only safe shared scaffold and rule surfaces.
+```
+
+```text
+请保守刷新当前项目的工程记忆模板，保留项目特化内容，只更新安全的共享骨架和规则。
+```
+
+```text
+Please migrate this project's memory to zh-CN. Replace template portions with zh-CN templates, draft project-specific narrative in zh-CN for review, and keep commands, paths, APIs, filenames, raw errors, and code symbols in their original form.
+```
+
+```text
+请把当前项目工程记忆迁移到 zh-CN。模板部分替换为中文模板，项目特化叙述内容翻译成中文；命令、路径、API、文件名、错误文本和代码符号保持原文。
+```
+
+```text
+Please reinitialize project memory and do not preserve old content. I confirm old scaffold customizations may be overwritten after backup.
+```
+
+```text
+请重新初始化工程记忆，不保留旧内容。我确认可以在备份后覆盖旧脚手架。
+```
+
 ## Upgrade Flow
 
 Use a conservative analyze -> plan -> backup -> apply -> validate flow.

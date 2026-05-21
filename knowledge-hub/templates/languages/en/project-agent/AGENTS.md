@@ -52,6 +52,23 @@ After exploration, proceed only when the goal, scope, non-goals, and validation 
 
 Scope discipline: do not fold unrelated refactors, cleanup, or behavior changes into a work item unless they are explicit goals. If acceptance checks are skipped or unavailable, record that before claiming completion.
 
+## Engineering Memory Refresh, Migration, And Reset
+Treat project-memory refresh, template upgrade, and language migration as
+memory-scoped workflows, not ordinary bulk edits.
+
+- Before changing `.agents/**` for these requests, run the project context gate
+  and use the relevant `project-bootstrap` proposal-first, backup-first script
+  flow.
+- Refresh or template upgrade preserves project-specific content by default.
+  Update missing or unmodified scaffold surfaces, and route customized content
+  to review.
+- Language migration changes templates and reviewed narrative to the target
+  project-memory language while keeping commands, paths, APIs, filenames, raw
+  errors, and code symbols in their original form.
+- Reset or reinitialize may discard old memory only when the user explicitly
+  says not to preserve it, such as "do not keep old project memory" or "reset
+  to the latest templates".
+
 ## Project Commands
 Use documented project commands before inventing new ones. Discovery order:
 
