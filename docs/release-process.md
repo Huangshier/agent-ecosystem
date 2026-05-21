@@ -72,6 +72,9 @@ The validator checks:
 - conservative project-memory language migration between `en` and `zh-CN`,
   including proposal-first, backup-first, apply, validate, mixed-memory, and
   project-specific preservation fixtures
+- read-only body-level project-memory language audit coverage for
+  metadata/body mismatches, fenced code, protected literals, and mixed
+  narrative fixtures
 - project-bootstrap operating modes, including missing-template refresh,
   unmodified-template refresh, compatibility overwrite warnings, and
   backup-first force reset behavior

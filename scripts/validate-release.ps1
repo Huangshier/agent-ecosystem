@@ -33,6 +33,7 @@ $evidence = [ordered]@{
     memory_metadata = [ordered]@{}
     language_policy = [ordered]@{}
     language_migration = [ordered]@{}
+    memory_language_audit = [ordered]@{}
     routing = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
@@ -170,6 +171,7 @@ $requiredFiles = @(
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
+    "skills/project-bootstrap/scripts/audit_memory_language.ps1",
     "examples/minimal-project/README.md",
     "examples/minimal-project/.agents/AGENTS.md",
     "examples/minimal-project/docs/specs/example-work/spec.md",
@@ -772,6 +774,172 @@ try {
 }
 catch {
     Add-Check "localized context discovery metadata" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $auditScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "audit_memory_language.ps1"
+    if (-not (Test-Path -LiteralPath $auditScript)) {
+        throw "audit_memory_language.ps1 was not installed into the recommended runtime."
+    }
+
+    $auditProject = Join-PathParts $scratchRootFull "body-level-memory-language-audit"
+    New-Item -ItemType Directory -Force -Path $auditProject | Out-Null
+    Assert-PathInsideRoot -Path $auditProject -Root $scratchRootFull
+
+    $contextDir = Join-PathParts $auditProject ".agents" "context" "experience"
+    $commandsDir = Join-PathParts $auditProject ".agents" "commands"
+    $specDir = Join-PathParts $auditProject "docs" "specs" "body-mixed"
+    New-Item -ItemType Directory -Force -Path $contextDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $commandsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $specDir | Out-Null
+
+    $zhSummary = [regex]::Unescape('\u8fd9\u662f\u4e2d\u6587\u6458\u8981\u3002')
+    $zhKeywords = [regex]::Unescape('\u8bed\u8a00, \u5ba1\u8ba1')
+    $zhBody = [regex]::Unescape('\u8fd9\u4e2a\u9879\u76ee\u7684\u6b63\u6587\u5df2\u7ecf\u662f\u4e2d\u6587\u3002\u540e\u7eed\u5ba1\u8ba1\u5e94\u8be5\u6309\u7167\u6b63\u6587\u8bed\u8a00\u5224\u65ad\uff0c\u800c\u4e0d\u662f\u6309\u7167\u5143\u6570\u636e\u5224\u65ad\u3002')
+    $zhCode = [regex]::Unescape('\u4ee3\u7801\u5757')
+    $zhSpecPrefix = [regex]::Unescape('\u8fd9\u4e2a\u89c4\u683c\u4fdd\u7559\u4e2d\u6587\u53d9\u8ff0\uff0c\u540c\u65f6')
+    $zhMixedSuffix = [regex]::Unescape('\u5e94\u8be5\u4f5c\u4e3a\u6df7\u5408\u8bed\u8a00\u8bc1\u636e\u88ab\u62a5\u544a\u3002')
+    $zhCommandHeading = [regex]::Unescape('\u8fd0\u884c\u547d\u4ee4')
+    $zhProtectedBody = [regex]::Unescape('\u8fd9\u91cc\u4ec5\u5305\u542b\u547d\u4ee4\u3001\u8def\u5f84\u3001API\u3001\u6587\u4ef6\u540d\u548c\u539f\u59cb\u9519\u8bef\u6587\u672c\uff0c\u4e0d\u5e94\u89e6\u53d1\u6b63\u6587\u8bed\u8a00\u53d1\u73b0\u3002')
+
+    $metadataZhBodyEnPath = Join-PathParts $contextDir "metadata-zh-body-en.md"
+    Set-Content -LiteralPath $metadataZhBodyEnPath -Value @(
+        "## Summary",
+        $zhSummary,
+        "",
+        "## Keywords",
+        $zhKeywords,
+        "",
+        "## Notes",
+        "The rollout remains paused until review. The project should preserve this operational lesson for future migrations."
+    ) -Encoding UTF8
+
+    $metadataEnBodyZhPath = Join-PathParts $contextDir "metadata-en-body-zh.md"
+    Set-Content -LiteralPath $metadataEnBodyZhPath -Value @(
+        "## Summary",
+        "English metadata summary.",
+        "",
+        "## Keywords",
+        "language, audit",
+        "",
+        "## Notes",
+        $zhBody
+    ) -Encoding UTF8
+
+    $fencedCodePath = Join-PathParts $contextDir "fenced-code-only.md"
+    Set-Content -LiteralPath $fencedCodePath -Value @(
+        "## Summary",
+        $zhSummary,
+        "",
+        "## Keywords",
+        $zhCode,
+        "",
+        '```text',
+        "This English text is inside a fenced code block and should not count.",
+        "The command git status and path src/app.py should stay ignored here.",
+        '```'
+    ) -Encoding UTF8
+
+    $protectedLiteralsPath = Join-PathParts $commandsDir "protected-literals.md"
+    Set-Content -LiteralPath $protectedLiteralsPath -Value @(
+        "# $zhCommandHeading",
+        "",
+        $zhProtectedBody,
+        "",
+        "powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot C:\Temp\audit",
+        "Keep `Get-FooBar`, `src/app.py`, `AGENTS.md`, `feat`, `ERROR_PATH_NOT_FOUND`, and `CustomThing` unchanged."
+    ) -Encoding UTF8
+
+    $mixedSpecPath = Join-PathParts $specDir "spec.md"
+    Set-Content -LiteralPath $mixedSpecPath -Value @(
+        "# Body Mixed Spec",
+        "",
+        ("{0} this English narrative remains in the body and should be flagged as mixed language evidence. {1}" -f $zhSpecPrefix, $zhMixedSuffix)
+    ) -Encoding UTF8
+
+    function Get-AuditFixtureHashes {
+        param([string]$Root)
+
+        $hashes = @{}
+        foreach ($file in @(Get-ChildItem -LiteralPath $Root -Recurse -File)) {
+            $relative = ConvertTo-DisplayPath -Path $file.FullName -Root $Root
+            $hashes[$relative] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+        }
+        return $hashes
+    }
+
+    $hashesBefore = Get-AuditFixtureHashes -Root $auditProject
+    $audit = & $auditScript -ProjectDir $auditProject -ExpectedLanguage "zh-CN" -IncludeSpecs -IncludeCommands -Json | ConvertFrom-Json
+    $humanOutput = @(& $auditScript -ProjectDir $auditProject -ExpectedLanguage "zh-CN" -IncludeSpecs -IncludeCommands)
+    $hashesAfter = Get-AuditFixtureHashes -Root $auditProject
+
+    $changedFiles = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($key in @($hashesBefore.Keys)) {
+        if (-not $hashesAfter.ContainsKey($key) -or $hashesBefore[$key] -ne $hashesAfter[$key]) {
+            $changedFiles.Add($key)
+        }
+    }
+    foreach ($key in @($hashesAfter.Keys)) {
+        if (-not $hashesBefore.ContainsKey($key)) {
+            $changedFiles.Add($key)
+        }
+    }
+    if ($changedFiles.Count -gt 0) {
+        throw ("Body-level audit helper changed project files: {0}" -f ($changedFiles.ToArray() -join "; "))
+    }
+
+    $findingPaths = @($audit.findings | ForEach-Object { [string]$_.path })
+    $expectedFindingPaths = @(
+        ".agents/context/experience/metadata-zh-body-en.md",
+        "docs/specs/body-mixed/spec.md"
+    )
+    foreach ($expectedPath in $expectedFindingPaths) {
+        if ($expectedPath -notin $findingPaths) {
+            throw "Body-level audit helper missed expected finding: $expectedPath"
+        }
+    }
+    foreach ($unexpectedPath in @(
+        ".agents/context/experience/metadata-en-body-zh.md",
+        ".agents/context/experience/fenced-code-only.md",
+        ".agents/commands/protected-literals.md"
+    )) {
+        if ($unexpectedPath -in $findingPaths) {
+            throw "Body-level audit helper reported an ignored fixture: $unexpectedPath"
+        }
+    }
+
+    $metadataOnly = @($audit.findings | Where-Object { [string]$_.path -eq ".agents/context/experience/metadata-zh-body-en.md" -and [string]$_.code -eq "metadata_only_localization" })
+    $mixedBody = @($audit.findings | Where-Object { [string]$_.path -eq "docs/specs/body-mixed/spec.md" -and [string]$_.code -eq "mixed_language_body" })
+    if ($metadataOnly.Count -ne 1 -or $mixedBody.Count -ne 1) {
+        throw "Body-level audit helper reported unexpected finding codes."
+    }
+    if ([int]$audit.summary.finding_count -ne 2) {
+        throw ("Body-level audit helper returned unexpected finding count: {0}" -f $audit.summary.finding_count)
+    }
+    if (@($humanOutput | Where-Object { $_ -like "WARN .agents/context/experience/metadata-zh-body-en.md:*" }).Count -ne 1) {
+        throw "Body-level audit helper human output did not include the metadata/body warning."
+    }
+
+    $script:evidence.memory_language_audit = [ordered]@{
+        project = $auditProject
+        scanned_files = [int]$audit.scanned_files
+        findings = @($audit.findings | ForEach-Object { [ordered]@{ path = [string]$_.path; code = [string]$_.code; reason = [string]$_.reason } })
+        non_findings = @(
+            ".agents/context/experience/metadata-en-body-zh.md",
+            ".agents/context/experience/fenced-code-only.md",
+            ".agents/commands/protected-literals.md"
+        )
+        read_only_hash_check = "passed"
+    }
+
+    Add-Check "body-level memory language audit" "PASS" "Read-only audit helper detects metadata-only localization and mixed narrative body language while ignoring metadata, fenced code, commands, paths, APIs, filenames, raw errors, and code identifiers." $evidence.memory_language_audit
+}
+catch {
+    Add-Check "body-level memory language audit" "FAIL" $_.Exception.Message
 }
 
 try {

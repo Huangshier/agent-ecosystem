@@ -88,6 +88,22 @@ Optional flags:
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
+Standalone body-level language audit:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit_memory_language.ps1 -ProjectDir <project_path> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+```
+
+Use this helper when review needs to verify narrative body language without
+running a full migration apply flow. It ignores `Summary` / `Keywords`
+discovery metadata, fenced code blocks, inline code, commands, paths, API
+names, filenames, raw errors, and code identifiers before reporting heuristic
+warning-level findings. It is read-only and must not be treated as automatic
+translation, rewrite, or approval.
+When using `-Json`, the output includes the resolved `project_dir`. Review or
+redact local paths before copying audit output into public issues, pull
+requests, or documents.
+
 Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
 - Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested. Pass the project's current memory language explicitly when the project is not English-first or when lock metadata already records a language.
