@@ -16,6 +16,10 @@ imports.
 - `knowledge/standards/`: cross-project rules and boundaries.
 - `knowledge/domain-packs/`: optional public-safe domain knowledge bundles.
 
+Domain-pack lifecycle, manifest, promotion, safety, validation, and profile
+boundaries are governed by
+[`docs/domain-pack-governance.md`](../docs/domain-pack-governance.md).
+
 Private domain skills, private migration notes, and environment-specific
 automation are intentionally excluded from this public hub.
 

@@ -31,5 +31,9 @@ Domain packs are optional knowledge bundles under
 catalogs, checklists, and boundaries. Promote a domain pack into a skill only
 after repeated cross-project use proves a stable, scriptable workflow.
 
+The authoritative public lifecycle, manifest, promotion, safety, validation, and
+profile-boundary rules are defined in
+[Domain pack governance](domain-pack-governance.md).
+
 Private domain skills and environment-specific automation belong outside this
 public repository.
