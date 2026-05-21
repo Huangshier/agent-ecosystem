@@ -187,6 +187,12 @@ function Split-MemoryText {
             continue
         }
 
+        if ($inDiscoveryMetadata -and [string]::IsNullOrWhiteSpace($line)) {
+            $metadataLines.Add($line) | Out-Null
+            $inDiscoveryMetadata = $false
+            continue
+        }
+
         if ($inDiscoveryMetadata -and (Test-MarkdownHeading -Line $line)) {
             $inDiscoveryMetadata = $false
         }
