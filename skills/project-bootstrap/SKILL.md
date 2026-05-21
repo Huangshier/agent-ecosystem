@@ -100,6 +100,9 @@ discovery metadata, fenced code blocks, inline code, commands, paths, API
 names, filenames, raw errors, and code identifiers before reporting heuristic
 warning-level findings. It is read-only and must not be treated as automatic
 translation, rewrite, or approval.
+When using `-Json`, the output includes the resolved `project_dir`. Review or
+redact local paths before copying audit output into public issues, pull
+requests, or documents.
 
 Operating modes:
 - Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.

@@ -107,6 +107,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\s
 The audit ignores `Summary` / `Keywords` discovery metadata, fenced code, and
 protected literals before reporting heuristic findings. It is read-only and
 does not translate or rewrite project memory.
+When using `-Json`, the output includes the resolved `project_dir`. Review or
+redact local paths before copying audit output into public issues, pull
+requests, or documents.
 
 The file templates are structural baselines for scaffold generation, language
 updates, and conservative migration planning. They are not a reason to replace
