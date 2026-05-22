@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/validation-scratch-retention/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-12
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -79,6 +79,5 @@
     - PR body references #38.
     - Hosted release validation run `25724432079` passed before the
       memory-closeout commit.
-  - Continue / stop decision: Completed. Next boundary is maintainer review /
-    ready / merge decision. Re-read PR checks after later commits rather than
-    creating repeated memory-only commits for check timestamps.
+  - Continue / stop decision: Complete; PR #39 merged to `main` at
+    `f6d42726a882c961a59ebfca88db74d8bf0b9aa6`, and issue #38 is closed.

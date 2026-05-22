@@ -2,9 +2,9 @@
 
 - **Title**: Bootstrap Operating Modes
 - **Slug**: bootstrap-operating-modes
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-12
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 - Clarify `project-bootstrap` operating modes so existing project memory does not enter an unsafe overwrite path by default.

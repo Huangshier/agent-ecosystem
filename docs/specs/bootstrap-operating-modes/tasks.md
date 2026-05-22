@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/bootstrap-operating-modes/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-12
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -31,10 +31,11 @@
   - Validation: Fixtures cover ordinary refresh, compatibility overwrite warning, and force-reset backup behavior.
   - Notes: Full local release validation passed with `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] T06: Validate and publish draft PR
+- [x] T06: Validate and publish draft PR
   - Scope: branch commit, push, and draft PR for #33.
   - Validation: `git diff --check` and release validation pass; PR body includes required non-goals.
-  - Notes: Stop after draft PR creation for maintainer review.
+  - Notes: PR #40 merged to `main` at
+    `19656e5f92264a960c8e6ac6039debd97166c10f`; issue #33 is closed.
 
 ## Task-to-Spec Notes
 - #33 is a semantic and safety-boundary change.
@@ -63,11 +64,12 @@
   - Inputs: README, skill docs, public user docs, and validator.
   - Outputs: Updated `project-bootstrap` docs, adoption/language/release docs, and release validator coverage.
   - Validation: `git diff --check` passed; `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1` passed with `PASS=35 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Continue to commit, push, and draft PR.
+  - Continue / stop decision: Continue to recorded PR evidence.
 
-- [ ] P04: Validate, commit, push, and open a draft PR for #33
+- [x] P04: Validate, commit, push, and open a draft PR for #33
   - Goal: Produce a reviewable issue-first PR.
   - Inputs: Completed implementation and documentation.
-  - Outputs: Commit, pushed branch, and draft PR.
-  - Validation: `git diff --check`, release validation, and PR body checks.
-  - Continue / stop decision: Stop for maintainer review after draft PR creation.
+  - Outputs: PR #40 merged to `main`.
+  - Validation: PR #40 merge commit
+    `19656e5f92264a960c8e6ac6039debd97166c10f`.
+  - Continue / stop decision: Complete.

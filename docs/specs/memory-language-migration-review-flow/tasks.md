@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/memory-language-migration-review-flow/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-22
 
 ## Tasks
@@ -27,10 +27,12 @@
     `PASS=50 FAIL=0 WARN=0 DEFERRED=0`.
   - Notes: Manual review should be framed as exception routing.
 
-- [ ] T04: Publish PR and wait for checks
+- [x] T04: Publish PR and wait for checks
   - Scope: Commit, push branch, open PR for #79-B, monitor hosted checks.
-  - Validation: GitHub checks pass before merge recommendation.
-  - Notes: Do not merge PR or push `main`.
+  - Validation: PR #86 merged to `main` at
+    `8d1d07035a6be1bc642e82b73c50f29133f627ea`; issue #79 is closed.
+  - Notes: No direct `main` push, tag, release, settings, ruleset, or
+    sensitive repository configuration changes were made.
 
 ## Task-to-Spec Notes
 - This work follows #67 and #79-A and may close #79 only if the PR body and
@@ -57,9 +59,9 @@
     `PASS=50 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to publish.
 
-- [ ] P03: Complete phase 3 and record validation
+- [x] P03: Complete phase 3 and record validation
   - Goal: Validate locally and publish PR.
   - Inputs: Final diff and validation evidence.
-  - Outputs: Commit, pushed branch, PR, hosted check evidence.
-  - Validation: Local release validation and hosted checks pass.
-  - Continue / stop decision: Stop before merge and recommend.
+  - Outputs: PR #86 merged to `main`.
+  - Validation: Local release validation and hosted checks passed before merge.
+  - Continue / stop decision: Complete; #79 is closed by PR #86.

@@ -2,9 +2,9 @@
 
 - **Title**: Template Language Directory Convergence
 - **Slug**: template-language-directory-convergence
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 > Historical note: this work package records the migration away from legacy
 > template paths. References to `templates/project-root`,
@@ -45,7 +45,7 @@
   `templates/languages/<language>/project-root|project-agent`.
 - Update `init_hub.ps1`, release validation, READMEs, SKILL docs, and path
   references.
-- Open a draft PR for #51 without merging or pushing directly to `main`.
+- Land the #51 change through a review PR without pushing directly to `main`.
 
 ## 4. Non-Goals
 - Do not keep compatibility mirrors for old template paths.
@@ -53,7 +53,7 @@
 - Do not add unrelated language migration features.
 - Do not change release metadata except documentation/validation references
   needed for #51.
-- Do not merge the draft PR or push directly to `main`.
+- Do not push directly to `main`.
 
 ## 5. Constraints
 - Public repository engineering memory and specs are English-first.
@@ -104,7 +104,8 @@
 - `git diff --check` passes.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
   passes.
-- Draft PR is open and not merged.
+- PR #52 merged on 2026-05-13 at
+  `e5367790469574a350bd9cbed28b56fd8b9f74bd`; issue #51 is closed.
 
 Current evidence:
 - Issue #51: https://github.com/Huangshier/agent-ecosystem/issues/51

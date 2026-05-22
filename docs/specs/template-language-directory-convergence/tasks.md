@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/template-language-directory-convergence/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 > Historical note: this task plan records the migration away from legacy
 > template paths. References to `templates/project-root`,
@@ -51,10 +51,10 @@
 
 - [x] T06: Commit, push topic branch, and open draft PR.
   - Scope: only #51 implementation and required public memory/spec updates.
-  - Validation: draft PR exists with issue link; no direct push to `main`.
-  - Notes: PR #52 is open as draft at
-    https://github.com/Huangshier/agent-ecosystem/pull/52. Release validation
-    passed locally with `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
+  - Validation: PR #52 merged to `main` at
+    `e5367790469574a350bd9cbed28b56fd8b9f74bd`; issue #51 is closed.
+  - Notes: Release validation passed locally with
+    `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## Task-to-Spec Notes
 - Plain bootstrap must map to the `en` language templates.
@@ -99,5 +99,4 @@
   - Inputs: validated working tree changes.
   - Outputs: commit, pushed branch, draft PR.
   - Validation: PR URL and branch status.
-  - Continue / stop decision: Stop implementation; PR #52 is draft and waiting
-    for maintainer review or follow-up feedback.
+  - Continue / stop decision: Complete.

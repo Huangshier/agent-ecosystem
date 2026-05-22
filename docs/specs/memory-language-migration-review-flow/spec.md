@@ -2,7 +2,7 @@
 
 - **Title**: Memory Language Migration Review Flow
 - **Slug**: memory-language-migration-review-flow
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
 - **Updated**: 2026-05-22
 

@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/minimal-project-adoption-walkthrough/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-11
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -31,17 +31,16 @@
   - Validation: Public memory no longer presents #25 as active.
   - Notes: Public memory now points to #22 and records PR #26 closeout.
 
-- [ ] T05: Validate, publish PR, and wait for checks
+- [x] T05: Validate, publish PR, and wait for checks
   - Scope: branch `issue-22-minimal-adoption-walkthrough`.
   - Validation:
     - `git diff --check`
     - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1`
     - hosted release validation checks on PR
-  - Notes: PR #28 is open, should close #22, and uses the governance template.
-    Local validation passed and hosted release validation passed. Maintainer
-    review requested minor spec/task/PR body corrections; no runtime behavior or
-    #27 scope is included. Follow-up release validation after review corrections
-    passed with `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
+  - Notes: PR #28 merged on 2026-05-11 at
+    `38e39834398e034698b9c37541605a8a7630f04e`; issue #22 is closed.
+    Follow-up release validation after review corrections passed with
+    `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## Task-to-Spec Notes
 
@@ -72,17 +71,16 @@
   - Validation:
     - `git diff --check` passed.
     - Local release validation passed: `PASS=33 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Completed; PR #28 is open and ready for hosted
-    checks / maintainer review.
+  - Continue / stop decision: Complete; PR #28 merged and issue #22 is closed.
 
-- [ ] P04: Wait for hosted checks and maintainer review
+- [x] P04: Wait for hosted checks and maintainer review
   - Goal: Ensure external checks pass before maintainer merge decision.
   - Inputs: opened PR.
-  - Outputs: hosted check summary.
+  - Outputs: PR #28 merged to `main`; issue #22 closed.
   - Validation:
     - Hosted release validation passed on PR #28:
       - `validate Windows PowerShell 5.1`: `SUCCESS`
       - `validate pwsh (windows-latest)`: `SUCCESS`
       - `validate pwsh (ubuntu-latest)`: `SUCCESS`
       - `validate pwsh (macos-latest)`: `SUCCESS`
-  - Continue / stop decision: Hosted checks passed; maintainer review remains.
+  - Continue / stop decision: Complete.

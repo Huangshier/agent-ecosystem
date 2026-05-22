@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/body-level-memory-language-audit/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-21
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -27,10 +27,13 @@
     claims passed.
   - Notes: Keep docs explicit that audit is read-only and heuristic.
 
-- [ ] T04: Publish review branch and PR
-  - Scope: commit, push branch, open PR for issue #67, wait for hosted checks.
-  - Validation: local checks plus GitHub PR checks pass.
-  - Notes: Do not merge PR or push `main`.
+- [x] T04: Publish review branch and PR
+  - Scope: commit, push branch, open PR for issue #67, and complete hosted
+    checks before merge.
+  - Validation: PR #84 merged to `main` at
+    `df208697889f4a3104f234c4b4c5aef4a79c1c22`; issue #67 is closed.
+  - Notes: No direct `main` push, tag, release, settings, ruleset, or
+    sensitive repository configuration changes were made.
 
 ## Task-to-Spec Notes
 - Issue #67 is intentionally separate from #79; this work provides audit
@@ -55,9 +58,10 @@
   - Validation: targeted and full validator checks passed.
   - Continue / stop decision: continued; validation failures were resolved.
 
-- [ ] P03: Complete publish and PR check phase
+- [x] P03: Complete publish and PR check phase
   - Goal: Reviewable PR with passing local and hosted checks.
   - Inputs: final diff and validation evidence.
-  - Outputs: commit, pushed branch, PR, hosted check status.
-  - Validation: GitHub checks pass.
-  - Continue / stop decision: stop before merge and give recommendation.
+  - Outputs: PR #84 merged to `main`.
+  - Validation: Local validation passed; PR #84 hosted checks passed before
+    merge.
+  - Continue / stop decision: Complete; #67 is closed by PR #84.

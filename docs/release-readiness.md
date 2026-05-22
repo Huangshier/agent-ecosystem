@@ -33,8 +33,9 @@ changes are candidates for the next stabilization release or changelog batch.
 - One public-safe domain pack scaffold is present:
   `knowledge/domain-packs/embedded-core/`.
 - Public installer supports `minimal`, `recommended`, `full`, and `dev` profiles.
-- `full` and `dev` are documented as `v0.1.0` placeholders that currently
-  install the same public content as `recommended`.
+- `full` and `dev` remain reserved future public scopes that currently install
+  the same public content as `recommended` until a governance-approved
+  expansion lands.
 - Recommended profile has been validated against a temporary runtime in copy mode.
 - Recommended profile has been smoke-tested by bootstrapping a new project from
   a temporary runtime install.

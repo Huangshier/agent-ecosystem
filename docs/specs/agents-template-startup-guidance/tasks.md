@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/agents-template-startup-guidance/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -54,9 +54,10 @@
   - Validation: `git diff --check` and release validation.
   - Continue / stop decision: Continue. `git diff --check` passed, and `scripts/validate-release.ps1` passed with `PASS=39 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] P04: Complete phase 4 and record validation
+- [x] P04: Complete phase 4 and record validation
   - Goal: PR-ready memory sync, commit, push, and PR handoff.
   - Inputs: Passing validation and clean scoped diff.
-  - Outputs: Updated public memory, commit, branch, and PR.
-  - Validation: `git status`, PR URL, and no post-PR memory-only commit.
-  - Continue / stop decision: PR-ready memory sync is in progress before commit/push/PR. After PR creation, do not add a memory-only follow-up commit unless explicitly approved.
+  - Outputs: PR #45 merged to `main`.
+  - Validation: PR #45 merge commit
+    `458e3834abf2648e907ce20a3c48e9d4fb5a6b9c`; issue #44 is closed.
+  - Continue / stop decision: Complete.

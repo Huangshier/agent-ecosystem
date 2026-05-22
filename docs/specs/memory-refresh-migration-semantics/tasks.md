@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/memory-refresh-migration-semantics/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-21
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 

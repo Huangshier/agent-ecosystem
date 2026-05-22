@@ -2,9 +2,9 @@
 
 - **Title**: Memory Refresh, Migration, And Reset Semantics
 - **Slug**: memory-refresh-migration-semantics
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
-- **Updated**: 2026-05-21
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 - Refs #79 by clarifying guidance and trigger semantics for project-memory
