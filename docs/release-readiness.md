@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.3` public release. Latest published public release:
+Status: `v0.4.4` release-prep candidate. Latest published public release:
 `v0.4.3`.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
@@ -12,13 +12,21 @@ public stabilization release. `v0.4.0` delivered the conservative `en` /
 converged the template model to language-scoped project-root and project-agent
 directories. `v0.4.3` was published as a stabilization release for release
 record normalization, legacy template-path audit coverage, and existing project
-upgrade guidance.
+upgrade guidance. `v0.4.4` is prepared as a stabilization / docs / governance
+patch release candidate for the post-`v0.4.3` guardrails, memory-language
+governance, Chinese homepage, domain-pack governance, and spec-state
+reconciliation work.
 
-## Post-v0.4.3 Main State
+## v0.4.4 Candidate State
 
-Current `main` includes unreleased stabilization guardrail changes after the
-`v0.4.3` tag. The latest published public release remains `v0.4.3`; these
-changes are candidates for the next stabilization release or changelog batch.
+Current `main` includes the post-`v0.4.3` stabilization / docs / governance
+changes summarized in `docs/releases/v0.4.4.md`. The latest published public
+release remains `v0.4.3` until a maintainer approves the release-prep PR, then
+creates the `v0.4.4` tag and GitHub Release.
+
+Maintainer recommendation: publish `v0.4.4` after release-prep review and
+hosted release validation pass, because current public GitHub state has no open
+pull requests and only the deferred #23 next-version planning umbrella open.
 
 ## Completed
 
@@ -159,6 +167,28 @@ changes are candidates for the next stabilization release or changelog batch.
   `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8` passed on Windows PowerShell 5.1,
   Windows pwsh, Ubuntu pwsh, and macOS pwsh:
   https://github.com/Huangshier/agent-ecosystem/actions/runs/25841179794
+- Post-`v0.4.3` closeout write-scope, cross-workspace, `/goal` evidence,
+  high-risk evidence, bootstrap analyze, and memory-scope language governance
+  guardrails have landed through issues #65, #66, #68, and #69.
+- PR base guard and release-validation concurrency are present.
+- Root `.agents/` is checkout-local runtime memory and untracked.
+- The Simplified Chinese homepage is `README.md`; `README.en.md` remains the
+  English entrypoint.
+- Domain-pack governance lifecycle is documented without enabling profile
+  expansion or new public domain packs.
+- Body-level project-memory language audit and `en` / `zh-CN` migration review
+  flow validation are covered.
+- Completed `docs/specs/**` work-package state was reconciled, and #23 remains
+  a deferred next-version planning umbrella.
+- Public release notes are present at `docs/releases/v0.4.4.md` as a bilingual
+  release-prep draft.
+- Current `main` baseline release validation passed with
+  `PASS=50 FAIL=0 WARN=0 DEFERRED=0`.
+- `v0.4.4` release-prep local release validation passed with
+  `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
+- Latest hosted Release validation on `main` passed for commit
+  `41aef52ff33399e2c7a94ede43fa488e0068059c`:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/26266323421
 
 ## Required Before Future Publishing
 
@@ -264,5 +294,6 @@ The release validator now covers:
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
 - v0.4.3 release notes coverage
+- v0.4.4 release-prep notes coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage
