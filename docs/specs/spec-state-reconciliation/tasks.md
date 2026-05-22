@@ -21,6 +21,9 @@
   - Validation: Completed work packages were changed to `Done`; stale PR
     publish, hosted-check wait, merge wait, and maintainer-review waiting text
     was rewritten to durable completion evidence.
+  - Notes: Also reconciled the stale unchecked P01 task in
+    `docs/specs/v0-3-1-stabilization/tasks.md`. That task-level checkbox fix
+    is intentionally outside the 13 top-level work package audit count.
 
 - [x] T04: Update adjacent readiness wording
   - Scope: `docs/release-readiness.md`.

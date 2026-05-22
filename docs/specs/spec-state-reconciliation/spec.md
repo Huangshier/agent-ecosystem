@@ -24,6 +24,10 @@
   `Needs maintainer decision`: 0.
 - Human decision needed: none for the audited rows; each `Done` decision has
   merged PR, closed issue, or published release evidence.
+- Additional task-level stale checkbox reconciliation: 1
+  (`docs/specs/v0-3-1-stabilization/tasks.md`). This is not counted in the 13
+  top-level work package audit rows because that work package was already
+  `Done`; only its stale unchecked P01 task was reconciled.
 
 ## 3. Audit Table
 
@@ -48,6 +52,9 @@
 - Durable completion evidence stays in the affected specs and tasks.
 - Volatile branch, draft PR, hosted-check waiting, merge-wait, and PR-publish
   language was removed or rewritten where it contradicted current GitHub state.
+- `docs/specs/v0-3-1-stabilization/tasks.md` had one stale unchecked P01 task
+  while the top-level work package was already `Done`; that checkbox was
+  reconciled as a task-level cleanup outside the 13-row audit table.
 - #23 remains open as a next-version planning umbrella. This reconciliation
   records that #56, #67, and #79 are complete, but it does not implement #23.
 - `docs/release-readiness.md` now describes `full` and `dev` as reserved
