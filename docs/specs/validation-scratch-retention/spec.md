@@ -2,9 +2,9 @@
 
 - **Title**: Validation Scratch Retention
 - **Slug**: validation-scratch-retention
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-12
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 

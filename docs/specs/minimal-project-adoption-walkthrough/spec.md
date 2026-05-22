@@ -2,9 +2,9 @@
 
 - **Title**: Minimal Project Adoption Walkthrough
 - **Slug**: minimal-project-adoption-walkthrough
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-11
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 

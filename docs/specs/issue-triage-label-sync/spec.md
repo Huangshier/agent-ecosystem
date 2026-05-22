@@ -2,9 +2,9 @@
 
 - **Title**: Issue triage label sync
 - **Slug**: issue-triage-label-sync
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 

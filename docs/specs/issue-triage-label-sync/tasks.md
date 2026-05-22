@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/issue-triage-label-sync/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -56,5 +56,6 @@
   - Goal: Publish reviewable change for maintainer review.
   - Inputs: completed local diff.
   - Outputs: pushed branch `issue-42-triage-label-sync` and draft PR #43.
-  - Validation: local checks passed; hosted release validation run `25776495732` started.
-  - Continue / stop decision: Stop for maintainer review after hosted checks finish.
+  - Validation: PR #43 merged to `main` at
+    `c502f0cf894288ced1178ac182e57f50d62bc755`; issue #42 is closed.
+  - Continue / stop decision: Complete.

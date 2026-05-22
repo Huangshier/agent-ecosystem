@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: docs/specs/v0-3-0-public-maintenance/spec.md
-- **Status**: Active
-- **Updated**: 2026-05-08
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -24,7 +24,7 @@
 - [x] T04: Prepare `v0.3.0` release candidate docs.
   - Scope: README, changelog, release readiness, release process, and release notes.
   - Validation: Release validator `v0.3.0` release notes coverage passed.
-  - Notes: Local gates passed; tag is deferred until after PR merge.
+  - Notes: Local gates passed before PR merge; `v0.3.0` was later published.
 
 ## Task-to-Spec Notes
 
@@ -62,16 +62,20 @@
   - Validation: Windows PowerShell 5.1 and PowerShell 7 release validators, parser checks, public/private `git diff --check`, spec validation, and private overlay smoke passed.
   - Continue / stop decision: Continue to GitHub PR flow.
 
-- [ ] P05: Complete phase 5 and record validation.
+- [x] P05: Complete phase 5 and record validation.
   - Goal: GitHub PR flow.
   - Inputs: Pushed branch and passing CI.
-  - Outputs: Merged PR and closed issues.
-  - Validation: GitHub PR/issue/API state.
-  - Continue / stop decision:
+  - Outputs: PR #3 merged to `main`; issues #1 and #2 closed.
+  - Validation: PR #3 merge commit
+    `433287141073e4ba216bc9f99da781a22c49cb0c`; issues #1 and #2 closed on
+    2026-05-08.
+  - Continue / stop decision: Complete.
 
-- [ ] P06: Complete phase 6 and record validation.
+- [x] P06: Complete phase 6 and record validation.
   - Goal: Publish `v0.3.0`.
   - Inputs: Merged main and release notes.
-  - Outputs: Pushed tag and GitHub Release.
-  - Validation: GitHub release URL and tag state.
-  - Continue / stop decision:
+  - Outputs: Tag and GitHub Release `v0.3.0`.
+  - Validation: GitHub Release `v0.3.0` is published, non-draft,
+    non-prerelease, and points at
+    `433287141073e4ba216bc9f99da781a22c49cb0c`.
+  - Continue / stop decision: Complete.

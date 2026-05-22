@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/file-based-memory-templates/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 > Historical note: this task plan predates the `v0.4.2` language-scoped
 > template model. References to `skills/project-bootstrap/templates/project-memory/`
@@ -35,10 +35,11 @@
   - Validation: Release validation covers `en`, `zh-CN`, file template source presence, and missing `zh-CN` template fallback.
   - Notes: Document that this is not arbitrary-language i18n.
 
-- [ ] T06: Final validation and PR publication
+- [x] T06: Final validation and PR publication
   - Scope: diff review, required validation commands, commit, push, draft PR.
-  - Validation: `git diff --check` passed; `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1` passed with `PASS=37 FAIL=0 WARN=0 DEFERRED=0`; draft PR pending.
-  - Notes: PR body must include `Fixes #32`, `Depends on #33`, #30 out-of-scope, and no arbitrary-language i18n.
+  - Validation: `git diff --check` passed; `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1` passed with `PASS=37 FAIL=0 WARN=0 DEFERRED=0`; PR #41 merged.
+  - Notes: PR #41 merged to `main` at
+    `354b857087169a794ec1bca71258d3213f4e805f`; issue #32 is closed.
 
 ## Task-to-Spec Notes
 - Templates are structural baselines and defaults, not authorization to overwrite customized project memory.
@@ -68,9 +69,10 @@
   - Validation: `git diff --check` passed; release validation `PASS=37 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to PR publication.
 
-- [ ] P04: Complete phase 4 and record validation
+- [x] P04: Complete phase 4 and record validation
   - Goal: Publish draft PR for maintainer review.
   - Inputs: Validated branch.
-  - Outputs: Commit, pushed branch, draft PR.
-  - Validation: Local validation passed; PR creation pending.
-  - Continue / stop decision: Stop after PR creation for maintainer review.
+  - Outputs: PR #41 merged to `main`.
+  - Validation: PR #41 merge commit
+    `354b857087169a794ec1bca71258d3213f4e805f`.
+  - Continue / stop decision: Complete.

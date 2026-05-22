@@ -2,9 +2,9 @@
 
 - **Title**: Body-Level Memory Language Audit
 - **Slug**: body-level-memory-language-audit
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
-- **Updated**: 2026-05-21
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 - Implement issue #67 by adding a reusable, read-only project-memory language

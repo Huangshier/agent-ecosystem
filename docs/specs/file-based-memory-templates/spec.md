@@ -2,9 +2,9 @@
 
 - **Title**: File-Based Memory Templates
 - **Slug**: file-based-memory-templates
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 > Historical note: this closed work package predates the `v0.4.2`
 > language-scoped template model. References to

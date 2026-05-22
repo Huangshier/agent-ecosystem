@@ -2,9 +2,9 @@
 
 - **Title**: Project Memory Template Authority Refactor
 - **Slug**: project-memory-template-authority
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 > Historical note: this work package records the intermediate `v0.4.1`
 > authority layout. References to `templates/project-root`,
@@ -40,7 +40,7 @@
 - Update language scaffold scripts and validation to use the bundled snapshot.
 - Preserve normal bootstrap behavior and safety semantics.
 - Update public documentation that names the old template path.
-- Open a draft PR with `Fixes #49` in the body.
+- Land the #49 change through a review PR with `Fixes #49` in the body.
 
 ## 4. Non-Goals
 - Do not change #30 migration apply behavior or add a new #30 migration path.
@@ -53,7 +53,7 @@
 
 ## 5. Constraints
 - Public repository engineering memory and specs are English-first.
-- Do not push directly to `main`; work must land on a topic branch and draft PR.
+- Do not push directly to `main`; work must land through a review PR.
 - Keep old-path compatibility mirrors out of the repository.
 - Scope control: do not include unrelated refactors, cleanup, or behavior
   changes unless they are explicit goals.

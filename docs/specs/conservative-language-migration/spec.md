@@ -2,9 +2,9 @@
 
 - **Title**: Conservative Language Migration
 - **Slug**: conservative-language-migration
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Maintainer + agent
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 > Historical note: this work package predates the `v0.4.2` language-scoped
 > template model. References to `skills/project-bootstrap/templates/project-memory/`
@@ -184,8 +184,8 @@ Current evidence:
 - PR #46 blocking concerns were addressed on 2026-05-13 and revalidated with
   `git diff --check` plus `scripts/validate-release.ps1` reporting
   `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-- Phase 2 validation evidence will be recorded after the new narrative
-  fixtures pass on this branch.
+- Phase 2 validation passed and PR #47 merged on 2026-05-13 at
+  `2beb8285803abe17daaea1d2eac590cb91d2aef0`; issue #30 is closed.
 - Phase 2 validation passed on 2026-05-13 with `git diff --check` and
   `scripts/validate-release.ps1` reporting
   `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.

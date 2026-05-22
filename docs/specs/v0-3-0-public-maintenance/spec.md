@@ -2,18 +2,19 @@
 
 - **Title**: v0.3.0 public maintenance and release
 - **Slug**: v0-3-0-public-maintenance
-- **Status**: Active
+- **Status**: Done
 - **Owner**: release maintenance
-- **Updated**: 2026-05-08
+- **Updated**: 2026-05-22
 
 ## 1. Summary
 
 - Resolve GitHub issues #1 and #2 through a standard public collaboration flow.
-- Prepare and publish the next public release after validation passes.
+- Record the completed `v0.3.0` public maintenance release.
 
 ## 2. Current Context
 
-- Local public `main` contains the v0.3.0 backlog remediation commits and is ahead of `origin/main`.
+- Public `v0.3.0` was published on 2026-05-08 from tag target
+  `433287141073e4ba216bc9f99da781a22c49cb0c`.
 - Issue #1 covers localized context discovery headings for memory diagnostics.
 - Issue #2 covers bilingual public/private workflow routing guidance.
 - The private overlay CI blocker is private-side state and does not block public release publication.
@@ -24,7 +25,8 @@
 - Document public/private bilingual routing in public-safe language.
 - Extend release validation so both changes are covered by the release gate.
 - Update release candidate documentation for `v0.3.0`.
-- Push a review branch, open and merge a pull request, close the issues, and publish the public release when validation passes.
+- Record the review branch, merged pull request, closed issues, and published
+  release evidence.
 
 ## 4. Non-Goals
 

@@ -15,13 +15,17 @@
 
 - [x] T02: Implement PR base/stack safety guardrails
   - Scope: PR template, governance docs, and PR base guard workflow.
-  - Validation: pending local release validation and hosted PR checks.
+  - Validation: local release validation passed with
+    `PASS=46 FAIL=0 WARN=0 DEFERRED=0`; hosted release validation passed before
+    PR #77 merge.
   - Notes: Non-`main` PRs require both `stack:allowed` and the explicit stacked
     declaration in the PR body.
 
 - [x] T03: Add CI concurrency and decide whether to split CI
   - Scope: release validation workflow and release-process docs.
-  - Validation: pending local release validation and hosted PR checks.
+  - Validation: local release validation passed with
+    `PASS=46 FAIL=0 WARN=0 DEFERRED=0`; hosted release validation passed before
+    PR #77 merge.
   - Notes: CI is not split in this change; required full release validation
     remains the merge gate.
 
@@ -36,7 +40,8 @@
 - [x] T05: Re-triage deferred issues
   - Scope: #67, #56, and #23 only.
   - Validation: public issue state readback.
-  - Notes: #67 and #56 are accepted. #23 remains deferred for a later
+  - Notes: #67 and #56 were accepted at this closeout boundary and were later
+    completed by PR #84 and PR #83. #23 remains open for a later
     release-planning pass.
 
 ## Task-to-Spec Notes

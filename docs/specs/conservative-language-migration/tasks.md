@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/conservative-language-migration/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 ## Tasks
 
@@ -60,8 +60,7 @@
 ## Task-to-Spec Notes
 - PR #46 completed #30 Phase 1: deterministic conservative migration scaffold
   with explicit manual-review routing for customized narrative.
-- #30 Phase 2 remains incomplete until routed narrative content can be proposed,
-  reviewed, applied, and validated.
+- #30 Phase 2 is complete via PR #47; issue #30 is closed.
 
 ## Conditional Loop Tasks
 - Not applicable.
@@ -92,9 +91,9 @@
   - Continue / stop decision: Continue.
 
 - [x] P04: Complete phase 4 and record validation
-  - Goal: Produce draft PR and stop for maintainer review.
+  - Goal: Produce the Phase 1 review PR and record completion evidence.
   - Inputs: Validated diff and public memory sync.
-  - Outputs: Commit, pushed branch, draft PR.
+  - Outputs: PR #46 merged to `main`.
   - Validation: `git diff --check` and release validator passed; PR #46 review
     blocking concerns were addressed and revalidated.
   - Continue / stop decision: Complete; PR #46 merged on 2026-05-13.
@@ -109,5 +108,5 @@
     routed context/spec updates, docs, and release validation fixtures.
   - Validation: `git diff --check` and release validator passed with
     `PASS=40 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Implementation complete; stop after opening a
-    draft Phase 2 PR.
+  - Continue / stop decision: Complete; PR #47 merged to `main` at
+    `2beb8285803abe17daaea1d2eac590cb91d2aef0`.

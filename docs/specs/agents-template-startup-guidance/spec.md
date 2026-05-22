@@ -2,9 +2,9 @@
 
 - **Title**: Agents Template Startup Guidance
 - **Slug**: `agents-template-startup-guidance`
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Agent
-- **Updated**: 2026-05-13
+- **Updated**: 2026-05-22
 
 > Historical note: this work package predates the `v0.4.2` language-scoped
 > template model. References to `templates/project-root`,
@@ -78,7 +78,8 @@
 - Validation covers the new template guidance requirements.
 - `git diff --check` passed on 2026-05-13.
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1` passed on 2026-05-13 with `PASS=39 FAIL=0 WARN=0 DEFERRED=0`.
-- Implementation is PR-ready pending commit, push, and PR creation.
+- PR #45 merged on 2026-05-13 at
+  `458e3834abf2648e907ce20a3c48e9d4fb5a6b9c`; issue #44 is closed.
 
 ## 10. Loop Contract
 - Not applicable.

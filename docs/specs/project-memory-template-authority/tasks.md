@@ -1,8 +1,8 @@
 # Task Plan
 
 - **Spec**: `docs/specs/project-memory-template-authority/spec.md`
-- **Status**: Active
-- **Updated**: 2026-05-13
+- **Status**: Done
+- **Updated**: 2026-05-22
 
 > Historical note: this task plan records the intermediate `v0.4.1` authority
 > layout. References to `templates/project-memory` or
@@ -51,13 +51,10 @@
 
 - [x] T06: Commit, push topic branch, and open draft PR.
   - Scope: only #49 implementation and required public memory/spec updates.
-  - Validation: draft PR exists with `Fixes #49` in the body; hosted Release
-    validation succeeded for the PR head.
-  - Notes: PR #50 is open as draft at
-    https://github.com/Huangshier/agent-ecosystem/pull/50. Current head SHA is
-    `54b2498366a611589638f1e8aac68c73c95c7b30`. Hosted Release validation
-    succeeded on Windows PowerShell 5.1, Windows PowerShell 7, Ubuntu, and
-    macOS via run
+  - Validation: PR #50 merged to `main` at
+    `7978d53542de5ce8c35af4f16ffc32e647fe4db0`; issue #49 is closed.
+  - Notes: Hosted Release validation succeeded on Windows PowerShell 5.1,
+    Windows PowerShell 7, Ubuntu, and macOS via run
     https://github.com/Huangshier/agent-ecosystem/actions/runs/25800447160.
 
 ## Task-to-Spec Notes
@@ -97,5 +94,4 @@
     https://github.com/Huangshier/agent-ecosystem/pull/50, remains draft, and
     hosted Release validation succeeded for head
     `54b2498366a611589638f1e8aac68c73c95c7b30`.
-  - Continue / stop decision: Stop implementation. PR #50 is draft and waiting
-    for maintainer review or later ready-for-review approval.
+  - Continue / stop decision: Complete.
