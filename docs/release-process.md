@@ -6,10 +6,11 @@ repository.
 
 ## Release Gate
 
-Run the release validation gate before any push, tag, or published release:
+Run the release validation gate before any push, tag, or published release.
+For publish-ready finalization, pass the version that is about to be tagged:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
@@ -39,6 +40,9 @@ emits JSON evidence with `-Json`.
 The validator checks:
 
 - public repository structure and release documentation entrypoints
+- publish-ready release metadata alignment for the target version across
+  `README.md`, `README.en.md`, release notes, release readiness, and the release
+  notes index
 - root `.agents/` runtime memory is not tracked, while generated/template
   `.agents` paths remain allowed
 - public spec files avoid obvious volatile active-state records unless covered
@@ -94,7 +98,8 @@ The validator checks:
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
 - v0.4.3 release notes coverage
-- v0.4.4 release-prep notes coverage
+- v0.4.4 published release notes coverage
+- target-version publish-ready alignment coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage
 
@@ -175,6 +180,29 @@ approval. Repository settings, secrets, GitHub App permissions, rulesets, and
 release publishing are maintainer-controlled actions, not agent-only validation
 tiers.
 
+## Release Finalization Alignment
+
+Maintainer authorization to publish starts the finalization phase; it is not
+authorization to tag or publish directly from release-planning metadata.
+
+Before creating a tag or GitHub Release, the agent must complete publish-ready
+alignment:
+
+1. Update `README.md` and `README.en.md` so their current release fields match
+   the target version.
+2. Update the target release notes from planning copy to published-release
+   metadata, including status, tag target, published GitHub Release URL, and
+   final validation evidence.
+3. Update release readiness and the release notes index so they no longer carry
+   stale candidate, draft, unpublished, or older-current-release wording.
+4. Run `scripts/validate-release.ps1 -TargetVersion <target-version>` and fix
+   any alignment failure before continuing.
+5. Review the final diff and validation result before creating the tag or
+   GitHub Release.
+
+If alignment cannot be completed or validation fails, stop before tag creation
+and release publication.
+
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
@@ -185,7 +213,9 @@ tiers.
 5. Open or update a pull request when using CI for release review.
 6. Confirm the release validation workflow passes on Windows, Ubuntu, and macOS.
 7. Record only public-safe release status in this repository.
-8. Push, tag, and publish release notes only after maintainer approval.
+8. After maintainer authorization, complete release-finalization alignment and
+   rerun the validator with `-TargetVersion <target-version>`.
+9. Push, tag, and publish release notes only after alignment and validation pass.
 
 Do not publish if the validator reports a failed check. Fix the public tree or
 record the release-blocking decision in private migration state, then rerun the

@@ -1,7 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.4` release-prep candidate. Latest published public release:
-`v0.4.3`.
+Status: `v0.4.4` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -12,21 +11,20 @@ public stabilization release. `v0.4.0` delivered the conservative `en` /
 converged the template model to language-scoped project-root and project-agent
 directories. `v0.4.3` was published as a stabilization release for release
 record normalization, legacy template-path audit coverage, and existing project
-upgrade guidance. `v0.4.4` is prepared as a stabilization / docs / governance
-patch release candidate for the post-`v0.4.3` guardrails, memory-language
-governance, Chinese homepage, domain-pack governance, and spec-state
-reconciliation work.
+upgrade guidance. `v0.4.4` was published as a stabilization / docs / governance
+patch release for the post-`v0.4.3` guardrails, memory-language governance,
+Chinese homepage, domain-pack governance, and spec-state reconciliation work.
 
-## v0.4.4 Candidate State
+## v0.4.4 Published State
 
 Current `main` includes the post-`v0.4.3` stabilization / docs / governance
-changes summarized in `docs/releases/v0.4.4.md`. The latest published public
-release remains `v0.4.3` until a maintainer approves the release-prep PR, then
-creates the `v0.4.4` tag and GitHub Release.
+changes summarized in `docs/releases/v0.4.4.md`. `v0.4.4` has been tagged and
+published as the current public release.
 
-Maintainer recommendation: publish `v0.4.4` after release-prep review and
-hosted release validation pass, because current public GitHub state has no open
-pull requests and only the deferred #23 next-version planning umbrella open.
+Published GitHub Release:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
+
+Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 
 ## Completed
 
@@ -180,15 +178,16 @@ pull requests and only the deferred #23 next-version planning umbrella open.
   flow validation are covered.
 - Completed `docs/specs/**` work-package state was reconciled, and #23 remains
   a deferred next-version planning umbrella.
-- Public release notes are present at `docs/releases/v0.4.4.md` as a bilingual
-  release-prep draft.
-- Current `main` baseline release validation passed with
-  `PASS=50 FAIL=0 WARN=0 DEFERRED=0`.
-- `v0.4.4` release-prep local release validation passed with
+- Public release notes are present at `docs/releases/v0.4.4.md` as bilingual
+  published release notes.
+- `v0.4.4` final local release validation passed with
   `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
-- Latest hosted Release validation on `main` passed for commit
-  `41aef52ff33399e2c7a94ede43fa488e0068059c`:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/26266323421
+- Final hosted Release validation for the published `v0.4.4` tag target
+  `71fabb372a4cbc024f07c920a0c17b903a77afc2` passed on Windows PowerShell 5.1,
+  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
+  https://github.com/Huangshier/agent-ecosystem/actions/runs/26269908157
+- GitHub Release `v0.4.4` has been published:
+  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
 
 ## Required Before Future Publishing
 
@@ -196,7 +195,14 @@ pull requests and only the deferred #23 next-version planning umbrella open.
 - Re-run `scripts/validate-release.ps1` if installer, skill, template, release
   documentation, or audit rules change during review.
 - Review the final local diff.
-- Push, tag, and publish release notes only after maintainer approval.
+- Maintainer authorization to publish starts release-finalization alignment; it
+  does not authorize an immediate tag or GitHub Release.
+- Before creating a future tag or GitHub Release, align `README.md`,
+  `README.en.md`, release notes, release readiness, and the release notes index
+  to the target version, then run
+  `scripts/validate-release.ps1 -TargetVersion <target-version>`.
+- Push, tag, and publish release notes only after finalization alignment and
+  release validation pass.
 
 ## Current Quick Start
 
@@ -294,6 +300,7 @@ The release validator now covers:
 - v0.4.1 release notes coverage
 - v0.4.2 release notes coverage
 - v0.4.3 release notes coverage
-- v0.4.4 release-prep notes coverage
+- v0.4.4 published release notes coverage
+- publish-ready release metadata alignment coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage

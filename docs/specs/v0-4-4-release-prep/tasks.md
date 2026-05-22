@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/v0-4-4-release-prep/spec.md`
-- **Status**: Draft
+- **Status**: Ready for review
 - **Updated**: 2026-05-22
 
 ## Tasks
@@ -34,11 +34,21 @@
   - Validation: PR references #23 without closing it and does not tag or publish
     a release.
 
+- [x] T06: Correct post-publication metadata and finalization guardrail
+  - Scope: `README.md`, `README.en.md`, `docs/releases/v0.4.4.md`,
+    `docs/releases/README.md`, `docs/release-readiness.md`,
+    `docs/release-process.md`, and `scripts/validate-release.ps1`.
+  - Validation: `git diff --check`; full local release validation with
+    `-TargetVersion v0.4.4` passed with
+    `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
+
 ## Task-to-Spec Notes
 
-- Release publication remains outside this work package.
-- `README.md` and `README.en.md` intentionally keep `v0.4.3` as the current
-  published release until maintainer-approved publication changes that fact.
+- New release publication actions remain outside this addendum; the `v0.4.4`
+  tag and GitHub Release already exist.
+- Historical release-preparation work intentionally kept `README.md` and
+  `README.en.md` on `v0.4.3`; the post-publication addendum updates them to
+  `v0.4.4`.
 
 ## Conditional Loop Tasks
 
@@ -68,3 +78,18 @@
   - Validation: Full local release validation passed with
     `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to maintainer review.
+
+- [x] P05: Correct post-publication metadata and finalization guardrail
+  - Goal: Align public metadata with the published `v0.4.4` state and prevent
+    future direct publishing from planning metadata.
+  - Inputs: Published tag target
+    `71fabb372a4cbc024f07c920a0c17b903a77afc2`, GitHub Release `v0.4.4`,
+    final hosted Release validation run `26269908157`, and maintainer request.
+  - Outputs: Updated README current-release fields, published release notes,
+    release readiness, release notes index, release process finalization
+    guidance, and validator target-version alignment check.
+  - Validation: `git diff --check`; full local release validation with
+    `-TargetVersion v0.4.4` passed with
+    `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
+  - Continue / stop decision: Stop at a reviewable PR; do not retag, republish,
+    edit settings, reopen #23, or push directly to `main`.
