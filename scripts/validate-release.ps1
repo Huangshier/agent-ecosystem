@@ -168,6 +168,7 @@ $requiredFiles = @(
     "docs/releases/v0.4.1.md",
     "docs/releases/v0.4.2.md",
     "docs/releases/v0.4.3.md",
+    "docs/releases/v0.4.4.md",
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -1423,6 +1424,7 @@ try {
             "English version: [README.en.md](README.en.md)"
         )
         "docs/releases/README.md" = @(
+            "[v0.4.4](v0.4.4.md)",
             "[v0.4.3](v0.4.3.md)",
             "[v0.4.2](v0.4.2.md)",
             "[v0.4.1](v0.4.1.md)",
@@ -1750,6 +1752,48 @@ try {
 }
 catch {
     Add-Check "v0.4.3 release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.4.md"
+    $releaseTokens = @(
+        "v0.4.4",
+        "release-prep draft",
+        "GitHub Release title",
+        "Copyable GitHub Release Body",
+        "English",
+        "stabilization / docs / governance",
+        "Issue #23",
+        "PR #87",
+        "PASS=50 FAIL=0 WARN=0 DEFERRED=0",
+        "26266323421",
+        "41aef52ff33399e2c7a94ede43fa488e0068059c",
+        "Upgrade / Usage Impact",
+        "Risk / Rollback",
+        "Maintainer Recommendation",
+        "Release Boundary"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.4 release-prep notes" "FAIL" "Release notes are missing required v0.4.4 release-prep tokens." @($missingReleaseTokens)
+    }
+    else {
+        $stalePublishedTokens = @(
+            "Status: public release",
+            "Published GitHub Release:",
+            "tag target"
+        )
+        $stalePublishedMatches = @($stalePublishedTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($stalePublishedMatches.Count -gt 0) {
+            Add-Check "v0.4.4 release-prep notes" "FAIL" "Release-prep notes contain published-release-only wording before v0.4.4 publication." @($stalePublishedMatches)
+        }
+        else {
+            Add-Check "v0.4.4 release-prep notes" "PASS" "v0.4.4 release-prep notes include bilingual release body, validation evidence, usage impact, risk, and recommendation."
+        }
+    }
+}
+catch {
+    Add-Check "v0.4.4 release-prep notes" "FAIL" $_.Exception.Message
 }
 
 try {

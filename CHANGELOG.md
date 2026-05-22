@@ -4,6 +4,13 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
+- No unreleased public changes after the `v0.4.4` release-prep candidate.
+
+## v0.4.4 - 2026-05-22 (release-prep candidate)
+
+- Prepared a stabilization / docs / governance patch release candidate. The
+  copyable bilingual GitHub Release body is maintained in
+  `docs/releases/v0.4.4.md`.
 - Reconciled published `v0.4.3` release records after publication.
 - Added cross-project closeout write-scope guardrails for public/private
   boundary control.
@@ -16,6 +23,18 @@ All notable public changes are summarized here.
   context gate and memory governance skills.
 - Closed out accepted stabilization engineering-memory state after PR #74.
 - Added PR base/stack safety guardrails and release-validation concurrency.
+- Localized root `.agents/` runtime state so checkout-local memory is ignored
+  and no longer tracked as a public fact source.
+- Made `README.md` the Simplified Chinese homepage and kept `README.en.md` as
+  the English entrypoint.
+- Added the domain-pack governance lifecycle without enabling new public domain
+  packs or changing installer profile behavior.
+- Added the read-only body-level project-memory language audit helper and
+  validator fixtures.
+- Improved memory refresh, reset, and language migration review semantics for
+  `en` / `zh-CN` project memory.
+- Reconciled completed public `docs/specs/**` work-package state and kept #23
+  as a deferred next-version planning umbrella.
 
 ## v0.4.3 - 2026-05-14
 
