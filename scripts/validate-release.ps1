@@ -2,6 +2,7 @@
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
+    [string]$TargetVersion = "v0.4.4",
     [switch]$Json
 )
 
@@ -40,6 +41,14 @@ $evidence = [ordered]@{
     agent_template_guidance = [ordered]@{}
     memory_boundary = [ordered]@{}
     spec_state_boundary = [ordered]@{}
+}
+
+$targetReleaseVersion = $TargetVersion.Trim()
+if ([string]::IsNullOrWhiteSpace($targetReleaseVersion)) {
+    $targetReleaseVersion = "v0.4.4"
+}
+if ($targetReleaseVersion -notmatch '^v\d+\.\d+\.\d+$') {
+    throw "TargetVersion must look like vMAJOR.MINOR.PATCH."
 }
 
 function Invoke-InstallerProfile {
@@ -1399,6 +1408,7 @@ try {
         "README.md" = @(
             "English: [README.en.md](README.en.md)",
             "简体中文（当前）",
+            "当前版本：``$targetReleaseVersion``",
             "一句话理解",
             "5 分钟上手",
             "分层模型",
@@ -1410,6 +1420,7 @@ try {
         )
         "README.en.md" = @(
             "Simplified Chinese: [README.md](README.md)",
+            "Current release: ``$targetReleaseVersion``",
             "One-Line Summary",
             "Five-Minute Start",
             "Layer Model",
@@ -1424,7 +1435,7 @@ try {
             "English version: [README.en.md](README.en.md)"
         )
         "docs/releases/README.md" = @(
-            "[v0.4.4](v0.4.4.md)",
+            "[$targetReleaseVersion]($targetReleaseVersion.md)",
             "[v0.4.3](v0.4.3.md)",
             "[v0.4.2](v0.4.2.md)",
             "[v0.4.1](v0.4.1.md)",
@@ -1462,6 +1473,89 @@ try {
 }
 catch {
     Add-Check "readme language entrypoints" "FAIL" $_.Exception.Message
+}
+
+try {
+    $targetReleaseNotesPath = "docs/releases/$targetReleaseVersion.md"
+    $alignmentFiles = [ordered]@{
+        "README.md" = Get-FileText -RelativePath "README.md"
+        "README.en.md" = Get-FileText -RelativePath "README.en.md"
+        $targetReleaseNotesPath = Get-FileText -RelativePath $targetReleaseNotesPath
+        "docs/release-readiness.md" = Get-FileText -RelativePath "docs/release-readiness.md"
+        "docs/releases/README.md" = Get-FileText -RelativePath "docs/releases/README.md"
+    }
+
+    $alignmentExpectations = [ordered]@{
+        "README.md" = @("当前版本：``$targetReleaseVersion``")
+        "README.en.md" = @("Current release: ``$targetReleaseVersion``")
+        $targetReleaseNotesPath = @(
+            "# $targetReleaseVersion Release Notes",
+            "Status: public release",
+            "Published GitHub Release:",
+            "Tag target:"
+        )
+        "docs/release-readiness.md" = @(
+            "Status: ``$targetReleaseVersion`` published public release",
+            "GitHub Release ``$targetReleaseVersion`` has been published"
+        )
+        "docs/releases/README.md" = @("[$targetReleaseVersion]($targetReleaseVersion.md)")
+    }
+
+    $alignmentFailures = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $alignmentExpectations.Keys) {
+        $text = [string]$alignmentFiles[$relativePath]
+        foreach ($token in $alignmentExpectations[$relativePath]) {
+            if (-not $text.Contains($token)) {
+                $alignmentFailures.Add("$relativePath missing target-version token: $token")
+            }
+        }
+    }
+
+    $staleFinalizationTokens = @(
+        "release-prep draft",
+        "release-prep candidate",
+        "release prep draft",
+        "release prep candidate",
+        "not yet tagged",
+        "not yet published",
+        "latest published public release"
+    )
+    foreach ($relativePath in @($targetReleaseNotesPath, "docs/release-readiness.md")) {
+        $text = [string]$alignmentFiles[$relativePath]
+        foreach ($token in $staleFinalizationTokens) {
+            if ($text -like ("*{0}*" -f $token)) {
+                $alignmentFailures.Add("$relativePath contains pre-publication wording: $token")
+            }
+        }
+    }
+
+    $releaseIndexLines = @(([string]$alignmentFiles["docs/releases/README.md"]) -split "`r?`n")
+    $targetIndexToken = "[{0}]({0}.md)" -f $targetReleaseVersion
+    $targetIndexLines = @($releaseIndexLines | Where-Object { $_.Contains($targetIndexToken) })
+    if ($targetIndexLines.Count -eq 0) {
+        $alignmentFailures.Add("docs/releases/README.md missing target release index entry for $targetReleaseVersion")
+    }
+    foreach ($line in $targetIndexLines) {
+        if ($line -match '(?i)release[- ]prep|draft|candidate|not yet|unpublished') {
+            $alignmentFailures.Add("docs/releases/README.md target release entry still looks pre-publication: $line")
+        }
+    }
+
+    if ($alignmentFailures.Count -gt 0) {
+        Add-Check "publish-ready release alignment" "FAIL" "Target release metadata is not publish-ready." ([ordered]@{
+            target_version = $targetReleaseVersion
+            failures = @($alignmentFailures.ToArray())
+        })
+    }
+    else {
+        Add-Check "publish-ready release alignment" "PASS" "README, release notes, release readiness, and release index match the target published version." ([ordered]@{
+            target_version = $targetReleaseVersion
+            checked_files = @($alignmentExpectations.Keys)
+        })
+    }
+}
+catch {
+    Add-Check "publish-ready release alignment" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -1758,42 +1852,48 @@ try {
     $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.4.md"
     $releaseTokens = @(
         "v0.4.4",
-        "release-prep draft",
+        "Status: public release",
         "GitHub Release title",
+        "Published GitHub Release:",
+        "Tag target: ``71fabb372a4cbc024f07c920a0c17b903a77afc2``",
         "Copyable GitHub Release Body",
         "English",
         "stabilization / docs / governance",
         "Issue #23",
         "PR #87",
-        "PASS=50 FAIL=0 WARN=0 DEFERRED=0",
-        "26266323421",
-        "41aef52ff33399e2c7a94ede43fa488e0068059c",
+        "PASS=51 FAIL=0 WARN=0 DEFERRED=0",
+        "26269908157",
+        "71fabb372a4cbc024f07c920a0c17b903a77afc2",
         "Upgrade / Usage Impact",
         "Risk / Rollback",
-        "Maintainer Recommendation",
+        "Maintainer Record",
         "Release Boundary"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @($releaseTokens | Where-Object { -not $releaseNotes.Contains($_) })
     if ($missingReleaseTokens.Count -gt 0) {
-        Add-Check "v0.4.4 release-prep notes" "FAIL" "Release notes are missing required v0.4.4 release-prep tokens." @($missingReleaseTokens)
+        Add-Check "v0.4.4 published release notes" "FAIL" "Release notes are missing required v0.4.4 published-release tokens." @($missingReleaseTokens)
     }
     else {
-        $stalePublishedTokens = @(
-            "Status: public release",
-            "Published GitHub Release:",
-            "tag target"
+        $staleReleasePrepTokens = @(
+            "release-prep draft",
+            "release-prep candidate",
+            "not yet tagged",
+            "not yet published",
+            "Hosted checks for the release-prep PR",
+            "do not create the tag",
+            "Before a tag"
         )
-        $stalePublishedMatches = @($stalePublishedTokens | Where-Object { $releaseNotes -like "*$_*" })
-        if ($stalePublishedMatches.Count -gt 0) {
-            Add-Check "v0.4.4 release-prep notes" "FAIL" "Release-prep notes contain published-release-only wording before v0.4.4 publication." @($stalePublishedMatches)
+        $staleReleasePrepMatches = @($staleReleasePrepTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($staleReleasePrepMatches.Count -gt 0) {
+            Add-Check "v0.4.4 published release notes" "FAIL" "Release notes still contain pre-publication wording after v0.4.4 publication." @($staleReleasePrepMatches)
         }
         else {
-            Add-Check "v0.4.4 release-prep notes" "PASS" "v0.4.4 release-prep notes include bilingual release body, validation evidence, usage impact, risk, and recommendation."
+            Add-Check "v0.4.4 published release notes" "PASS" "v0.4.4 release notes summarize published scope, validation evidence, usage impact, risk, and release boundary."
         }
     }
 }
 catch {
-    Add-Check "v0.4.4 release-prep notes" "FAIL" $_.Exception.Message
+    Add-Check "v0.4.4 published release notes" "FAIL" $_.Exception.Message
 }
 
 try {
