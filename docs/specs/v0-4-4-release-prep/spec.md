@@ -2,19 +2,18 @@
 
 - **Title**: v0.4.4 Release Prep And Finalization Guardrail
 - **Slug**: v0-4-4-release-prep
-- **Status**: Ready for review
+- **Status**: Completed
 - **Owner**: Codex
 - **Updated**: 2026-05-22
 
 ## 1. Summary
 
-- Prepare a public-safe `v0.4.4` release candidate as a stabilization / docs /
+- Prepared a public-safe `v0.4.4` release candidate as a stabilization / docs /
   governance patch release.
-- Produce bilingual release notes that can be copied directly into the GitHub
-  Release page after maintainer approval.
+- Produced bilingual release notes for the GitHub Release page.
 - Correct the post-publication metadata after `v0.4.4` was tagged and
   published.
-- Add a small publish-ready alignment guardrail so maintainer authorization to
+- Added a small publish-ready alignment guardrail so maintainer authorization to
   publish requires final metadata alignment before tag or GitHub Release
   creation.
 - Keep #23 as a next-version release-planning umbrella. This work references
@@ -34,19 +33,19 @@
 
 ## 3. Goals
 
-- Add a `v0.4.4` release notes draft with clear `中文` and `English` sections.
-- Update `CHANGELOG.md`, release notes index, release readiness, and release
+- Added a `v0.4.4` release notes draft with clear `中文` and `English` sections.
+- Updated `CHANGELOG.md`, release notes index, release readiness, and release
   process coverage for the release candidate.
-- Add validator coverage for the `v0.4.4` release-prep notes.
-- Update `README.md`, `README.en.md`, `docs/releases/v0.4.4.md`,
+- Added validator coverage for the `v0.4.4` release-prep notes.
+- Updated `README.md`, `README.en.md`, `docs/releases/v0.4.4.md`,
   `docs/release-readiness.md`, and the release notes index to reflect the
   published `v0.4.4` state.
-- Update release process guidance so publication approval triggers
+- Updated release process guidance so publication approval triggers
   release-finalization alignment rather than immediate tag or GitHub Release
   creation.
-- Extend the validator so `-TargetVersion <version>` blocks mismatched README,
+- Extended the validator so `-TargetVersion <version>` blocks mismatched README,
   release notes, release readiness, and release index metadata.
-- Record release scope, validation evidence, known limitations, risk/rollback,
+- Recorded release scope, validation evidence, known limitations, risk/rollback,
   and maintainer recommendation in public-safe release-facing artifacts.
 
 ## 4. Non-Goals
@@ -70,8 +69,8 @@
 - Release finalization must align public metadata and pass validation before any
   future tag or GitHub Release publication.
 - Durable specs may record release scope, decisions, acceptance evidence, and
-  completed results, but should not act as a live branch, PR, or hosted-check
-  waiting dashboard.
+  completed results, but should not act as a transient operational status
+  dashboard.
 
 ## 6. Assumptions
 
@@ -79,7 +78,7 @@
   minor release because it does not expand install profiles, add public domain
   packs, or introduce a new product surface.
 - #23 can serve as the issue-first release-planning reference when the release
-  prep PR uses `Refs #23` rather than a closing keyword.
+  prep work references it without a closing keyword.
 - `docs/releases/README.md` is the release notes index named by the validator
   alignment requirement.
 
@@ -130,7 +129,9 @@
 - `git diff --check` passes.
 - Full local release validation passes with
   `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
-- Hosted PR checks should pass before maintainer release approval.
+- Hosted validation for the release-finalization guardrail addendum passed as
+  public evidence: PR base guard plus the Release validation matrix for Windows
+  PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
 
 ## 10. Loop Contract
 
@@ -143,7 +144,7 @@
   - P01: Assess public GitHub and `main` state after `v0.4.3`.
   - P02: Prepare release-facing docs and changelog records.
   - P03: Add validator coverage for the release-prep draft.
-  - P04: Run local validation and prepare PR metadata for maintainer review.
+  - P04: Run local validation and record maintainer handoff evidence.
   - P05: Correct post-publication metadata and add target-version
     release-finalization alignment.
 - **Continue rule**: Continue while changes stay within release-prep docs,

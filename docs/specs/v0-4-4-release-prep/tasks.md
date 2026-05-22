@@ -1,14 +1,14 @@
 # Task Plan
 
 - **Spec**: `docs/specs/v0-4-4-release-prep/spec.md`
-- **Status**: Ready for review
+- **Status**: Completed
 - **Updated**: 2026-05-22
 
 ## Tasks
 
 - [x] T01: Assess public state and version positioning
   - Scope: latest published release, merged post-`v0.4.3` work, open
-    issue/PR state, and release validation evidence.
+    issue state, linked pull request state, and release validation evidence.
   - Validation: Candidate classified as stabilization / docs / governance
     patch release; #23 remains a referenced planning umbrella.
 
@@ -29,10 +29,11 @@
   - Validation: `git diff --check`; `scripts/validate-release.ps1` passed with
     `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [x] T05: Prepare maintainer handoff
-  - Scope: PR body with summary, validation, risk/rollback, and recommendation.
-  - Validation: PR references #23 without closing it and does not tag or publish
-    a release.
+- [x] T05: Record maintainer handoff evidence
+  - Scope: Release scope, validation, risk/rollback, recommendation, and #23
+    reference boundary.
+  - Validation: Release-prep records referenced #23 without closing it and did
+    not tag or publish a release before maintainer authorization.
 
 - [x] T06: Correct post-publication metadata and finalization guardrail
   - Scope: `README.md`, `README.en.md`, `docs/releases/v0.4.4.md`,
@@ -41,6 +42,9 @@
   - Validation: `git diff --check`; full local release validation with
     `-TargetVersion v0.4.4` passed with
     `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
+  - Evidence: Hosted checks for the release-finalization guardrail addendum
+    passed: PR base guard plus Release validation on Windows PowerShell 5.1,
+    Windows pwsh, Ubuntu pwsh, and macOS pwsh.
 
 ## Task-to-Spec Notes
 
@@ -58,7 +62,7 @@
 
 - [x] P01: Complete state assessment
   - Goal: Establish release scope from public evidence.
-  - Inputs: GitHub issue, PR, release, run, and `main` state.
+  - Inputs: GitHub issue, linked pull requests, release, run, and `main` state.
   - Outputs: Patch-release positioning.
   - Validation: No expansion or profile behavior change found.
   - Continue / stop decision: Continue.
@@ -77,7 +81,8 @@
   - Outputs: Validator check and validation evidence.
   - Validation: Full local release validation passed with
     `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Continue to maintainer review.
+  - Continue / stop decision: Completed release-prep validation and handoff
+    evidence.
 
 - [x] P05: Correct post-publication metadata and finalization guardrail
   - Goal: Align public metadata with the published `v0.4.4` state and prevent
@@ -91,5 +96,8 @@
   - Validation: `git diff --check`; full local release validation with
     `-TargetVersion v0.4.4` passed with
     `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Stop at a reviewable PR; do not retag, republish,
-    edit settings, reopen #23, or push directly to `main`.
+  - Evidence: Hosted checks for the addendum passed after the transient Windows
+    pwsh artifact-upload retry: PR base guard plus Release validation on
+    Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh.
+  - Continue / stop decision: Completed; do not retag, republish, edit
+    settings, reopen #23, or push directly to `main`.
