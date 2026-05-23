@@ -76,16 +76,25 @@ Use documented project commands before inventing new ones. Discovery order:
 2. Tooling surfaces such as package scripts, Makefiles, task runners, and CI workflows.
 3. `.agents/commands/README.md` and any workflow cards under `.agents/commands/`.
 
-Use `.agents/commands/` for reusable high-frequency workflows such as setup, format/lint, test, build, release validation, and review checklists. Each command card should be short and include purpose, when to use it, prerequisites, commands, expected evidence, and safety notes for external side effects.
+Use `.agents/commands/` for reusable high-frequency workflows such as setup, format/lint, test, build, release validation, recurring monitors, and review checklists. Each command card should be short and include purpose, when to use it, prerequisites, commands, expected evidence, and safety notes for external side effects.
+
+Recurring automations should usually point at a command card instead of embedding project rules in the scheduler prompt. Keep the schedule prompt thin: when to run, which card to execute, and where to report. Keep project rules, verification commands, safety boundaries, and output expectations in repository files.
 
 ## Large Issue Planning
 For large, high-blast-radius, or multi-area issues, produce an implementation plan before editing. When the plan would create an oversized PR, propose a reviewable PR split and keep each phase tied to acceptance evidence.
+
+## Verification And Completion
+Every implementation task should have an explicit verifier before it is called done. Prefer deterministic, scriptable checks from project docs, CI, package scripts, or `.agents/commands/`.
+
+For non-trivial work, write the verifier in `docs/specs/<slug>/spec.md` acceptance criteria or `tasks.md` validation fields. If no deterministic verifier exists, record the review evidence that substitutes for it, such as rendered output, screenshots, manual reproduction steps, or reviewer confirmation.
+
+If an expected verifier cannot run, record why in the active spec/tasks or `.agents/process.txt`, mark the remaining risk, and do not present the work as fully complete.
 
 ## Delivery Protocol & Working Loop
 For implementation tasks that produce repository changes, a complete unit of work may include the relevant parts of the following sequence:
 
 1. **Read & Plan**: Read relevant code and context notes. For non-trivial work, prefer a project spec under `docs/specs/<slug>/` before implementation. Keep `.agents/plan.md` as a session-local pointer, not a second project plan.
-2. **Implement & Verify**: Confirm the work meets the completion criteria and passes relevant validation for this project. Implement in small validated steps. Prefer deterministic, scriptable verification commands. Record blockers in `.agents/process.txt`.
+2. **Implement & Verify**: Confirm the work meets the completion criteria and passes the named verifier(s) for this project. Implement in small validated steps. Prefer deterministic, scriptable verification commands. Record blockers in `.agents/process.txt`.
 3. **Atomic Commit**: Commit only when the user asks for a commit or project policy clearly requires one. When committing in a git repository, inspect recent history with `git log` and match the repository's prevailing commit message format unless the user or project policy says otherwise.
 4. **The Push**: Push only when the user explicitly asks, or when established project workflow unambiguously requires it and remote access is available.
 5. **The Report**: After validation and any required commit/push steps, provide your report. If the task is review-only or blocked by environment or policy, report the blocker or findings clearly instead of pretending the task is complete.
@@ -98,7 +107,7 @@ This gate is workflow guidance, not a Git hook, repository ruleset, or branch-pr
 Checklist:
 
 1. Re-read the active `docs/specs/<slug>/spec.md` and `docs/specs/<slug>/tasks.md`.
-2. Update the active spec status, phase state, acceptance evidence, and explicit non-goals when the phase result changed.
+2. Update the active spec status, phase state, verifier / acceptance evidence, and explicit non-goals when the phase result changed.
 3. Update `.agents/plan.md` so it points at the real active spec and current next action, without copying the full task list.
 4. Update `.agents/process.txt` when active issues, PRs, blockers, branch state, or next actions changed.
 5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.

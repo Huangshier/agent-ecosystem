@@ -67,16 +67,25 @@ Agent 会话应把本文件作为主要工作指南。
 2. 工具入口，例如 package scripts、Makefile、任务运行器和 CI workflows。
 3. `.agents/commands/README.md` 以及 `.agents/commands/` 下的工作流卡片。
 
-`.agents/commands/` 用于沉淀高频、可复用的工作流，例如 setup、format/lint、test、build、release validation 和 review checklist。每张命令卡保持简短，包含用途、何时使用、前置条件、命令、预期证据，以及外部副作用的安全说明。
+`.agents/commands/` 用于沉淀高频、可复用的工作流，例如 setup、format/lint、test、build、release validation、recurring monitor 和 review checklist。每张命令卡保持简短，包含用途、何时使用、前置条件、命令、预期证据，以及外部副作用的安全说明。
+
+Recurring automation 通常应指向一张命令卡，而不是把项目规则塞进 scheduler prompt。调度 prompt 保持轻量：什么时候运行、执行哪张命令卡、汇报到哪里。项目规则、验证命令、安全边界和输出要求保存在仓库文件中。
 
 ## 大 issue 规划
 对于范围大、影响面高或跨多个区域的 issue，编辑前先产出 implementation plan。若计划会形成过大的 PR，应提出可复核的 PR 拆分方案，并让每个阶段绑定验收证据。
+
+## 验证与完成
+每个实现任务在声明完成前都应有明确 verifier。优先使用项目文档、CI、package scripts 或 `.agents/commands/` 中记录的确定性、可脚本化检查。
+
+非平凡工作应把 verifier 写入 `docs/specs/<slug>/spec.md` 的验收标准，或写入 `tasks.md` 的验证字段。若没有确定性 verifier，应记录可替代的复核证据，例如渲染产物、截图、手动复现步骤或 reviewer confirmation。
+
+如果预期 verifier 无法运行，在 active spec/tasks 或 `.agents/process.txt` 中记录原因和剩余风险，不要把工作汇报为完全完成。
 
 ## 交付流程
 产生仓库变更的实现任务，完整工作单元通常包含以下步骤中的相关部分：
 
 1. **读取与计划**：读取相关代码和上下文记录。非平凡工作优先在 `docs/specs/<slug>/` 下建立项目 spec。`.agents/plan.md` 只作为会话级指针，不复制完整项目计划。
-2. **实现与验证**：确认工作满足完成标准，并通过项目相关验证。以小步可验证方式实现，优先使用确定性、可脚本化的验证命令。阻塞写入 `.agents/process.txt`。
+2. **实现与验证**：确认工作满足完成标准，并通过项目命名的 verifier。以小步可验证方式实现，优先使用确定性、可脚本化的验证命令。阻塞写入 `.agents/process.txt`。
 3. **原子提交**：只有当用户要求提交，或项目流程明确要求提交时才 commit。提交前检查 `git log`，遵循仓库既有 commit message 风格，除非用户或项目规则另有要求。
 4. **推送**：只有当用户明确要求，或项目流程明确要求且远端可访问时才 push。
 5. **报告**：完成验证以及必要的 commit / push 后再汇报。若任务只是 review 或被环境/规则阻塞，清楚报告阻塞或发现，不能假装完成。
@@ -89,7 +98,7 @@ Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭
 检查清单：
 
 1. 重新读取当前 `docs/specs/<slug>/spec.md` 和 `docs/specs/<slug>/tasks.md`。
-2. 当阶段结果变化时，更新当前 spec 的状态、阶段状态、验收证据和明确非目标。
+2. 当阶段结果变化时，更新当前 spec 的状态、阶段状态、verifier / 验收证据和明确非目标。
 3. 更新 `.agents/plan.md`，使其指向真实 active spec 和当前下一步，不复制完整任务清单。
 4. 当 active issues、PR、阻塞、分支状态或下一步变化时，更新 `.agents/process.txt`。
 5. `.agents/notes.md` 只记录需要跨会话保留的持久已验证事实、最终决策或证据链接。
