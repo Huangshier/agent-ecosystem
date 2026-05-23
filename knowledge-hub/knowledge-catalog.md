@@ -43,6 +43,11 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: a non-trivial task needs durable intent, bounded execution, and
     validation evidence.
+- [Long Session Phase Split](knowledge/patterns/long-session-phase-split.md)
+  - Maturity: verified
+  - Scope: cross-project
+  - Use when: large, restart-prone, or evidence-heavy work should be split into
+    spec, implementation, and closeout phases.
 
 ### Standards
 
@@ -56,6 +61,11 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: deciding language routing across conversation, public artifacts,
     project memory, and private overlay work.
+- [Public Promotion Checklist](knowledge/standards/public-promotion-checklist.md)
+  - Maturity: verified
+  - Scope: cross-project
+  - Use when: promoting reusable lessons from project-local or private evidence
+    into public issues, PRs, docs, templates, or knowledge entries.
 
 ### Domain Packs
 

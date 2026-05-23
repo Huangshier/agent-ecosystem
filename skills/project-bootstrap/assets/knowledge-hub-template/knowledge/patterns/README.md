@@ -26,3 +26,4 @@ Recommended fields:
 ## Current Entries
 
 - [Context Gate to Spec to Validation Loop](context-gate-spec-validation-loop.md)
+- [Long Session Phase Split](long-session-phase-split.md)
