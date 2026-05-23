@@ -151,6 +151,32 @@ criteria, and completed evidence. It should not preserve local branch status,
 waiting pull-request merge steps, pending hosted checks, branch publishing
 steps, or duplicate issue-label dashboards as long-lived state.
 
+## Cross-Repository Promotion
+
+When agent-assisted work promotes a reusable lesson from private, project-local,
+or local audit evidence into this public repository, the public issue or pull
+request should reference the generic evidence summary and the public work
+surface. It must not copy raw private logs, local paths, private repository
+mappings, credentials, or sensitive audit details.
+
+Before editing public files, the agent should:
+
+- run the project context gate for each repository that will be read or written;
+- record which repository is read-only evidence and which repository is the
+  public write target;
+- verify the write target root, branch, and `git status -sb`;
+- confirm GitHub access is being used only for issue, pull request, branch, and
+  validation workflows in scope;
+- stop for ambiguity around write root, base branch, settings, secrets,
+  rulesets, tags, releases, or other maintainer-controlled actions.
+
+Use
+[Public Promotion Checklist](../knowledge-hub/knowledge/standards/public-promotion-checklist.md)
+for reusable promotion boundaries, and
+[Long Session Phase Split](../knowledge-hub/knowledge/patterns/long-session-phase-split.md)
+when the source work is large enough that spec, implementation, and closeout
+should be separate reviewable phases.
+
 ## Repository Controls
 
 The current repository control model is:

@@ -30,11 +30,13 @@ hub. Use it before opening individual knowledge files.
 ### Patterns
 
 - [Context Gate to Spec to Validation Loop](knowledge/patterns/context-gate-spec-validation-loop.md)
+- [Long Session Phase Split](knowledge/patterns/long-session-phase-split.md)
 
 ### Standards
 
 - [Public Knowledge Boundary](knowledge/standards/public-knowledge-boundary.md)
 - [Bilingual Public/Private Routing](knowledge/standards/bilingual-public-private-routing.md)
+- [Public Promotion Checklist](knowledge/standards/public-promotion-checklist.md)
 
 ## Maintenance
 

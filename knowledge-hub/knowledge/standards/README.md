@@ -25,3 +25,5 @@ Recommended fields:
 ## Current Entries
 
 - [Public Knowledge Boundary](public-knowledge-boundary.md)
+- [Bilingual Public/Private Routing](bilingual-public-private-routing.md)
+- [Public Promotion Checklist](public-promotion-checklist.md)
