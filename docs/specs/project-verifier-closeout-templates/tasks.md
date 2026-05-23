@@ -27,9 +27,9 @@
   - Notes: `git diff --check` passed. Release validation passed with `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
 
 - [x] T05: Close out public memory and commit
-  - Scope: Public `.agents/process.txt`, `.agents/plan.md`, spec/tasks, and template files.
-  - Validation: Public `.agents/` memory refreshed locally; final clean status is verified after the commit step.
-  - Notes: Public `.agents/` is local runtime memory and is not tracked.
+  - Scope: Public tracked spec/tasks and template files; root `.agents/` closeout notes are local untracked checkout memory only.
+  - Validation: The public PR artifact excludes root `.agents/**`; final clean status is verified after the commit step.
+  - Notes: Root `.agents/` may be refreshed locally for closeout, but it is not a public fact source and is not part of this PR.
 
 ## Task-to-Spec Notes
 - T02 and T03 map to P02 and P03 in the execution contract.
