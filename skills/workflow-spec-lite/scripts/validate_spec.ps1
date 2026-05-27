@@ -31,7 +31,8 @@ function Get-SectionBody {
 
     foreach ($alias in $Aliases) {
         $escaped = [regex]::Escape($alias)
-        $pattern = "(?ms)^##\s+\d+\.\s+$escaped\s*$\r?\n(?<body>.*?)(?=^##\s+\d+\.|\z)"
+        $localizedSuffix = "(?:\s*[\(\uFF08][^\)\uFF09]+[\)\uFF09])?"
+        $pattern = "(?ms)^##\s+\d+\.\s+$escaped$localizedSuffix\s*$\r?\n(?<body>.*?)(?=^##\s+\d+\.|\z)"
         $match = [regex]::Match($Text, $pattern)
         if ($match.Success) {
             return [string]$match.Groups["body"].Value
@@ -79,7 +80,8 @@ function Test-RequiredField {
         [string]$FieldName
     )
 
-    $pattern = "(?m)^\-[ \t]+\*\*{0}\*\*:[ \t]+\S" -f [regex]::Escape($FieldName)
+    $localizedSuffix = "(?:[ \t]*[\(\uFF08][^\)\uFF09]+[\)\uFF09])?"
+    $pattern = "(?m)^\-[ \t]+\*\*{0}{1}\*\*:[ \t]+\S" -f [regex]::Escape($FieldName), $localizedSuffix
     return ($Text -match $pattern)
 }
 
