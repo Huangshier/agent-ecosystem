@@ -63,13 +63,21 @@ jobs:
                 continue;
               }
 
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                name: label,
-              });
-              core.info(`Removed stale label: ${label}`);
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: label,
+                });
+                core.info(`Removed stale label: ${label}`);
+              } catch (error) {
+                if (error.status === 404) {
+                  core.info(`Label already removed (concurrent run): ${label}`);
+                } else {
+                  throw error;
+                }
+              }
             }
 
             if (!currentLabels.includes(desired)) {
