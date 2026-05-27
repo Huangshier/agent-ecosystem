@@ -7,8 +7,8 @@
 ## Tasks
 
 - [x] T01: Confirm issue and repository scope
-  - Scope: Issue #94, local `main`, open PR state, validator, release fixture, and zh-CN templates.
-  - Validation: `gh issue view 94`, `gh pr list`, `git status -sb`, and template inspection.
+  - Scope: Issue #94, repository baseline, validator, release fixture, and zh-CN templates.
+  - Validation: Issue metadata, repository baseline, and template inspection.
   - Notes: Scope excludes #96 modularization and unrelated memory template changes.
 
 - [x] T02: Update validator bilingual anchor matching
@@ -27,9 +27,9 @@
   - Notes: The two zh-CN spec-lite template copies match: `SHA256 32BC05E05E1324C4C02E331DC766231208C873E7CD3425A5F9E193CFB5525A19`.
 
 - [x] T05: Finalize PR evidence
-  - Scope: Spec/tasks evidence, commit, push, and draft PR body.
-  - Validation: `git diff --check`, focused validator checks, release validation, clean staged diff, PR creation.
-  - Notes: Draft PR #105 exists and is waiting for maintainer review.
+  - Scope: Durable spec/tasks evidence and PR validation summary.
+  - Validation: `git diff --check`, focused validator checks, release validation, and scoped PR creation.
+  - Notes: A scoped PR was opened for #94 with validation evidence.
 
 ## Task-to-Spec Notes
 - T02 and T03 satisfy Goals 1 through 4.
@@ -44,8 +44,8 @@
 - [x] P01: Confirm issue scope and current evidence
   - Goal: Ground the implementation in #94 and current repository state.
   - Inputs: Issue #94, validator source, release fixture block, zh-CN templates.
-  - Outputs: Active branch and this work package.
-  - Validation: Repository is on a fresh branch from current `origin/main`.
+  - Outputs: This work package.
+  - Validation: Repository baseline confirmed before implementation.
   - Continue / stop decision: Continue.
 
 - [x] P02: Implement validator and fixture updates
@@ -60,11 +60,11 @@
   - Inputs: Local working tree.
   - Outputs: Validation evidence in this work package and PR body.
   - Validation: `git diff --check`; spec validation for this work package; focused validator checks; release validation `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
-  - Continue / stop decision: Continue to draft PR publication.
+  - Continue / stop decision: Continue to scoped PR publication.
 
-- [x] P04: Publish draft PR
-  - Goal: Submit a scoped PR for maintainer review.
+- [x] P04: Publish scoped PR
+  - Goal: Publish a scoped PR for #94.
   - Inputs: Validated local branch.
-  - Outputs: Commit `1bfd06f`, pushed branch, draft PR #105.
-  - Validation: PR URL exists: <https://github.com/Huangshier/agent-ecosystem/pull/105>.
-  - Continue / stop decision: Stop and wait for maintainer review.
+  - Outputs: Scoped PR opened for #94: <https://github.com/Huangshier/agent-ecosystem/pull/105>.
+  - Validation: PR description records validation evidence.
+  - Continue / stop decision: Stop at the scoped PR publication boundary.

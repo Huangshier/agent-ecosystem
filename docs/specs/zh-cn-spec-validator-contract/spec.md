@@ -57,9 +57,10 @@
   - a filled English spec fixture.
   - a filled zh-CN bilingual spec fixture matching the actual template anchor style.
 - Focused negative validator checks failed as expected for missing `Title`, missing goals, and missing `Autonomy level`.
-- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate-release.ps1 -ScratchRoot .runtime/validation/issue94-release` passed with `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
+- `scripts/validate-release.ps1` passed with `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
 - The zh-CN spec-lite template in `knowledge-hub/templates/...` matches the project-bootstrap bundled snapshot (`SHA256 32BC05E05E1324C4C02E331DC766231208C873E7CD3425A5F9E193CFB5525A19`).
-- Draft PR #105 exists for #94 and waits for maintainer review: <https://github.com/Huangshier/agent-ecosystem/pull/105>.
+- A scoped PR was opened for #94: <https://github.com/Huangshier/agent-ecosystem/pull/105>.
+- Validation evidence is recorded in this section and in the PR description.
 
 ## 10. Loop Contract
 - Not applicable.
@@ -67,13 +68,13 @@
 ## 11. Execution Contract
 - **Autonomy level**: bounded-autonomous
 - **Phase list**:
-  - P01: Confirm issue scope, current repository state, and validator/template evidence. Completed.
+  - P01: Confirm issue scope, repository baseline, and validator/template evidence. Completed.
   - P02: Implement scoped validator and release fixture updates. Completed.
   - P03: Run focused and full validation, then update this work package with evidence. Completed.
-  - P04: Commit, push a scoped branch, and open a draft PR for #94. Completed.
+  - P04: Publish a scoped PR for #94 with validation evidence. Completed.
 - **Continue rule**: Continue while changes remain inside #94 scope, validation failures are explainable and fixable, and no high-impact external action is required.
 - **Stop rule**: Stop on scope drift into #96 modularization, unrelated template rewrites, weakened negative checks, unexplainable validation failures, merge/tag/release/branch-deletion needs, or permission blockers.
-- **State record**: `docs/specs/zh-cn-spec-validator-contract/spec.md`, `docs/specs/zh-cn-spec-validator-contract/tasks.md`, local `.agents/plan.md`, and local `.agents/process.txt` when active branch or PR state changes.
+- **State record**: `docs/specs/zh-cn-spec-validator-contract/spec.md`, `docs/specs/zh-cn-spec-validator-contract/tasks.md`, and the scoped PR description.
 
 ## 12. Open Questions
 - None currently blocking implementation.
