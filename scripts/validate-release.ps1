@@ -1154,14 +1154,14 @@ try {
     $chineseSpec = @"
 # 工作说明
 
-- **Title**: 中文章节 fixture
-- **Slug**: chinese-section-fixture
-- **Status**: Active
-- **Owner**: release validation
-- **Updated**: 2026-05-08
+- **Title（标题）**: 中文章节 fixture
+- **Slug（标识）**: chinese-section-fixture
+- **Status（状态）**: Active
+- **Owner（负责人）**: release validation
+- **Updated（更新时间）**: 2026-05-08
 
-## 1. 摘要
-- 验证中文章节别名可以通过轻量 spec validator。
+## 1. Summary（摘要）
+- 验证真实 zh-CN 模板的双语 anchor 可以通过轻量 spec validator。
 
 ## 2. 当前上下文
 - release validation 需要覆盖中文项目记忆场景。
@@ -1191,12 +1191,12 @@ try {
 - 不适用。
 
 ## 11. 执行契约
-- **Autonomy level**: bounded-autonomous
-- **Phase list**:
+- **Autonomy level（自主级别）**: bounded-autonomous
+- **Phase list（阶段列表）**:
   - P01: 验证中文章节 fixture。
-- **Continue rule**: fixture 通过时继续。
-- **Stop rule**: 必需章节缺失时停止。
-- **State record**: release validation evidence。
+- **Continue rule（继续规则）**: fixture 通过时继续。
+- **Stop rule（停止规则）**: 必需章节缺失时停止。
+- **State record（状态记录）**: release validation evidence。
 
 ## 12. 开放问题
 - 无。
@@ -1210,6 +1210,11 @@ try {
     }
 
     $negativeFixtures = @(
+        [ordered]@{
+            name = "missing-title"
+            expected_finding = "metadata_title_missing"
+            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Title\*\*:\s+.*\r?\n', '')
+        },
         [ordered]@{
             name = "missing-goals"
             expected_finding = "section_goals_missing"
@@ -1234,6 +1239,11 @@ try {
             name = "missing-stop-rule"
             expected_finding = "execution_stop_rule_missing"
             text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Stop rule\*\*:\s+.*\r?$', '- **Stop rule**:')
+        },
+        [ordered]@{
+            name = "missing-autonomy-level"
+            expected_finding = "execution_autonomy_level_missing"
+            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Autonomy level\*\*:\s+.*\r?$', '- **Autonomy level**:')
         }
     )
 
@@ -1265,7 +1275,7 @@ try {
         )
         negative_fixtures = @($negativeEvidence.ToArray())
     }
-    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts a complete spec and rejects missing goals, non-goals, acceptance, risks, and stop rule fixtures." $evidence.spec_lite
+    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English and zh-CN bilingual specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
 }
 catch {
     Add-Check "spec-lite validator" "FAIL" $_.Exception.Message
