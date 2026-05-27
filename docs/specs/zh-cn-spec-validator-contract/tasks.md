@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/zh-cn-spec-validator-contract/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-05-27
 
 ## Tasks
@@ -26,10 +26,10 @@
   - Validation: Hash or content comparison.
   - Notes: The two zh-CN spec-lite template copies match: `SHA256 32BC05E05E1324C4C02E331DC766231208C873E7CD3425A5F9E193CFB5525A19`.
 
-- [ ] T05: Finalize PR evidence
+- [x] T05: Finalize PR evidence
   - Scope: Spec/tasks evidence, commit, push, and draft PR body.
   - Validation: `git diff --check`, focused validator checks, release validation, clean staged diff, PR creation.
-  - Notes: Local validation passed; draft PR publication is the final stop point.
+  - Notes: Draft PR #105 exists and is waiting for maintainer review.
 
 ## Task-to-Spec Notes
 - T02 and T03 satisfy Goals 1 through 4.
@@ -62,9 +62,9 @@
   - Validation: `git diff --check`; spec validation for this work package; focused validator checks; release validation `PASS=52 FAIL=0 WARN=0 DEFERRED=0`.
   - Continue / stop decision: Continue to draft PR publication.
 
-- [ ] P04: Publish draft PR
+- [x] P04: Publish draft PR
   - Goal: Submit a scoped PR for maintainer review.
   - Inputs: Validated local branch.
-  - Outputs: Commit, pushed branch, draft PR.
-  - Validation: PR URL exists.
-  - Continue / stop decision: Stop after PR creation.
+  - Outputs: Commit `1bfd06f`, pushed branch, draft PR #105.
+  - Validation: PR URL exists: <https://github.com/Huangshier/agent-ecosystem/pull/105>.
+  - Continue / stop decision: Stop and wait for maintainer review.
