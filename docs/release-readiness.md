@@ -189,6 +189,23 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - GitHub Release `v0.4.4` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
 
+## v0.4.5 Release Prep (candidate)
+
+`v0.4.5` is a maintenance / compatibility / governance patch release
+candidate that packages post-`v0.4.4` changes already merged to `main`:
+
+- Issue triage label-sync idempotency (#102 / PR #104).
+- Spec validator zh-CN anchor alignment (#94 / PR #105).
+- UTF-8 no-BOM validator handling (#106 / PR #107).
+- Release validation workflow explicit permissions (#95 / PR #108).
+- General bug and feature issue templates (#99 / PR #109).
+
+This is a **release-prep candidate**. It is not yet tagged, not yet
+published, and is not the current public release. `v0.4.4` remains the
+current published version.
+
+Candidate release notes: `docs/releases/v0.4.5.md`.
+
 ## Required Before Future Publishing
 
 - Re-run the final sensitive information audit if review changes the public tree.

@@ -1,5 +1,6 @@
 # Release Notes
 
+- [v0.4.5 (candidate)](v0.4.5.md) — release-prep candidate, not yet published
 - [v0.4.4](v0.4.4.md)
 - [v0.4.3](v0.4.3.md)
 - [v0.4.2](v0.4.2.md)
