@@ -4,9 +4,9 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.4.5` release-prep candidate.
+- No unreleased public changes after the `v0.4.5` maintenance preparation.
 
-## v0.4.5 - (release-prep candidate, not yet published)
+## v0.4.5 - (in preparation)
 
 - Fixed issue triage label-sync to handle concurrent `issues` events
   idempotently. (Issue #102, PR #104)
