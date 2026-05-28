@@ -1032,6 +1032,7 @@ try {
     $fixtureDir = Join-PathParts $scratchRootFull "spec-lite-fixtures"
     New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
     Assert-PathInsideRoot -Path $fixtureDir -Root $scratchRootFull
+    $strictUtf8NoBom = New-Object System.Text.UTF8Encoding($false, $true)
 
     $completeSpec = @"
 # Work Spec
@@ -1209,6 +1210,17 @@ try {
         throw ("Chinese section spec fixture failed: {0}" -f (($chinesePositive.findings | ConvertTo-Json -Compress -Depth 5)))
     }
 
+    $chineseNoBomPath = Join-PathParts $fixtureDir "chinese-section-spec-utf8-no-bom.md"
+    [System.IO.File]::WriteAllText($chineseNoBomPath, $chineseSpec, $strictUtf8NoBom)
+    $chineseNoBomBytes = [System.IO.File]::ReadAllBytes($chineseNoBomPath)
+    if ($chineseNoBomBytes.Length -ge 3 -and $chineseNoBomBytes[0] -eq 0xEF -and $chineseNoBomBytes[1] -eq 0xBB -and $chineseNoBomBytes[2] -eq 0xBF) {
+        throw "UTF-8 no-BOM Chinese spec fixture unexpectedly contains a BOM."
+    }
+    $chineseNoBomPositive = & $specValidator -SpecPath $chineseNoBomPath -RequireExecutionContract -Json | ConvertFrom-Json
+    if (-not [bool]$chineseNoBomPositive.pass) {
+        throw ("UTF-8 no-BOM Chinese section spec fixture failed: {0}" -f (($chineseNoBomPositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
     $negativeFixtures = @(
         [ordered]@{
             name = "missing-title"
@@ -1271,11 +1283,12 @@ try {
         positive_fixture = $positivePath
         positive_variants = @(
             [ordered]@{ name = "loop-contract"; path = $loopPath },
-            [ordered]@{ name = "chinese-sections"; path = $chinesePath }
+            [ordered]@{ name = "chinese-sections"; path = $chinesePath },
+            [ordered]@{ name = "chinese-sections-utf8-no-bom"; path = $chineseNoBomPath }
         )
         negative_fixtures = @($negativeEvidence.ToArray())
     }
-    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English and zh-CN bilingual specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
+    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English, zh-CN bilingual, and UTF-8 no-BOM zh-CN specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
 }
 catch {
     Add-Check "spec-lite validator" "FAIL" $_.Exception.Message
