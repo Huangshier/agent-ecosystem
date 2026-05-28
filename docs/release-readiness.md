@@ -198,7 +198,7 @@ been tagged and published as the current public release.
 GitHub Release `v0.4.5` has been published:
 https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.5
 
-Tag target: `<!-- maintainer: fill with #110 merge commit SHA after merge -->`.
+Tag target: PR #110 merge commit.
 
 ## Required Before Future Publishing
 

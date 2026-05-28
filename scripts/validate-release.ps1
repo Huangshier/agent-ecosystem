@@ -1542,7 +1542,11 @@ try {
         "release prep candidate",
         "not yet tagged",
         "not yet published",
-        "latest published public release"
+        "latest published public release",
+        "fill with #",
+        "to be filled",
+        "to be confirmed",
+        "maintainer:"
     )
     foreach ($relativePath in @($targetReleaseNotesPath, "docs/release-readiness.md")) {
         $text = [string]$alignmentFiles[$relativePath]
@@ -1933,7 +1937,7 @@ try {
         "maintenance / compatibility / governance",
         "Issue #102",
         "PR #104",
-        "PASS=52 FAIL=0 WARN=0 DEFERRED=0",
+        "PASS=53 FAIL=0 WARN=0 DEFERRED=0",
         "Upgrade / Usage Impact",
         "Risk / Rollback",
         "Maintainer Record",
@@ -1953,7 +1957,12 @@ try {
             "pending maintainer",
             "Hosted checks for the release-prep PR",
             "do not create the tag",
-            "Before a tag"
+            "Before a tag",
+            "fill with #",
+            "after merge",
+            "maintainer:",
+            "to be filled",
+            "to be confirmed"
         )
         $staleReleasePrepMatches = @($staleReleasePrepTokens | Where-Object { $releaseNotes -like "*$_*" })
         if ($staleReleasePrepMatches.Count -gt 0) {
