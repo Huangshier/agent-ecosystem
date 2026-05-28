@@ -140,6 +140,7 @@ tooling。当前不会额外启用 domain-pack content。生命周期和 profile
 - [Language policy](docs/language-policy.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
+- [Spec lifecycle](docs/spec-lifecycle.md)
 - [Shell strategy](docs/shell-strategy.md)
 - [Release notes](docs/releases/README.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)

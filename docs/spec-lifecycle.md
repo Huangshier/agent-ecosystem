@@ -18,8 +18,9 @@ area (the `- **Status**:` line near the top):
 | `Superseded` | Replaced by a newer spec or approach. Kept for traceability. |
 | `Deferred` | Accepted but intentionally postponed to a future version or milestone. |
 
-Use `Done` (not `Completed`) for finished work. One historical spec uses
-`Completed`; new work and updates should use `Done`.
+Use `Done` (not `Completed`) for finished work. One earlier spec used
+`Completed`; this PR normalizes that value. New work and updates should use
+`Done`.
 
 ## When to Keep a Completed Spec in Place
 
