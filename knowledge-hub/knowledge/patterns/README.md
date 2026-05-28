@@ -26,4 +26,7 @@ Recommended fields:
 ## Current Entries
 
 - [Context Gate to Spec to Validation Loop](context-gate-spec-validation-loop.md)
+- [Error Diagnosis Framing](error-diagnosis-framing.md)
+- [Issue Decomposition](issue-decomposition.md)
 - [Long Session Phase Split](long-session-phase-split.md)
+- [Staged Refactor Execution](staged-refactor-execution.md)
