@@ -1711,7 +1711,17 @@ try {
         Add-Check "v0.2.0 release notes" "FAIL" "Release notes are missing required v0.2.0 summary tokens." @($missingReleaseTokens)
     }
     else {
-        Add-Check "v0.2.0 release notes" "PASS" "v0.2.0 release notes summarize closeout features, validation expectation, and public boundary."
+        $staleReleaseBodyTokens = @(
+            "Status: release candidate",
+            "Expected local result for the release candidate"
+        )
+        $staleReleaseBodyMatches = @($staleReleaseBodyTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($staleReleaseBodyMatches.Count -gt 0) {
+            Add-Check "v0.2.0 release notes" "FAIL" "Release notes still contain stale release-candidate wording after publication." @($staleReleaseBodyMatches)
+        }
+        else {
+            Add-Check "v0.2.0 release notes" "PASS" "v0.2.0 release notes summarize closeout features, historical validation, and public boundary."
+        }
     }
 }
 catch {
@@ -1733,7 +1743,16 @@ try {
         Add-Check "v0.3.0 release notes" "FAIL" "Release notes are missing required v0.3.0 summary tokens." @($missingReleaseTokens)
     }
     else {
-        Add-Check "v0.3.0 release notes" "PASS" "v0.3.0 release notes summarize backlog remediation, issue fixes, validation expectation, and public boundary."
+        $staleReleaseBodyTokens = @(
+            "Expected local result for the release candidate"
+        )
+        $staleReleaseBodyMatches = @($staleReleaseBodyTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($staleReleaseBodyMatches.Count -gt 0) {
+            Add-Check "v0.3.0 release notes" "FAIL" "Release notes still contain stale release-candidate wording after publication." @($staleReleaseBodyMatches)
+        }
+        else {
+            Add-Check "v0.3.0 release notes" "PASS" "v0.3.0 release notes summarize backlog remediation, issue fixes, historical validation, and public boundary."
+        }
     }
 }
 catch {
@@ -1885,6 +1904,8 @@ try {
         "Published GitHub Release:",
         "Tag target: ``71fabb372a4cbc024f07c920a0c17b903a77afc2``",
         "Copyable GitHub Release Body",
+        "RELEASE_BODY_START",
+        "RELEASE_BODY_END",
         "English",
         "stabilization / docs / governance",
         "Issue #23",
@@ -1894,7 +1915,7 @@ try {
         "71fabb372a4cbc024f07c920a0c17b903a77afc2",
         "Upgrade / Usage Impact",
         "Risk / Rollback",
-        "Maintainer Record",
+        "Internal Release Record",
         "Release Boundary"
     )
     $missingReleaseTokens = @($releaseTokens | Where-Object { -not $releaseNotes.Contains($_) })
@@ -1909,7 +1930,14 @@ try {
             "not yet published",
             "Hosted checks for the release-prep PR",
             "do not create the tag",
-            "Before a tag"
+            "Before a tag",
+            "Maintainer Record",
+            "维护者记录",
+            "维护者建议",
+            "after merging",
+            "合并后",
+            "no additional commits required",
+            "无需额外提交"
         )
         $staleReleasePrepMatches = @($staleReleasePrepTokens | Where-Object { $releaseNotes -like "*$_*" })
         if ($staleReleasePrepMatches.Count -gt 0) {
@@ -1933,6 +1961,8 @@ try {
         "Published GitHub Release:",
         "Tag target:",
         "Copyable GitHub Release Body",
+        "RELEASE_BODY_START",
+        "RELEASE_BODY_END",
         "English",
         "maintenance / compatibility / governance",
         "Issue #102",
@@ -1940,7 +1970,7 @@ try {
         "PASS=53 FAIL=0 WARN=0 DEFERRED=0",
         "Upgrade / Usage Impact",
         "Risk / Rollback",
-        "Maintainer Record",
+        "Internal Release Record",
         "Release Boundary"
     )
     $missingReleaseTokens = @($releaseTokens | Where-Object { -not $releaseNotes.Contains($_) })
@@ -1960,6 +1990,12 @@ try {
             "Before a tag",
             "fill with #",
             "after merge",
+            "After merging",
+            "Maintainer Record",
+            "维护者记录",
+            "维护者建议",
+            "no additional commits required",
+            "无需额外提交",
             "maintainer:",
             "to be filled",
             "to be confirmed"
