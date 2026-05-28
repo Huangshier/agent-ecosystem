@@ -203,6 +203,42 @@ alignment:
 If alignment cannot be completed or validation fails, stop before tag creation
 and release publication.
 
+## GitHub Release Body Hygiene
+
+The GitHub Release body is public, final-state copy. It should describe what
+changed, validation, upgrade impact, known limitations, linked public work, and
+the public boundary. It must not contain maintainer-only workflow instructions,
+tag or publish directions, release-prep draft language, or candidate-state
+wording after publication.
+
+Release note files may keep internal release evidence, but that evidence must
+live outside the `Copyable GitHub Release Body` section. For release notes that
+combine public copy and internal evidence, wrap the copyable body with
+`<!-- RELEASE_BODY_START -->` and `<!-- RELEASE_BODY_END -->`, then place tag
+targets, validation run IDs, published URLs, or maintainer authorization notes
+under an `Internal Release Record` section after the end marker.
+
+Before publishing or editing a GitHub Release body, check the final body for
+these stale or internal-only phrases unless they appear in an explicitly
+historical, non-copyable internal record:
+
+- `release candidate`, `候选版本`, `发布候选版本`, `发布候选`
+- `release-prep`, `release-prep draft`, `发布草案`
+- `Maintainer Record`, `维护者记录`, `维护者建议`
+- `Merge-to-publish`
+- `after merging`, `合并后`
+- `create tag`, `创建 tag`
+- `publish GitHub Release`, `发布 GitHub Release`
+- `no additional commits required`, `无需额外提交`
+- `ready to publish`
+- `维护者确认前`, `维护者审核前`
+- `hosted checks 仍应通过`
+
+Body-only edits to existing GitHub Releases must be explicitly scoped as
+body-only. They must not alter tags, tag targets, release assets, release dates,
+latest/prerelease flags, repository settings, rulesets, secrets, or branch
+protection.
+
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
