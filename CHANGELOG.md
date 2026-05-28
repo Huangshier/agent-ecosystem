@@ -4,7 +4,20 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.4.4` release-prep candidate.
+- No unreleased public changes after the `v0.4.5` release.
+
+## v0.4.5 - 2026-05-29
+
+- Fixed issue triage label-sync to handle concurrent `issues` events
+  idempotently. (Issue #102, PR #104)
+- Aligned workflow-spec-lite validator with Simplified Chinese heading
+  anchors. (Issue #94, PR #105)
+- Fixed `validate_spec` UTF-8 no-BOM detection for zh-CN spec files.
+  (Issue #106, PR #107)
+- Added explicit minimal permissions to release-validation CI workflow.
+  (Issue #95, PR #108)
+- Added general bug report and feature request issue templates.
+  (Issue #99, PR #109)
 
 ## v0.4.4 - 2026-05-22 (release-prep candidate)
 

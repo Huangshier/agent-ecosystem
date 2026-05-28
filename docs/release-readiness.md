@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.4` published public release.
+Status: `v0.4.5` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -188,6 +188,17 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   https://github.com/Huangshier/agent-ecosystem/actions/runs/26269908157
 - GitHub Release `v0.4.4` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
+
+## v0.4.5 Published State
+
+Current `main` includes the post-`v0.4.4` maintenance / compatibility /
+governance changes summarized in `docs/releases/v0.4.5.md`. `v0.4.5` has
+been tagged and published as the current public release.
+
+GitHub Release `v0.4.5` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.5
+
+Tag target: PR #110 merge commit.
 
 ## Required Before Future Publishing
 
