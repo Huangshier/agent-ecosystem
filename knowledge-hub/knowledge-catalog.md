@@ -48,6 +48,21 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: large, restart-prone, or evidence-heavy work should be split into
     spec, implementation, and closeout phases.
+- [Staged Refactor Execution](knowledge/patterns/staged-refactor-execution.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: a large refactor needs to be broken into independent, reviewable
+    stages with per-stage validation and rollback boundaries.
+- [Issue Decomposition](knowledge/patterns/issue-decomposition.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: a complex issue or task spans multiple modules, concerns, or
+    review cycles and needs independent, verifiable sub-tasks.
+- [Error Diagnosis Framing](knowledge/patterns/error-diagnosis-framing.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: an agent encounters an error and needs to present it to the user
+    with structured context for actionable diagnosis.
 
 ### Standards
 
