@@ -2,7 +2,7 @@
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
-    [string]$TargetVersion = "v0.4.4",
+    [string]$TargetVersion = "v0.4.5",
     [switch]$Json
 )
 
@@ -45,7 +45,7 @@ $evidence = [ordered]@{
 
 $targetReleaseVersion = $TargetVersion.Trim()
 if ([string]::IsNullOrWhiteSpace($targetReleaseVersion)) {
-    $targetReleaseVersion = "v0.4.4"
+    $targetReleaseVersion = "v0.4.5"
 }
 if ($targetReleaseVersion -notmatch '^v\d+\.\d+\.\d+$') {
     throw "TargetVersion must look like vMAJOR.MINOR.PATCH."
@@ -178,6 +178,7 @@ $requiredFiles = @(
     "docs/releases/v0.4.2.md",
     "docs/releases/v0.4.3.md",
     "docs/releases/v0.4.4.md",
+    "docs/releases/v0.4.5.md",
     "knowledge-hub/knowledge-catalog.md",
     "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
     "skills/workflow-spec-lite/scripts/validate_spec.ps1",
@@ -1917,6 +1918,54 @@ try {
 }
 catch {
     Add-Check "v0.4.4 published release notes" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseNotes = Get-FileText -RelativePath "docs/releases/v0.4.5.md"
+    $releaseTokens = @(
+        "v0.4.5",
+        "Status: public release",
+        "GitHub Release title",
+        "Published GitHub Release:",
+        "Tag target:",
+        "Copyable GitHub Release Body",
+        "English",
+        "maintenance / compatibility / governance",
+        "Issue #102",
+        "PR #104",
+        "PASS=52 FAIL=0 WARN=0 DEFERRED=0",
+        "Upgrade / Usage Impact",
+        "Risk / Rollback",
+        "Maintainer Record",
+        "Release Boundary"
+    )
+    $missingReleaseTokens = @($releaseTokens | Where-Object { -not $releaseNotes.Contains($_) })
+    if ($missingReleaseTokens.Count -gt 0) {
+        Add-Check "v0.4.5 published release notes" "FAIL" "Release notes are missing required v0.4.5 published-release tokens." @($missingReleaseTokens)
+    }
+    else {
+        $staleReleasePrepTokens = @(
+            "release-prep draft",
+            "release-prep candidate",
+            "not yet tagged",
+            "not yet published",
+            "in preparation",
+            "pending maintainer",
+            "Hosted checks for the release-prep PR",
+            "do not create the tag",
+            "Before a tag"
+        )
+        $staleReleasePrepMatches = @($staleReleasePrepTokens | Where-Object { $releaseNotes -like "*$_*" })
+        if ($staleReleasePrepMatches.Count -gt 0) {
+            Add-Check "v0.4.5 published release notes" "FAIL" "Release notes still contain pre-publication wording after v0.4.5 publication." @($staleReleasePrepMatches)
+        }
+        else {
+            Add-Check "v0.4.5 published release notes" "PASS" "v0.4.5 release notes summarize published scope, validation evidence, usage impact, risk, and release boundary."
+        }
+    }
+}
+catch {
+    Add-Check "v0.4.5 published release notes" "FAIL" $_.Exception.Message
 }
 
 try {
