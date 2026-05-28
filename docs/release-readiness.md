@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.4` published public release.
+Status: `v0.4.5` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -189,21 +189,16 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - GitHub Release `v0.4.4` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
 
-## v0.4.5 Maintenance Preparation
+## v0.4.5 Published State
 
-`v0.4.5` is a maintenance / compatibility / governance patch release in
-preparation, packaging post-`v0.4.4` changes already merged to `main`:
+Current `main` includes the post-`v0.4.4` maintenance / compatibility /
+governance changes summarized in `docs/releases/v0.4.5.md`. `v0.4.5` has
+been tagged and published as the current public release.
 
-- Issue triage label-sync idempotency (#102 / PR #104).
-- Spec validator zh-CN anchor alignment (#94 / PR #105).
-- UTF-8 no-BOM validator handling (#106 / PR #107).
-- Release validation workflow explicit permissions (#95 / PR #108).
-- General bug and feature issue templates (#99 / PR #109).
+GitHub Release `v0.4.5` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.5
 
-`v0.4.4` remains the current published version. Publish-finalization for
-v0.4.5 is pending maintainer authorization.
-
-Release notes: `docs/releases/v0.4.5.md`.
+Tag target: `<!-- maintainer: fill with #110 merge commit SHA after merge -->`.
 
 ## Required Before Future Publishing
 

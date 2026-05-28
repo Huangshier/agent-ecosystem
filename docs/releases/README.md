@@ -1,6 +1,6 @@
 # Release Notes
 
-- [v0.4.5](v0.4.5.md) — in preparation
+- [v0.4.5](v0.4.5.md)
 - [v0.4.4](v0.4.4.md)
 - [v0.4.3](v0.4.3.md)
 - [v0.4.2](v0.4.2.md)

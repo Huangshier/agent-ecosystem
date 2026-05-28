@@ -4,9 +4,9 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.4.5` maintenance preparation.
+- No unreleased public changes after the `v0.4.5` release.
 
-## v0.4.5 - (in preparation)
+## v0.4.5 - 2026-05-29
 
 - Fixed issue triage label-sync to handle concurrent `issues` events
   idempotently. (Issue #102, PR #104)
