@@ -23,6 +23,12 @@ function Add-Finding {
     })
 }
 
+function Read-Utf8Text {
+    param([string]$Path)
+    $encoding = New-Object System.Text.UTF8Encoding($false, $true)
+    return [System.IO.File]::ReadAllText($Path, $encoding)
+}
+
 function Get-SectionBody {
     param(
         [string]$Text,
@@ -92,7 +98,7 @@ if (-not (Test-Path -LiteralPath $specFullPath)) {
     Add-Finding $findings "spec_missing" "Spec file does not exist: $specFullPath"
 }
 else {
-    $text = Get-Content -LiteralPath $specFullPath -Raw
+    $text = Read-Utf8Text -Path $specFullPath
 
     foreach ($fieldName in @("Title", "Slug", "Status", "Owner", "Updated")) {
         if (-not (Test-RequiredField -Text $text -FieldName $fieldName)) {
