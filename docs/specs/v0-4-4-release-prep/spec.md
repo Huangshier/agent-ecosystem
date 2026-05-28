@@ -2,7 +2,7 @@
 
 - **Title**: v0.4.4 Release Prep And Finalization Guardrail
 - **Slug**: v0-4-4-release-prep
-- **Status**: Completed
+- **Status**: Done
 - **Owner**: Codex
 - **Updated**: 2026-05-22
 
