@@ -4,7 +4,18 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.4.5` release.
+- No unreleased public changes after the `v0.4.6` release.
+
+## v0.4.6 - 2026-05-29
+
+- Added spec lifecycle and review status hygiene documentation, including
+  completed-spec status guidance and README navigation. (Issue #98, PR #111)
+- Added public-safe reusable knowledge patterns for staged refactor execution,
+  issue decomposition, and error diagnosis framing. (Issue #100, PR #112)
+- Separated public GitHub Release body copy from internal release records,
+  added explicit release body markers, cleaned stale candidate wording from
+  historical release notes, and hardened release validation against the
+  regression. (Issue #113, PR #114)
 
 ## v0.4.5 - 2026-05-29
 

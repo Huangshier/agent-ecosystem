@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.5` published public release.
+Status: `v0.4.6` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -14,12 +14,16 @@ record normalization, legacy template-path audit coverage, and existing project
 upgrade guidance. `v0.4.4` was published as a stabilization / docs / governance
 patch release for the post-`v0.4.3` guardrails, memory-language governance,
 Chinese homepage, domain-pack governance, and spec-state reconciliation work.
+`v0.4.5` packaged the issue triage label-sync, spec validator zh-CN anchor,
+UTF-8 no-BOM, release-validation permissions, and issue template fixes.
+`v0.4.6` packages spec lifecycle governance, public-safe reusable knowledge
+patterns, and release body hygiene.
 
 ## v0.4.4 Published State
 
 Current `main` includes the post-`v0.4.3` stabilization / docs / governance
 changes summarized in `docs/releases/v0.4.4.md`. `v0.4.4` has been tagged and
-published as the current public release.
+published as a public release.
 
 Published GitHub Release:
 https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
@@ -193,12 +197,26 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 
 Current `main` includes the post-`v0.4.4` maintenance / compatibility /
 governance changes summarized in `docs/releases/v0.4.5.md`. `v0.4.5` has
-been tagged and published as the current public release.
+been tagged and published as a public release.
 
 GitHub Release `v0.4.5` has been published:
 https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.5
 
 Tag target: PR #110 merge commit.
+
+## v0.4.6 Published State
+
+Current `main` includes the post-`v0.4.5` documentation / governance /
+release-hygiene changes summarized in `docs/releases/v0.4.6.md`. `v0.4.6` is
+the target of this publish-finalization alignment.
+
+GitHub Release `v0.4.6` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.6
+
+Tag target: merge commit for the `v0.4.6` publish-finalization PR.
+
+Local release validation for this alignment passed with
+`PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
 
 ## Required Before Future Publishing
 
@@ -313,5 +331,7 @@ The release validator now covers:
 - v0.4.3 release notes coverage
 - v0.4.4 published release notes coverage
 - publish-ready release metadata alignment coverage
+- v0.4.5 published release notes coverage
+- v0.4.6 published release notes coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage
