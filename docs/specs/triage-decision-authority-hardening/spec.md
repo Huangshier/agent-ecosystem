@@ -2,7 +2,7 @@
 
 - **Title**: Triage Decision Authority Hardening
 - **Slug**: triage-decision-authority-hardening
-- **Status**: Active
+- **Status**: Done
 - **Owner**: Codex + maintainer
 - **Updated**: 2026-06-02
 
@@ -76,7 +76,11 @@
 - Workflow file contains single-field parsing, legacy checklist compatibility, actor authority guard, and concurrency.
 - Issue template exposes a single normalized decision field.
 - Governance docs describe the authority boundary.
-- PR for #121 will be opened after the validated diff is committed and pushed.
+- PR #122 is open and ready for maintainer review:
+  <https://github.com/Huangshier/agent-ecosystem/pull/122>.
+- Issue #121 and PR #122 were created by `agent-ecosystem-bot[bot]`.
+- The branch was pushed with the maintainer-authenticated account after GitHub
+  rejected the bot push because the App lacks workflow-file write permission.
 
 ## 10. Loop Contract
 - Not applicable.
@@ -87,7 +91,7 @@
   - P01: Create accepted issue #121 and durable public work package.
   - P02: Implement template, workflow, governance docs, and release validation updates.
   - P03: Run local validation and fix in-scope failures.
-  - P04: Commit, push, open PR, mark ready for review, and stop before merge.
+  - P04: Commit, push, open PR, mark ready for review, and stop before merge. Completed.
 - **Continue rule**: Continue while changes remain within #121 scope, validation failures are explainable and fixable, and no repository settings, release, tag, or merge action is required.
 - **Stop rule**: Stop on scope drift, unrelated refactor pressure, skipped acceptance checks that cannot be honestly reported, missing push/PR permission after the authorized fallback, repository settings/access-control/ruleset/tag/release/merge requirements, or unresolved ambiguity about maintainer authority.
 - **State record**: This spec, `tasks.md`, and the scoped PR description.

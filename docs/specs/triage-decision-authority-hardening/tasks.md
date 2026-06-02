@@ -1,7 +1,7 @@
 # Task Plan
 
 - **Spec**: `docs/specs/triage-decision-authority-hardening/spec.md`
-- **Status**: Active
+- **Status**: Done
 - **Updated**: 2026-06-02
 
 ## Tasks
@@ -26,10 +26,10 @@
   - Validation: `git diff --check`; release validation with scratch root.
   - Notes: `git diff --check` passed; workflow YAML parsed; local Node harness covered parser/actor paths; release validation passed with `PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
 
-- [ ] T05: Publish PR and stop before merge
+- [x] T05: Publish PR and stop before merge
   - Scope: branch, commit, push, PR for #121.
   - Validation: PR exists and is ready for maintainer review.
-  - Notes: Prefer bot push/PR; use current authenticated maintainer identity if bot cannot push workflow changes.
+  - Notes: PR #122 is open and non-draft. Bot push failed because the App lacks workflow-file write permission, so the branch was pushed with the maintainer-authenticated account as authorized. PR author was verified as `agent-ecosystem-bot[bot]`.
 
 ## Task-to-Spec Notes
 - T02 and T03 map to P02.
@@ -59,9 +59,9 @@
   - Validation: `git diff --check`; release validation.
   - Continue / stop decision: Continue.
 
-- [ ] P04: Commit, push, open PR, mark ready for review, and stop before merge
+- [x] P04: Commit, push, open PR, mark ready for review, and stop before merge
   - Goal: Publish a reviewable PR for #121.
   - Inputs: Validated diff and authenticated GitHub access.
   - Outputs: Commit, branch push, PR URL.
-  - Validation: PR exists and is ready for maintainer review.
+  - Validation: PR #122 exists, targets `main`, is non-draft, and PR author is verified as `agent-ecosystem-bot[bot]`.
   - Continue / stop decision: Stop for maintainer review and merge decision.
