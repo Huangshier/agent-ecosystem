@@ -72,7 +72,7 @@
   - trusted bot legacy checklist parsing adds the mapped label;
   - untrusted actor changes no-op before parsing failures can mutate labels;
   - trusted actor invalid `Decision:` fails without mutation.
-- `pwsh -NoProfile -File scripts/validate-release.ps1 -ScratchRoot .runtime/validation/issue121-release-rerun` passed with `PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
+- `pwsh -NoProfile -File scripts/validate-release.ps1 -ScratchRoot .runtime/validation/issue121-after-pr-evidence-rerun` passed with `PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
 - Workflow file contains single-field parsing, legacy checklist compatibility, actor authority guard, and concurrency.
 - Issue template exposes a single normalized decision field.
 - Governance docs describe the authority boundary.

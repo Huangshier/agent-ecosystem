@@ -19,7 +19,7 @@
 - [x] T03: Update docs and release validation
   - Scope: `docs/agent-governance.md` and `scripts/validate-release.ps1`.
   - Validation: release validation checks the new workflow/template/doc authority model.
-  - Notes: The validator now checks expected single-field and actor-guard tokens and rejects legacy checkbox template tokens.
+  - Notes: The validator now checks expected single-field and actor-guard markers and rejects legacy checkbox template markers.
 
 - [x] T04: Run local validation
   - Scope: full changed worktree.
