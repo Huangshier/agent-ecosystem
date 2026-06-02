@@ -1598,6 +1598,12 @@ try {
             "contents: read",
             "source:agent",
             "Human Triage Decision",
+            "concurrency:",
+            "Decision:",
+            "legacy checklist",
+            "agent-ecosystem-bot[bot]",
+            "getCollaboratorPermissionLevel",
+            "Actor is not trusted",
             "triage:accepted",
             "triage:rejected",
             "triage:deferred",
@@ -1610,11 +1616,15 @@ try {
             "mirrors the explicit",
             "does not make triage decisions",
             "source:agent",
+            "trusted automation",
+            "maintainer-authorized",
+            "Decision: needs-human",
             "review:needs-human"
         )
         ".github/ISSUE_TEMPLATE/agent-candidate.md" = @(
             "issue triage label sync workflow",
-            "Leave only one checked"
+            "Decision: needs-human",
+            "Allowed values: accepted, rejected, deferred, needs-human"
         )
     }
 
@@ -1626,17 +1636,43 @@ try {
             default { $issueTemplate }
         }
         foreach ($token in $triageExpectations[$relativePath]) {
-            if ($text -notlike ("*{0}*" -f $token)) {
+            if (-not $text.Contains($token)) {
                 $triageMissing.Add("$relativePath missing token: $token")
             }
         }
     }
 
-    if ($triageMissing.Count -gt 0) {
-        Add-Check "issue triage label sync" "FAIL" "Issue triage label sync workflow or docs are incomplete." @($triageMissing.ToArray())
+    $triageUnexpected = New-Object 'System.Collections.Generic.List[string]'
+    $triageUnexpectedTokens = [ordered]@{
+        ".github/workflows/issue-triage-label-sync.yml" = @(
+            "- unlabeled"
+        )
+        ".github/ISSUE_TEMPLATE/agent-candidate.md" = @(
+            "- [ ] Accepted",
+            "- [ ] Rejected",
+            "- [ ] Deferred",
+            "- [ ] Needs human investigation",
+            "Leave only one checked"
+        )
+    }
+    foreach ($relativePath in $triageUnexpectedTokens.Keys) {
+        $text = switch ($relativePath) {
+            ".github/workflows/issue-triage-label-sync.yml" { $triageWorkflow }
+            default { $issueTemplate }
+        }
+        foreach ($token in $triageUnexpectedTokens[$relativePath]) {
+            if ($text.Contains($token)) {
+                $triageUnexpected.Add("$relativePath still contains legacy token: $token")
+            }
+        }
+    }
+
+    if ($triageMissing.Count -gt 0 -or $triageUnexpected.Count -gt 0) {
+        $triageFindings = @($triageMissing.ToArray()) + @($triageUnexpected.ToArray())
+        Add-Check "issue triage label sync" "FAIL" "Issue triage label sync workflow or docs are incomplete." $triageFindings
     }
     else {
-        Add-Check "issue triage label sync" "PASS" "Agent candidate issue triage decisions are mirrored to labels by a scoped workflow." ([ordered]@{
+        Add-Check "issue triage label sync" "PASS" "Authorized agent candidate issue triage decisions are mirrored to labels by a scoped workflow." ([ordered]@{
             workflow = ".github/workflows/issue-triage-label-sync.yml"
             docs = @("docs/agent-governance.md", ".github/ISSUE_TEMPLATE/agent-candidate.md")
         })

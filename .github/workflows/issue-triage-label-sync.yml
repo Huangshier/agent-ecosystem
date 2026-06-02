@@ -6,7 +6,6 @@ on:
       - opened
       - edited
       - labeled
-      - unlabeled
 
 permissions:
   contents: read
@@ -15,11 +14,16 @@ permissions:
 jobs:
   sync:
     name: Sync human triage labels
-    if: contains(github.event.issue.labels.*.name, 'source:agent')
+    if: >-
+      contains(github.event.issue.labels.*.name, 'source:agent') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'source:agent')
     runs-on: ubuntu-latest
+    concurrency:
+      group: issue-triage-label-sync-${{ github.event.issue.number }}
+      cancel-in-progress: true
 
     steps:
-      - name: Mirror checklist decision to labels
+      - name: Mirror authorized decision to labels
         uses: actions/github-script@v8
         with:
           script: |
@@ -34,24 +38,137 @@ jobs:
 
             const section = sectionMatch[1];
             const decisions = [
-              { key: "accepted", label: "triage:accepted", pattern: /-\s*\[[xX]\]\s*Accepted\b/ },
-              { key: "rejected", label: "triage:rejected", pattern: /-\s*\[[xX]\]\s*Rejected\b/ },
-              { key: "deferred", label: "triage:deferred", pattern: /-\s*\[[xX]\]\s*Deferred\b/ },
-              { key: "needs-human", label: "triage:needs-human", pattern: /-\s*\[[xX]\]\s*Needs human investigation\b/ },
+              { key: "accepted", label: "triage:accepted", pattern: /^\s*-\s*\[[xX]\]\s*Accepted\b/im },
+              { key: "rejected", label: "triage:rejected", pattern: /^\s*-\s*\[[xX]\]\s*Rejected\b/im },
+              { key: "deferred", label: "triage:deferred", pattern: /^\s*-\s*\[[xX]\]\s*Deferred\b/im },
+              { key: "needs-human", label: "triage:needs-human", pattern: /^\s*-\s*\[[xX]\]\s*Needs human investigation\b/im },
             ];
+            const decisionLabels = new Map(decisions.map((decision) => [decision.key, decision.label]));
 
-            const checked = decisions.filter((decision) => decision.pattern.test(section));
-            if (checked.length === 0) {
-              core.info("No checked human triage decision found; leaving labels unchanged.");
+            async function getActorAuthority() {
+              const sender = context.payload.sender || {};
+              const login = sender.login || "";
+              const type = sender.type || "";
+              const trustedBotLogins = new Set(["agent-ecosystem-bot[bot]"]);
+
+              if (trustedBotLogins.has(login)) {
+                return { trusted: true, reason: `trusted automation ${login}` };
+              }
+
+              if (!login) {
+                return { trusted: false, reason: "missing event sender" };
+              }
+
+              if (type === "Bot") {
+                return { trusted: false, reason: `untrusted bot ${login}` };
+              }
+
+              try {
+                const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  username: login,
+                });
+                const permission = String(response.data.permission || "").toLowerCase();
+                const role = String(response.data.role_name || "").toLowerCase();
+                const trustedValues = new Set(["admin", "maintain", "write", "triage"]);
+
+                if (trustedValues.has(permission) || trustedValues.has(role)) {
+                  return { trusted: true, reason: `${login} has repository role ${role || permission}` };
+                }
+
+                return { trusted: false, reason: `${login} has repository role ${role || permission || "unknown"}` };
+              } catch (error) {
+                if (error.status === 404) {
+                  return { trusted: false, reason: `${login} is not a repository collaborator` };
+                }
+                throw error;
+              }
+            }
+
+            function checkedLegacyDecisions() {
+              return decisions.filter((decision) => decision.pattern.test(section));
+            }
+
+            function parseHumanDecision() {
+              const decisionMatches = [...section.matchAll(/^\s*Decision:\s*([^\r\n]*)\s*$/gim)];
+              const checked = checkedLegacyDecisions();
+
+              if (decisionMatches.length > 1) {
+                return {
+                  ok: false,
+                  error: "Multiple Human Triage Decision fields are present. Please leave exactly one Decision: field.",
+                };
+              }
+
+              if (decisionMatches.length === 1) {
+                if (checked.length > 0) {
+                  return {
+                    ok: false,
+                    error: "Human Triage Decision mixes the Decision: field with legacy checked checklist items. Please use only one decision format.",
+                  };
+                }
+
+                const key = decisionMatches[0][1].trim().toLowerCase();
+                if (!key) {
+                  return {
+                    ok: true,
+                    empty: true,
+                    message: "Empty Human Triage Decision field found; leaving labels unchanged.",
+                  };
+                }
+
+                if (!decisionLabels.has(key)) {
+                  return {
+                    ok: false,
+                    error: `Invalid Human Triage Decision '${key}'. Allowed values: ${[...decisionLabels.keys()].join(", ")}.`,
+                  };
+                }
+
+                return { ok: true, key, label: decisionLabels.get(key), source: "Decision field" };
+              }
+
+              if (checked.length === 0) {
+                return {
+                  ok: true,
+                  empty: true,
+                  message: "No Human Triage Decision field or checked legacy checklist decision found; leaving labels unchanged.",
+                };
+              }
+
+              if (checked.length > 1) {
+                return {
+                  ok: false,
+                  error: `Multiple legacy human triage decisions are checked: ${checked.map((item) => item.key).join(", ")}. Please leave exactly one checked decision or migrate to Decision:.`,
+                };
+              }
+
+              return {
+                ok: true,
+                key: checked[0].key,
+                label: checked[0].label,
+                source: "legacy checklist",
+              };
+            }
+
+            const authority = await getActorAuthority();
+            if (!authority.trusted) {
+              core.warning(`Actor is not trusted for triage label synchronization (${authority.reason}); leaving labels unchanged.`);
+              return;
+            }
+            core.info(`Actor authorized for triage label synchronization: ${authority.reason}.`);
+
+            const parsed = parseHumanDecision();
+            if (!parsed.ok) {
+              core.setFailed(parsed.error);
+              return;
+            }
+            if (parsed.empty) {
+              core.info(parsed.message);
               return;
             }
 
-            if (checked.length > 1) {
-              core.setFailed(`Multiple human triage decisions are checked: ${checked.map((item) => item.key).join(", ")}. Please leave exactly one checked decision.`);
-              return;
-            }
-
-            const desired = checked[0].label;
+            const desired = parsed.label;
             const currentLabels = issue.labels.map((label) => label.name);
             const labelsToRemove = decisions
               .map((decision) => decision.label)
@@ -87,7 +204,7 @@ jobs:
                 issue_number: issue.number,
                 labels: [desired],
               });
-              core.info(`Added label: ${desired}`);
+              core.info(`Added label from ${parsed.source}: ${desired}`);
             } else {
-              core.info(`Desired label already present: ${desired}`);
+              core.info(`Desired label already present from ${parsed.source}: ${desired}`);
             }

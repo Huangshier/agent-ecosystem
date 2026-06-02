@@ -45,11 +45,10 @@ assignees: ""
 
 ## Human Triage Decision
 
-<!-- The issue triage label sync workflow mirrors exactly one checked decision into triage labels. Leave only one checked. -->
+<!-- The issue triage label sync workflow mirrors this normalized field into triage labels only for trusted maintainers or maintainer-authorized automation. -->
 
-- [ ] Accepted
-- [ ] Rejected
-- [ ] Deferred
-- [ ] Needs human investigation
+Decision: needs-human
+
+Allowed values: accepted, rejected, deferred, needs-human
 
 Decision notes:

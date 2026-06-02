@@ -78,22 +78,36 @@ justifies them.
 ## Issue Triage Label Sync
 
 The `Issue triage label sync` workflow mirrors the explicit
-`Human Triage Decision` checklist in agent candidate issues into triage labels.
-It does not make triage decisions. A maintainer records the decision in the
-issue body, and automation keeps metadata consistent.
+`Human Triage Decision` field in agent candidate issues into triage labels. It
+does not make triage decisions. A maintainer records the decision in the issue
+body, and automation keeps metadata consistent.
 
-The workflow only runs for issues labeled `source:agent`. When exactly one
-decision is checked:
+New agent candidate issues should use a single normalized field:
 
-- `Accepted` adds `triage:accepted`.
-- `Rejected` adds `triage:rejected`.
-- `Deferred` adds `triage:deferred`.
-- `Needs human investigation` adds `triage:needs-human`.
+```text
+Decision: needs-human
+```
+
+Allowed values are `accepted`, `rejected`, `deferred`, and `needs-human`.
+Existing checklist-based issues remain supported as a legacy transition path
+when no `Decision:` field is present.
+
+The workflow only runs for issues labeled `source:agent`, and it only mutates
+labels when the event sender is trusted automation or has maintainer-authorized
+repository access. Untrusted actors may edit issue text, but their edits do not
+cause `triage:*` label changes.
+
+When exactly one valid decision is recorded:
+
+- `accepted` adds `triage:accepted`.
+- `rejected` adds `triage:rejected`.
+- `deferred` adds `triage:deferred`.
+- `needs-human` adds `triage:needs-human`.
 
 The workflow removes conflicting `triage:*` labels and stale issue-level
-`review:needs-human` after a clear decision is recorded. If multiple decisions
-are checked, it fails without changing labels so the maintainer can correct the
-issue body.
+`review:needs-human` after a clear, authorized decision is recorded. If a
+trusted actor records an invalid or ambiguous decision, the workflow fails
+without changing labels so the issue body can be corrected.
 
 ## Issue Requirements
 
