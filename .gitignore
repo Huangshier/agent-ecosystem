@@ -11,6 +11,10 @@ tmp/
 /.agents/_backup/
 /.agents/upgrade/
 
+# Public repository maintenance uses GitHub issues and PR bodies.
+# Target-project examples and templates under non-root paths remain tracked.
+/docs/specs/
+
 # Local migration notes that do not belong in the public repository
 docs/migration/local-*.md
 docs/migration/private/

@@ -83,8 +83,9 @@ For an existing project, treat bootstrap as a conservative refresh:
 ## 3. Use The Workflow Kernel
 
 - Start non-trivial work with `project-context-gate`.
-- Use `workflow-spec-lite` for work that needs durable goals, non-goals,
-  acceptance evidence, risks, or multi-phase execution.
+- Optionally use `workflow-spec-lite` in the target project for work that needs
+  durable goals, non-goals, acceptance evidence, risks, or multi-phase
+  execution.
 - Use `memory-governance` to keep `.agents` files small and route durable
   lessons into `.agents/context/`.
 - Use the public `knowledge-hub/knowledge-catalog.md` before opening individual
@@ -94,9 +95,14 @@ For an existing project, treat bootstrap as a conservative refresh:
 
 - Public source: reusable kernel and public-safe knowledge.
 - Runtime: generated install under `$HOME/.agents` or another target.
-- Project local: `.agents/` and `docs/specs/` inside the target project.
+- Project local: `.agents/` and optional `docs/specs/` inside the target
+  project.
 - Private overlay: optional private profiles, skills, and knowledge outside this
   public repository.
+
+This public repository itself uses GitHub issues and pull request bodies as the
+maintenance record. Do not copy its historical root `docs/specs/**` work-package
+pattern into public maintenance by default.
 
 Do not copy the public tree into a private overlay. Add only private increments.
 

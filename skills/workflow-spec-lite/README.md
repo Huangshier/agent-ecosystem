@@ -4,7 +4,11 @@ Lightweight spec-first workflow for non-trivial work. Create just enough structu
 
 ## Why
 
-When tackling non-trivial tasks - features spanning multiple files, research threads, refactors, or debugging efforts - it is easy for goals, constraints, and acceptance criteria to get lost in conversation. This skill ensures that durable work intent is captured in project documentation, not just in ephemeral agent memory.
+When tackling non-trivial tasks - features spanning multiple files, research threads, refactors, or debugging efforts - it is easy for goals, constraints, and acceptance criteria to get lost in conversation. This skill ensures that durable work intent is captured in target-project documentation, not just in ephemeral agent memory.
+
+In the public `agent-ecosystem` source repository, maintenance issues and pull
+request bodies are the canonical record. Do not use this skill to create root
+`docs/specs/**` work packages for public repository maintenance.
 
 ## How It Works
 
@@ -13,8 +17,8 @@ The skill routes incoming work into three complexity tiers:
 | Route | When | Output |
 |-------|------|--------|
 | **Quick** | Single file, clear target, obvious validation | No spec file - just execute |
-| **Standard** | Multiple files, constraints need writing down, may span sessions | `docs/specs/<slug>/spec.md` |
-| **Deep** | Multi-stage, cross-module, research + implementation, needs review/handoff | `docs/specs/<slug>/spec.md` + `docs/specs/<slug>/tasks.md` |
+| **Standard** | Multiple files, constraints need writing down, may span sessions | Target-project `docs/specs/<slug>/spec.md` |
+| **Deep** | Multi-stage, cross-module, research + implementation, needs review/handoff | Target-project `docs/specs/<slug>/spec.md` + `docs/specs/<slug>/tasks.md` |
 
 ## Output Structure
 

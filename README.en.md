@@ -14,15 +14,16 @@ reusable knowledge.
 
 It is not a demand that every project adopt the same process. Use the public
 kernel as a stable starting point, then adapt project-local `.agents/` memory,
-`docs/specs/` work packages, domain knowledge, and custom skills to fit the
-project.
+domain knowledge, and custom skills to fit the project. Target projects may
+also keep local `docs/specs/` work packages when complex work needs durable
+scope and acceptance evidence across sessions.
 
 ## Who It Is For
 
 - Maintainers who want Codex or other coding agents to load project rules,
   retain context, and hand off reviewable work more reliably.
-- Teams that need durable `docs/specs/` work packages instead of ephemeral chat
-  plans.
+- Teams that need optional durable local work packages instead of ephemeral chat
+  plans for complex work.
 - Projects that want a layered model for memory, lessons, and cross-project
   knowledge.
 - Users who want PowerShell-first installation, validation, and refresh tooling
@@ -41,7 +42,7 @@ project.
 
 1. Install a runtime under `$HOME/.agents` or another target directory.
 2. Bootstrap a project with `project-bootstrap` to create project-level
-   `AGENTS.md`, `.agents/`, and `docs/specs/` scaffolds.
+   `AGENTS.md`, `.agents/`, and optional target-project spec scaffolds.
 3. Start non-trivial work with `project-context-gate` so the agent loads
    instructions, hot memory, active specs, and relevant context progressively.
 4. Use `workflow-spec-lite` to capture goals, non-goals, constraints, risks, and
@@ -82,8 +83,10 @@ Run the context gate before project work:
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
 ```
 
-Then ask the agent to use `workflow-spec-lite` for non-trivial work so it
-creates `docs/specs/<slug>/spec.md` before implementation and validation.
+For complex work that should keep durable scope and acceptance evidence across
+sessions, ask the agent to use `workflow-spec-lite` so it creates a
+target-project-local `docs/specs/<slug>/spec.md` before implementation and
+validation.
 
 On non-Windows systems, or when PowerShell 7+ is already available, replace
 `powershell -NoProfile -ExecutionPolicy Bypass -File` with
@@ -100,7 +103,8 @@ In a project, bootstrap usually creates or maintains:
 
 - `AGENTS.md`: project-level agent entrypoint and fallback instructions.
 - `.agents/`: local runtime memory, context indexes, command cards, and lessons.
-- `docs/specs/`: durable work packages, task lists, and spec templates.
+- `docs/specs/`: optional target-project work packages, task lists, and spec
+  templates.
 
 Each project can choose its own project memory language. Commands, paths, APIs,
 filenames, code symbols, and raw error text may stay in their original form.
@@ -110,7 +114,8 @@ filenames, code symbols, and raw error text may stay in their original form.
 - Public source: this repository, containing the public-safe kernel, scripts,
   templates, and docs.
 - Runtime layer: generated install under `$HOME/.agents` or another target.
-- Project local layer: each target project's `.agents/` and `docs/specs/`.
+- Project local layer: each target project's `.agents/`, plus optional
+  `docs/specs/`.
 - Private overlay: optional private profiles, skills, knowledge, and migration
   records outside the public repository.
 
@@ -140,16 +145,21 @@ lifecycle and profile boundary.
 
 ## Documentation
 
+User adoption paths:
+
 - [Architecture](docs/architecture.md)
-- [Agent governance](docs/agent-governance.md)
-- [Domain pack governance](docs/domain-pack-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Existing project upgrade path](docs/existing-project-upgrade.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Language policy](docs/language-policy.md)
+
+Maintainer and advanced references:
+
+- [Agent governance](docs/agent-governance.md)
+- [Domain pack governance](docs/domain-pack-governance.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
-- [Spec lifecycle](docs/spec-lifecycle.md)
+- [Target-project spec lifecycle](docs/spec-lifecycle.md)
 - [Shell strategy](docs/shell-strategy.md)
 - [Release notes](docs/releases/README.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)

@@ -1,6 +1,6 @@
 ---
 name: workflow-spec-lite
-description: Lightweight spec-first workflow for non-trivial work. Use when starting a new feature, research thread, refactor, debugging effort, reverse-engineering task, or other implementation work where the goal, constraints, approach, or acceptance criteria should be made explicit before execution. Loads project context first, routes work as quick, standard, or deep, and writes project docs under docs/specs.
+description: Lightweight spec-first workflow for non-trivial target-project work. Use when starting a new feature, research thread, refactor, debugging effort, reverse-engineering task, or other implementation work where the goal, constraints, approach, or acceptance criteria should be made explicit before execution. Loads project context first, routes work as quick, standard, or deep, and writes target-project docs under docs/specs.
 category: kernel
 stability: stable
 scope: cross-project
@@ -29,13 +29,17 @@ Do not use this skill for:
 - pure memory cleanup tasks already covered by `memory-governance`
 
 ## Output Paths
-Write long-lived project artifacts under:
+Write long-lived target-project artifacts under:
 - `docs/specs/<slug>/spec.md`
 - `docs/specs/<slug>/tasks.md`
 
 Do not create `docs/specs/<slug>/plan.md`.
 
 `.agents/plan.md` remains session-local and should only point to the active spec/task, not duplicate their full content.
+
+When maintaining the public `agent-ecosystem` source repository itself, do not
+create root `docs/specs/**` work packages. Use the accepted GitHub issue and
+pull request body as the durable public maintenance record.
 
 ## Project Context Gate
 Before planning or implementing a non-trivial repository task, run a project context gate.

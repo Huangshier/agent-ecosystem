@@ -14,14 +14,15 @@ agent 协作中的项目记忆、上下文加载、轻量规格、记忆维护�
 稳定的工程习惯。
 
 它不是把每个项目都改造成同一种流程，而是提供一个 public-safe kernel。团队
-可以从这个 kernel 开始，再把自己的 `.agents/` 记忆、`docs/specs/` 工作包、
-领域知识和自定义 skills 叠加到项目本地。
+可以从这个 kernel 开始，再把自己的 `.agents/` 记忆、领域知识和自定义 skills
+叠加到项目本地；复杂任务需要跨会话保留时，也可以在目标项目本地使用
+`docs/specs/` 工作包。
 
 ## 适合谁
 
 - 想让 Codex 或其他 coding agents 更可靠地读项目规则、记住上下文、交付可复核
   工作的维护者。
-- 需要把 agent 会话中的临时计划沉淀为长期 `docs/specs/` 工作包的团队。
+- 需要在复杂任务中把 agent 会话计划可选沉淀为长期本地工作包的团队。
 - 希望把项目经验、踩坑记录和跨项目知识分层管理的人。
 - 想用 PowerShell-first 脚本安装、验证、刷新 workflow kernel 的项目。
 
@@ -37,8 +38,8 @@ agent 协作中的项目记忆、上下文加载、轻量规格、记忆维护�
 ## 核心工作流
 
 1. 安装 runtime：把公开 Workflow Kernel 安装到 `$HOME/.agents` 或指定目录。
-2. 初始化项目：用 `project-bootstrap` 生成项目级 `AGENTS.md`、`.agents/` 和
-   `docs/specs/` 骨架。
+2. 初始化项目：用 `project-bootstrap` 生成项目级 `AGENTS.md`、`.agents/`，以及
+   目标项目可选使用的 spec 模板骨架。
 3. 进入任务：用 `project-context-gate` 渐进读取项目指令、热记忆、active specs
    和相关上下文。
 4. 固化意图：用 `workflow-spec-lite` 为非平凡工作建立轻量 spec，记录目标、非目标、
@@ -78,8 +79,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-boo
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
 ```
 
-然后让 agent 使用 `workflow-spec-lite` 为非平凡任务建立
-`docs/specs/<slug>/spec.md`，再执行实现和验证。
+对于需要跨会话保留范围和验收的复杂任务，可以让 agent 使用
+`workflow-spec-lite` 在目标项目本地建立 `docs/specs/<slug>/spec.md`，再执行实现
+和验证。
 
 非 Windows 系统，或已经安装 PowerShell 7+ 时，可以把
 `powershell -NoProfile -ExecutionPolicy Bypass -File` 换成
@@ -94,7 +96,7 @@ manifest 可能包含本机绝对路径，不应提交到项目仓库。
 
 - `AGENTS.md`：项目级 agent 入口和 fallback 指令。
 - `.agents/`：本地运行态记忆、上下文索引、命令卡和经验记录。
-- `docs/specs/`：跨会话保留的工作包、任务清单和 spec 模板。
+- `docs/specs/`：目标项目可选的跨会话工作包、任务清单和 spec 模板。
 
 每个项目可以选择自己的项目记忆语言。命令、路径、API、文件名、代码符号和原始错误文本
 可以保留原文。
@@ -103,7 +105,7 @@ manifest 可能包含本机绝对路径，不应提交到项目仓库。
 
 - Public source：本仓库，保存 public-safe kernel、脚本、模板和文档。
 - Runtime layer：安装到 `$HOME/.agents` 或其他目标目录的可执行工作流层。
-- Project local layer：目标项目自己的 `.agents/` 和 `docs/specs/`。
+- Project local layer：目标项目自己的 `.agents/`，以及可选的 `docs/specs/`。
 - Private overlay：可选的私有 profiles、skills、knowledge 和迁移记录，放在公开仓库之外。
 
 ## Profiles
@@ -131,16 +133,21 @@ tooling。当前不会额外启用 domain-pack content。生命周期和 profile
 
 ## 文档导航
 
+用户采用路径：
+
 - [Architecture](docs/architecture.md)
-- [Agent governance](docs/agent-governance.md)
-- [Domain pack governance](docs/domain-pack-governance.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Existing project upgrade path](docs/existing-project-upgrade.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Language policy](docs/language-policy.md)
+
+维护者和高级参考：
+
+- [Agent governance](docs/agent-governance.md)
+- [Domain pack governance](docs/domain-pack-governance.md)
 - [Release process](docs/release-process.md)
 - [Release readiness](docs/release-readiness.md)
-- [Spec lifecycle](docs/spec-lifecycle.md)
+- [Target-project spec lifecycle](docs/spec-lifecycle.md)
 - [Shell strategy](docs/shell-strategy.md)
 - [Release notes](docs/releases/README.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
