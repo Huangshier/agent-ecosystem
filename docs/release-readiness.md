@@ -19,6 +19,14 @@ UTF-8 no-BOM, release-validation permissions, and issue template fixes.
 `v0.4.6` packages spec lifecycle governance, public-safe reusable knowledge
 patterns, and release body hygiene.
 
+## v0.5.0 Planning Scope
+
+The active v0.5.0 planning scope is the stabilization-first maintenance
+sequence in [v0.5.0 Maintenance Scope](roadmap/v0.5.0-maintenance-scope.md).
+That scope note defines issue ordering before any v0.5.0 implementation PRs
+start. It is not a release candidate, publish-finalization record, tag plan, or
+GitHub Release authorization.
+
 ## v0.4.4 Published State
 
 Current `main` includes the post-`v0.4.3` stabilization / docs / governance
