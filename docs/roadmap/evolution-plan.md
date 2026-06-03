@@ -45,8 +45,8 @@ private-overlay/
 - Knowledge Hub: cross-project templates, experience, patterns, and standards.
 - Domain Packs: optional domain-specific knowledge or skills after repeated use
   proves they are stable.
-- Project Overlay: project-local `.agents/` memory and `docs/specs/` work
-  packages.
+- Project Overlay: project-local `.agents/` memory and optional `docs/specs/`
+  work packages.
 
 ## First Public Release
 
