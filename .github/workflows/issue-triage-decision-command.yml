@@ -1,0 +1,33 @@
+name: Issue triage decision command
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  command:
+    name: Apply authorized decision command
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.state == 'open' &&
+      contains(github.event.issue.labels.*.name, 'source:agent')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: issue-triage-decision-command-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Check out workflow helper
+        uses: actions/checkout@v6
+
+      - name: Apply maintainer decision command
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const command = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/issue-triage-decision-command.js`);
+            await command.run({ github, context, core });
