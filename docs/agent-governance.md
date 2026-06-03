@@ -109,6 +109,37 @@ The workflow removes conflicting `triage:*` labels and stale issue-level
 trusted actor records an invalid or ambiguous decision, the workflow fails
 without changing labels so the issue body can be corrected.
 
+## Issue Triage Decision Commands
+
+Maintainers can also record an agent candidate issue decision with an exact
+comment command instead of editing the issue body directly:
+
+```text
+/decision accepted
+/decision rejected
+/decision deferred
+/decision needs-human
+```
+
+The `/accept` alias is supported as a shortcut for `/decision accepted`.
+
+These commands are only decision-entry shortcuts. They do not implement the
+issue, create branches or pull requests, create sub-issues, publish releases,
+or infer decisions from ordinary prose.
+
+The command workflow only operates on open issues labeled `source:agent` and
+ignores pull request comments. It mutates issue bodies only when the commenter
+is trusted automation or has repository `admin`, `maintain`, or `write`
+authority. The narrower command authority is intentional because comment
+commands update the `Decision:` field itself, not only labels.
+
+When an authorized command is accepted, automation updates the issue body's
+`Decision:` field and `Decision notes:` line, then converges `triage:*` labels
+from that updated decision in the same workflow run. The body decision remains
+the source of truth. The same-workflow label convergence is required because
+workflow-created issue body edits do not create a follow-up `issues: edited`
+workflow run with the repository `GITHUB_TOKEN`.
+
 ## Issue Requirements
 
 Agent candidate issues should include:

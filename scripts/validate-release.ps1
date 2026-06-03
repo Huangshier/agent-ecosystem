@@ -1589,6 +1589,9 @@ catch {
 
 try {
     $triageWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-label-sync.yml"
+    $decisionCommandWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-decision-command.yml"
+    $decisionCommandHelper = Get-FileText -RelativePath ".github/scripts/issue-triage-decision-command.js"
+    $decisionCommandTest = Get-FileText -RelativePath "scripts/test-issue-triage-decision-command.ps1"
     $governance = Get-FileText -RelativePath "docs/agent-governance.md"
     $issueTemplate = Get-FileText -RelativePath ".github/ISSUE_TEMPLATE/agent-candidate.md"
     $triageExpectations = [ordered]@{
@@ -1611,14 +1614,50 @@ try {
             "review:needs-human",
             "core.setFailed"
         )
+        ".github/workflows/issue-triage-decision-command.yml" = @(
+            "issue_comment:",
+            "issues: write",
+            "contents: read",
+            "source:agent",
+            "pull_request == null",
+            "concurrency:",
+            "actions/checkout@v6",
+            "actions/github-script@v8",
+            "issue-triage-decision-command.js"
+        )
+        ".github/scripts/issue-triage-decision-command.js" = @(
+            "parseDecisionCommand",
+            "/decision accepted",
+            "/accept",
+            "TRUSTED_REPOSITORY_ROLES",
+            '"admin", "maintain", "write"',
+            "getCollaboratorPermissionLevel",
+            "updateDecisionInBody",
+            "convergeTriageLabels",
+            "review:needs-human",
+            "Pull request comments are ignored"
+        )
+        "scripts/test-issue-triage-decision-command.ps1" = @(
+            "/decision accepted",
+            "/decision maybe",
+            'permission: "triage"',
+            "pull_request",
+            "triage:accepted",
+            "triage:needs-human"
+        )
         "docs/agent-governance.md" = @(
             "Issue Triage Label Sync",
+            "Issue Triage Decision Commands",
             "mirrors the explicit",
             "does not make triage decisions",
             "source:agent",
             "trusted automation",
             "maintainer-authorized",
             "Decision: needs-human",
+            "/decision accepted",
+            "admin",
+            "maintain",
+            "write",
             "review:needs-human"
         )
         ".github/ISSUE_TEMPLATE/agent-candidate.md" = @(
@@ -1632,6 +1671,9 @@ try {
     foreach ($relativePath in $triageExpectations.Keys) {
         $text = switch ($relativePath) {
             ".github/workflows/issue-triage-label-sync.yml" { $triageWorkflow }
+            ".github/workflows/issue-triage-decision-command.yml" { $decisionCommandWorkflow }
+            ".github/scripts/issue-triage-decision-command.js" { $decisionCommandHelper }
+            "scripts/test-issue-triage-decision-command.ps1" { $decisionCommandTest }
             "docs/agent-governance.md" { $governance }
             default { $issueTemplate }
         }
@@ -1672,8 +1714,16 @@ try {
         Add-Check "issue triage label sync" "FAIL" "Issue triage label sync workflow or docs are incomplete." $triageFindings
     }
     else {
+        $decisionCommandTestScript = Join-PathParts $repoRoot "scripts" "test-issue-triage-decision-command.ps1"
+        $decisionCommandTestResult = & $decisionCommandTestScript -RepoRoot $repoRoot -Json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0) {
+            throw "Issue triage decision command tests exited with code $LASTEXITCODE."
+        }
         Add-Check "issue triage label sync" "PASS" "Authorized agent candidate issue triage decisions are mirrored to labels by a scoped workflow." ([ordered]@{
             workflow = ".github/workflows/issue-triage-label-sync.yml"
+            command_workflow = ".github/workflows/issue-triage-decision-command.yml"
+            command_helper = ".github/scripts/issue-triage-decision-command.js"
+            command_test = $decisionCommandTestResult
             docs = @("docs/agent-governance.md", ".github/ISSUE_TEMPLATE/agent-candidate.md")
         })
     }
