@@ -63,6 +63,10 @@ function makeCore() {
   };
 }
 
+function countOccurrences(text, pattern) {
+  return (String(text).match(pattern) || []).length;
+}
+
 async function runScenario({ commentBody, issue, sender, permission }) {
   const calls = [];
   const github = {
@@ -136,13 +140,46 @@ async function runScenario({ commentBody, issue, sender, permission }) {
   });
   assert.strictEqual(updated.changed, true);
   assert(updated.body.includes("Decision: accepted"));
-  assert(updated.body.includes("Decision notes: Set to accepted by @maintainer via `/decision accepted` on 2026-06-03T00:00:00.000Z."));
+  assert(updated.body.includes("Decision notes: Set to accepted by `maintainer` via `/decision accepted` on 2026-06-03T00:00:00.000Z."));
+  assert(!updated.body.includes("@maintainer"));
+  assert.strictEqual(countOccurrences(updated.body, /^Decision notes:/gim), 1);
+  assert(updated.body.indexOf("Decision: accepted") < updated.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human"));
+  assert(updated.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human") < updated.body.indexOf("Decision notes: Set to accepted"));
   assert.strictEqual(helper.updateDecisionInBody({
     body: "## Background\n\nNo triage section.\n",
     decision: "accepted",
     actorLogin: "maintainer",
     command: "/decision accepted",
   }).changed, false);
+
+  const polluted = helper.updateDecisionInBody({
+    body: [
+      "## Background",
+      "",
+      "Body text.",
+      "",
+      "## Human Triage Decision",
+      "",
+      "Decision: accepted",
+      "",
+      "Decision notes: Set to accepted by @Huangshier via `/decision accepted` on 2026-06-03T10:26:32.379Z.",
+      "",
+      "",
+      "Allowed values: accepted, rejected, deferred, needs-human",
+      "",
+      "Decision notes:",
+      "",
+    ].join("\n"),
+    decision: "accepted",
+    actorLogin: "Huangshier",
+    command: "/decision accepted",
+    now: "2026-06-03T10:30:00.000Z",
+  });
+  assert.strictEqual(polluted.changed, true);
+  assert(!polluted.body.includes("@Huangshier"));
+  assert.strictEqual(countOccurrences(polluted.body, /^Decision notes:/gim), 1);
+  assert(polluted.body.indexOf("Decision: accepted") < polluted.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human"));
+  assert(polluted.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human") < polluted.body.indexOf("Decision notes: Set to accepted"));
 
   const authorized = await runScenario({
     commentBody: "/decision accepted",
@@ -151,6 +188,8 @@ async function runScenario({ commentBody, issue, sender, permission }) {
   });
   assert.strictEqual(authorized.result.action, "updated");
   assert.strictEqual(authorized.calls.filter((call) => call[0] === "update").length, 1);
+  assert(!authorized.calls[0][1].body.includes("@maintainer"));
+  assert.strictEqual(countOccurrences(authorized.calls[0][1].body, /^Decision notes:/gim), 1);
   assert.strictEqual(authorized.calls.filter((call) => call[0] === "removeLabel" && call[1].name === "triage:needs-human").length, 1);
   assert.strictEqual(authorized.calls.filter((call) => call[0] === "addLabels" && call[1].labels[0] === "triage:accepted").length, 1);
 
@@ -195,7 +234,7 @@ async function runScenario({ commentBody, issue, sender, permission }) {
   assert.strictEqual(nonAgent.calls.length, 0);
 
   console.log(JSON.stringify({
-    tests: 9,
+    tests: 11,
     helper: process.argv[2],
     status: "PASS",
   }));
