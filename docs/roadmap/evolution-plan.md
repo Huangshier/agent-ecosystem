@@ -10,6 +10,14 @@ This public roadmap describes the reusable product direction. Local migration
 state, private repository mappings, machine-specific paths, and sensitive audit
 notes belong in the private overlay repository.
 
+## Current Release Scope
+
+The active maintenance sequence for v0.5.0 is defined in
+[v0.5.0 Maintenance Scope](v0.5.0-maintenance-scope.md). That document triages
+open issues, establishes a stabilization-first PR ordering, and defers
+expansion work (domain packs, profile expansion, cross-platform wrappers)
+unless the maintainer explicitly chooses otherwise.
+
 ## Target Operating Model
 
 ```text
