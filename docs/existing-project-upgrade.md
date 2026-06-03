@@ -9,6 +9,17 @@ New empty projects should use the
 instead. This guide assumes the project already has local memory, specs, and
 possibly generated context entries.
 
+## Which Path Should I Use?
+
+| Intent | Recommended path |
+| --- | --- |
+| Adopt Agent Ecosystem in a new project | Use the minimal project adoption walkthrough. |
+| Refresh missing scaffold files in an existing project | Run conservative bootstrap refresh; preserve project-specific memory. |
+| Upgrade only unmodified old templates | Use `-RefreshUnmodifiedTemplates` after checking the current project memory language. |
+| Change project memory language | Use the conservative language migration Analyze -> Plan -> Apply -> Validate flow. |
+| Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup. |
+| Inspect current state only | Run `project-context-gate` and `memory-governance` diagnostics without apply modes. |
+
 ## Current Template Model
 
 `v0.4.2` uses language-scoped project-memory templates:
@@ -44,6 +55,10 @@ Preserve local content such as:
   acceptance evidence.
 - Any project-specific commands, context indexes, or notes that do not exactly
   match the public scaffold.
+
+This preservation rule applies to target projects being upgraded. The public
+`agent-ecosystem` source repository no longer tracks root `docs/specs/**` as its
+own maintenance record.
 
 ## Intent Quick Reference
 

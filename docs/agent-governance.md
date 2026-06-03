@@ -188,13 +188,18 @@ The root `.agents/` directory is checkout-local runtime memory for this
 repository. It may be useful while an agent is working in one local clone, but
 it is not a public fact source and must not be tracked in the public repository.
 
-Durable public state belongs in GitHub issues and pull requests,
-`docs/specs/**`, governance docs, release docs, changelog entries, release
-notes, or curated `knowledge-hub/knowledge/**` entries. `docs/specs/**` should
-record goals, non-goals, accepted scope, durable decisions, risks, acceptance
-criteria, and completed evidence. It should not preserve local branch status,
-waiting pull-request merge steps, pending hosted checks, branch publishing
-steps, or duplicate issue-label dashboards as long-lived state.
+Durable public maintenance state belongs in GitHub issues and pull request
+bodies, governance docs, release docs, changelog entries, release notes, or
+curated `knowledge-hub/knowledge/**` entries. GitHub issues should carry scope,
+non-goals, acceptance criteria, and maintainer triage decisions. Pull request
+bodies should carry issue-to-change mapping, validation evidence, rollback
+notes, and human decision state.
+
+The public repository no longer tracks root `docs/specs/**` work packages for
+its own maintenance. `workflow-spec-lite` remains available for target projects
+that choose project-local `docs/specs/<slug>/` work packages, and examples or
+templates may still include those paths when clearly marked as target-project
+artifacts.
 
 ## Cross-Repository Promotion
 

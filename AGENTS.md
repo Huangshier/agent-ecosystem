@@ -34,7 +34,6 @@ If local `.agents/` files are absent or stale, use public sources instead:
 
 - this root `AGENTS.md`
 - GitHub issues and pull requests
-- `docs/specs/**`
 - `docs/agent-governance.md`
 - `docs/release-process.md`
 - `CHANGELOG.md`
@@ -45,17 +44,22 @@ Core rules that apply even if `.agents/AGENTS.md` was not loaded:
 - Follow system, runtime, and explicit user instructions before project defaults.
 - Make routine reversible implementation choices yourself; stop for genuine ambiguity, destructive actions, external writes, missing credentials, or policy/safety risk.
 - For broad or underspecified requests, do read-only exploration first, then clarify goal/scope/validation before editing when needed.
-- For non-trivial work, prefer a lightweight work package under `docs/specs/<slug>/` before implementation.
 - Keep `.agents/plan.md` session-local when local runtime memory exists; do not duplicate full project specs or task lists there.
-- Keep `docs/specs/**` durable. Specs may record goals, non-goals, decisions,
-  risks, acceptance criteria, and completed evidence. They should not become a
-  long-lived dashboard for the current branch, waiting pull requests, pending
-  hosted checks, or local publish steps.
+- For this public repository, use GitHub issues and PR bodies as the canonical
+  maintenance record. Do not create or commit root `docs/specs/**` work
+  packages for public repository maintenance.
+- `workflow-spec-lite` remains a target-project tool. Target projects may keep
+  their own local `docs/specs/<slug>/` work packages when that fits their
+  workflow.
 - Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.
 
-For non-trivial work that should survive the current session, use:
-- `docs/specs/<slug>/spec.md` for durable goals, constraints, approach, and acceptance
-- `docs/specs/<slug>/tasks.md` for long-lived execution steps when the work is multi-stage
-- `docs/specs/_templates/` for reusable project templates
+For non-trivial public maintenance that should survive the current session, use:
+- the accepted GitHub issue for scope, non-goals, and acceptance criteria
+- the pull request body for issue-to-change mapping, validation, rollback, and
+  maintainer decision state
+- release docs, changelog entries, governance docs, or curated knowledge entries
+  only when the result is meant to remain user-facing or reusable
 
-For multi-stage work, use an Execution Contract in the spec so the agent continues to the next validated phase until the stop rule is triggered.
+For multi-stage target-project work that uses `workflow-spec-lite`, use an
+Execution Contract in the project-local spec so the agent continues to the next
+validated phase until the stop rule is triggered.

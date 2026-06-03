@@ -10,8 +10,12 @@ and project-local memory.
 - Public source lives in this repository.
 - Private overlays live outside this repository.
 - Runtime installs are generated under `$HOME/.agents`.
-- Project-local state lives in each project's `.agents/` and `docs/specs/`
-  directories.
+- Project-local state lives in each target project's `.agents/` directory and,
+  when the project chooses spec-first work packages, its local `docs/specs/`
+  directory.
+- This public source repository uses GitHub issues and pull request bodies as
+  the canonical maintenance record. It does not track root `docs/specs/**`
+  work packages for its own maintenance.
 
 ## Workflow Kernel
 
