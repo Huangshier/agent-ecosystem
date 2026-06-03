@@ -21,9 +21,9 @@
   - Validation: `git diff --check`; local harness; full release validator.
   - Notes: Keep manual `Decision:` edit flow intact.
 
-- [ ] T04: Commit, push, and open draft PR
+- [x] T04: Commit, push, and open draft PR
   - Scope: Branch `codex/issue-123-decision-comment-command`.
-  - Validation: Draft PR exists and references #123.
+  - Validation: Draft PR #124 exists and references #123.
   - Notes: Push uses maintainer identity per explicit authorization because workflow-file pushes are outside current bot permissions.
 
 ## Task-to-Spec Notes
@@ -45,9 +45,9 @@
   - Validation: `scripts/test-issue-triage-decision-command.ps1 -Json`, `git diff --check`, and `scripts/validate-release.ps1 -ScratchRoot <scratch>` passed.
   - Continue / stop decision: Continue to draft PR creation.
 
-- [ ] P03: Complete phase 3 and record validation
+- [x] P03: Complete phase 3 and record validation
   - Goal: Push branch and create draft PR.
   - Inputs: Validated local commit.
-  - Outputs: Draft PR.
-  - Validation: PR metadata and local validation evidence.
+  - Outputs: Draft PR #124.
+  - Validation: PR metadata and local validation evidence recorded in the PR body.
   - Continue / stop decision: Stop after reporting as requested.

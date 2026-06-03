@@ -59,7 +59,7 @@
 - `scripts/test-issue-triage-decision-command.ps1 -Json` passed with 9 checks.
 - `git diff --check` passed.
 - `scripts/validate-release.ps1 -ScratchRoot <scratch>` passed with `PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
-- Draft PR links issue #123 and includes validation evidence.
+- Draft PR #124 links issue #123 and includes validation evidence.
 
 ## 10. Loop Contract
 - Not applicable.
@@ -69,7 +69,7 @@
 - **Phase list**:
   - P01: Create accepted issue and implementation branch. Completed.
   - P02: Add workflow, helper, docs, spec, and validator coverage. Completed.
-  - P03: Run local validation, commit, push with maintainer identity, and open a draft PR. Completed through local validation; draft PR is the handoff artifact.
+  - P03: Run local validation, commit, push with maintainer identity, and open draft PR #124. Completed.
 - **Continue rule**: Continue while work remains inside issue #123 scope, local validation is available, and no repository settings, secrets, release, tag, merge, or branch-protection action is needed.
 - **Stop rule**: Stop on workflow scope drift, untrusted write identity, validation failure that cannot be diagnosed, missing maintainer authorization for workflow branch push, skipped acceptance checks, or any request to merge, publish, tag, or change repository controls.
 - **State record**: This spec, `tasks.md`, issue #123, and the draft PR.
