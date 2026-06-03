@@ -1633,6 +1633,8 @@ try {
             '"admin", "maintain", "write"',
             "getCollaboratorPermissionLevel",
             "updateDecisionInBody",
+            "DEFAULT_ALLOWED_VALUES_LINE",
+            "formatActorLogin",
             "convergeTriageLabels",
             "review:needs-human",
             "Pull request comments are ignored"
@@ -1640,6 +1642,9 @@ try {
         "scripts/test-issue-triage-decision-command.ps1" = @(
             "/decision accepted",
             "/decision maybe",
+            "countOccurrences",
+            'assert(!updated.body.includes("@maintainer"))',
+            "Allowed values: accepted, rejected, deferred, needs-human",
             'permission: "triage"',
             "pull_request",
             "triage:accepted",

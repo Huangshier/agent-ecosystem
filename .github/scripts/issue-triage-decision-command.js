@@ -18,6 +18,7 @@ const SUPPORTED_COMMANDS = [
 const TRIAGE_LABELS = [...DECISION_LABELS.values()];
 const TRUSTED_BOTS = new Set(["agent-ecosystem-bot[bot]"]);
 const TRUSTED_REPOSITORY_ROLES = new Set(["admin", "maintain", "write"]);
+const DEFAULT_ALLOWED_VALUES_LINE = "Allowed values: accepted, rejected, deferred, needs-human";
 
 function normalizeCommentBody(body) {
   return String(body || "").trim();
@@ -116,7 +117,7 @@ async function getActorAuthority({ github, context }) {
 
 function getHumanTriageSection(body) {
   const text = String(body || "");
-  const match = text.match(/(^##\s*Human Triage Decision\s*)([\s\S]*?)(?=^##\s+|\s*$)/im);
+  const match = text.match(/(^##[ \t]*Human Triage Decision[ \t]*(?:\r?\n|$))([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/im);
   if (!match) {
     return null;
   }
@@ -127,6 +128,26 @@ function getHumanTriageSection(body) {
     section: match[2],
     full: match[0],
   };
+}
+
+function formatActorLogin(actorLogin) {
+  const login = String(actorLogin || "").trim();
+  if (!login) {
+    return "an authorized actor";
+  }
+  return `\`${login.replace(/`/g, "")}\``;
+}
+
+function getTriageSectionExtraLines(section) {
+  return String(section || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => {
+      if (!line.trim()) {
+        return false;
+      }
+      return !/^\s*(Decision|Allowed values|Decision notes):/i.test(line);
+    });
 }
 
 function updateDecisionInBody({ body, decision, actorLogin, command, now }) {
@@ -144,18 +165,33 @@ function updateDecisionInBody({ body, decision, actorLogin, command, now }) {
     return { changed: false, reason: "Expected exactly one Decision: field in Human Triage Decision section." };
   }
 
-  const timestamp = now || new Date().toISOString();
-  const safeActor = actorLogin ? `@${actorLogin}` : "an authorized actor";
-  const note = `Decision notes: Set to ${decision} by ${safeActor} via \`${command}\` on ${timestamp}.`;
-
-  let section = sectionInfo.section.replace(/^\s*Decision:\s*[^\r\n]*\s*$/im, `Decision: ${decision}`);
-  if (/^\s*Decision notes:.*$/im.test(section)) {
-    section = section.replace(/^\s*Decision notes:.*$/im, note);
-  } else {
-    section = `${section.trimEnd()}\n\n${note}\n`;
+  const allowedValuesMatches = [...sectionInfo.section.matchAll(/^\s*Allowed values:\s*([^\r\n]*)\s*$/gim)];
+  if (allowedValuesMatches.length > 1) {
+    return { changed: false, reason: "Expected at most one Allowed values: field in Human Triage Decision section." };
   }
 
-  const updatedSection = `${sectionInfo.heading}${section}`;
+  const allowedValuesLine = allowedValuesMatches.length === 1
+    ? `Allowed values: ${allowedValuesMatches[0][1].trim()}`
+    : DEFAULT_ALLOWED_VALUES_LINE;
+  const timestamp = now || new Date().toISOString();
+  const safeActor = formatActorLogin(actorLogin);
+  const note = `Decision notes: Set to ${decision} by ${safeActor} via \`${command}\` on ${timestamp}.`;
+
+  const sectionLines = [
+    "",
+    `Decision: ${decision}`,
+    "",
+    allowedValuesLine,
+    "",
+    note,
+  ];
+  const extraLines = getTriageSectionExtraLines(sectionInfo.section);
+  if (extraLines.length > 0) {
+    sectionLines.push("", ...extraLines);
+  }
+  sectionLines.push("");
+
+  const updatedSection = `${sectionInfo.heading}${sectionLines.join("\n")}`;
   const updatedBody = `${body.slice(0, sectionInfo.start)}${updatedSection}${body.slice(sectionInfo.end)}`;
   return { changed: updatedBody !== body, body: updatedBody, decision, label: DECISION_LABELS.get(decision) };
 }
@@ -260,6 +296,7 @@ module.exports = {
   parseDecisionCommand,
   shouldProcessIssue,
   resolveActorAuthorityFromPermission,
+  formatActorLogin,
   updateDecisionInBody,
   convergeTriageLabels,
   run,
