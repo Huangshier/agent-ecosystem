@@ -1299,7 +1299,6 @@ catch {
 try {
     $antiDriftFiles = [ordered]@{
         "skills/workflow-spec-lite/references/spec-template.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
-        "docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "knowledge-hub/templates/languages/en/project-root/docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
