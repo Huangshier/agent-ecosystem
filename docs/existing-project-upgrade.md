@@ -20,6 +20,24 @@ possibly generated context entries.
 | Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup. |
 | Inspect current state only | Run `project-context-gate` and `memory-governance` diagnostics without apply modes. |
 
+## Command Ownership Boundary
+
+The bootstrap command is the owner for scaffold creation, safe refresh,
+unmodified-template refresh, and explicit backup-first force reset. Upgrade and
+migration logic belongs in dedicated helpers:
+
+- `memory_upgrade.ps1` for legacy memory analysis, proposal, and apply;
+- `language_migration.ps1` for conservative project-memory language migration;
+- `audit_memory_language.ps1` for read-only body-language evidence;
+- `check_hub_lock.ps1` for lock drift checks.
+
+`bootstrap_project.ps1` keeps existing upgrade and migration switches as
+compatibility and discoverability wrappers, but future old-release upgrade
+orchestration should not be added to the main bootstrap script by default. See
+[Project Bootstrap Command Boundaries](project-bootstrap-command-boundaries.md)
+for the full boundary, compatibility rules, and standalone runtime packaging
+constraints.
+
 ## Current Template Model
 
 `v0.4.2` uses language-scoped project-memory templates:

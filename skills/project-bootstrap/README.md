@@ -30,6 +30,21 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - Upstream source for `knowledge-hub` aggregate sync
 - Bootstrap does not own routine global experience promotion. It installs project scaffolds and upgrade helpers; the installed `knowledge-hub/scripts` directory is the runtime entrypoint for promoted experience.
 
+## Command Boundary
+- `bootstrap_project.ps1` owns scaffold creation, safe missing-template
+  refresh, unmodified-template refresh, and explicit backup-first force reset.
+- Dedicated helpers own upgrade and migration logic:
+  `memory_upgrade.ps1`, `language_migration.ps1`, `audit_memory_language.ps1`,
+  and `check_hub_lock.ps1`.
+- Existing bootstrap upgrade and migration switches remain compatibility and
+  discoverability wrappers. They should route to dedicated helpers instead of
+  making the bootstrap script the default home for more orchestration logic.
+- Future old-release upgrade orchestration should live in a dedicated helper or
+  command card that composes context gate, bootstrap refresh, memory upgrade,
+  language migration, and validation steps.
+- For the full boundary and standalone runtime packaging constraints, see
+  `docs/project-bootstrap-command-boundaries.md`.
+
 ## Legacy Memory Upgrade
 - `memory_upgrade.ps1 -Mode Analyze` is the strict no-edit memory-only
   analysis path.
