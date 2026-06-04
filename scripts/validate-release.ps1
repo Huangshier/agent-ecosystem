@@ -35,6 +35,7 @@ $evidence = [ordered]@{
     language_policy = [ordered]@{}
     language_migration = [ordered]@{}
     memory_language_audit = [ordered]@{}
+    bootstrap_command_boundary = [ordered]@{}
     routing = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
@@ -443,6 +444,56 @@ try {
 }
 catch {
     Add-Check "existing project upgrade path" "FAIL" $_.Exception.Message
+}
+
+try {
+    $boundaryDocPath = "docs/project-bootstrap-command-boundaries.md"
+    $boundaryDoc = Get-FileText -RelativePath $boundaryDocPath
+    $upgradeGuide = Get-FileText -RelativePath "docs/existing-project-upgrade.md"
+    $bootstrapReadme = Get-FileText -RelativePath "skills/project-bootstrap/README.md"
+    $boundaryTokens = @(
+        "scaffold creation",
+        "safe refresh",
+        "explicit force reset",
+        "legacy memory upgrade wrappers",
+        "conservative project-memory language migration wrappers",
+        "future old-release upgrade orchestration",
+        "memory_upgrade.ps1",
+        "language_migration.ps1",
+        "audit_memory_language.ps1",
+        "check_hub_lock.ps1",
+        "Dedicated upgrade orchestration helper",
+        "Release-to-release upgrade rehearsals should live in a dedicated helper or command card",
+        "Standalone Runtime Packaging",
+        "copy-mode and link-mode",
+        "#96 covers staged modularization",
+        "#97 covers shared PowerShell path helpers",
+        "#118 covers old-release upgrade validation"
+    )
+    $missingBoundaryTokens = @($boundaryTokens | Where-Object { $boundaryDoc -notlike "*$_*" })
+    $missingBoundaryLinks = @()
+    if ($upgradeGuide -notlike "*project-bootstrap-command-boundaries.md*") {
+        $missingBoundaryLinks += "docs/existing-project-upgrade.md missing command boundary design note link."
+    }
+    if ($bootstrapReadme -notlike "*docs/project-bootstrap-command-boundaries.md*") {
+        $missingBoundaryLinks += "skills/project-bootstrap/README.md missing command boundary design note link."
+    }
+
+    $script:evidence.bootstrap_command_boundary = [ordered]@{
+        design_note = $boundaryDocPath
+        missing_tokens = @($missingBoundaryTokens)
+        missing_links = @($missingBoundaryLinks)
+    }
+
+    if ($missingBoundaryTokens.Count -gt 0 -or $missingBoundaryLinks.Count -gt 0) {
+        Add-Check "project-bootstrap command boundaries" "FAIL" "Project-bootstrap command boundary documentation is incomplete." $evidence.bootstrap_command_boundary
+    }
+    else {
+        Add-Check "project-bootstrap command boundaries" "PASS" "Project-bootstrap command ownership, compatibility aliases, future upgrade orchestration, and standalone packaging boundaries are documented." $evidence.bootstrap_command_boundary
+    }
+}
+catch {
+    Add-Check "project-bootstrap command boundaries" "FAIL" $_.Exception.Message
 }
 
 try {
