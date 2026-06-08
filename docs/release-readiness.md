@@ -204,6 +204,21 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - GitHub Release `v0.4.4` has been published:
   https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
 
+- Old-release upgrade support matrix defines supported direct (`v0.4.2`–`v0.4.6`),
+  best-effort (`v0.3.x`–`v0.4.1`), and unsupported (`v0.1.0`, `v0.2.0`) categories
+  with expected upgrade paths and validation steps.
+- Old-release upgrade path documentation covers runtime install upgrade
+  (same-machine refresh, copy mode, link/junction mode), project memory upgrade
+  (analyze/plan/apply/validate), fresh-machine install, and manifest verification.
+- `v0.4.6` → current `main` old-release upgrade rehearsal passed: runtime install
+  upgrade, project memory analyze (0 findings), hub lock in-sync, context gate,
+  and memory diagnosis (0 findings).
+- Release process requires at least one old-release upgrade rehearsal before
+  tagging releases that change the install contract, template structure, or
+  project memory schema.
+- Old-release rehearsal evidence is recorded in
+  `docs/old-release-rehearsal-evidence.md`.
+
 ## v0.4.5 Published State
 
 Current `main` includes the post-`v0.4.4` maintenance / compatibility /
@@ -346,3 +361,6 @@ The release validator now covers:
 - v0.4.6 published release notes coverage
 - legacy template-path reference audit coverage
 - existing project upgrade path coverage
+- old-release upgrade support matrix and path documentation
+- old-release rehearsal evidence for `v0.4.6` → current `main`
+- release process old-release upgrade rehearsal requirement

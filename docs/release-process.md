@@ -239,6 +239,45 @@ body-only. They must not alter tags, tag targets, release assets, release dates,
 latest/prerelease flags, repository settings, rulesets, secrets, or branch
 protection.
 
+## Old-Release Upgrade Rehearsal
+
+Starting with `v0.5.0`, the release process requires at least one old-release
+upgrade rehearsal before tagging a new public release. This rehearsal validates
+the upgrade path from a published tag to the current `main`.
+
+### When to Rehearse
+
+- Before tagging any release that changes the install contract, template
+  structure, project memory schema, or hub lock format.
+- Before tagging any release that adds or removes install profiles.
+- For patch or docs-only releases that do not change the above surfaces,
+  a rehearsal from the most recent supported-direct tag is still recommended
+  but may be skipped if the maintainer records the deferral.
+
+### What to Rehearse
+
+1. **Runtime install upgrade**: Install from the source tag, then upgrade
+   from current `main` with `-Force`. Verify the install manifest.
+2. **Project memory upgrade**: Bootstrap a project from the source tag's
+   runtime, then upgrade the runtime and run memory upgrade analyze, hub
+   lock check, context gate, and memory diagnosis.
+3. **Record evidence**: Add results to
+   `docs/old-release-rehearsal-evidence.md`.
+
+### Minimum Source Tag
+
+The most recent supported-direct tag should be the primary rehearsal source.
+For `v0.5.0`, this is `v0.4.6`. If the release changes the template
+structure, also rehearse the earliest supported-direct source to confirm
+forward compatibility.
+
+### Checklist vs Automation
+
+Today the rehearsal is a manual checklist. Steps are documented in
+[Old-Release Upgrade Path](old-release-upgrade-path.md). Future enhancement
+may script the rehearsal into the release validator as an optional fixture,
+but this is not required for `v0.5.0`.
+
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
