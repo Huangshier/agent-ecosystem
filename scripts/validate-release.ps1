@@ -12,6 +12,7 @@ $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "lib/path-guard.ps1")
 . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+. (Join-Path $scriptDir "validation/workflow-spec-lite-fixture-helper.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -161,6 +162,10 @@ $requiredFiles = @(
     "scripts/prune-validation-scratch.ps1",
     "scripts/uninstall.ps1",
     "scripts/validation/release-test-helper.ps1",
+    "scripts/validation/workflow-spec-lite-fixture-helper.ps1",
+    "scripts/validation/workflow-spec-lite-fixtures/complete-spec.md",
+    "scripts/validation/workflow-spec-lite-fixtures/loop-contract-spec.md",
+    "scripts/validation/workflow-spec-lite-fixtures/chinese-section-spec.md",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/existing-project-upgrade.md",
@@ -1182,264 +1187,11 @@ function Invoke-ReleaseValidationSpecAndDocumentationChecks {
 try {
     $specValidator = Join-PathParts $repoRoot "skills" "workflow-spec-lite" "scripts" "validate_spec.ps1"
     $fixtureDir = Join-PathParts $scratchRootFull "spec-lite-fixtures"
-    New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
-    Assert-PathInsideRoot -Path $fixtureDir -Root $scratchRootFull
-    $strictUtf8NoBom = New-Object System.Text.UTF8Encoding($false, $true)
-
-    $completeSpec = @"
-# Work Spec
-
-- **Title**: Spec validator fixture
-- **Slug**: spec-validator-fixture
-- **Status**: Active
-- **Owner**: release validation
-- **Updated**: 2026-05-08
-
-## 1. Summary
-- Validate the workflow-spec-lite spec validator helper.
-
-## 2. Current Context
-- Release validation creates temporary positive and negative fixtures.
-
-## 3. Goals
-- Confirm complete specs pass.
-
-## 4. Non-Goals
-- Do not rewrite or normalize the target spec automatically.
-
-## 5. Constraints
-- Run only against temporary fixture files.
-
-## 6. Assumptions
-- Markdown headings follow the lightweight spec template.
-
-## 7. Risks
-- Missing acceptance or stop rules can let scope drift go unnoticed.
-
-## 8. Proposed Approach
-- Execute the validator and inspect structured findings.
-
-## 9. Acceptance / Evidence
-- Positive fixture passes and targeted negative fixtures fail.
-
-## 10. Loop Contract
-- Not required for this fixture.
-
-## 11. Execution Contract
-- Use for multi-phase work where the agent should continue after each validated phase.
-- **Autonomy level**: bounded-autonomous
-- **Phase list**:
-  - P01: Run validator fixture checks.
-- **Continue rule**: Continue only when fixture results match expectations.
-- **Stop rule**: Stop when required goals, non-goals, risks, acceptance, or stop rule fields are missing.
-- **State record**: release validation evidence.
-
-## 12. Open Questions
-- None for this fixture.
-"@
-
-    $positivePath = Join-PathParts $fixtureDir "complete-spec.md"
-    Set-Content -LiteralPath $positivePath -Value $completeSpec -Encoding UTF8
-    $positive = & $specValidator -SpecPath $positivePath -RequireExecutionContract -Json | ConvertFrom-Json
-    if (-not [bool]$positive.pass) {
-        throw ("Complete spec fixture failed: {0}" -f (($positive.findings | ConvertTo-Json -Compress -Depth 5)))
-    }
-
-    $loopSpec = @"
-# Work Spec
-
-- **Title**: Loop contract fixture
-- **Slug**: loop-contract-fixture
-- **Status**: Active
-- **Owner**: release validation
-- **Updated**: 2026-05-08
-
-## 1. Summary
-- Validate that loop-oriented specs can pass the lightweight validator.
-
-## 2. Current Context
-- Release validation needs a positive fixture with a Loop Contract.
-
-## 3. Goals
-- Confirm loop specs pass when required sections are present.
-
-## 4. Non-Goals
-- Do not execute the loop action.
-
-## 5. Constraints
-- Run only against temporary fixture files.
-
-## 6. Assumptions
-- The loop contract is agent-facing state, not executable code.
-
-## 7. Risks
-- A vague loop can lead to unbounded repeated work.
-
-## 8. Proposed Approach
-- Validate a bounded Loop Contract fixture.
-
-## 9. Acceptance / Evidence
-- The Loop Contract fixture passes validation.
-
-## 10. Loop Contract
-- **Variable**: retry count
-- **Source of truth**: temporary fixture text
-- **Check command**: inspect fixture
-- **Pass predicate**: retry count is below the limit
-- **Iteration action**: no-op validation fixture
-- **State record**: release validation evidence
-- **Limits**: one validation attempt
-- **Abort conditions**: missing required spec sections
-
-## 11. Execution Contract
-
-## 12. Open Questions
-- None for this fixture.
-"@
-
-    $loopPath = Join-PathParts $fixtureDir "loop-contract-spec.md"
-    Set-Content -LiteralPath $loopPath -Value $loopSpec -Encoding UTF8
-    $loopPositive = & $specValidator -SpecPath $loopPath -Json | ConvertFrom-Json
-    if (-not [bool]$loopPositive.pass) {
-        throw ("Loop Contract spec fixture failed: {0}" -f (($loopPositive.findings | ConvertTo-Json -Compress -Depth 5)))
-    }
-
-    $chineseSpec = @"
-# 工作说明
-
-- **Title（标题）**: 中文章节 fixture
-- **Slug（标识）**: chinese-section-fixture
-- **Status（状态）**: Active
-- **Owner（负责人）**: release validation
-- **Updated（更新时间）**: 2026-05-08
-
-## 1. Summary（摘要）
-- 验证真实 zh-CN 模板的双语 anchor 可以通过轻量 spec validator。
-
-## 2. 当前上下文
-- release validation 需要覆盖中文项目记忆场景。
-
-## 3. 目标
-- 确认中文章节正例通过。
-
-## 4. 非目标
-- 不改写 fixture 文件。
-
-## 5. 约束
-- 只使用临时 fixture。
-
-## 6. 假设
-- 中文章节标题保持模板约定。
-
-## 7. 风险
-- 中文章节别名缺失会影响中文项目 spec。
-
-## 8. 方案
-- 执行 validator 并检查 pass 字段。
-
-## 9. 验收与证据
-- 中文章节 fixture 通过验证。
-
-## 10. 循环契约
-- 不适用。
-
-## 11. 执行契约
-- **Autonomy level（自主级别）**: bounded-autonomous
-- **Phase list（阶段列表）**:
-  - P01: 验证中文章节 fixture。
-- **Continue rule（继续规则）**: fixture 通过时继续。
-- **Stop rule（停止规则）**: 必需章节缺失时停止。
-- **State record（状态记录）**: release validation evidence。
-
-## 12. 开放问题
-- 无。
-"@
-
-    $chinesePath = Join-PathParts $fixtureDir "chinese-section-spec.md"
-    Set-Content -LiteralPath $chinesePath -Value $chineseSpec -Encoding UTF8
-    $chinesePositive = & $specValidator -SpecPath $chinesePath -RequireExecutionContract -Json | ConvertFrom-Json
-    if (-not [bool]$chinesePositive.pass) {
-        throw ("Chinese section spec fixture failed: {0}" -f (($chinesePositive.findings | ConvertTo-Json -Compress -Depth 5)))
-    }
-
-    $chineseNoBomPath = Join-PathParts $fixtureDir "chinese-section-spec-utf8-no-bom.md"
-    [System.IO.File]::WriteAllText($chineseNoBomPath, $chineseSpec, $strictUtf8NoBom)
-    $chineseNoBomBytes = [System.IO.File]::ReadAllBytes($chineseNoBomPath)
-    if ($chineseNoBomBytes.Length -ge 3 -and $chineseNoBomBytes[0] -eq 0xEF -and $chineseNoBomBytes[1] -eq 0xBB -and $chineseNoBomBytes[2] -eq 0xBF) {
-        throw "UTF-8 no-BOM Chinese spec fixture unexpectedly contains a BOM."
-    }
-    $chineseNoBomPositive = & $specValidator -SpecPath $chineseNoBomPath -RequireExecutionContract -Json | ConvertFrom-Json
-    if (-not [bool]$chineseNoBomPositive.pass) {
-        throw ("UTF-8 no-BOM Chinese section spec fixture failed: {0}" -f (($chineseNoBomPositive.findings | ConvertTo-Json -Compress -Depth 5)))
-    }
-
-    $negativeFixtures = @(
-        [ordered]@{
-            name = "missing-title"
-            expected_finding = "metadata_title_missing"
-            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Title\*\*:\s+.*\r?\n', '')
-        },
-        [ordered]@{
-            name = "missing-goals"
-            expected_finding = "section_goals_missing"
-            text = [regex]::Replace($completeSpec, '(?ms)^## 3\. Goals\s*\r?\n.*?(?=^## 4\.)', '')
-        },
-        [ordered]@{
-            name = "missing-non-goals"
-            expected_finding = "section_non_goals_missing"
-            text = [regex]::Replace($completeSpec, '(?ms)^## 4\. Non-Goals\s*\r?\n.*?(?=^## 5\.)', '')
-        },
-        [ordered]@{
-            name = "missing-acceptance"
-            expected_finding = "section_acceptance_missing"
-            text = [regex]::Replace($completeSpec, '(?ms)^## 9\. Acceptance / Evidence\s*\r?\n.*?(?=^## 10\.)', '')
-        },
-        [ordered]@{
-            name = "missing-risks"
-            expected_finding = "section_risks_missing"
-            text = [regex]::Replace($completeSpec, '(?ms)^## 7\. Risks\s*\r?\n.*?(?=^## 8\.)', '')
-        },
-        [ordered]@{
-            name = "missing-stop-rule"
-            expected_finding = "execution_stop_rule_missing"
-            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Stop rule\*\*:\s+.*\r?$', '- **Stop rule**:')
-        },
-        [ordered]@{
-            name = "missing-autonomy-level"
-            expected_finding = "execution_autonomy_level_missing"
-            text = [regex]::Replace($completeSpec, '(?m)^\-\s+\*\*Autonomy level\*\*:\s+.*\r?$', '- **Autonomy level**:')
-        }
-    )
-
-    $negativeEvidence = New-Object 'System.Collections.Generic.List[object]'
-    foreach ($fixture in $negativeFixtures) {
-        $path = Join-PathParts $fixtureDir ("{0}.md" -f $fixture.name)
-        Set-Content -LiteralPath $path -Value $fixture.text -Encoding UTF8
-        $result = & $specValidator -SpecPath $path -RequireExecutionContract -Json | ConvertFrom-Json
-        $findingIds = @($result.findings | ForEach-Object { [string]$_.id })
-        if ([bool]$result.pass) {
-            throw ("Negative fixture unexpectedly passed: {0}" -f $fixture.name)
-        }
-        if ([string]$fixture.expected_finding -notin $findingIds) {
-            throw ("Negative fixture {0} did not report expected finding {1}. Findings: {2}" -f $fixture.name, $fixture.expected_finding, ($findingIds -join ", "))
-        }
-        $negativeEvidence.Add([ordered]@{
-            name = [string]$fixture.name
-            expected_finding = [string]$fixture.expected_finding
-            findings = @($findingIds)
-        })
-    }
-
-    $script:evidence.spec_lite = [ordered]@{
-        validator = $specValidator
-        positive_fixture = $positivePath
-        positive_variants = @(
-            [ordered]@{ name = "loop-contract"; path = $loopPath },
-            [ordered]@{ name = "chinese-sections"; path = $chinesePath },
-            [ordered]@{ name = "chinese-sections-utf8-no-bom"; path = $chineseNoBomPath }
-        )
-        negative_fixtures = @($negativeEvidence.ToArray())
-    }
+    $script:evidence.spec_lite = Invoke-WorkflowSpecLiteValidatorFixtureSuite `
+        -RepositoryRoot $repoRoot `
+        -SpecValidator $specValidator `
+        -FixtureDir $fixtureDir `
+        -ScratchRoot $scratchRootFull
     Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English, zh-CN bilingual, and UTF-8 no-BOM zh-CN specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
 }
 catch {
