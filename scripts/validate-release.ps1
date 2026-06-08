@@ -144,7 +144,7 @@ function Test-Manifest {
     return @($errors.ToArray())
 }
 
-# Invoke-ReleaseValidationRepositoryChecks: 无参数；按原顺序执行仓库结构、公共文档边界和 helper ownership 检查。
+# Invoke-ReleaseValidationRepositoryChecks: No parameters; runs repository structure, public documentation boundary, and helper ownership checks in the original order.
 function Invoke-ReleaseValidationRepositoryChecks {
 
 $requiredFiles = @(
@@ -697,7 +697,7 @@ else {
 
 }
 
-# Invoke-ReleaseValidationInstallerRuntimeChecks: 无参数；按原顺序执行安装矩阵、runtime smoke 和临时项目支持检查。
+# Invoke-ReleaseValidationInstallerRuntimeChecks: No parameters; runs installer matrix, runtime smoke, and temporary project support checks in the original order.
 function Invoke-ReleaseValidationInstallerRuntimeChecks {
 
 $script:profileExpectations = [ordered]@{
@@ -1176,7 +1176,7 @@ catch {
 
 }
 
-# Invoke-ReleaseValidationSpecAndDocumentationChecks: 无参数；按原顺序执行 workflow-spec-lite fixture、模板指导、README 和 release notes 检查。
+# Invoke-ReleaseValidationSpecAndDocumentationChecks: No parameters; runs workflow-spec-lite fixture, template guidance, README, and release notes checks in the original order.
 function Invoke-ReleaseValidationSpecAndDocumentationChecks {
 
 try {
@@ -2322,7 +2322,7 @@ catch {
 
 }
 
-# Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks: 无参数；按原顺序执行 runtime 行为、upgrade/migration flow 和 knowledge hub 检查。
+# Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks: No parameters; runs runtime behavior, upgrade/migration flow, and knowledge hub checks in the original order.
 function Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks {
 
 try {
@@ -3355,7 +3355,7 @@ catch {
 
 }
 
-# Invoke-ReleaseValidationParserSafetyChecks: 无参数；按原顺序执行 git diff、encoding、PowerShell/JSON parser 和 public safety scan 检查。
+# Invoke-ReleaseValidationParserSafetyChecks: No parameters; runs git diff, encoding, PowerShell/JSON parser, and public safety scan checks in the original order.
 function Invoke-ReleaseValidationParserSafetyChecks {
 
 try {
@@ -3521,7 +3521,7 @@ catch {
 
 }
 
-# Invoke-ReleaseValidationLanguageTemplateChecks: 无参数；按原顺序执行语言策略、模板 auto-write 和 bilingual routing 检查。
+# Invoke-ReleaseValidationLanguageTemplateChecks: No parameters; runs language policy, template auto-write, and bilingual routing checks in the original order.
 function Invoke-ReleaseValidationLanguageTemplateChecks {
 
 try {
