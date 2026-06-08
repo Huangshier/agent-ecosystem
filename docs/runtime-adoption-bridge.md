@@ -160,6 +160,12 @@ pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate
 This inventories hot/warm/cold context files and produces a structured
 context summary that the agent can use to continue work.
 
+For a copyable agent-facing summary, use `-Brief`:
+
+```powershell
+pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Brief
+```
+
 ## Generic Agent Path
 
 When the agent runtime has no known startup surface for `AGENTS.md` or
@@ -175,6 +181,12 @@ When the agent runtime has no known startup surface for `AGENTS.md` or
 
    ```powershell
    pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Json
+   ```
+
+   For compact agent handoff text:
+
+   ```powershell
+   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Brief
    ```
 
 2. Read hot-tier files: `AGENTS.md`, `.agents/AGENTS.md`,

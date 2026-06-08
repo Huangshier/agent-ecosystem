@@ -41,6 +41,12 @@ when PowerShell 7+ is already available.
 
 The helper inventories files and git state; the agent still reads and applies the listed context.
 
+For a compact, copyable agent brief, request brief output:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/context_gate.ps1 -ProjectRoot . -Brief
+```
+
 It reports context in progressive disclosure tiers:
 - Hot: load immediately for most non-trivial work.
 - Warm: active `docs/specs` work package.
@@ -48,6 +54,8 @@ It reports context in progressive disclosure tiers:
 
 Optional flags:
 - `-Json`: structured output.
+- `-Brief`: compact agent brief with gate type, project root, git state,
+  hot/warm/cold context responsibilities, warnings, and next action.
 - `-IncludeTemplates`: include every `.agents/context/` file for audits.
 
 ## License

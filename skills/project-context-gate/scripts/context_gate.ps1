@@ -3,6 +3,7 @@ param(
     [ValidateSet("start", "phase", "resume")]
     [string]$Gate = "start",
     [switch]$Json,
+    [switch]$Brief,
     [switch]$IncludeTemplates
 )
 
@@ -124,6 +125,93 @@ function Get-GitState {
     }
 }
 
+# Format-BriefItemList: render context items for brief output.
+function Format-BriefItemList {
+    param(
+        [object[]]$Items,
+        [string]$EmptyText
+    )
+
+    $itemList = @($Items)
+    if ($itemList.Count -eq 0) {
+        return @("- $EmptyText")
+    }
+
+    return @(
+        $itemList | ForEach-Object {
+            "- {0} [{1}]" -f $_.path, $_.reason
+        }
+    )
+}
+
+# Write-ContextBrief: emit a copyable agent brief from the context gate payload.
+function Write-ContextBrief {
+    param([object]$Payload)
+
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $git = $Payload.git
+    $statusList = @($git.status)
+    $warningList = @($Payload.warnings)
+
+    $lines.Add("Project Context Gate Brief") | Out-Null
+    $lines.Add(("Gate: {0}" -f $Payload.gate)) | Out-Null
+    $lines.Add(("Project root: {0}" -f $Payload.project_root)) | Out-Null
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Git:") | Out-Null
+    $lines.Add(("- state: {0}" -f $git.state)) | Out-Null
+    if ($git.root) { $lines.Add(("- root: {0}" -f $git.root)) | Out-Null }
+    if ($git.branch) { $lines.Add(("- branch: {0}" -f $git.branch)) | Out-Null }
+    if ($statusList.Count -gt 0) {
+        $lines.Add("- status:") | Out-Null
+        foreach ($statusItem in $statusList) {
+            $lines.Add(("  - {0}" -f $statusItem)) | Out-Null
+        }
+    }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Hot files (load now):") | Out-Null
+    foreach ($line in Format-BriefItemList -Items $Payload.hot_files -EmptyText "(none)") {
+        $lines.Add($line) | Out-Null
+    }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Active work package files:") | Out-Null
+    foreach ($line in Format-BriefItemList -Items $Payload.warm_files -EmptyText "(none)") {
+        $lines.Add($line) | Out-Null
+    }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Cold discovery-only files:") | Out-Null
+    foreach ($line in Format-BriefItemList -Items $Payload.cold_files -EmptyText "(none)") {
+        $lines.Add($line) | Out-Null
+    }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Warnings / boundary notes:") | Out-Null
+    if ($warningList.Count -eq 0) {
+        $lines.Add("- (no warnings)") | Out-Null
+    } else {
+        foreach ($warning in $warningList) {
+            $lines.Add(("- {0}" -f $warning)) | Out-Null
+        }
+    }
+    $lines.Add("- Cold files are discovery-only; open matching entries by Summary, Keywords, or task relevance.") | Out-Null
+    $lines.Add("- This script inventories context only; it does not read all cold files or write project memory.") | Out-Null
+    if ($git.state -eq "dirty") {
+        $lines.Add("- Git is dirty; inspect status before editing or staging changes.") | Out-Null
+    }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Next action:") | Out-Null
+    $lines.Add("- Read the hot files first.") | Out-Null
+    $lines.Add("- For non-trivial active work, read the active work package files.") | Out-Null
+    $lines.Add("- Keep cold files closed until their index, Summary, Keywords, or task relevance matches the current work.") | Out-Null
+    $lines.Add("- Produce a short constraint capsule before editing.") | Out-Null
+
+    Write-Output ($lines -join [Environment]::NewLine)
+}
+
 function Get-ContextDiscoveryFiles {
     param(
         [string]$ContextDir,
@@ -207,6 +295,11 @@ $payload = [ordered]@{
 
 if ($Json.IsPresent) {
     $payload | ConvertTo-Json -Depth 8
+    return
+}
+
+if ($Brief.IsPresent) {
+    Write-ContextBrief -Payload $payload
     return
 }
 
