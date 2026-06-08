@@ -58,3 +58,9 @@ Helper layout:
 - `lib/path-guard.ps1`: shared path joining and safety guards.
 - `validation/release-test-helper.ps1`: common helper functions used by the
   release validator.
+
+PowerShell helper ownership is documented in
+`docs/powershell-helper-ownership.md`. Repository maintenance scripts may
+dot-source `scripts/lib/path-guard.ps1`; installed skill and knowledge-hub
+runtime scripts must remain usable without a source checkout, so some local
+helper copies are intentional until a packaged runtime helper contract exists.

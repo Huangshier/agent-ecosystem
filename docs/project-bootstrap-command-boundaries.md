@@ -92,6 +92,8 @@ The boundary must keep installed skills usable outside the source checkout.
 - #97 covers shared PowerShell path helpers and runtime script ownership. This
   note only states that future shared helper dependencies must preserve
   standalone packaging.
+- `docs/powershell-helper-ownership.md` defines the first-stage #97 helper
+  ownership model and the intentional `Join-PathParts` duplication allowlist.
 - #118 covers old-release upgrade validation. This note defines where that
   orchestration should live before #118 implementation begins.
 

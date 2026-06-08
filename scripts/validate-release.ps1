@@ -165,6 +165,7 @@ $requiredFiles = @(
     "docs/existing-project-upgrade.md",
     "docs/how-to-adapt.md",
     "docs/language-policy.md",
+    "docs/powershell-helper-ownership.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
     "docs/shell-strategy.md",
@@ -561,6 +562,69 @@ try {
 }
 catch {
     Add-Check "shared path guard helper" "FAIL" $_.Exception.Message
+}
+
+try {
+    $helperOwnershipDoc = Get-FileText -RelativePath "docs/powershell-helper-ownership.md"
+    $allowedJoinPathPartsDefinitions = @(
+        "knowledge-hub/scripts/promote_experience.ps1",
+        "knowledge-hub/scripts/rebuild_experience_index.ps1",
+        "knowledge-hub/scripts/search_experience.ps1",
+        "scripts/lib/path-guard.ps1",
+        "skills/project-bootstrap/scripts/audit_memory_language.ps1",
+        "skills/project-bootstrap/scripts/bootstrap_project.ps1",
+        "skills/project-bootstrap/scripts/check_hub_lock.ps1",
+        "skills/project-bootstrap/scripts/init_hub.ps1",
+        "skills/project-bootstrap/scripts/language_migration.ps1",
+        "skills/project-bootstrap/scripts/promote_experience.ps1",
+        "skills/project-bootstrap/scripts/rebuild_experience_index.ps1",
+        "skills/project-bootstrap/scripts/set_project_language.ps1",
+        "skills/project-context-gate/scripts/context_gate.ps1"
+    )
+    $definitionPattern = "(?m)^function\s+Join-PathParts\s*\{"
+    $actualDefinitions = New-Object 'System.Collections.Generic.List[string]'
+
+    foreach ($relativePath in @(Get-GitFiles | Where-Object {
+                ($_ -like "scripts/*.ps1" -or $_ -like "scripts/**/*.ps1" -or
+                    $_ -like "skills/*.ps1" -or $_ -like "skills/**/*.ps1" -or
+                    $_ -like "knowledge-hub/*.ps1" -or $_ -like "knowledge-hub/**/*.ps1")
+            })) {
+        $text = Get-FileText -RelativePath $relativePath
+        if ($text -match $definitionPattern) {
+            $actualDefinitions.Add(($relativePath -replace "\\", "/"))
+        }
+    }
+
+    $actual = @($actualDefinitions.ToArray() | Sort-Object -Unique)
+    $allowed = @($allowedJoinPathPartsDefinitions | Sort-Object -Unique)
+    $unexpectedDefinitions = @($actual | Where-Object { $_ -notin $allowed })
+    $missingDefinitions = @($allowed | Where-Object { $_ -notin $actual })
+    $docMarkers = @(
+        "Repository maintenance scripts",
+        "Installed skill runtime scripts",
+        "Knowledge hub installed runtime scripts",
+        "Intentional Duplication",
+        "Compatibility Copies",
+        "scripts/lib/path-guard.ps1"
+    )
+    $missingDocMarkers = @($docMarkers | Where-Object { $helperOwnershipDoc -notlike "*$_*" })
+
+    if ($unexpectedDefinitions.Count -eq 0 -and $missingDefinitions.Count -eq 0 -and $missingDocMarkers.Count -eq 0) {
+        Add-Check "PowerShell helper ownership allowlist" "PASS" "Join-PathParts definitions match the documented helper ownership model." ([ordered]@{
+            ownership_doc = "docs/powershell-helper-ownership.md"
+            allowed_definitions = @($allowed)
+        })
+    }
+    else {
+        Add-Check "PowerShell helper ownership allowlist" "FAIL" "Join-PathParts helper ownership guard found drift." ([ordered]@{
+            unexpected_definitions = @($unexpectedDefinitions)
+            missing_definitions = @($missingDefinitions)
+            missing_doc_markers = @($missingDocMarkers)
+        })
+    }
+}
+catch {
+    Add-Check "PowerShell helper ownership allowlist" "FAIL" $_.Exception.Message
 }
 
 try {
