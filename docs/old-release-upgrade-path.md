@@ -5,7 +5,7 @@ releases to the current release, and the expected behavior for runtime
 install state and existing project memory state.
 
 New users should follow the
-[quick start](../release-readiness.md#current-quick-start) or the
+[quick start](release-readiness.md#current-quick-start) or the
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md)
 instead. This guide is for users who already have a runtime install from a
 previous public release.
@@ -174,13 +174,18 @@ the full results.
 
 ## Release Process Implications
 
-Starting with `v0.5.0`, the release process requires at least one
-old-release upgrade rehearsal before tagging a new release. This rehearsal:
+Starting with `v0.5.0`, a release that changes the install contract, template
+structure, project memory schema, hub lock format, or install profiles
+requires at least one old-release upgrade rehearsal before tagging. This
+rehearsal:
 
 - Exercises the most recent supported-direct tag against the target release.
 - Validates both runtime install upgrade and project memory upgrade.
 - Records results as public-safe evidence in this repository.
 - Is a manual checklist today; scripted automation is a future enhancement.
+
+Patch or docs-only releases that do not change the above surfaces may skip
+the rehearsal if the maintainer records the deferral.
 
 See [Release Process](release-process.md#old-release-upgrade-rehearsal) for
 the rehearsal requirement.
