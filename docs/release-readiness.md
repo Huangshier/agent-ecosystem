@@ -69,6 +69,9 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - Duplicate experience-maintenance helpers have been reviewed:
   `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
   is the preferred runtime maintenance entrypoint.
+- PowerShell helper ownership is documented: repository maintenance scripts use
+  `scripts/lib/path-guard.ps1`, while installed skill and knowledge-hub runtime
+  scripts keep local helpers or depend only on same-package helpers.
 - The initial public experience entry is documented as a public-safe reindexed
   backfill with local source paths intentionally omitted from `index.json`.
 - Installer fallback metadata behavior is documented: the runtime
