@@ -144,7 +144,8 @@ function Test-Manifest {
     return @($errors.ToArray())
 }
 
-try {
+# Invoke-ReleaseValidationRepositoryChecks: 无参数；按原顺序执行仓库结构、公共文档边界和 helper ownership 检查。
+function Invoke-ReleaseValidationRepositoryChecks {
 
 $requiredFiles = @(
     "README.md",
@@ -694,26 +695,31 @@ else {
     Add-Check "skill metadata" "FAIL" "Skill metadata mismatch." @($metadataErrors.ToArray())
 }
 
-$profileExpectations = [ordered]@{
+}
+
+# Invoke-ReleaseValidationInstallerRuntimeChecks: 无参数；按原顺序执行安装矩阵、runtime smoke 和临时项目支持检查。
+function Invoke-ReleaseValidationInstallerRuntimeChecks {
+
+$script:profileExpectations = [ordered]@{
     minimal = @("project-bootstrap")
     recommended = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
     full = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
     dev = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
 }
 
-$installModes = @("copy")
+$script:installModes = @("copy")
 if (-not $SkipLinkMode.IsPresent) {
-    $installModes += "link"
+    $script:installModes += "link"
 }
 
 $installFailures = New-Object 'System.Collections.Generic.List[string]'
-$recommendedCopyRuntime = $null
-$recommendedLinkRuntime = $null
-foreach ($profile in $profileExpectations.Keys) {
-    foreach ($mode in $installModes) {
+$script:recommendedCopyRuntime = $null
+$script:recommendedLinkRuntime = $null
+foreach ($profile in $script:profileExpectations.Keys) {
+    foreach ($mode in $script:installModes) {
         try {
             $result = Invoke-InstallerProfile -Profile $profile -Mode $mode
-            $errors = @(Test-Manifest -InstallResult $result -ExpectedSkills $profileExpectations[$profile])
+            $errors = @(Test-Manifest -InstallResult $result -ExpectedSkills $script:profileExpectations[$profile])
             $manifest = $result.manifest
             $itemModes = @($manifest.items | ForEach-Object { [string]$_.mode })
             $script:evidence.profile_matrix += [ordered]@{
@@ -728,10 +734,10 @@ foreach ($profile in $profileExpectations.Keys) {
                 $installFailures.Add(("{0}/{1}: {2}" -f $profile, $mode, ($errors -join "; ")))
             }
             if ($profile -eq "recommended" -and $mode -eq "copy") {
-                $recommendedCopyRuntime = $result.target_dir
+                $script:recommendedCopyRuntime = $result.target_dir
             }
             if ($profile -eq "recommended" -and $mode -eq "link") {
-                $recommendedLinkRuntime = $result.target_dir
+                $script:recommendedLinkRuntime = $result.target_dir
             }
         }
         catch {
@@ -848,18 +854,18 @@ function Invoke-RuntimeSmoke {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
     $runtimeSmokeResults = New-Object 'System.Collections.Generic.List[object]'
-    $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $recommendedCopyRuntime -Name "copy"))
+    $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedCopyRuntime -Name "copy"))
 
     if (-not $SkipLinkMode.IsPresent) {
-        if ([string]::IsNullOrWhiteSpace($recommendedLinkRuntime)) {
+        if ([string]::IsNullOrWhiteSpace($script:recommendedLinkRuntime)) {
             throw "Recommended link runtime was not created."
         }
-        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $recommendedLinkRuntime -Name "link"))
+        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedLinkRuntime -Name "link"))
     }
 
     $script:evidence.runtime_smoke = @($runtimeSmokeResults.ToArray())
@@ -870,7 +876,7 @@ catch {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
@@ -878,8 +884,8 @@ try {
     New-Item -ItemType Directory -Force -Path $localizedProject | Out-Null
     Assert-PathInsideRoot -Path $localizedProject -Root $scratchRootFull
 
-    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $localizedProject -HubDir $hubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Host
 
     $summaryHeading = -join @([char]0x6458, [char]0x8981)
@@ -899,11 +905,11 @@ try {
     )
     Set-Content -LiteralPath $localizedContextPath -Value $localizedContextText -Encoding UTF8
 
-    $memoryDiagnoseScript = Join-PathParts $recommendedCopyRuntime "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
+    $memoryDiagnoseScript = Join-PathParts $script:recommendedCopyRuntime "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
     $diagnose = & $memoryDiagnoseScript -ProjectRoot $localizedProject -Json | ConvertFrom-Json
     $diagnoseMetadataFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "context_missing_discovery_metadata" })
 
-    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
     $upgrade = & $memoryUpgradeScript -ProjectDir $localizedProject -Mode Analyze -Json | ConvertFrom-Json
     $upgradeMetadataFindings = @($upgrade.findings | Where-Object { [string]$_.code -eq "context_metadata_missing" })
 
@@ -928,11 +934,11 @@ catch {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
-    $auditScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "audit_memory_language.ps1"
+    $auditScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "audit_memory_language.ps1"
     if (-not (Test-Path -LiteralPath $auditScript)) {
         throw "audit_memory_language.ps1 was not installed into the recommended runtime."
     }
@@ -1167,6 +1173,11 @@ try {
 catch {
     Add-Check "validation scratch retention pruning" "FAIL" $_.Exception.Message
 }
+
+}
+
+# Invoke-ReleaseValidationSpecAndDocumentationChecks: 无参数；按原顺序执行 workflow-spec-lite fixture、模板指导、README 和 release notes 检查。
+function Invoke-ReleaseValidationSpecAndDocumentationChecks {
 
 try {
     $specValidator = Join-PathParts $repoRoot "skills" "workflow-spec-lite" "scripts" "validate_spec.ps1"
@@ -2309,6 +2320,11 @@ catch {
     Add-Check "v0.4.6 published release notes" "FAIL" $_.Exception.Message
 }
 
+}
+
+# Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks: 无参数；按原顺序执行 runtime 行为、upgrade/migration flow 和 knowledge hub 检查。
+function Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks {
+
 try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
@@ -2341,10 +2357,10 @@ try {
         throw "Failed to commit hub lock fixture."
     }
 
-    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $projectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
     & $bootstrapScript -ProjectDir $batchProjectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
-    $checkHubLockScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "check_hub_lock.ps1"
+    $checkHubLockScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "check_hub_lock.ps1"
     $hubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture -HubDir $hubFixture)
     $hubLockStatusLine = @($hubLockOutput | Where-Object { $_ -match '^Status:\s+' } | Select-Object -Last 1)
     if ($hubLockStatusLine.Count -lt 1 -or $hubLockStatusLine[0] -notmatch 'Status:\s+in_sync') {
@@ -2428,7 +2444,7 @@ try {
     if ([string]$secondManifest.profile -ne "recommended") {
         throw "Forced reinstall did not update manifest profile to recommended."
     }
-    if (-not (Test-ExactArray -Actual @($secondManifest.skills) -Expected $profileExpectations.recommended)) {
+    if (-not (Test-ExactArray -Actual @($secondManifest.skills) -Expected $script:profileExpectations.recommended)) {
         throw "Forced reinstall manifest did not include recommended skills."
     }
 
@@ -2504,7 +2520,7 @@ catch {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
@@ -2512,8 +2528,8 @@ try {
     New-Item -ItemType Directory -Force -Path $memoryUpgradeProject | Out-Null
     Assert-PathInsideRoot -Path $memoryUpgradeProject -Root $scratchRootFull
 
-    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $memoryUpgradeProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
 
     $processPath = Join-PathParts $memoryUpgradeProject ".agents" "process.txt"
@@ -2526,7 +2542,7 @@ try {
     Add-Content -LiteralPath $planPath -Value "`nSpec: $exampleSpecRef"
     Add-Content -LiteralPath $notesPath -Value "`nTODO: temporary session state used by validation."
 
-    $memoryUpgradeScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
     $analyze = & $memoryUpgradeScript -ProjectDir $memoryUpgradeProject -Mode Analyze -Json | ConvertFrom-Json
     if (@($analyze.findings).Count -lt 1) {
         throw "Memory upgrade Analyze did not report validation findings."
@@ -2673,13 +2689,13 @@ catch {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
-    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
-    $languageMigrationScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "language_migration.ps1"
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $languageMigrationScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "language_migration.ps1"
     if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
         throw "language_migration.ps1 was not installed into the recommended runtime."
     }
@@ -2993,7 +3009,7 @@ catch {
 }
 
 try {
-    if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }
 
@@ -3001,8 +3017,8 @@ try {
     New-Item -ItemType Directory -Force -Path $preserveProject | Out-Null
     Assert-PathInsideRoot -Path $preserveProject -Root $scratchRootFull
 
-    $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
 
     $rootAgentsPath = Join-PathParts $preserveProject "AGENTS.md"
@@ -3337,6 +3353,11 @@ catch {
     Add-Check "duplicate helper hash" "FAIL" $_.Exception.Message
 }
 
+}
+
+# Invoke-ReleaseValidationParserSafetyChecks: 无参数；按原顺序执行 git diff、encoding、PowerShell/JSON parser 和 public safety scan 检查。
+function Invoke-ReleaseValidationParserSafetyChecks {
+
 try {
     $gitDiffCheck = & git -c core.autocrlf=false -c core.safecrlf=false -C $repoRoot diff --check 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -3498,6 +3519,11 @@ catch {
     Add-Check "sensitive audit" "FAIL" $_.Exception.Message
 }
 
+}
+
+# Invoke-ReleaseValidationLanguageTemplateChecks: 无参数；按原顺序执行语言策略、模板 auto-write 和 bilingual routing 检查。
+function Invoke-ReleaseValidationLanguageTemplateChecks {
+
 try {
     $repoGuide = Get-FileText -RelativePath "AGENTS.md"
     $languagePolicyPresent = $repoGuide -match '(?m)^## Project Language Policy\s*$'
@@ -3546,7 +3572,7 @@ try {
             [Parameter(Mandatory = $true)][string]$ExpectedSpecToken
         )
 
-        if ([string]::IsNullOrWhiteSpace($recommendedCopyRuntime)) {
+        if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
             throw "Recommended copy runtime was not created."
         }
 
@@ -3555,8 +3581,8 @@ try {
         New-Item -ItemType Directory -Force -Path $languageProjectDir | Out-Null
         Assert-PathInsideRoot -Path $languageProjectDir -Root $scratchRootFull
 
-        $hubDir = Join-PathParts $recommendedCopyRuntime "knowledge-hub"
-        $bootstrapScript = Join-PathParts $recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+        $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+        $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
         & $bootstrapScript -ProjectDir $languageProjectDir -HubDir $hubDir -ProjectLanguage $Language -SkipMemoryUpgradeAnalysis | Out-Host
 
         $requiredMarkers = [ordered]@{
@@ -3753,11 +3779,11 @@ try {
     }
 
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
-        $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $recommendedCopyRuntime
-        $autoWriteEvidence += Test-PlainBootstrapDefaultsToEnglish -RuntimeDir $recommendedCopyRuntime
+        $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $script:recommendedCopyRuntime
+        $autoWriteEvidence += Test-PlainBootstrapDefaultsToEnglish -RuntimeDir $script:recommendedCopyRuntime
         $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
         $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
-        $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $recommendedCopyRuntime
+        $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $script:recommendedCopyRuntime
     }
 
     $script:evidence.language_policy = [ordered]@{
@@ -3836,6 +3862,15 @@ catch {
     Add-Check "bilingual public/private routing" "FAIL" $_.Exception.Message
 }
 
+}
+
+try {
+    Invoke-ReleaseValidationRepositoryChecks
+    Invoke-ReleaseValidationInstallerRuntimeChecks
+    Invoke-ReleaseValidationSpecAndDocumentationChecks
+    Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks
+    Invoke-ReleaseValidationParserSafetyChecks
+    Invoke-ReleaseValidationLanguageTemplateChecks
 }
 catch {
     Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
