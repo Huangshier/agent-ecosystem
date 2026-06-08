@@ -1,0 +1,244 @@
+# Runtime Adoption Bridge
+
+This document answers issue #116. It explains how different agent runtimes
+enter the same Workflow Kernel project memory model without changing runtime
+behavior or adding runtime-specific configuration to bootstrap templates.
+
+For the first-use installation and bootstrap path, see
+[how-to-adapt](how-to-adapt.md). For the full adoption walkthrough, see
+[minimal project adoption](walkthroughs/minimal-project-adoption.md).
+
+## Scope
+
+This bridge covers three runtime classes:
+
+- **Codex** (OpenAI): native `AGENTS.md` support, skill discovery.
+- **Claude Code** (Anthropic): native `CLAUDE.md` loading, optional
+  `@AGENTS.md` import shim.
+- **Generic agents**: unknown startup surface; use `project-context-gate`
+  script as the explicit context reconstruction entry.
+
+This document does not:
+
+- add `CLAUDE.md`, `GEMINI.md`, `.clinerules`, or other runtime-specific
+  files to bootstrap templates;
+- implement a shared session state store, lifecycle hooks, state schema, or
+  runtime adapter layer;
+- control any runtime's internal loading behavior;
+- include private overlay paths, local runtime state, or sensitive material.
+
+## Shared Entry Point
+
+The Workflow Kernel uses `AGENTS.md` at the project root as the canonical
+entrypoint. This file tells the agent where to find deeper guidance:
+
+```text
+<project>/
+  AGENTS.md                       ← root entrypoint (always present after bootstrap)
+  .agents/
+    AGENTS.md                     ← primary working guide
+    process.txt                   ← hot memory: current session state
+    plan.md                       ← hot memory: active plan pointer
+    notes.md                      ← cold memory: confirmed facts
+    context/                      ← long-term memory cards
+      README.md
+      tech/
+      business/
+      experience/
+    commands/                     ← reusable workflow cards
+  docs/
+    specs/                        ← optional durable work packages
+```
+
+## Progressive Loading
+
+All runtimes should load context by disclosure tier, not by preloading
+everything at once. This keeps context cost proportional to task complexity.
+
+**Hot tier** — load immediately at session start:
+
+1. `AGENTS.md` (root)
+2. `.agents/AGENTS.md`
+3. `.agents/process.txt`
+4. `.agents/plan.md`
+
+**Warm tier** — load when a non-trivial task is active:
+
+- `docs/specs/<slug>/spec.md` and `tasks.md` referenced by process.txt or
+  plan.md
+
+**Cold tier** — open on demand only when task keywords match:
+
+- `.agents/context/README.md` and matching context entries by Summary or
+  Keywords
+- `.agents/notes.md`
+
+Skip missing files without treating them as errors.
+
+## Codex Path
+
+Codex has native `AGENTS.md` support. The entry sequence is:
+
+1. Codex reads the root `AGENTS.md` at session start.
+2. Follow the minimum read order defined in that file:
+   `.agents/AGENTS.md`, `.agents/process.txt`, `.agents/plan.md`,
+   `.agents/context/README.md`.
+3. For non-trivial work, use `project-context-gate` to rebuild the full
+   constraint capsule.
+4. For durable work packages, use `workflow-spec-lite` under
+   `docs/specs/<slug>/`.
+5. For periodic memory maintenance, use `memory-governance`.
+
+Codex also discovers skills via the installed skill registry. If
+`project-context-gate` is installed, Codex can invoke it directly; otherwise,
+the fallback rule in the skill's SKILL.md requires the agent to perform
+progressive loading manually.
+
+## Claude Code Path
+
+Claude Code loads `CLAUDE.md` from the project root or `.claude/` directory
+at session start. It does **not** automatically read `AGENTS.md`.
+
+### Recommended: Opt-In CLAUDE.md Shim
+
+Create a thin `CLAUDE.md` at the project root that explicitly imports the
+minimum project-memory startup files:
+
+```markdown
+# CLAUDE.md
+
+@AGENTS.md
+@.agents/AGENTS.md
+@.agents/process.txt
+@.agents/plan.md
+@.agents/context/README.md
+```
+
+These imports expose the minimum startup context for non-trivial tasks: the
+root entrypoint, the primary working guide, current session state, the active
+plan pointer, and the cold-context routing index. The context README helps the
+agent discover matching cold-tier entries on demand.
+
+The shim does **not** preload the full `.agents/context/` tree. After loading
+the files above, the agent should open specific context entries only when the
+current task keywords match an entry's Summary or Keywords. This mirrors the
+progressive loading discipline that `AGENTS.md` defines for other runtimes.
+
+This shim explicitly surfaces the minimum startup files because maintainer
+testing found that importing only `@AGENTS.md` is not sufficient: Claude Code
+may stop at the root file and not continue into `.agents/`. The explicit import
+list ensures the agent sees the same hot-tier context that other runtimes
+receive from following `AGENTS.md` instructions.
+
+The shim does not control Claude Code's internal behavior. If any imported file
+is missing, the scaffold is incomplete — run `project-bootstrap` first, then
+re-run this shim. For ongoing context verification, use `project-context-gate`.
+
+### Why Not Rely on Global CLAUDE.md Alone?
+
+A global `CLAUDE.md` in the user's home directory can instruct Claude Code to
+look for `AGENTS.md` in each project. Maintainer testing found that this
+approach is unreliable: Claude Code does not always follow cross-file
+discovery instructions from a global config when the target file is not
+itself a recognized loading surface. Even a project-local `CLAUDE.md` that
+imports only `@AGENTS.md` is insufficient — Claude Code may stop at the root
+file without continuing into `.agents/`. The explicit multi-import shim above
+is more dependable because `CLAUDE.md` is a first-class loading surface, `@`
+import is a native inclusion mechanism, and the import list directly surfaces
+the minimum startup files instead of relying on the agent to follow
+instructions inside `AGENTS.md`.
+
+### Alternative: Use project-context-gate
+
+If the project does not have a `CLAUDE.md` shim, invoke
+`project-context-gate` explicitly at the start of non-trivial work:
+
+```powershell
+pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
+```
+
+This inventories hot/warm/cold context files and produces a structured
+context summary that the agent can use to continue work.
+
+## Generic Agent Path
+
+When the agent runtime has no known startup surface for `AGENTS.md` or
+`CLAUDE.md`, use the explicit context reconstruction path:
+
+1. Run `project-context-gate` to inventory available context files:
+
+   ```powershell
+   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
+   ```
+
+   For JSON output suitable for automation:
+
+   ```powershell
+   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Json
+   ```
+
+2. Read hot-tier files: `AGENTS.md`, `.agents/AGENTS.md`,
+   `.agents/process.txt`, `.agents/plan.md`.
+
+3. Read any active work packages: `docs/specs/<slug>/spec.md` and `tasks.md`
+   referenced by process or plan.
+
+4. Read matching cold-tier entries only when task keywords align with
+   `.agents/context/` Summary or Keywords.
+
+5. Produce a constraint capsule summarizing: current objective, project
+   rules, validation requirements, and known blockers.
+
+## First-Use Diagnostic
+
+When in doubt about whether project memory is properly loaded, check:
+
+```powershell
+# 1. Verify scaffold exists
+Test-Path <project>/AGENTS.md
+Test-Path <project>/.agents/AGENTS.md
+
+# 2. Run context gate
+pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
+
+# 3. Verify bootstrap lock
+pwsh -NoProfile -File <runtime>/skills/project-bootstrap/scripts/check_hub_lock.ps1 -ProjectDir <project>
+```
+
+If any check fails, re-run `project-bootstrap` for the project:
+
+```powershell
+pwsh -NoProfile -File <runtime>/skills/project-bootstrap/scripts/bootstrap_project.ps1 -ProjectDir <project>
+```
+
+## Public / Private Boundary
+
+- `AGENTS.md`, `.agents/`, and `docs/specs/` inside the target project are
+  **project-local**. They belong to the project, not to the public kernel
+  repository.
+- The public kernel repository (`agent-ecosystem`) provides templates,
+  skills, and documentation. It does not own project-local memory.
+- Private overlays, runtime state, sensitive material, and local-only paths must
+  not appear in public documentation, issues, or pull requests.
+- When promoting a reusable lesson from a private project to the public
+  knowledge hub, follow the
+  [public promotion checklist](../knowledge-hub/knowledge/standards/public-promotion-checklist.md).
+
+## Long-Term Direction
+
+A recent discussion on issue #116 proposed externalizing session state into
+a shared store with cross-runtime lifecycle hooks and a standardized state
+schema. This would allow any agent runtime to resume another runtime's
+session from a checkpoint. The proposal is architecturally interesting but
+requires validation as a real user pain point and conflicts with the current
+file-driven progressive disclosure model. It is recorded as a long-term
+exploration topic and is out of scope for this documentation bridge.
+
+## Validation
+
+Documentation-only changes to this bridge should run:
+
+```powershell
+git diff --check
+pwsh -NoProfile -File scripts/validate-release.ps1 -ScratchRoot <scratch-root>
+```
