@@ -82,6 +82,62 @@ function Get-LineMatches {
     return @($lineMatches.ToArray())
 }
 
+function Get-MissingRequiredText {
+    param(
+        [AllowNull()][string]$Text,
+        [string[]]$RequiredText = @()
+    )
+
+    if ($null -eq $Text) {
+        $Text = ""
+    }
+
+    return @($RequiredText | Where-Object { $Text -notlike ("*{0}*" -f $_) })
+}
+
+function Get-ValidationFilesByExtension {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Filter
+    )
+
+    return @(Get-ChildItem -LiteralPath $Root -Recurse -File -Filter $Filter | Where-Object {
+            (ConvertTo-DisplayPath -Path $_.FullName -Root $Root) -notmatch '(^|/)\.git(/|$)'
+        })
+}
+
+function Test-BytesHaveUtf8Bom {
+    param([byte[]]$Bytes)
+
+    return ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xEF -and $Bytes[1] -eq 0xBB -and $Bytes[2] -eq 0xBF)
+}
+
+function Test-BytesHaveNonAscii {
+    param([byte[]]$Bytes)
+
+    foreach ($byte in $Bytes) {
+        if ($byte -gt 0x7F) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-PowerShellParseError {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+
+    $ignoredAst = $null
+    $errors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$ignoredAst, [ref]$errors) | Out-Null
+    if ($errors.Count -gt 0) {
+        return ("{0}: {1}" -f (ConvertTo-DisplayPath -Path $Path -Root $Root), ($errors | ForEach-Object { $_.Message }) -join "; ")
+    }
+    return ""
+}
+
 function Get-CurrentPowerShellPath {
     $currentProcess = Get-Process -Id $PID
     if (-not [string]::IsNullOrWhiteSpace($currentProcess.Path)) {
