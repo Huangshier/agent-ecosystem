@@ -1854,57 +1854,150 @@ function Validate-NarrativeMigrationPlan {
     }
 }
 
-$ProjectDirFull = [System.IO.Path]::GetFullPath($ProjectDir)
-if (-not (Test-Path -LiteralPath $ProjectDirFull)) {
-    throw "Project directory does not exist: $ProjectDirFull"
-}
+# Get-LanguageMigrationRuntimeContext: resolves ProjectDir and TemplateRoot for the mode handlers.
+function Get-LanguageMigrationRuntimeContext {
+    param(
+        [string]$ProjectDirValue,
+        [string]$TemplateRootValue
+    )
 
-if ([string]::IsNullOrWhiteSpace($TemplateRoot)) {
-    $skillRoot = Split-Path -Parent $PSScriptRoot
-    $TemplateRoot = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "languages"
-}
-$TemplateRootFull = [System.IO.Path]::GetFullPath($TemplateRoot)
-if (-not (Test-Path -LiteralPath $TemplateRootFull)) {
-    throw "Project language template root does not exist: $TemplateRootFull"
-}
-
-$payload = $null
-
-if ($Mode -eq "Apply" -or $Mode -eq "Validate") {
-    $plan = Read-MigrationPlan -PlanPath $MigrationPlan
-    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
-    if ($Mode -eq "Apply") {
-        $applyResult = Apply-MigrationPlan -Plan $plan
-        $payload = [ordered]@{
-            project = [string]$plan.project
-            mode = $Mode
-            source_language = [string]$plan.source_language
-            target_language = [string]$plan.target_language
-            apply_result = $applyResult
-        }
-    } else {
-        $validation = Validate-MigrationPlan -Plan $plan
-        $payload = [ordered]@{
-            project = [string]$plan.project
-            mode = $Mode
-            source_language = [string]$plan.source_language
-            target_language = [string]$plan.target_language
-            validation = $validation
-        }
-        if (-not [bool]$validation.valid) {
-            if ($Json.IsPresent) {
-                $payload | ConvertTo-Json -Depth 10
-            }
-            throw "Language migration validation failed."
-        }
+    $projectDirFull = [System.IO.Path]::GetFullPath($ProjectDirValue)
+    if (-not (Test-Path -LiteralPath $projectDirFull)) {
+        throw "Project directory does not exist: $projectDirFull"
     }
-} elseif ($Mode -eq "PlanNarrative") {
-    $basePlan = Read-MigrationPlan -PlanPath $MigrationPlan
+
+    if ([string]::IsNullOrWhiteSpace($TemplateRootValue)) {
+        $skillRoot = Split-Path -Parent $PSScriptRoot
+        $TemplateRootValue = Join-PathParts $skillRoot "assets" "knowledge-hub-template" "templates" "languages"
+    }
+    $templateRootFull = [System.IO.Path]::GetFullPath($TemplateRootValue)
+    if (-not (Test-Path -LiteralPath $templateRootFull)) {
+        throw "Project language template root does not exist: $templateRootFull"
+    }
+
+    return [ordered]@{
+        project_dir = $projectDirFull
+        template_root = $templateRootFull
+    }
+}
+
+# Invoke-LanguageMigrationAnalyze: runs Analyze mode and returns the existing JSON/human payload shape.
+function Invoke-LanguageMigrationAnalyze {
+    param(
+        [string]$ProjectDirFull,
+        [string]$TemplateRootFull,
+        [string]$SourceLanguageValue,
+        [string]$TargetLanguageValue
+    )
+
+    $sourceCode = Resolve-SupportedLanguage -Language $SourceLanguageValue -ParamName "SourceLanguage"
+    $targetCode = Resolve-SupportedLanguage -Language $TargetLanguageValue -ParamName "TargetLanguage"
+    if ($sourceCode -eq $targetCode) {
+        throw "SourceLanguage and TargetLanguage must differ for language migration."
+    }
+
+    $analysis = Get-MigrationAnalysis -Root $ProjectDirFull -TemplateRootFull $TemplateRootFull -SourceCode $sourceCode -TargetCode $targetCode
+    return [ordered]@{
+        project = $ProjectDirFull
+        mode = "Analyze"
+        source_language = $sourceCode
+        target_language = $targetCode
+        summary = $analysis.summary
+        actions = @($analysis.actions)
+    }
+}
+
+# Invoke-LanguageMigrationPlan: runs Plan mode and returns the existing proposal payload shape.
+function Invoke-LanguageMigrationPlan {
+    param(
+        [string]$ProjectDirFull,
+        [string]$TemplateRootFull,
+        [string]$SourceLanguageValue,
+        [string]$TargetLanguageValue
+    )
+
+    $sourceCode = Resolve-SupportedLanguage -Language $SourceLanguageValue -ParamName "SourceLanguage"
+    $targetCode = Resolve-SupportedLanguage -Language $TargetLanguageValue -ParamName "TargetLanguage"
+    if ($sourceCode -eq $targetCode) {
+        throw "SourceLanguage and TargetLanguage must differ for language migration."
+    }
+
+    $analysis = Get-MigrationAnalysis -Root $ProjectDirFull -TemplateRootFull $TemplateRootFull -SourceCode $sourceCode -TargetCode $targetCode
+    $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+    $backup = New-MigrationBackup -Root $ProjectDirFull -Actions @($analysis.actions) -Stamp $stamp
+    $proposal = Write-MigrationProposal -Root $ProjectDirFull -Analysis $analysis -Backup $backup
+    return [ordered]@{
+        project = $ProjectDirFull
+        mode = "Plan"
+        source_language = $sourceCode
+        target_language = $targetCode
+        summary = $analysis.summary
+        proposal = [string]$proposal.proposal
+        proposal_markdown = [string]$proposal.proposal_markdown
+        backup_dir = [string]$proposal.backup_dir
+        actions = @($analysis.actions)
+    }
+}
+
+# Invoke-LanguageMigrationApply: runs Apply mode and returns the existing apply_result payload shape.
+function Invoke-LanguageMigrationApply {
+    param(
+        [string]$ProjectDirFull,
+        [string]$MigrationPlanValue
+    )
+
+    $plan = Read-MigrationPlan -PlanPath $MigrationPlanValue
+    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
+    $applyResult = Apply-MigrationPlan -Plan $plan
+    return [ordered]@{
+        project = [string]$plan.project
+        mode = "Apply"
+        source_language = [string]$plan.source_language
+        target_language = [string]$plan.target_language
+        apply_result = $applyResult
+    }
+}
+
+# Invoke-LanguageMigrationValidate: runs Validate mode and preserves failure output behavior.
+function Invoke-LanguageMigrationValidate {
+    param(
+        [string]$ProjectDirFull,
+        [string]$MigrationPlanValue,
+        [switch]$JsonOutput
+    )
+
+    $plan = Read-MigrationPlan -PlanPath $MigrationPlanValue
+    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
+    $validation = Validate-MigrationPlan -Plan $plan
+    $payload = [ordered]@{
+        project = [string]$plan.project
+        mode = "Validate"
+        source_language = [string]$plan.source_language
+        target_language = [string]$plan.target_language
+        validation = $validation
+    }
+    if (-not [bool]$validation.valid) {
+        if ($JsonOutput.IsPresent) {
+            $payload | ConvertTo-Json -Depth 10
+        }
+        throw "Language migration validation failed."
+    }
+    return $payload
+}
+
+# Invoke-LanguageMigrationPlanNarrative: runs PlanNarrative mode and returns the existing narrative proposal payload shape.
+function Invoke-LanguageMigrationPlanNarrative {
+    param(
+        [string]$ProjectDirFull,
+        [string]$MigrationPlanValue
+    )
+
+    $basePlan = Read-MigrationPlan -PlanPath $MigrationPlanValue
     Assert-PlanProjectMatchesCurrentProject -Plan $basePlan -CurrentProjectDir $ProjectDirFull
     $proposal = Write-NarrativeProposal -Root $ProjectDirFull -BasePlan $basePlan
-    $payload = [ordered]@{
+    return [ordered]@{
         project = $ProjectDirFull
-        mode = $Mode
+        mode = "PlanNarrative"
         source_language = [string]$basePlan.source_language
         target_language = [string]$basePlan.target_language
         summary = $proposal.summary
@@ -1913,67 +2006,117 @@ if ($Mode -eq "Apply" -or $Mode -eq "Validate") {
         backup_dir = [string]$proposal.backup_dir
         actions = @($proposal.actions)
     }
-} elseif ($Mode -eq "ApplyNarrative" -or $Mode -eq "ValidateNarrative") {
-    $plan = Read-NarrativePlan -PlanPath $MigrationPlan
+}
+
+# Invoke-LanguageMigrationApplyNarrative: runs ApplyNarrative mode and returns the existing apply_result payload shape.
+function Invoke-LanguageMigrationApplyNarrative {
+    param(
+        [string]$ProjectDirFull,
+        [string]$MigrationPlanValue
+    )
+
+    $plan = Read-NarrativePlan -PlanPath $MigrationPlanValue
     Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
-    if ($Mode -eq "ApplyNarrative") {
-        $applyResult = Apply-NarrativeMigrationPlan -Plan $plan
-        $payload = [ordered]@{
-            project = [string]$plan.project
-            mode = $Mode
-            source_language = [string]$plan.source_language
-            target_language = [string]$plan.target_language
-            apply_result = $applyResult
+    $applyResult = Apply-NarrativeMigrationPlan -Plan $plan
+    return [ordered]@{
+        project = [string]$plan.project
+        mode = "ApplyNarrative"
+        source_language = [string]$plan.source_language
+        target_language = [string]$plan.target_language
+        apply_result = $applyResult
+    }
+}
+
+# Invoke-LanguageMigrationValidateNarrative: runs ValidateNarrative mode and preserves failure output behavior.
+function Invoke-LanguageMigrationValidateNarrative {
+    param(
+        [string]$ProjectDirFull,
+        [string]$MigrationPlanValue,
+        [switch]$JsonOutput
+    )
+
+    $plan = Read-NarrativePlan -PlanPath $MigrationPlanValue
+    Assert-PlanProjectMatchesCurrentProject -Plan $plan -CurrentProjectDir $ProjectDirFull
+    $validation = Validate-NarrativeMigrationPlan -Plan $plan
+    $payload = [ordered]@{
+        project = [string]$plan.project
+        mode = "ValidateNarrative"
+        source_language = [string]$plan.source_language
+        target_language = [string]$plan.target_language
+        validation = $validation
+    }
+    if (-not [bool]$validation.valid) {
+        if ($JsonOutput.IsPresent) {
+            $payload | ConvertTo-Json -Depth 10
         }
-    } else {
-        $validation = Validate-NarrativeMigrationPlan -Plan $plan
-        $payload = [ordered]@{
-            project = [string]$plan.project
-            mode = $Mode
-            source_language = [string]$plan.source_language
-            target_language = [string]$plan.target_language
-            validation = $validation
+        throw "Language migration narrative validation failed."
+    }
+    return $payload
+}
+
+# Write-LanguageMigrationHumanSummary: writes the existing human summary lines for any mode payload.
+function Write-LanguageMigrationHumanSummary {
+    param($Payload)
+
+    Write-Output ("Language migration {0}: {1}" -f [string]$Payload.mode.ToLowerInvariant(), [string]$Payload.project)
+    Write-Output ("Source language: {0}" -f [string]$Payload.source_language)
+    Write-Output ("Target language: {0}" -f [string]$Payload.target_language)
+    if ($Payload.PSObject.Properties.Name -contains "summary") {
+        Write-Output ("Files analyzed: {0}" -f [int]$Payload.summary.total)
+        Write-Output ("Files to write: {0}" -f [int]$Payload.summary.writes)
+        Write-Output ("Manual-review files: {0}" -f [int]$Payload.summary.manual_review)
+    }
+    if ($Payload.PSObject.Properties.Name -contains "proposal") {
+        Write-Output ("Proposal: {0}" -f [string]$Payload.proposal)
+        Write-Output ("Proposal markdown: {0}" -f [string]$Payload.proposal_markdown)
+        Write-Output ("Backup: {0}" -f [string]$Payload.backup_dir)
+    }
+    if ($Payload.PSObject.Properties.Name -contains "apply_result") {
+        Write-Output ("Result: {0}" -f [string]$Payload.apply_result.result)
+        Write-Output ("Backup: {0}" -f [string]$Payload.apply_result.backup_dir)
+        Write-Output ("Files written: {0}" -f [int]$Payload.apply_result.files_written)
+        Write-Output ("Manual-review files: {0}" -f [int]$Payload.apply_result.manual_review_count)
+    }
+    if ($Payload.PSObject.Properties.Name -contains "validation") {
+        Write-Output ("Valid: {0}" -f [bool]$Payload.validation.valid)
+        if ($Payload.validation.PSObject.Properties.Name -contains "completion_ready") {
+            Write-Output ("Completion ready: {0}" -f [bool]$Payload.validation.completion_ready)
         }
-        if (-not [bool]$validation.valid) {
-            if ($Json.IsPresent) {
-                $payload | ConvertTo-Json -Depth 10
-            }
-            throw "Language migration narrative validation failed."
+        if ($Payload.validation.PSObject.Properties.Name -contains "body_language_audit") {
+            Write-Output ("Body language audit findings: {0}" -f [int]$Payload.validation.body_language_audit.summary.finding_count)
+        }
+        foreach ($finding in @($Payload.validation.findings)) {
+            Write-Output ("[{0}] {1}: {2}" -f [string]$finding.severity, [string]$finding.code, [string]$finding.message)
+            Write-Output ("  Path: {0}" -f [string]$finding.path)
         }
     }
-} else {
-    $sourceCode = Resolve-SupportedLanguage -Language $SourceLanguage -ParamName "SourceLanguage"
-    $targetCode = Resolve-SupportedLanguage -Language $TargetLanguage -ParamName "TargetLanguage"
-    if ($sourceCode -eq $targetCode) {
-        throw "SourceLanguage and TargetLanguage must differ for language migration."
+}
+
+$runtimeContext = Get-LanguageMigrationRuntimeContext -ProjectDirValue $ProjectDir -TemplateRootValue $TemplateRoot
+$ProjectDirFull = [string]$runtimeContext.project_dir
+$TemplateRootFull = [string]$runtimeContext.template_root
+
+switch ($Mode) {
+    "Analyze" {
+        $payload = Invoke-LanguageMigrationAnalyze -ProjectDirFull $ProjectDirFull -TemplateRootFull $TemplateRootFull -SourceLanguageValue $SourceLanguage -TargetLanguageValue $TargetLanguage
     }
-
-    $analysis = Get-MigrationAnalysis -Root $ProjectDirFull -TemplateRootFull $TemplateRootFull -SourceCode $sourceCode -TargetCode $targetCode
-
-    if ($Mode -eq "Plan") {
-        $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
-        $backup = New-MigrationBackup -Root $ProjectDirFull -Actions @($analysis.actions) -Stamp $stamp
-        $proposal = Write-MigrationProposal -Root $ProjectDirFull -Analysis $analysis -Backup $backup
-        $payload = [ordered]@{
-            project = $ProjectDirFull
-            mode = $Mode
-            source_language = $sourceCode
-            target_language = $targetCode
-            summary = $analysis.summary
-            proposal = [string]$proposal.proposal
-            proposal_markdown = [string]$proposal.proposal_markdown
-            backup_dir = [string]$proposal.backup_dir
-            actions = @($analysis.actions)
-        }
-    } else {
-        $payload = [ordered]@{
-            project = $ProjectDirFull
-            mode = $Mode
-            source_language = $sourceCode
-            target_language = $targetCode
-            summary = $analysis.summary
-            actions = @($analysis.actions)
-        }
+    "Plan" {
+        $payload = Invoke-LanguageMigrationPlan -ProjectDirFull $ProjectDirFull -TemplateRootFull $TemplateRootFull -SourceLanguageValue $SourceLanguage -TargetLanguageValue $TargetLanguage
+    }
+    "Apply" {
+        $payload = Invoke-LanguageMigrationApply -ProjectDirFull $ProjectDirFull -MigrationPlanValue $MigrationPlan
+    }
+    "Validate" {
+        $payload = Invoke-LanguageMigrationValidate -ProjectDirFull $ProjectDirFull -MigrationPlanValue $MigrationPlan -JsonOutput:$Json.IsPresent
+    }
+    "PlanNarrative" {
+        $payload = Invoke-LanguageMigrationPlanNarrative -ProjectDirFull $ProjectDirFull -MigrationPlanValue $MigrationPlan
+    }
+    "ApplyNarrative" {
+        $payload = Invoke-LanguageMigrationApplyNarrative -ProjectDirFull $ProjectDirFull -MigrationPlanValue $MigrationPlan
+    }
+    "ValidateNarrative" {
+        $payload = Invoke-LanguageMigrationValidateNarrative -ProjectDirFull $ProjectDirFull -MigrationPlanValue $MigrationPlan -JsonOutput:$Json.IsPresent
     }
 }
 
@@ -1982,35 +2125,4 @@ if ($Json.IsPresent) {
     return
 }
 
-Write-Output ("Language migration {0}: {1}" -f $Mode.ToLowerInvariant(), [string]$payload.project)
-Write-Output ("Source language: {0}" -f [string]$payload.source_language)
-Write-Output ("Target language: {0}" -f [string]$payload.target_language)
-if ($payload.PSObject.Properties.Name -contains "summary") {
-    Write-Output ("Files analyzed: {0}" -f [int]$payload.summary.total)
-    Write-Output ("Files to write: {0}" -f [int]$payload.summary.writes)
-    Write-Output ("Manual-review files: {0}" -f [int]$payload.summary.manual_review)
-}
-if ($payload.PSObject.Properties.Name -contains "proposal") {
-    Write-Output ("Proposal: {0}" -f [string]$payload.proposal)
-    Write-Output ("Proposal markdown: {0}" -f [string]$payload.proposal_markdown)
-    Write-Output ("Backup: {0}" -f [string]$payload.backup_dir)
-}
-if ($payload.PSObject.Properties.Name -contains "apply_result") {
-    Write-Output ("Result: {0}" -f [string]$payload.apply_result.result)
-    Write-Output ("Backup: {0}" -f [string]$payload.apply_result.backup_dir)
-    Write-Output ("Files written: {0}" -f [int]$payload.apply_result.files_written)
-    Write-Output ("Manual-review files: {0}" -f [int]$payload.apply_result.manual_review_count)
-}
-if ($payload.PSObject.Properties.Name -contains "validation") {
-    Write-Output ("Valid: {0}" -f [bool]$payload.validation.valid)
-    if ($payload.validation.PSObject.Properties.Name -contains "completion_ready") {
-        Write-Output ("Completion ready: {0}" -f [bool]$payload.validation.completion_ready)
-    }
-    if ($payload.validation.PSObject.Properties.Name -contains "body_language_audit") {
-        Write-Output ("Body language audit findings: {0}" -f [int]$payload.validation.body_language_audit.summary.finding_count)
-    }
-    foreach ($finding in @($payload.validation.findings)) {
-        Write-Output ("[{0}] {1}: {2}" -f [string]$finding.severity, [string]$finding.code, [string]$finding.message)
-        Write-Output ("  Path: {0}" -f [string]$finding.path)
-    }
-}
+Write-LanguageMigrationHumanSummary -Payload $payload
