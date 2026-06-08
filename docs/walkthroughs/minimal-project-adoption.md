@@ -101,9 +101,17 @@ For automation or compact inspection, request JSON:
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project> -Json
 ```
 
-The context gate should show the project root, hot memory files, and discovered
-context files. In an agent session, the agent should turn that output into a
-short constraint capsule before editing.
+For a copyable agent brief, request the compact brief output:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project> -Brief
+```
+
+The context gate should show the project root, git state, hot memory files,
+active work package files, and discovered context files. In an agent session,
+the agent should turn that output into a short constraint capsule before
+editing. Use `-Json` for automation contracts and `-Brief` for a human/agent
+handoff surface.
 
 ## 4. Create A First Spec-Lite Work Package
 

@@ -66,6 +66,7 @@ If the helper is unavailable, manually check the same paths.
 
 Useful flags:
 - `-Json`: emit a structured payload for automation or compact summaries.
+- `-Brief`: emit a compact, copyable agent brief for human/agent handoff.
 - `-IncludeTemplates`: include every `.agents/context/` file, including templates, for audits.
 
 ### Step 2: Load Context Progressively
@@ -110,6 +111,11 @@ Before continuing work, summarize the current task constraints in a few lines:
   packages.
 
 Use the capsule to guide the next implementation or verification step. Keep it short enough to refresh repeatedly during long sessions.
+
+When a user or runtime needs a copyable handoff artifact, use `-Brief` instead
+of manually rewriting the inventory. The brief is a presentation layer over the
+same context inventory. It preserves the default and `-Json` behavior, does not
+read every cold context file, and does not write project memory.
 
 ### Step 3a: Verify Cross-Workspace Roots
 When work crosses repositories, sibling worktrees, generated workspaces, or

@@ -704,6 +704,24 @@ function Invoke-RuntimeSmoke {
         }
     }
 
+    $contextBriefText = (& $contextGateScript -ProjectRoot $projectDir -Brief) -join [Environment]::NewLine
+    $expectedBriefMarkers = @(
+        "Project Context Gate Brief",
+        "Gate: start",
+        "Project root:",
+        "Git:",
+        "Hot files (load now):",
+        "Active work package files:",
+        "Cold discovery-only files:",
+        "Warnings / boundary notes:",
+        "Next action:"
+    )
+    foreach ($marker in $expectedBriefMarkers) {
+        if ($contextBriefText -notmatch [regex]::Escape($marker)) {
+            throw "Context gate brief output did not include marker: $marker"
+        }
+    }
+
     $specDir = Join-PathParts $projectDir "docs" "specs" ("validation-smoke-{0}" -f $Name)
     New-Item -ItemType Directory -Force -Path $specDir | Out-Null
     $specSource = Join-PathParts $RuntimeDir "skills" "workflow-spec-lite" "references" "spec-template.md"
@@ -752,6 +770,7 @@ function Invoke-RuntimeSmoke {
         project = $projectDir
         bootstrap = "passed"
         context_gate_hot_file_count = @($contextJson.hot_files).Count
+        context_gate_brief = "passed"
         spec = $specTarget
         tasks = $tasksTarget
         memory_diagnose_findings = $findingCount
