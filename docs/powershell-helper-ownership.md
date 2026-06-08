@@ -1,12 +1,12 @@
 # PowerShell Helper Ownership
 
-This note defines the first-stage ownership model for issue #97. It documents
-where shared PowerShell path helpers may live today, where local helper copies
-are intentional, and what future consolidation must preserve.
+This note defines the PowerShell helper ownership model for issue #97. It
+documents where shared PowerShell path helpers may live today, where local
+helper copies are intentional, and what future consolidation must preserve.
 
-This is a governance and validation guard stage. It does not remove runtime
-helper copies, does not introduce a skill-local or hub-local helper package,
-and does not complete #97.
+The current deliverable boundary is documentation plus validation guardrails.
+It does not remove runtime helper copies and does not introduce a skill-local or
+hub-local helper package.
 
 ## Ownership Model
 
@@ -86,6 +86,33 @@ compatibility or deprecation plan.
 
 Do not combine this helper ownership work with #96 release-validator or
 language-migration modularization.
+
+## Issue #97 Closeout
+
+The second-stage #97 review found no safe direct deletion of local
+`Join-PathParts` definitions inside installed runtime scripts. Each remaining
+definition is either:
+
+- the repository-maintenance authority in `scripts/lib/path-guard.ps1`;
+- a standalone installed skill runtime entrypoint;
+- a knowledge-hub installed runtime entrypoint; or
+- a project-bootstrap compatibility copy used to seed the installed hub script
+  surface.
+
+Reducing the installed-runtime definitions further would require a new
+packaged helper contract, such as a skill-local or hub-local helper module, plus
+copy-mode and link-mode install validation. That is a separate packaging
+refactor, not an in-scope #97 cleanup.
+
+For the current v0.5.0 stabilization sequence, #97 is considered satisfied
+when:
+
+- repository-maintenance scripts use the authoritative
+  `scripts/lib/path-guard.ps1` helper;
+- installed skill and hub scripts do not depend on repository-only helper paths;
+- compatibility copies remain documented and hash-guarded where they are meant
+  to be identical; and
+- release validation fails on unclassified new `Join-PathParts` definitions.
 
 ## Validation
 
