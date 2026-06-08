@@ -150,6 +150,7 @@ User adoption paths:
 - [Architecture](docs/architecture.md)
 - [How to adapt](docs/how-to-adapt.md)
 - [Existing project upgrade path](docs/existing-project-upgrade.md)
+- [Old-release upgrade path](docs/old-release-upgrade-path.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Language policy](docs/language-policy.md)
 
