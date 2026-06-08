@@ -424,7 +424,7 @@ try {
         "ApplyMemoryUpgrade",
         "Validate"
     )
-    $missingUpgradeTokens = @($upgradeTokens | Where-Object { $upgradeGuide -notlike "*$_*" })
+    $missingUpgradeTokens = @(Get-MissingRequiredText -Text $upgradeGuide -RequiredText $upgradeTokens)
     $missingLinks = @()
     if ($adaptGuide -notlike "*existing project upgrade path*") {
         $missingLinks += "docs/how-to-adapt.md missing existing project upgrade path link."
@@ -471,7 +471,7 @@ try {
         "#97 covers shared PowerShell path helpers",
         "#118 covers old-release upgrade validation"
     )
-    $missingBoundaryTokens = @($boundaryTokens | Where-Object { $boundaryDoc -notlike "*$_*" })
+    $missingBoundaryTokens = @(Get-MissingRequiredText -Text $boundaryDoc -RequiredText $boundaryTokens)
     $missingBoundaryLinks = @()
     if ($upgradeGuide -notlike "*project-bootstrap-command-boundaries.md*") {
         $missingBoundaryLinks += "docs/existing-project-upgrade.md missing command boundary design note link."
@@ -607,7 +607,7 @@ try {
         "Compatibility Copies",
         "scripts/lib/path-guard.ps1"
     )
-    $missingDocMarkers = @($docMarkers | Where-Object { $helperOwnershipDoc -notlike "*$_*" })
+    $missingDocMarkers = @(Get-MissingRequiredText -Text $helperOwnershipDoc -RequiredText $docMarkers)
 
     if ($unexpectedDefinitions.Count -eq 0 -and $missingDefinitions.Count -eq 0 -and $missingDocMarkers.Count -eq 0) {
         Add-Check "PowerShell helper ownership allowlist" "PASS" "Join-PathParts definitions match the documented helper ownership model." ([ordered]@{
@@ -637,6 +637,11 @@ try {
         "Get-GitFiles",
         "Get-FileText",
         "Get-LineMatches",
+        "Get-MissingRequiredText",
+        "Get-ValidationFilesByExtension",
+        "Test-BytesHaveUtf8Bom",
+        "Test-BytesHaveNonAscii",
+        "Get-PowerShellParseError",
         "Get-CurrentPowerShellPath",
         "Get-PowerShellFileArguments",
         "Invoke-IsolatedPowerShellScript",
@@ -1931,7 +1936,7 @@ try {
         "domain-pack scaffold",
         "PASS=21 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.2.0 release notes" "FAIL" "Release notes are missing required v0.2.0 summary tokens." @($missingReleaseTokens)
     }
@@ -1963,7 +1968,7 @@ try {
         "context gate large context benchmark",
         "PASS=32 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.3.0 release notes" "FAIL" "Release notes are missing required v0.3.0 summary tokens." @($missingReleaseTokens)
     }
@@ -1994,7 +1999,7 @@ try {
         "actions/upload-artifact@v7",
         "PASS=33 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.3.1 release notes" "FAIL" "Release notes are missing required v0.3.1 summary tokens." @($missingReleaseTokens)
     }
@@ -2017,7 +2022,7 @@ try {
         "narrative migration",
         "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.4.0 release notes" "FAIL" "Release notes are missing required v0.4.0 summary tokens." @($missingReleaseTokens)
     }
@@ -2039,7 +2044,7 @@ try {
         "skills/project-bootstrap/templates/project-memory",
         "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.4.1 release notes" "FAIL" "Release notes are missing required v0.4.1 summary tokens." @($missingReleaseTokens)
     }
@@ -2065,7 +2070,7 @@ try {
         "dev",
         "PASS=40 FAIL=0 WARN=0 DEFERRED=0"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.4.2 release notes" "FAIL" "Release notes are missing required v0.4.2 summary tokens." @($missingReleaseTokens)
     }
@@ -2094,7 +2099,7 @@ try {
         "26072b7f8e25e2a5b1092b6af45d47ae1c43cac8",
         "Published GitHub Release"
     )
-    $missingReleaseTokens = @($releaseTokens | Where-Object { $releaseNotes -notlike "*$_*" })
+    $missingReleaseTokens = @(Get-MissingRequiredText -Text $releaseNotes -RequiredText $releaseTokens)
     if ($missingReleaseTokens.Count -gt 0) {
         Add-Check "v0.4.3 release notes" "FAIL" "Release notes are missing required v0.4.3 published-release tokens." @($missingReleaseTokens)
     }
@@ -3174,7 +3179,7 @@ try {
         "knowledge/standards/bilingual-public-private-routing.md",
         "knowledge/domain-packs/embedded-core/catalog.md"
     )
-    $missingCatalogTokens = @($catalogRequiredTokens | Where-Object { $catalogText -notlike "*$_*" })
+    $missingCatalogTokens = @(Get-MissingRequiredText -Text $catalogText -RequiredText $catalogRequiredTokens)
 
     $metadataFiles = @(
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
@@ -3345,21 +3350,15 @@ catch {
 
 try {
     $encodingErrors = New-Object 'System.Collections.Generic.List[string]'
-    $psFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.ps1" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
+    $psFiles = @(Get-ValidationFilesByExtension -Root $repoRoot -Filter "*.ps1")
     foreach ($file in $psFiles) {
         $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
         if ($bytes.Length -eq 0) {
             continue
         }
 
-        $hasUtf8Bom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
-        $hasNonAscii = $false
-        foreach ($byte in $bytes) {
-            if ($byte -gt 0x7F) {
-                $hasNonAscii = $true
-                break
-            }
-        }
+        $hasUtf8Bom = Test-BytesHaveUtf8Bom -Bytes $bytes
+        $hasNonAscii = Test-BytesHaveNonAscii -Bytes $bytes
 
         if ($hasNonAscii -and -not $hasUtf8Bom) {
             $encodingErrors.Add(("{0}: contains non-ASCII bytes but is not UTF-8 with BOM" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot)))
@@ -3379,13 +3378,11 @@ catch {
 
 try {
     $parseErrors = New-Object 'System.Collections.Generic.List[string]'
-    $psFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.ps1" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
+    $psFiles = @(Get-ValidationFilesByExtension -Root $repoRoot -Filter "*.ps1")
     foreach ($file in $psFiles) {
-        $tokens = $null
-        $errors = $null
-        [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
-        if ($errors.Count -gt 0) {
-            $parseErrors.Add(("{0}: {1}" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot), ($errors | ForEach-Object { $_.Message }) -join "; "))
+        $parseError = Get-PowerShellParseError -Path $file.FullName -Root $repoRoot
+        if (-not [string]::IsNullOrWhiteSpace($parseError)) {
+            $parseErrors.Add($parseError)
         }
     }
     if ($parseErrors.Count -gt 0) {
@@ -3401,7 +3398,7 @@ catch {
 
 try {
     $jsonErrors = New-Object 'System.Collections.Generic.List[string]'
-    $jsonFiles = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Filter "*.json" | Where-Object { (ConvertTo-DisplayPath -Path $_.FullName -Root $repoRoot) -notmatch '(^|/)\.git(/|$)' })
+    $jsonFiles = @(Get-ValidationFilesByExtension -Root $repoRoot -Filter "*.json")
     foreach ($file in $jsonFiles) {
         try {
             Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json | Out-Null
@@ -3817,8 +3814,8 @@ try {
             default { $releaseProcess }
         }
         foreach ($token in $routingExpectations[$relativePath]) {
-            if ($text -notlike ("*{0}*" -f $token)) {
-                $routingMissing.Add("$relativePath missing token: $token")
+            foreach ($missingToken in @(Get-MissingRequiredText -Text $text -RequiredText @($token))) {
+                $routingMissing.Add("$relativePath missing token: $missingToken")
             }
         }
     }
