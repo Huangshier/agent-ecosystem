@@ -90,6 +90,8 @@ For an existing project, treat bootstrap as a conservative refresh:
   lessons into `.agents/context/`.
 - Use the public `knowledge-hub/knowledge-catalog.md` before opening individual
   reusable knowledge entries.
+- For runtime-specific startup paths (Codex, Claude Code, generic agents), see
+  the [runtime adoption bridge](runtime-adoption-bridge.md).
 
 ## 4. Keep Layers Separate
 
