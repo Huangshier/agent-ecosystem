@@ -58,6 +58,38 @@ trusted only because it comes from the App. Agent-assisted issues and pull
 requests must still state the actor boundary in the issue or pull request body,
 and maintainer authority remains required for merge and release decisions.
 
+## Pull Request Identity Guard
+
+The `PR identity guard` workflow is a hosted pull request check for explicitly
+agent-authored changes. It is intentionally narrower than normal contributor
+validation: human-authored pull requests are not required to use bot commit
+metadata.
+
+The guard applies when a pull request has at least one agent-authored signal:
+
+- the pull request author is the `agent-ecosystem-bot` App identity;
+- the pull request carries the `source:agent` label;
+- the head branch starts with `codex/` or `agent/`;
+- the pull request body declares an agent-authored or agent-assisted flow.
+
+For matching pull requests, the guard scans every commit in the pull request,
+not only the latest head commit. Each commit author and committer must be:
+
+```text
+agent-ecosystem-bot[bot] <agent-ecosystem-bot[bot]@users.noreply.github.com>
+```
+
+A mismatch fails the hosted check with the affected commit and field. Repair the
+branch by amending the affected commits so both author and committer use the bot
+identity, then update the branch through the bot-backed public write flow.
+
+Actor Boundary exceptions are allowed only when they are explicit and
+reviewable. If a bot-authored pull request needs a maintainer-authored commit
+because of workflow, repository setting, secret, or permission limits, the pull
+request body must include an `## Actor Boundary` section explaining the reason.
+The guard will surface the mismatch as a warning instead of failing, leaving the
+exception visible for maintainer review. Do not infer exceptions silently.
+
 ## Required Labels
 
 Use these labels for agent-assisted maintenance:
