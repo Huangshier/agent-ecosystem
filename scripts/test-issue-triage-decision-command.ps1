@@ -145,12 +145,50 @@ async function runScenario({ commentBody, issue, sender, permission }) {
   assert.strictEqual(countOccurrences(updated.body, /^Decision notes:/gim), 1);
   assert(updated.body.indexOf("Decision: accepted") < updated.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human"));
   assert(updated.body.indexOf("Allowed values: accepted, rejected, deferred, needs-human") < updated.body.indexOf("Decision notes: Set to accepted"));
-  assert.strictEqual(helper.updateDecisionInBody({
+  // Missing section: now appends normalized section instead of failing
+  const missingSection = helper.updateDecisionInBody({
     body: "## Background\n\nNo triage section.\n",
     decision: "accepted",
     actorLogin: "maintainer",
     command: "/decision accepted",
-  }).changed, false);
+    now: "2026-06-03T00:00:00.000Z",
+  });
+  assert.strictEqual(missingSection.changed, true);
+  assert.strictEqual(missingSection.appended, true);
+  assert(missingSection.body.includes("## Human Triage Decision"));
+  assert(missingSection.body.includes("Decision: accepted"));
+  assert(missingSection.body.includes("Decision notes: Set to accepted by `maintainer`"));
+  assert(missingSection.body.includes("Allowed values: accepted, rejected, deferred, needs-human"));
+  // Original content is preserved
+  assert(missingSection.body.includes("## Background"));
+
+  // Missing section with empty body
+  const emptyBody = helper.updateDecisionInBody({
+    body: "",
+    decision: "rejected",
+    actorLogin: "agent-ecosystem-bot[bot]",
+    command: "/decision rejected",
+    now: "2026-06-03T00:00:00.000Z",
+  });
+  assert.strictEqual(emptyBody.changed, true);
+  assert.strictEqual(emptyBody.appended, true);
+  assert(emptyBody.body.includes("Decision: rejected"));
+  assert.strictEqual(emptyBody.label, "triage:rejected");
+
+  // Missing section: idempotent on re-run (second run finds section, updates in place)
+  const secondRun = helper.updateDecisionInBody({
+    body: missingSection.body,
+    decision: "deferred",
+    actorLogin: "admin",
+    command: "/decision deferred",
+    now: "2026-06-03T01:00:00.000Z",
+  });
+  assert.strictEqual(secondRun.changed, true);
+  assert.strictEqual(secondRun.appended, undefined);
+  assert(secondRun.body.includes("Decision: deferred"));
+  assert(!secondRun.body.includes("Decision: accepted"));
+  // Only one Decision notes line in the section
+  assert.strictEqual(countOccurrences(secondRun.body, /^Decision notes:/gim), 1);
 
   const polluted = helper.updateDecisionInBody({
     body: [
@@ -233,8 +271,42 @@ async function runScenario({ commentBody, issue, sender, permission }) {
   assert.strictEqual(nonAgent.result.action, "ignored");
   assert.strictEqual(nonAgent.calls.length, 0);
 
+  // Missing section scenario: /decision accepted on source:agent issue without HTD section
+  const missingSectionScenario = await runScenario({
+    commentBody: "/decision accepted",
+    issue: {
+      number: 200,
+      state: "open",
+      labels: [{ name: "source:agent" }, { name: "triage:needs-human" }],
+      body: "## Background\n\nAPI-created issue without triage section.\n",
+    },
+    permission: "write",
+  });
+  assert.strictEqual(missingSectionScenario.result.action, "updated");
+  assert.strictEqual(missingSectionScenario.result.decision, "accepted");
+  assert.strictEqual(missingSectionScenario.calls.filter((call) => call[0] === "update").length, 1);
+  assert(missingSectionScenario.calls[0][1].body.includes("## Human Triage Decision"));
+  assert(missingSectionScenario.calls[0][1].body.includes("Decision: accepted"));
+  assert.strictEqual(missingSectionScenario.calls.filter((call) => call[0] === "removeLabel" && call[1].name === "triage:needs-human").length, 1);
+  assert.strictEqual(missingSectionScenario.calls.filter((call) => call[0] === "addLabels" && call[1].labels[0] === "triage:accepted").length, 1);
+
+  // Missing section scenario: bot command on issue without HTD section
+  const botMissingSection = await runScenario({
+    commentBody: "/decision accepted",
+    issue: {
+      number: 201,
+      state: "open",
+      labels: [{ name: "source:agent" }],
+      body: "Bot-created issue.\n",
+    },
+    sender: { login: "agent-ecosystem-bot[bot]", type: "Bot" },
+    permission: "write",
+  });
+  assert.strictEqual(botMissingSection.result.action, "updated");
+  assert.strictEqual(botMissingSection.calls.filter((call) => call[0] === "update").length, 1);
+
   console.log(JSON.stringify({
-    tests: 11,
+    tests: 16,
     helper: process.argv[2],
     status: "PASS",
   }));
