@@ -1,0 +1,32 @@
+name: PR identity guard
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  identity-guard:
+    name: verify agent PR commit identity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out workflow helper
+        uses: actions/checkout@v6
+
+      - name: Verify agent-authored pull request identity
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const guard = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/pr-identity-guard.js`);
+            await guard.run({ github, context, core });

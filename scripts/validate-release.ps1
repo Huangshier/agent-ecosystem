@@ -160,6 +160,7 @@ $requiredFiles = @(
     "scripts/install.ps1",
     "scripts/lib/path-guard.ps1",
     "scripts/prune-validation-scratch.ps1",
+    "scripts/test-pr-identity-guard.ps1",
     "scripts/uninstall.ps1",
     "scripts/validation/release-test-helper.ps1",
     "scripts/validation/workflow-spec-lite-fixture-helper.ps1",
@@ -195,7 +196,9 @@ $requiredFiles = @(
     "examples/minimal-project/README.md",
     "examples/minimal-project/.agents/AGENTS.md",
     "examples/minimal-project/docs/specs/example-work/spec.md",
-    "examples/minimal-project/docs/specs/example-work/tasks.md"
+    "examples/minimal-project/docs/specs/example-work/tasks.md",
+    ".github/workflows/pr-identity-guard.yml",
+    ".github/scripts/pr-identity-guard.js"
 )
 $missingFiles = @($requiredFiles | Where-Object { -not (Test-RequiredPath -RelativePath $_) })
 
@@ -1733,6 +1736,87 @@ try {
 }
 catch {
     Add-Check "issue triage label sync" "FAIL" $_.Exception.Message
+}
+
+try {
+    $identityWorkflow = Get-FileText -RelativePath ".github/workflows/pr-identity-guard.yml"
+    $identityHelper = Get-FileText -RelativePath ".github/scripts/pr-identity-guard.js"
+    $identityTest = Get-FileText -RelativePath "scripts/test-pr-identity-guard.ps1"
+    $governance = Get-FileText -RelativePath "docs/agent-governance.md"
+    $identityExpectations = [ordered]@{
+        ".github/workflows/pr-identity-guard.yml" = @(
+            "pull_request:",
+            "contents: read",
+            "pull-requests: read",
+            "verify agent PR commit identity",
+            "actions/checkout@v6",
+            "actions/github-script@v8",
+            "pr-identity-guard.js"
+        )
+        ".github/scripts/pr-identity-guard.js" = @(
+            "ACCEPTED_BOT_SIGNATURES",
+            "agent-ecosystem-bot[bot]@users.noreply.github.com",
+            "resolveAgentSignals",
+            "source:agent",
+            "codex|agent",
+            "evaluatePullRequestIdentity",
+            "evaluateCommitIdentity",
+            "Actor Boundary",
+            "listCommits"
+        )
+        "scripts/test-pr-identity-guard.ps1" = @(
+            "source:agent",
+            "codex/issue-145-pr-identity-guard",
+            "Actor Boundary",
+            "agent-ecosystem-bot[bot]@users.noreply.github.com",
+            "committer is Local User"
+        )
+        "docs/agent-governance.md" = @(
+            "Pull Request Identity Guard",
+            "source:agent",
+            "codex/",
+            "agent/",
+            "scans every commit",
+            "commit author and committer",
+            "Actor Boundary",
+            "bot-backed public write flow"
+        )
+    }
+
+    $identityMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $identityExpectations.Keys) {
+        $text = switch ($relativePath) {
+            ".github/workflows/pr-identity-guard.yml" { $identityWorkflow }
+            ".github/scripts/pr-identity-guard.js" { $identityHelper }
+            "scripts/test-pr-identity-guard.ps1" { $identityTest }
+            default { $governance }
+        }
+        foreach ($token in $identityExpectations[$relativePath]) {
+            if (-not $text.Contains($token)) {
+                $identityMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    if ($identityMissing.Count -gt 0) {
+        Add-Check "PR identity guard" "FAIL" "PR identity guard workflow, helper, tests, or docs are incomplete." @($identityMissing.ToArray())
+    }
+    else {
+        $identityTestScript = Join-PathParts $repoRoot "scripts" "test-pr-identity-guard.ps1"
+        $identityTestResult = & $identityTestScript -RepoRoot $repoRoot -Json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0) {
+            throw "PR identity guard tests exited with code $LASTEXITCODE."
+        }
+        Add-Check "PR identity guard" "PASS" "Hosted PR checks validate bot commit identity for explicitly agent-authored pull requests." ([ordered]@{
+            workflow = ".github/workflows/pr-identity-guard.yml"
+            helper = ".github/scripts/pr-identity-guard.js"
+            focused_test = $identityTestResult
+            docs = "docs/agent-governance.md"
+        })
+    }
+}
+catch {
+    Add-Check "PR identity guard" "FAIL" $_.Exception.Message
 }
 
 try {
