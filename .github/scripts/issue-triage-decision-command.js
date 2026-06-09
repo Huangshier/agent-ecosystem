@@ -150,6 +150,24 @@ function getTriageSectionExtraLines(section) {
     });
 }
 
+function buildNormalizedTriageSection({ decision, actorLogin, command, now }) {
+  const timestamp = now || new Date().toISOString();
+  const safeActor = formatActorLogin(actorLogin);
+  const note = `Decision notes: Set to ${decision} by ${safeActor} via \`${command}\` on ${timestamp}.`;
+
+  return [
+    "",
+    "## Human Triage Decision",
+    "",
+    `Decision: ${decision}`,
+    "",
+    DEFAULT_ALLOWED_VALUES_LINE,
+    "",
+    note,
+    "",
+  ].join("\n");
+}
+
 function updateDecisionInBody({ body, decision, actorLogin, command, now }) {
   if (!DECISION_LABELS.has(decision)) {
     return { changed: false, reason: `Unsupported decision: ${decision}` };
@@ -157,7 +175,12 @@ function updateDecisionInBody({ body, decision, actorLogin, command, now }) {
 
   const sectionInfo = getHumanTriageSection(body);
   if (!sectionInfo) {
-    return { changed: false, reason: "Human Triage Decision section was not found." };
+    // Section missing: append a normalized section at the end of the body.
+    const appended = buildNormalizedTriageSection({ decision, actorLogin, command, now });
+    const text = String(body || "");
+    const separator = text.length > 0 && !text.endsWith("\n") ? "\n" : "";
+    const updatedBody = text + separator + appended;
+    return { changed: updatedBody !== body, body: updatedBody, decision, label: DECISION_LABELS.get(decision), appended: true };
   }
 
   const decisionMatches = [...sectionInfo.section.matchAll(/^\s*Decision:\s*([^\r\n]*)\s*$/gim)];
@@ -297,6 +320,7 @@ module.exports = {
   shouldProcessIssue,
   resolveActorAuthorityFromPermission,
   formatActorLogin,
+  buildNormalizedTriageSection,
   updateDecisionInBody,
   convergeTriageLabels,
   run,

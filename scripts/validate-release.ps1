@@ -1627,6 +1627,7 @@ try {
             '"admin", "maintain", "write"',
             "getCollaboratorPermissionLevel",
             "updateDecisionInBody",
+            "buildNormalizedTriageSection",
             "DEFAULT_ALLOWED_VALUES_LINE",
             "formatActorLogin",
             "convergeTriageLabels",
@@ -1642,7 +1643,9 @@ try {
             'permission: "triage"',
             "pull_request",
             "triage:accepted",
-            "triage:needs-human"
+            "triage:needs-human",
+            "missingSection",
+            "appended"
         )
         "docs/agent-governance.md" = @(
             "Issue Triage Label Sync",
@@ -1651,6 +1654,7 @@ try {
             "does not make triage decisions",
             "source:agent",
             "trusted automation",
+            "appends a normalized section",
             "maintainer-authorized",
             "Decision: needs-human",
             "/decision accepted",

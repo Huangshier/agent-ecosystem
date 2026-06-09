@@ -140,6 +140,13 @@ the source of truth. The same-workflow label convergence is required because
 workflow-created issue body edits do not create a follow-up `issues: edited`
 workflow run with the repository `GITHUB_TOKEN`.
 
+If an open `source:agent` issue does not contain a `## Human Triage Decision`
+section, a valid decision command appends a normalized section at the end of the
+issue body before applying the decision. This handles agent-created issues that
+bypass the issue template and omit the section. The appended section uses the
+same structure as the agent-candidate template. A subsequent decision command on
+the same issue finds the appended section and updates it in place.
+
 ## Issue Requirements
 
 Agent candidate issues should include:
