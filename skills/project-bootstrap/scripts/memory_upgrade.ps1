@@ -290,6 +290,11 @@ function Get-Analysis {
         }
     }
 
+    $claudeMdPath = Join-Path $Root "CLAUDE.md"
+    if (-not (Test-Path -LiteralPath $claudeMdPath)) {
+        Add-Finding $findings "info" "missing_claude_shim" $claudeMdPath "Root CLAUDE.md shim is missing. Claude Code will not auto-load project memory." "Run bootstrap_project.ps1 to generate the shim, or create CLAUDE.md manually with @AGENTS.md imports."
+    }
+
     $memoryFiles = @(
         (Join-Path $agentDir "process.txt"),
         (Join-Path $agentDir "plan.md"),
