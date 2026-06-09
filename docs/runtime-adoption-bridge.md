@@ -46,7 +46,7 @@ entrypoint. This file tells the agent where to find deeper guidance:
       tech/
       business/
       experience/
-    commands/                     ← reusable workflow cards
+    commands/                     ← command index (README.md); do not preload cards
   docs/
     specs/                        ← optional durable work packages
 ```
@@ -119,9 +119,11 @@ minimum project-memory startup files:
 
 These imports expose the minimum startup context for non-trivial tasks: the
 root entrypoint, the primary working guide, current session state, the active
-plan pointer, the cold-context routing index, and the commands directory. The
+plan pointer, the cold-context routing index, and the commands README. The
 context README helps the agent discover matching cold-tier entries on demand.
-The commands README surfaces reusable workflow cards.
+The commands README surfaces reusable workflow cards. The shim imports only
+`README.md` from each index directory — it does not preload `.agents/context/**`
+context cards or `.agents/commands/**` command cards.
 
 The shim does **not** preload the full `.agents/context/` tree. After loading
 the files above, the agent should open specific context entries only when the

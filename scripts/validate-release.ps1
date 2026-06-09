@@ -939,9 +939,25 @@ try {
         throw "Memory upgrade analyze did not report missing_claude_shim advisory for project without CLAUDE.md."
     }
 
-    Add-Check "CLAUDE.md shim adoption" "PASS" "Bootstrap preserves existing CLAUDE.md; memory upgrade analyze reports missing_claude_shim advisory." ([ordered]@{
+    # Test 3: Memory upgrade analyze reports incomplete CLAUDE.md as advisory
+    $incompleteProject = Join-PathParts $scratchRootFull "claude-md-incomplete-test"
+    New-Item -ItemType Directory -Force -Path $incompleteProject | Out-Null
+    Assert-PathInsideRoot -Path $incompleteProject -Root $scratchRootFull
+
+    & $bootstrapScript -ProjectDir $incompleteProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    Set-Content -LiteralPath (Join-Path $incompleteProject "CLAUDE.md") -Value "# CLAUDE.md`n`n@AGENTS.md`n" -Encoding UTF8
+
+    $incompleteJsonText = & $memoryUpgradeScript -ProjectDir $incompleteProject -Mode Analyze -Json
+    $incompleteJson = $incompleteJsonText | ConvertFrom-Json
+    $hasIncompleteAdvisory = @($incompleteJson.findings | Where-Object { $_.code -eq "incomplete_claude_shim" }).Count -gt 0
+    if (-not $hasIncompleteAdvisory) {
+        throw "Memory upgrade analyze did not report incomplete_claude_shim advisory for project with partial CLAUDE.md imports."
+    }
+
+    Add-Check "CLAUDE.md shim adoption" "PASS" "Bootstrap preserves existing CLAUDE.md; memory upgrade analyze reports missing_claude_shim and incomplete_claude_shim advisories." ([ordered]@{
         preserve_hash_match = ($customHash -eq $postHash)
-        advisory_detected = $hasShimAdvisory
+        missing_advisory_detected = $hasShimAdvisory
+        incomplete_advisory_detected = $hasIncompleteAdvisory
     })
 }
 catch {
