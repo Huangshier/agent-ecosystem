@@ -4,7 +4,33 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.4.6` release.
+- No unreleased public changes after the `v0.5.0` release.
+
+## v0.5.0 - 2026-06-09
+
+- Added the stabilization-first v0.5.0 maintenance scope and completed the
+  accepted pre-release governance sequence without expanding public domain
+  packs, install profiles, or shell surfaces. (Issue #120, PR #129)
+- Stopped tracking public root `docs/specs/**` maintenance work packages and
+  kept public repository maintenance state in GitHub issues, pull request
+  bodies, release docs, and governance docs. (Issue #127, PR #128)
+- Clarified `project-bootstrap` command ownership, context gate brief output,
+  runtime adoption bridge documentation, and PowerShell helper ownership.
+  (Issues #116, #117, #119, #97; PRs #130, #131, #133, #134, #135)
+- Refactored the release validator into stable helper and check-group
+  boundaries, including workflow-spec-lite fixture extraction and language
+  migration mode-handler separation. (Issue #96, PRs #136-#140)
+- Documented the old-release upgrade path and recorded the `v0.4.6` to current
+  `main` rehearsal evidence required before tagging v0.5.0. (Issue #118,
+  PR #141)
+- Added the bootstrap-provided `CLAUDE.md` shim for Claude Code adoption.
+  (Issue #142, PR #144)
+- Hardened agent issue triage decision handling for missing decision sections
+  and stabilized maintainer comment command body updates. (Issues #121, #123,
+  #125, #143; PRs #122, #124, #126, #147)
+- Added a hosted PR identity guard for explicitly agent-authored pull requests,
+  validating bot author and committer identity across every PR commit.
+  (Issue #145, PR #148)
 
 ## v0.4.6 - 2026-05-29
 
@@ -13,7 +39,7 @@ All notable public changes are summarized here.
 - Added public-safe reusable knowledge patterns for staged refactor execution,
   issue decomposition, and error diagnosis framing. (Issue #100, PR #112)
 - Separated public GitHub Release body copy from internal release records,
-  added explicit release body markers, cleaned stale candidate wording from
+  added explicit release body markers, cleaned stale pre-publication wording from
   historical release notes, and hardened release validation against the
   regression. (Issue #113, PR #114)
 
@@ -30,9 +56,9 @@ All notable public changes are summarized here.
 - Added general bug report and feature request issue templates.
   (Issue #99, PR #109)
 
-## v0.4.4 - 2026-05-22 (release-prep candidate)
+## v0.4.4 - 2026-05-22
 
-- Prepared a stabilization / docs / governance patch release candidate. The
+- Published a stabilization / docs / governance patch release. The
   copyable bilingual GitHub Release body is maintained in
   `docs/releases/v0.4.4.md`.
 - Reconciled published `v0.4.3` release records after publication.

@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.4.6` published public release.
+Status: `v0.5.0` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -16,16 +16,29 @@ patch release for the post-`v0.4.3` guardrails, memory-language governance,
 Chinese homepage, domain-pack governance, and spec-state reconciliation work.
 `v0.4.5` packaged the issue triage label-sync, spec validator zh-CN anchor,
 UTF-8 no-BOM, release-validation permissions, and issue template fixes.
-`v0.4.6` packages spec lifecycle governance, public-safe reusable knowledge
-patterns, and release body hygiene.
+`v0.4.6` packaged spec lifecycle governance, public-safe reusable knowledge
+patterns, and release body hygiene. `v0.5.0` packages the stabilization-first
+maintenance closeout, public maintenance-record boundary, release validator
+modularization, old-release upgrade rehearsal evidence, Claude Code adoption
+shim, agent issue triage hardening, and hosted PR identity guard.
 
-## v0.5.0 Planning Scope
+## v0.5.0 Published State
 
-The active v0.5.0 planning scope is the stabilization-first maintenance
-sequence in [v0.5.0 Maintenance Scope](roadmap/v0.5.0-maintenance-scope.md).
-That scope note defines issue ordering before any v0.5.0 implementation PRs
-start. It is not a release candidate, publish-finalization record, tag plan, or
-GitHub Release authorization.
+Current `main` includes the post-`v0.4.6` stabilization / governance /
+validation-infrastructure changes summarized in `docs/releases/v0.5.0.md`.
+`v0.5.0` is aligned for maintainer tag and GitHub Release publication from the
+merge commit of the `v0.5.0` publish-finalization PR.
+
+GitHub Release `v0.5.0` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.0
+
+Tag target: merge commit for the `v0.5.0` publish-finalization PR.
+
+Local release validation for this alignment passed with
+`PASS=58 FAIL=0 WARN=0 DEFERRED=0`.
+
+Release body source: `docs/releases/v0.5.0.md`, between
+`RELEASE_BODY_START` and `RELEASE_BODY_END`.
 
 ## v0.4.4 Published State
 
@@ -233,8 +246,8 @@ Tag target: PR #110 merge commit.
 ## v0.4.6 Published State
 
 Current `main` includes the post-`v0.4.5` documentation / governance /
-release-hygiene changes summarized in `docs/releases/v0.4.6.md`. `v0.4.6` is
-the target of this publish-finalization alignment.
+release-hygiene changes summarized in `docs/releases/v0.4.6.md`. `v0.4.6` has
+been tagged and published as a public release.
 
 GitHub Release `v0.4.6` has been published:
 https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.6
