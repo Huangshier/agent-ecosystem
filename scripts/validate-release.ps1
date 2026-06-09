@@ -784,6 +784,19 @@ function Invoke-RuntimeSmoke {
         }
     }
 
+    # Verify CLAUDE.md shim was generated
+    $claudeMdPath = Join-PathParts $projectDir "CLAUDE.md"
+    if (-not (Test-Path -LiteralPath $claudeMdPath)) {
+        throw "Bootstrap did not generate CLAUDE.md shim at project root."
+    }
+    $claudeMdText = Get-Content -LiteralPath $claudeMdPath -Raw
+    $expectedClaudeImports = @("@AGENTS.md", "@.agents/AGENTS.md", "@.agents/process.txt", "@.agents/plan.md", "@.agents/context/README.md", "@.agents/commands/README.md")
+    foreach ($import in $expectedClaudeImports) {
+        if ($claudeMdText -notlike "*$import*") {
+            throw "CLAUDE.md shim is missing expected import: $import"
+        }
+    }
+
     $contextBriefText = (& $contextGateScript -ProjectRoot $projectDir -Brief) -join [Environment]::NewLine
     $expectedBriefMarkers = @(
         "Project Context Gate Brief",
@@ -878,6 +891,77 @@ try {
 }
 catch {
     Add-Check "runtime smoke" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    # Test 1: Existing CLAUDE.md is preserved during re-bootstrap
+    $preserveProject = Join-PathParts $scratchRootFull "claude-md-preserve-test"
+    New-Item -ItemType Directory -Force -Path $preserveProject | Out-Null
+    Assert-PathInsideRoot -Path $preserveProject -Root $scratchRootFull
+
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+
+    # Initial bootstrap to create scaffold
+    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
+
+    # Overwrite CLAUDE.md with custom content
+    $customClaudeContent = "# Custom CLAUDE.md`n`n@AGENTS.md`n"
+    Set-Content -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Value $customClaudeContent -Encoding UTF8
+    $customHash = (Get-FileHash -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Algorithm SHA256).Hash
+
+    # Re-bootstrap (default mode should not overwrite existing files)
+    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
+
+    $postHash = (Get-FileHash -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Algorithm SHA256).Hash
+    if ($customHash -ne $postHash) {
+        throw "Bootstrap overwrote existing CLAUDE.md in default refresh mode."
+    }
+
+    # Test 2: Memory upgrade analyze reports missing CLAUDE.md as advisory
+    $noShimProject = Join-PathParts $scratchRootFull "claude-md-advisory-test"
+    New-Item -ItemType Directory -Force -Path $noShimProject | Out-Null
+    Assert-PathInsideRoot -Path $noShimProject -Root $scratchRootFull
+
+    # Bootstrap, then remove CLAUDE.md to simulate pre-shim project
+    & $bootstrapScript -ProjectDir $noShimProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    Remove-Item -LiteralPath (Join-Path $noShimProject "CLAUDE.md") -Force
+
+    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $analyzeJsonText = & $memoryUpgradeScript -ProjectDir $noShimProject -Mode Analyze -Json
+    $analyzeJson = $analyzeJsonText | ConvertFrom-Json
+    $hasShimAdvisory = @($analyzeJson.findings | Where-Object { $_.code -eq "missing_claude_shim" }).Count -gt 0
+    if (-not $hasShimAdvisory) {
+        throw "Memory upgrade analyze did not report missing_claude_shim advisory for project without CLAUDE.md."
+    }
+
+    # Test 3: Memory upgrade analyze reports incomplete CLAUDE.md as advisory
+    $incompleteProject = Join-PathParts $scratchRootFull "claude-md-incomplete-test"
+    New-Item -ItemType Directory -Force -Path $incompleteProject | Out-Null
+    Assert-PathInsideRoot -Path $incompleteProject -Root $scratchRootFull
+
+    & $bootstrapScript -ProjectDir $incompleteProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    Set-Content -LiteralPath (Join-Path $incompleteProject "CLAUDE.md") -Value "# CLAUDE.md`n`n@AGENTS.md`n" -Encoding UTF8
+
+    $incompleteJsonText = & $memoryUpgradeScript -ProjectDir $incompleteProject -Mode Analyze -Json
+    $incompleteJson = $incompleteJsonText | ConvertFrom-Json
+    $hasIncompleteAdvisory = @($incompleteJson.findings | Where-Object { $_.code -eq "incomplete_claude_shim" }).Count -gt 0
+    if (-not $hasIncompleteAdvisory) {
+        throw "Memory upgrade analyze did not report incomplete_claude_shim advisory for project with partial CLAUDE.md imports."
+    }
+
+    Add-Check "CLAUDE.md shim adoption" "PASS" "Bootstrap preserves existing CLAUDE.md; memory upgrade analyze reports missing_claude_shim and incomplete_claude_shim advisories." ([ordered]@{
+        preserve_hash_match = ($customHash -eq $postHash)
+        missing_advisory_detected = $hasShimAdvisory
+        incomplete_advisory_detected = $hasIncompleteAdvisory
+    })
+}
+catch {
+    Add-Check "CLAUDE.md shim adoption" "FAIL" $_.Exception.Message
 }
 
 try {
@@ -1240,6 +1324,12 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
     }
+    $claudeShimFiles = [ordered]@{
+        "knowledge-hub/templates/languages/en/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
+        "knowledge-hub/templates/languages/zh-CN/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
+    }
     $agentGuidanceFiles = [ordered]@{
         "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
         "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
@@ -1262,6 +1352,9 @@ try {
     }
     foreach ($relativePath in $commandGuidanceFiles.Keys) {
         $guidanceExpectations[$relativePath] = $commandGuidanceFiles[$relativePath]
+    }
+    foreach ($relativePath in $claudeShimFiles.Keys) {
+        $guidanceExpectations[$relativePath] = $claudeShimFiles[$relativePath]
     }
 
     $guidanceMissing = New-Object 'System.Collections.Generic.List[string]'

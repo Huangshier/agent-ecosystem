@@ -144,6 +144,9 @@ function Test-ProtectedMemoryPath {
     if ($normalized -eq "AGENTS.md") {
         return $true
     }
+    if ($normalized -eq "CLAUDE.md") {
+        return $true
+    }
     if ($normalized -eq ".agents/AGENTS.md") {
         return $true
     }
