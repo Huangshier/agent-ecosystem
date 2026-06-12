@@ -20,6 +20,8 @@
 - 对宽泛或范围不清的请求，先做只读探索；必要时再澄清目标、范围和验证方式。
 - 工程记忆刷新、模板升级和语言迁移不是普通批量文件编辑。执行前必须先检查并使用相关 skill / script workflow：刷新或升级默认保留项目特化内容；语言迁移处理模板替换和经复核的叙述内容，并保持命令、路径、API、文件名、错误文本和代码符号等受保护字面量原文；reset / reinitialize 只有在用户明确允许丢弃旧记忆时才可执行。
 - 非平凡工作优先在 `docs/specs/<slug>/` 下建立 lightweight work package。
+  使用 `workflow-spec-lite` routing criteria 作为是否需要 spec 的决策规则：
+  目标窄、验收清晰、验证路径明确且没有长期设计价值的 quick path 任务可以不创建 spec。
 - `.agents/plan.md` 保持会话本地，不要复制完整项目 specs 或任务清单。
 - 只有用户或项目策略要求时才 commit。只有用户明确要求，或既有项目流程明确要求时才 push。
 

@@ -93,7 +93,7 @@ If an expected verifier cannot run, record why in the active spec/tasks or `.age
 ## Delivery Protocol & Working Loop
 For implementation tasks that produce repository changes, a complete unit of work may include the relevant parts of the following sequence:
 
-1. **Read & Plan**: Read relevant code and context notes. For non-trivial work, prefer a project spec under `docs/specs/<slug>/` before implementation. Keep `.agents/plan.md` as a session-local pointer, not a second project plan.
+1. **Read & Plan**: Read relevant code and context notes. Use `workflow-spec-lite` routing criteria as the deciding rule for whether a project spec is needed. Prefer a project spec under `docs/specs/<slug>/` for standard/deep work or durable design value; use the quick path without creating a spec for narrow tasks with clear acceptance criteria and validation. Keep `.agents/plan.md` as a session-local pointer, not a second project plan.
 2. **Implement & Verify**: Confirm the work meets the completion criteria and passes the named verifier(s) for this project. Implement in small validated steps. Prefer deterministic, scriptable verification commands. Record blockers in `.agents/process.txt`.
 3. **Atomic Commit**: Commit only when the user asks for a commit or project policy clearly requires one. When committing in a git repository, inspect recent history with `git log` and match the repository's prevailing commit message format unless the user or project policy says otherwise.
 4. **The Push**: Push only when the user explicitly asks, or when established project workflow unambiguously requires it and remote access is available.

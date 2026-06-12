@@ -25,6 +25,10 @@ Core rules that apply even if `.agents/AGENTS.md` was not loaded:
   their original form, and reset/reinitialize requires explicit permission to
   discard old memory.
 - For non-trivial work, prefer a lightweight work package under `docs/specs/<slug>/` before implementation.
+  Use `workflow-spec-lite` routing criteria as the deciding rule for whether a
+  spec is needed: quick-path tasks with a narrow target, clear acceptance
+  criteria, clear validation, and no durable design value can proceed without
+  creating a spec.
 - Keep `.agents/plan.md` session-local; do not duplicate full project specs or task lists there.
 - Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.
 

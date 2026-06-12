@@ -1,7 +1,9 @@
 Current State
+- Status: idle | planning | implementing | verifying | finishing
 - Project memory language: English.
-- Update this at session end.
-- Keep this focused on active status and blockers.
+- Update this at session end, including Status when the active phase changes.
+- Treat Status as a lightweight resume hint, not a mandatory workflow engine.
+- Keep this focused on active status, blockers, and the next recoverable step.
 
 Completed
 - Add completed milestones here.
