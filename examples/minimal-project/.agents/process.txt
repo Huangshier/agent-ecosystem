@@ -1,4 +1,5 @@
 Current State
+- Status: idle
 - Minimal example scaffold.
 
 Completed
