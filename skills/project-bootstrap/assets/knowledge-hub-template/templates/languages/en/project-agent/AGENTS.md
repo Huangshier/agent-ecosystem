@@ -111,9 +111,12 @@ Checklist:
 3. Update `.agents/plan.md` so it points at the real active spec and current next action, without copying the full task list.
 4. Update `.agents/process.txt` when active issues, PRs, blockers, branch state, or next actions changed.
 5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.
-6. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
-7. Record hosted check results once at the relevant boundary. After a PR has been opened, do not push memory-only commits solely to refresh state or hosted-check timestamps unless explicitly approved.
-8. Confirm the gate did not introduce unrelated refactors, pre-commit hooks, repository ruleset changes, or changes outside the accepted issue scope.
+6. When `memory_diagnose.ps1` is available, run it against the project root before claiming the memory sync is complete:
+   `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`.
+   Address warnings before closing the phase, or record why they are intentionally deferred. Record the finding count and summary in the active spec/tasks, PR body, or phase-close evidence.
+7. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
+8. Record hosted check results once at the relevant boundary. After a PR has been opened, do not push memory-only commits solely to refresh state or hosted-check timestamps unless explicitly approved.
+9. Confirm the gate did not introduce unrelated refactors, pre-commit hooks, repository ruleset changes, or changes outside the accepted issue scope.
 
 ## Tooling Constraints
 - **Non-Interactive**: Do not wait for ceremonial approval before routine reversible edits. Commit and push rules still follow the Delivery Protocol.

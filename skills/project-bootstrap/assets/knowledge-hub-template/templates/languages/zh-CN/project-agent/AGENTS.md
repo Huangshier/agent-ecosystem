@@ -102,9 +102,12 @@ Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭
 3. 更新 `.agents/plan.md`，使其指向真实 active spec 和当前下一步，不复制完整任务清单。
 4. 当 active issues、PR、阻塞、分支状态或下一步变化时，更新 `.agents/process.txt`。
 5. `.agents/notes.md` 只记录需要跨会话保留的持久已验证事实、最终决策或证据链接。
-6. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
-7. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。
-8. 确认门禁没有引入无关重构、pre-commit hooks、仓库 ruleset 变更，或超出已接受 issue 范围的变更。
+6. 当 `memory_diagnose.ps1` 可用时，在声明记忆同步完成前针对项目根目录运行：
+   `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`。
+   阶段收尾前先处理 warnings；若有意延期，记录原因。将 finding count 与摘要记录到 active spec/tasks、PR body 或阶段收尾证据中。
+7. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
+8. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。
+9. 确认门禁没有引入无关重构、pre-commit hooks、仓库 ruleset 变更，或超出已接受 issue 范围的变更。
 
 ## 工具约束
 - **非交互优先**：不要为了常规可逆编辑等待仪式性确认。commit 和 push 仍遵守交付流程。
