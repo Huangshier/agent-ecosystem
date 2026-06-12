@@ -1292,7 +1292,7 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/docs/specs/_templates/spec-lite.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
-        "skills/workflow-spec-lite/SKILL.md" = @("scope drift", "unrelated refactors", "skipped acceptance checks", "validate_spec.ps1")
+        "skills/workflow-spec-lite/SKILL.md" = @("scope drift", "unrelated refactors", "skipped acceptance checks", "validate_spec.ps1", "memory_diagnose.ps1", "finding count")
         "skills/memory-governance/SKILL.md" = @("Scope drift", "Unrelated refactor", "Skipped acceptance")
     }
 
@@ -1334,10 +1334,10 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
     }
     $agentGuidanceFiles = [ordered]@{
-        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "memory_diagnose.ps1", "finding count", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "memory_diagnose.ps1", "finding count", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "memory_diagnose.ps1", "finding count", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "memory_diagnose.ps1", "finding count", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
     }
     $commandGuidanceFiles = [ordered]@{
         "knowledge-hub/templates/languages/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")

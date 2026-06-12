@@ -243,9 +243,12 @@ Before marking a pull request ready for review, handing off a non-draft pull req
 3. Update `.agents/plan.md` so it points to the real active spec and current next action without duplicating the full task list.
 4. Update `.agents/process.txt` if active issues, PRs, branch state, blockers, or next actions changed.
 5. Update `.agents/notes.md` only when there is a durable verified fact, final decision, or evidence link worth preserving.
-6. Check that no completed hosted-check wait, ready-for-review step, or previous PR remains listed as active work.
-7. Record hosted check evidence once at the relevant boundary. Do not create repeated memory-only commits solely to refresh hosted-check timestamps.
-8. Confirm the sync did not add unrelated refactors, pre-commit hooks, GitHub ruleset changes, or work outside the accepted issue scope.
+6. When `memory_diagnose.ps1` is available, run it against the project root before claiming the memory sync is complete:
+   `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`.
+   Address warnings before closing the phase, or record why they are intentionally deferred. Record the finding count and summary in the active spec/tasks, PR body, or phase-close evidence.
+7. Check that no completed hosted-check wait, ready-for-review step, or previous PR remains listed as active work.
+8. Record hosted check evidence once at the relevant boundary. Do not create repeated memory-only commits solely to refresh hosted-check timestamps.
+9. Confirm the sync did not add unrelated refactors, pre-commit hooks, GitHub ruleset changes, or work outside the accepted issue scope.
 
 Ordinary intermediate commits do not require a full engineering-memory sync. Keep this as a documented workflow gate; do not implement it as a pre-commit hook or repository ruleset requirement.
 
