@@ -41,6 +41,7 @@ $evidence = [ordered]@{
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
     agent_template_guidance = [ordered]@{}
+    structural_diagnostics_design = [ordered]@{}
     memory_boundary = [ordered]@{}
     spec_state_boundary = [ordered]@{}
 }
@@ -175,6 +176,7 @@ $requiredFiles = @(
     "docs/powershell-helper-ownership.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
+    "docs/roadmap/memory-diagnose-structural-diagnostics.md",
     "docs/shell-strategy.md",
     "docs/template-path-reference-audit.md",
     "docs/releases/README.md",
@@ -1317,6 +1319,54 @@ try {
 }
 catch {
     Add-Check "anti-drift hardening" "FAIL" $_.Exception.Message
+}
+
+try {
+    $structuralDiagnosticsFiles = [ordered]@{
+        "docs/roadmap/memory-diagnose-structural-diagnostics.md" = @(
+            'Status: design boundary for issue #155 Part B',
+            'PR #160 completed #155 Part A',
+            'Do not implement Completed list growth detection in this design PR',
+            'Do not implement information-density heuristics in this design PR',
+            'Do not change `LargeFileLineThreshold`',
+            'Completed list growth',
+            'Information-density pressure',
+            'Stable facts mixed with runtime state',
+            'Fixture Matrix',
+            'Staged Implementation Plan'
+        )
+        "skills/memory-governance/README.md" = @(
+            'Structural Diagnostics Design',
+            'memory-diagnose-structural-diagnostics.md',
+            '#155 Part B',
+            'design-first'
+        )
+    }
+
+    $structuralDiagnosticsMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in $structuralDiagnosticsFiles.Keys) {
+        $text = Get-FileText -RelativePath $relativePath
+        foreach ($token in $structuralDiagnosticsFiles[$relativePath]) {
+            if (-not $text.Contains($token)) {
+                $structuralDiagnosticsMissing.Add("$relativePath missing token: $token")
+            }
+        }
+    }
+
+    $script:evidence.structural_diagnostics_design = [ordered]@{
+        checked_files = @($structuralDiagnosticsFiles.Keys)
+        missing = @($structuralDiagnosticsMissing.ToArray())
+    }
+
+    if ($structuralDiagnosticsMissing.Count -gt 0) {
+        Add-Check "structural memory diagnostics design" "FAIL" "Structural memory diagnostics design boundary is incomplete." $evidence.structural_diagnostics_design
+    }
+    else {
+        Add-Check "structural memory diagnostics design" "PASS" "Structural memory diagnostics design defines Part B boundaries, false-positive risks, fixture expectations, and staged implementation." $evidence.structural_diagnostics_design
+    }
+}
+catch {
+    Add-Check "structural memory diagnostics design" "FAIL" $_.Exception.Message
 }
 
 try {

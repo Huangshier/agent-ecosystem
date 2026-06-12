@@ -19,6 +19,13 @@ Public templates use `## Summary` and `## Keywords` for context discovery
 metadata. The diagnosis helper also recognizes localized equivalents for
 project memory files.
 
+## Structural Diagnostics Design
+Future structural diagnostics for `memory_diagnose.ps1` should follow
+[`docs/roadmap/memory-diagnose-structural-diagnostics.md`](../../docs/roadmap/memory-diagnose-structural-diagnostics.md).
+That design records #155 Part B goals, non-goals, false-positive boundaries,
+fixture expectations, and the staged implementation plan. It is intentionally
+design-first and does not change current helper behavior.
+
 ## Related Repositories
 - Global shared templates and experience live in `knowledge-hub`.
 - This skill governs how project-local memory should be cleaned and routed. It may mark global candidates, but promotion is a separate `knowledge-hub/scripts` maintenance action.
