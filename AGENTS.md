@@ -27,8 +27,9 @@ this order:
 2. `.agents/process.txt`
 3. `.agents/plan.md` (for non-trivial tasks)
 4. `.agents/context/README.md`, then only matching `.agents/context/**` entries by Summary, Keywords, or task relevance
+5. `.agents/commands/README.md`, then only matching `.agents/commands/**` command cards when a documented workflow is relevant
 
-Do not preload the full `.agents/context/` tree at startup.
+Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.
 
 If local `.agents/` files are absent or stale, use public sources instead:
 

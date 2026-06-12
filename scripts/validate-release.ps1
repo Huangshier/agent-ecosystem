@@ -1321,11 +1321,11 @@ catch {
 
 try {
     $rootGuidanceFiles = [ordered]@{
-        "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', 'Do not preload the full `.agents/context/` tree at startup.')
-        "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
-        "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', 'Do not preload the full `.agents/context/` tree at startup.')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '启动时不要预加载完整 `.agents/context/` 目录。')
+        "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
+        "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
+        "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', '启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', '启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。')
     }
     $claudeShimFiles = [ordered]@{
         "knowledge-hub/templates/languages/en/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
@@ -1379,7 +1379,7 @@ try {
         Add-Check "agent template startup guidance" "FAIL" "Root, project-agent, or commands templates are missing lean startup, command, PR-ready, or large-issue guidance." $evidence.agent_template_guidance
     }
     else {
-        Add-Check "agent template startup guidance" "PASS" "Root, project-agent, and commands templates include lean startup context discovery, Project Commands, PR-ready memory sync, and large-issue planning guidance." $evidence.agent_template_guidance
+        Add-Check "agent template startup guidance" "PASS" "Root, project-agent, and commands templates include lean startup context and command discovery, Project Commands, PR-ready memory sync, and large-issue planning guidance." $evidence.agent_template_guidance
     }
 }
 catch {

@@ -62,6 +62,8 @@ everything at once. This keeps context cost proportional to task complexity.
 2. `.agents/AGENTS.md`
 3. `.agents/process.txt`
 4. `.agents/plan.md`
+5. `.agents/context/README.md`
+6. `.agents/commands/README.md`
 
 **Warm tier** — load when a non-trivial task is active:
 
@@ -70,8 +72,9 @@ everything at once. This keeps context cost proportional to task complexity.
 
 **Cold tier** — open on demand only when task keywords match:
 
-- `.agents/context/README.md` and matching context entries by Summary or
-  Keywords
+- matching `.agents/context/**` entries by Summary or Keywords
+- matching `.agents/commands/**` command cards when a documented workflow is
+  relevant
 - `.agents/notes.md`
 
 Skip missing files without treating them as errors.
@@ -83,7 +86,7 @@ Codex has native `AGENTS.md` support. The entry sequence is:
 1. Codex reads the root `AGENTS.md` at session start.
 2. Follow the minimum read order defined in that file:
    `.agents/AGENTS.md`, `.agents/process.txt`, `.agents/plan.md`,
-   `.agents/context/README.md`.
+   `.agents/context/README.md`, and `.agents/commands/README.md`.
 3. For non-trivial work, use `project-context-gate` to rebuild the full
    constraint capsule.
 4. For durable work packages, use `workflow-spec-lite` under

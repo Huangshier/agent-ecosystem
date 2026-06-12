@@ -11,8 +11,9 @@
 2. `.agents/process.txt`
 3. `.agents/plan.md`，仅非平凡任务需要
 4. `.agents/context/README.md`，然后只按 Summary、Keywords 或任务相关性打开匹配的 `.agents/context/**` 条目
+5. `.agents/commands/README.md`，然后仅在相关工作流适用时打开匹配的 `.agents/commands/**` 命令卡片
 
-启动时不要预加载完整 `.agents/context/` 目录。
+启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。
 
 即使 `.agents/AGENTS.md` 未加载，也适用以下核心规则：
 - 系统、runtime 和用户明确指令优先于项目默认值。

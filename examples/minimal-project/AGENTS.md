@@ -9,4 +9,5 @@ Minimum read order:
 1. `.agents/AGENTS.md`
 2. `.agents/process.txt`
 3. `.agents/plan.md`
-4. active `docs/specs/<slug>/spec.md` and `tasks.md`
+4. `.agents/commands/README.md`, then only relevant command cards
+5. active `docs/specs/<slug>/spec.md` and `tasks.md`
