@@ -11,8 +11,9 @@ Minimum read order for each substantive session:
 2. `.agents/process.txt`
 3. `.agents/plan.md` (for non-trivial tasks)
 4. `.agents/context/README.md`, then only matching `.agents/context/**` entries by Summary, Keywords, or task relevance
+5. `.agents/commands/README.md`, then only matching `.agents/commands/**` command cards when a documented workflow is relevant
 
-Do not preload the full `.agents/context/` tree at startup.
+Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.
 
 Core rules that apply even if `.agents/AGENTS.md` was not loaded:
 - Follow system, runtime, and explicit user instructions before project defaults.
