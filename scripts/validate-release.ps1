@@ -1384,7 +1384,7 @@ catch {
 try {
     $fixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "memory-diagnose-structural-fixtures" "completed-list-growth"
     $fixtureReadme = Get-FileText -RelativePath "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/README.md"
-    foreach ($token in @("Completed List Growth", "compact-active-phase", "process-history-backlog", 'does not change `memory_diagnose.ps1` behavior')) {
+    foreach ($token in @("Completed List Growth", "compact-active-phase", "process-history-backlog", "process_completed_list_growth")) {
         if (-not $fixtureReadme.Contains($token)) {
             throw "Completed list growth fixture README is missing token: $token"
         }
@@ -1456,7 +1456,7 @@ try {
             if ([string]$expected.future_structural_diagnosis.expected_severity -ne "info") {
                 throw "Positive completed-list fixture does not document info severity."
             }
-            foreach ($recommendationToken in @("compress", "process.txt")) {
+            foreach ($recommendationToken in @("compress", "summarize", "process.txt")) {
                 if ($recommendationToken -notin @($expected.future_structural_diagnosis.recommendation_must_include | ForEach-Object { [string]$_ })) {
                     throw "Positive completed-list fixture recommendation shape is missing: $recommendationToken"
                 }
@@ -1474,6 +1474,29 @@ try {
         if (-not (Test-ExactArray -Actual $currentCodes -Expected $expectedCurrentCodes)) {
             throw "Current memory diagnosis findings for $fixtureName did not match fixture expectations. Actual: $($currentCodes -join ', ')"
         }
+        if ($fixtureRole -eq "positive") {
+            $growthFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "process_completed_list_growth" })
+            if ($growthFindings.Count -ne 1) {
+                throw "Positive completed-list fixture did not produce exactly one process_completed_list_growth finding."
+            }
+            $growthFinding = $growthFindings[0]
+            if ([string]$growthFinding.severity -ne "info") {
+                throw "Completed-list finding severity should be info."
+            }
+            $growthPath = ([string]$growthFinding.path).Replace('\', '/')
+            if (-not $growthPath.EndsWith(".agents/process.txt")) {
+                throw "Completed-list finding path should point to .agents/process.txt."
+            }
+            $growthRecommendation = [string]$growthFinding.recommendation
+            foreach ($recommendationToken in @($expected.future_structural_diagnosis.recommendation_must_include | ForEach-Object { [string]$_ })) {
+                if ($growthRecommendation.IndexOf($recommendationToken, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                    throw "Completed-list finding recommendation is missing token: $recommendationToken"
+                }
+            }
+        }
+        elseif ("process_completed_list_growth" -in $currentCodes) {
+            throw "Negative completed-list fixture unexpectedly produced process_completed_list_growth."
+        }
 
         $fixtureEvidence.Add([ordered]@{
             fixture = $fixtureName
@@ -1489,7 +1512,7 @@ try {
         family = "completed-list-growth"
         fixtures = @($fixtureEvidence.ToArray())
     }
-    Add-Check "structural memory diagnostics fixtures" "PASS" "Completed list growth positive and negative fixtures are public-safe, readable, and keep current memory_diagnose behavior unchanged." $evidence.structural_diagnostics_fixtures
+    Add-Check "structural memory diagnostics fixtures" "PASS" "Completed list growth positive and negative fixtures are public-safe, readable, and cover current memory_diagnose behavior." $evidence.structural_diagnostics_fixtures
 }
 catch {
     Add-Check "structural memory diagnostics fixtures" "FAIL" $_.Exception.Message

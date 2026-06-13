@@ -3,7 +3,9 @@
   "family": "completed-list-growth",
   "role": "positive",
   "current_diagnosis": {
-    "expected_finding_codes": []
+    "expected_finding_codes": [
+      "process_completed_list_growth"
+    ]
   },
   "future_structural_diagnosis": {
     "should_report": true,
@@ -14,6 +16,7 @@
     "expected_path_suffix": ".agents/process.txt",
     "recommendation_must_include": [
       "compress",
+      "summarize",
       "process.txt"
     ]
   },

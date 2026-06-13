@@ -73,6 +73,39 @@ function Test-DiscoveryHeading {
     return $false
 }
 
+function Get-CompletedSectionEntryCount {
+    param([string]$Text)
+
+    $localizedCompletedHeading = -join @([char]0x5DF2, [char]0x5B8C, [char]0x6210)
+    $completedHeadingPattern = '^(#{1,6}\s*)?(' + [regex]::Escape($localizedCompletedHeading) + '|Completed)\s*:?\s*$'
+    $entryCount = 0
+    $inCompletedSection = $false
+    foreach ($line in @($Text -split "`n")) {
+        $trimmedLine = ([string]$line).Trim()
+        if ($trimmedLine -match $completedHeadingPattern) {
+            $inCompletedSection = $true
+            continue
+        }
+        if (-not $inCompletedSection) {
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace($trimmedLine)) {
+            continue
+        }
+        if ($line -match '^\s*-\s+\S') {
+            $entryCount++
+            continue
+        }
+        if ($line -match '^\s{2,}\S') {
+            continue
+        }
+        break
+    }
+
+    return $entryCount
+}
+
+$completedListGrowthThreshold = 5
 $localizedSummaryHeading = -join @([char]0x6458, [char]0x8981)
 $localizedKeywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
 $discoveryHeadingAliases = [ordered]@{
@@ -109,6 +142,13 @@ foreach ($key in $memoryPaths.Keys) {
 
 if ($infos.ContainsKey("process") -and $infos["process"].text -match '(?i)(history|timeline|chronology|session\s+\d+|previous session)') {
     Add-Finding $findings "warning" "process_contains_history" $infos["process"].path "process.txt appears to contain historical timeline language." "Keep process.txt to current state, blockers, next actions, and last updated."
+}
+
+if ($infos.ContainsKey("process")) {
+    $completedEntryCount = Get-CompletedSectionEntryCount -Text $infos["process"].text
+    if ($completedEntryCount -gt $completedListGrowthThreshold) {
+        Add-Finding $findings "info" "process_completed_list_growth" $infos["process"].path ("process.txt has {0} completed entries under Completed." -f $completedEntryCount) "Compress and summarize completed history in process.txt; keep only current state, blockers, next actions, and last updated."
+    }
 }
 
 if ($infos.ContainsKey("notes") -and $infos["notes"].text -match '(?i)(today|yesterday|I tried|session|todo|\[ \]|\[x\])') {
