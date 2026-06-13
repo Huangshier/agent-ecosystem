@@ -26,6 +26,14 @@ That design records #155 Part B goals, non-goals, false-positive boundaries,
 fixture expectations, and the staged implementation plan. It is intentionally
 design-first and does not change current helper behavior.
 
+## Legacy Memory Upgrade Stable Facts
+`skills/project-bootstrap/scripts/memory_upgrade.ps1 -Mode Apply` is backup-first
+and preserves stable notes only through deterministic section rules. Compact
+bullet facts are kept from `# Confirmed Notes`, `## Stable Facts`,
+`# 已确认记录`, or `## 稳定事实` after volatile TODO, checkbox, next-step,
+branch / PR waiting, and temporary runtime lines are filtered. The helper does
+not infer stable facts from arbitrary prose or use semantic classification.
+
 ## Related Repositories
 - Global shared templates and experience live in `knowledge-hub`.
 - This skill governs how project-local memory should be cleaned and routed. It may mark global candidates, but promotion is a separate `knowledge-hub/scripts` maintenance action.

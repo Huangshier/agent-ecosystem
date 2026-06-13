@@ -107,6 +107,14 @@ $zhText = [ordered]@{
     MemoryUpgradedBackupPrefix = Join-CodePoints @(0x5347, 0x7EA7, 0xFF1B, 0x539F, 0x59CB, 0x6587, 0x4EF6, 0x5DF2, 0x5907, 0x4EFD, 0x5230, 0x0020, 0x002E, 0x0061, 0x0067, 0x0065, 0x006E, 0x0074, 0x0073, 0x002F, 0x005F, 0x0062, 0x0061, 0x0063, 0x006B, 0x0075, 0x0070, 0x002F)
     Period = Join-CodePoints @(0x3002)
     StableFactsOnly = Join-CodePoints @(0x672C, 0x6587, 0x4EF6, 0x53EA, 0x4FDD, 0x7559, 0x6709, 0x8BC1, 0x636E, 0x7684, 0x7A33, 0x5B9A, 0x4E8B, 0x5B9E, 0x3002)
+    StableFactsTitle = Join-CodePoints @(0x7A33, 0x5B9A, 0x4E8B, 0x5B9E)
+    CurrentBranch = Join-CodePoints @(0x5F53, 0x524D, 0x5206, 0x652F)
+    WaitingPr = (Join-CodePoints @(0x7B49, 0x5F85)) + " PR"
+    WaitingChecks = (Join-CodePoints @(0x7B49, 0x5F85)) + " checks"
+    WaitingMerge = (Join-CodePoints @(0x7B49, 0x5F85)) + " merge"
+    TemporaryRuntime = Join-CodePoints @(0x4E34, 0x65F6, 0x8FD0, 0x884C, 0x6001)
+    VerifiedFactsTemplate = Join-CodePoints @(0x53EA, 0x8BB0, 0x5F55, 0x5DF2, 0x7ECF, 0x9A8C, 0x8BC1, 0x7684, 0x7A33, 0x5B9A, 0x4E8B, 0x5B9E)
+    EvidenceSourceTemplate = Join-CodePoints @(0x5C3D, 0x91CF, 0x5199, 0x660E, 0x8BC1, 0x636E, 0x6765, 0x6E90)
 }
 
 function Resolve-MemoryLanguage {
@@ -243,24 +251,149 @@ function New-NotesLines {
     param(
         [string]$LanguageCode,
         [string]$Today,
-        [string]$Stamp
+        [string]$Stamp,
+        [string[]]$StableFacts = @()
     )
 
     if ($LanguageCode -eq "zh-CN") {
-        return @(
+        $lines = @(
             $zhText.ConfirmedNotesHeading,
             "",
             ("- {0} {1} {2}{3}/{4}" -f $zhText.MemoryUpgradedPrefix, $Today, $zhText.MemoryUpgradedBackupPrefix, $Stamp, $zhText.Period),
             ("- {0}" -f $zhText.StableFactsOnly)
         )
+        if ($StableFacts.Count -gt 0) {
+            $lines += ""
+            $lines += ("## {0}" -f $zhText.StableFactsTitle)
+            foreach ($fact in $StableFacts) {
+                $lines += "- $fact"
+            }
+        }
+        return $lines
     }
 
-    return @(
+    $lines = @(
         "# Confirmed Notes",
         "",
         "- Memory upgraded on $Today; original files backed up at .agents/_backup/$Stamp/.",
         "- Keep this file limited to stable verified facts with evidence."
     )
+    if ($StableFacts.Count -gt 0) {
+        $lines += ""
+        $lines += "## Stable Facts"
+        foreach ($fact in $StableFacts) {
+            $lines += "- $fact"
+        }
+    }
+    return $lines
+}
+
+function Test-StableNotesFactText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    $normalized = $Text.Trim()
+    if ($normalized.Length -gt 220) {
+        return $false
+    }
+
+    $volatilePattern = '(?i)(todo|\[[ xX]\]|next\s+(step|action)|today|yesterday|i tried|current branch|waiting\s+(for\s+)?(pr|checks?|merge)|temporary runtime|session state)'
+    if ($normalized -match $volatilePattern) {
+        return $false
+    }
+
+    foreach ($markerText in @(
+        $zhText.NextActions,
+        $zhText.CurrentBranch,
+        $zhText.WaitingPr,
+        $zhText.WaitingChecks,
+        $zhText.WaitingMerge,
+        $zhText.TemporaryRuntime
+    )) {
+        if ($normalized.IndexOf($markerText, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $false
+        }
+    }
+
+    $templateGuidancePattern = '(?i)^(record verified facts only\.?|include evidence source where possible\.?|keep this file limited to stable verified facts with evidence\.?|memory upgraded on .*)$'
+    if ($normalized -match $templateGuidancePattern) {
+        return $false
+    }
+
+    foreach ($markerText in @(
+        $zhText.StableFactsOnly,
+        $zhText.MemoryUpgradedPrefix,
+        $zhText.VerifiedFactsTemplate,
+        $zhText.EvidenceSourceTemplate
+    )) {
+        if ($normalized.IndexOf($markerText, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Get-StableNotesFacts {
+    param([string]$Text)
+
+    $facts = New-Object 'System.Collections.Generic.List[string]'
+    $seen = @{}
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return @()
+    }
+
+    $zhStableFactsHeading = "## $($zhText.StableFactsTitle)"
+    $collecting = $false
+    $sectionLevel = 0
+
+    foreach ($line in ($Text -split "\r?\n")) {
+        $trimmed = ([string]$line).Trim()
+        $headingMatch = [regex]::Match($trimmed, '^(#{1,6})\s+(.+?)\s*$')
+
+        if ($trimmed -eq "# Confirmed Notes" -or $trimmed -eq $zhText.ConfirmedNotesHeading) {
+            $collecting = $true
+            $sectionLevel = 1
+            continue
+        }
+        if ($trimmed -eq "## Stable Facts" -or $trimmed -eq $zhStableFactsHeading) {
+            $collecting = $true
+            $sectionLevel = 2
+            continue
+        }
+
+        if ($headingMatch.Success) {
+            $level = $headingMatch.Groups[1].Value.Length
+            if ($collecting -and $level -le $sectionLevel) {
+                $collecting = $false
+                $sectionLevel = 0
+            }
+            continue
+        }
+
+        if (-not $collecting) {
+            continue
+        }
+
+        $bulletMatch = [regex]::Match([string]$line, '^\s*-\s+(.+?)\s*$')
+        if (-not $bulletMatch.Success) {
+            continue
+        }
+
+        $fact = $bulletMatch.Groups[1].Value.Trim()
+        if (Test-StableNotesFactText -Text $fact) {
+            $key = $fact.ToLowerInvariant()
+            if (-not $seen.ContainsKey($key)) {
+                $seen[$key] = $true
+                $facts.Add($fact)
+            }
+        }
+    }
+
+    return @($facts.ToArray())
 }
 
 function Get-Analysis {
@@ -457,6 +590,7 @@ function Apply-Upgrade {
     $notesPath = Join-Path $agentDir "notes.md"
     $today = (Get-Date).ToString("yyyy-MM-dd")
     $memoryLanguage = Resolve-MemoryLanguage -Root $Root
+    $stableNotesFacts = @()
 
     if ($approvedActions.normalize_process -and (Test-Path -LiteralPath $processPath)) {
         $old = Get-Content -LiteralPath $processPath -Raw
@@ -473,7 +607,9 @@ function Apply-Upgrade {
     }
 
     if ($approvedActions.normalize_notes -and (Test-Path -LiteralPath $notesPath)) {
-        $lines = New-NotesLines -LanguageCode $memoryLanguage.code -Today $today -Stamp $stamp
+        $old = Get-Content -LiteralPath $notesPath -Raw
+        $stableNotesFacts = @(Get-StableNotesFacts -Text $old)
+        $lines = New-NotesLines -LanguageCode $memoryLanguage.code -Today $today -Stamp $stamp -StableFacts $stableNotesFacts
         Set-Content -LiteralPath $notesPath -Value $lines -Encoding UTF8
     }
 
@@ -486,6 +622,7 @@ function Apply-Upgrade {
         "- Proposal: $resolvedPlanPath",
         "- Project language: $($memoryLanguage.code)",
         "- Applied actions: $((@($approvedActions.GetEnumerator() | Where-Object { $_.Value } | ForEach-Object { $_.Key }) -join ', '))",
+        "- Stable notes facts preserved: $($stableNotesFacts.Count)",
         "",
         "Approved hot memory actions were applied. Review backup before deleting or further condensing old material."
     )
@@ -502,6 +639,7 @@ function Apply-Upgrade {
         project_language = $memoryLanguage.code
         requested_project_language = $memoryLanguage.requested
         language_warning = $memoryLanguage.warning
+        stable_notes_preserved_count = $stableNotesFacts.Count
     }
 }
 

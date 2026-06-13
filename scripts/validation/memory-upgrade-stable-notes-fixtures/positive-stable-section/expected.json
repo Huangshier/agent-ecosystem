@@ -1,0 +1,24 @@
+{
+  "fixture": "positive-stable-section",
+  "role": "positive",
+  "expected_preserved_count": 2,
+  "expected_preserved_tokens": [
+    "AE_FIXTURE_STABLE_ALPHA",
+    "AE_FIXTURE_STABLE_BETA"
+  ],
+  "forbidden_after_apply": [
+    "TODO",
+    "[ ]",
+    "[x]",
+    "next step",
+    "next action",
+    "today",
+    "yesterday",
+    "I tried",
+    "current branch",
+    "waiting PR",
+    "waiting checks",
+    "waiting merge",
+    "temporary runtime"
+  ]
+}

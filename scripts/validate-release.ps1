@@ -180,6 +180,11 @@ $requiredFiles = @(
     "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/notes.md",
     "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/context/README.md",
     "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/expected.json",
+    "scripts/validation/memory-upgrade-stable-notes-fixtures/README.md",
+    "scripts/validation/memory-upgrade-stable-notes-fixtures/positive-stable-section/notes.md",
+    "scripts/validation/memory-upgrade-stable-notes-fixtures/positive-stable-section/expected.json",
+    "scripts/validation/memory-upgrade-stable-notes-fixtures/negative-volatile-only/notes.md",
+    "scripts/validation/memory-upgrade-stable-notes-fixtures/negative-volatile-only/expected.json",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/existing-project-upgrade.md",
@@ -2818,6 +2823,126 @@ try {
 }
 catch {
     Add-Check "memory upgrade flow" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $fixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "memory-upgrade-stable-notes-fixtures"
+    $fixtureReadme = Get-FileText -RelativePath "scripts/validation/memory-upgrade-stable-notes-fixtures/README.md"
+    foreach ($token in @("positive-stable-section", "negative-volatile-only", "stable-section preservation")) {
+        if (-not $fixtureReadme.Contains($token)) {
+            throw "Memory upgrade stable notes fixture README is missing token: $token"
+        }
+    }
+
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
+    $fixtureCases = @(
+        [ordered]@{ name = "positive-stable-section"; role = "positive" },
+        [ordered]@{ name = "negative-volatile-only"; role = "negative" }
+    )
+    $fixtureEvidence = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($fixtureCase in $fixtureCases) {
+        $fixtureName = [string]$fixtureCase.name
+        $fixtureRole = [string]$fixtureCase.role
+        $fixtureDir = Join-PathParts $fixtureRoot $fixtureName
+        $fixtureNotesPath = Join-PathParts $fixtureDir "notes.md"
+        $expectedPath = Join-PathParts $fixtureDir "expected.json"
+        $expected = Get-Content -LiteralPath $expectedPath -Raw | ConvertFrom-Json
+        if ([string]$expected.fixture -ne $fixtureName) {
+            throw "Stable notes fixture expected.json name mismatch for $fixtureName."
+        }
+        if ([string]$expected.role -ne $fixtureRole) {
+            throw "Stable notes fixture role mismatch for $fixtureName."
+        }
+
+        $expectedTokens = @()
+        if ($null -ne $expected.expected_preserved_tokens) {
+            $expectedTokens = @($expected.expected_preserved_tokens | ForEach-Object { [string]$_ })
+        }
+        $forbiddenTokens = @()
+        if ($null -ne $expected.forbidden_after_apply) {
+            $forbiddenTokens = @($expected.forbidden_after_apply | ForEach-Object { [string]$_ })
+        }
+
+        $projectDir = Join-PathParts $scratchRootFull ("memory-upgrade-stable-notes-{0}" -f $fixtureName)
+        New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+        Assert-PathInsideRoot -Path $projectDir -Root $scratchRootFull
+        & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
+
+        $notesPath = Join-PathParts $projectDir ".agents" "notes.md"
+        Copy-Item -LiteralPath $fixtureNotesPath -Destination $notesPath -Force
+
+        $analyzeBefore = & $memoryUpgradeScript -ProjectDir $projectDir -Mode Analyze -Json | ConvertFrom-Json
+        $codesBefore = @($analyzeBefore.findings | ForEach-Object { [string]$_.code })
+        if ("notes_contains_session_state" -notin $codesBefore) {
+            throw "Stable notes fixture $fixtureName did not trigger notes_contains_session_state before Apply."
+        }
+
+        $plan = & $memoryUpgradeScript -ProjectDir $projectDir -Mode Plan -Json | ConvertFrom-Json
+        $proposalPath = [string]$plan.proposal
+        if ([string]::IsNullOrWhiteSpace($proposalPath) -or -not (Test-Path -LiteralPath $proposalPath)) {
+            throw "Stable notes fixture $fixtureName did not create a proposal."
+        }
+
+        $apply = & $memoryUpgradeScript -ProjectDir $projectDir -Mode Apply -UpgradePlan $proposalPath -Json | ConvertFrom-Json
+        $preservedCount = [int]$apply.apply_result.stable_notes_preserved_count
+        if ($preservedCount -ne [int]$expected.expected_preserved_count) {
+            throw "Stable notes fixture $fixtureName preserved $preservedCount facts; expected $($expected.expected_preserved_count)."
+        }
+
+        $backupDir = [string]$apply.apply_result.backup_dir
+        $backupNotesPath = Join-PathParts $backupDir "notes.md"
+        if ([string]::IsNullOrWhiteSpace($backupDir) -or -not (Test-Path -LiteralPath $backupNotesPath)) {
+            throw "Stable notes fixture $fixtureName did not create a notes.md backup."
+        }
+        $backupNotes = Get-Content -LiteralPath $backupNotesPath -Raw
+        if ($backupNotes -notlike "*TODO*" -and $backupNotes -notlike "*I tried*") {
+            throw "Stable notes fixture $fixtureName backup did not preserve original volatile notes."
+        }
+
+        $notesText = Get-Content -LiteralPath $notesPath -Raw
+        if ($fixtureRole -eq "negative" -and $notesText -like "*## Stable Facts*") {
+            throw "Negative stable notes fixture unexpectedly wrote a Stable Facts section."
+        }
+        foreach ($token in $expectedTokens) {
+            if ($notesText.IndexOf($token, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                throw "Stable notes fixture $fixtureName missing preserved token: $token"
+            }
+        }
+        foreach ($token in $forbiddenTokens) {
+            if ($notesText.IndexOf($token, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                throw "Stable notes fixture $fixtureName retained volatile token after Apply: $token"
+            }
+        }
+        $analyzeAfter = & $memoryUpgradeScript -ProjectDir $projectDir -Mode Analyze -Json | ConvertFrom-Json
+        $codesAfter = @($analyzeAfter.findings | ForEach-Object { [string]$_.code })
+        if ("notes_contains_session_state" -in $codesAfter) {
+            throw "Stable notes fixture $fixtureName still reports notes_contains_session_state after Apply."
+        }
+
+        $fixtureEvidence.Add([ordered]@{
+            fixture = $fixtureName
+            role = $fixtureRole
+            preserved_count = $preservedCount
+            preserved_tokens = @($expectedTokens)
+            before_codes = @($codesBefore)
+            after_codes = @($codesAfter)
+            backup_created = (Test-Path -LiteralPath $backupNotesPath)
+        })
+    }
+
+    Add-Check "memory upgrade stable notes preservation" "PASS" "Memory upgrade Apply preserves compact stable-section facts, removes volatile notes, and keeps backup-first behavior for positive and negative fixtures." ([ordered]@{
+        fixtures = @($fixtureEvidence.ToArray())
+    })
+}
+catch {
+    Add-Check "memory upgrade stable notes preservation" "FAIL" $_.Exception.Message
 }
 
 try {
