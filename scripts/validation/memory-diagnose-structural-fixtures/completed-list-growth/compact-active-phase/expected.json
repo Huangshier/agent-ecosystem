@@ -1,0 +1,18 @@
+{
+  "fixture": "compact-active-phase",
+  "family": "completed-list-growth",
+  "role": "negative",
+  "current_diagnosis": {
+    "expected_finding_codes": []
+  },
+  "future_structural_diagnosis": {
+    "should_report": false,
+    "acceptable_finding_codes": [],
+    "expected_severity": "",
+    "expected_path_suffix": ".agents/process.txt",
+    "recommendation_must_include": []
+  },
+  "completed_entry_expectation": {
+    "maximum": 2
+  }
+}

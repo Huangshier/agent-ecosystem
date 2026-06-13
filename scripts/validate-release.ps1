@@ -42,6 +42,7 @@ $evidence = [ordered]@{
     spec_lite = [ordered]@{}
     agent_template_guidance = [ordered]@{}
     structural_diagnostics_design = [ordered]@{}
+    structural_diagnostics_fixtures = [ordered]@{}
     memory_boundary = [ordered]@{}
     spec_state_boundary = [ordered]@{}
 }
@@ -168,6 +169,17 @@ $requiredFiles = @(
     "scripts/validation/workflow-spec-lite-fixtures/complete-spec.md",
     "scripts/validation/workflow-spec-lite-fixtures/loop-contract-spec.md",
     "scripts/validation/workflow-spec-lite-fixtures/chinese-section-spec.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/README.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/compact-active-phase/.agents/process.txt",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/compact-active-phase/.agents/plan.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/compact-active-phase/.agents/notes.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/compact-active-phase/.agents/context/README.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/compact-active-phase/expected.json",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/process.txt",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/plan.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/notes.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/.agents/context/README.md",
+    "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/process-history-backlog/expected.json",
     "scripts/validate-release.ps1",
     "docs/architecture.md",
     "docs/existing-project-upgrade.md",
@@ -1367,6 +1379,120 @@ try {
 }
 catch {
     Add-Check "structural memory diagnostics design" "FAIL" $_.Exception.Message
+}
+
+try {
+    $fixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "memory-diagnose-structural-fixtures" "completed-list-growth"
+    $fixtureReadme = Get-FileText -RelativePath "scripts/validation/memory-diagnose-structural-fixtures/completed-list-growth/README.md"
+    foreach ($token in @("Completed List Growth", "compact-active-phase", "process-history-backlog", 'does not change `memory_diagnose.ps1` behavior')) {
+        if (-not $fixtureReadme.Contains($token)) {
+            throw "Completed list growth fixture README is missing token: $token"
+        }
+    }
+
+    $memoryDiagnoseScript = Join-PathParts $repoRoot "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
+    $fixtureCases = @(
+        [ordered]@{ name = "compact-active-phase"; role = "negative" },
+        [ordered]@{ name = "process-history-backlog"; role = "positive" }
+    )
+
+    $fixtureEvidence = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($fixtureCase in $fixtureCases) {
+        $fixtureName = [string]$fixtureCase.name
+        $fixtureRole = [string]$fixtureCase.role
+        $projectRoot = Join-PathParts $fixtureRoot $fixtureName
+        $expectedPath = Join-PathParts $projectRoot "expected.json"
+        $processPath = Join-PathParts $projectRoot ".agents" "process.txt"
+
+        $expected = Get-Content -LiteralPath $expectedPath -Raw | ConvertFrom-Json
+        if ([string]$expected.fixture -ne $fixtureName) {
+            throw "Fixture expected.json name mismatch for $fixtureName."
+        }
+        if ([string]$expected.family -ne "completed-list-growth") {
+            throw "Fixture expected.json family mismatch for $fixtureName."
+        }
+        if ([string]$expected.role -ne $fixtureRole) {
+            throw "Fixture expected.json role mismatch for $fixtureName."
+        }
+        if ([string]$expected.future_structural_diagnosis.expected_path_suffix -ne ".agents/process.txt") {
+            throw "Fixture expected path suffix mismatch for $fixtureName."
+        }
+
+        $processLines = @(Get-Content -LiteralPath $processPath)
+        $completedLines = New-Object 'System.Collections.Generic.List[string]'
+        $inCompletedSection = $false
+        foreach ($line in $processLines) {
+            if ($line -eq "Completed") {
+                $inCompletedSection = $true
+                continue
+            }
+            if ($inCompletedSection -and $line -match '^[A-Za-z].*$') {
+                break
+            }
+            if ($inCompletedSection) {
+                $completedLines.Add([string]$line)
+            }
+        }
+        $completedEntryCount = ([regex]::Matches(($completedLines -join "`n"), '(?m)^-\s+')).Count
+
+        $entryExpectation = $expected.completed_entry_expectation
+        $entryExpectationFields = @($entryExpectation.PSObject.Properties.Name)
+        if ("minimum" -in $entryExpectationFields -and $completedEntryCount -lt [int]$entryExpectation.minimum) {
+            throw "Positive completed-list fixture has too few entries: $completedEntryCount"
+        }
+        if ("maximum" -in $entryExpectationFields -and $completedEntryCount -gt [int]$entryExpectation.maximum) {
+            throw "Negative completed-list fixture has too many entries: $completedEntryCount"
+        }
+
+        $shouldReport = [bool]$expected.future_structural_diagnosis.should_report
+        $acceptableCodes = @($expected.future_structural_diagnosis.acceptable_finding_codes | ForEach-Object { [string]$_ })
+        if ($fixtureRole -eq "positive") {
+            if (-not $shouldReport) {
+                throw "Positive completed-list fixture does not expect a future structural finding."
+            }
+            if ("process_completed_list_growth" -notin $acceptableCodes) {
+                throw "Positive completed-list fixture does not document the future finding code."
+            }
+            if ([string]$expected.future_structural_diagnosis.expected_severity -ne "info") {
+                throw "Positive completed-list fixture does not document info severity."
+            }
+            foreach ($recommendationToken in @("compress", "process.txt")) {
+                if ($recommendationToken -notin @($expected.future_structural_diagnosis.recommendation_must_include | ForEach-Object { [string]$_ })) {
+                    throw "Positive completed-list fixture recommendation shape is missing: $recommendationToken"
+                }
+            }
+        }
+        else {
+            if ($shouldReport) {
+                throw "Negative completed-list fixture unexpectedly expects a future structural finding."
+            }
+        }
+
+        $diagnose = & $memoryDiagnoseScript -ProjectRoot $projectRoot -Json | ConvertFrom-Json
+        $currentCodes = @($diagnose.findings | ForEach-Object { [string]$_.code })
+        $expectedCurrentCodes = @($expected.current_diagnosis.expected_finding_codes | ForEach-Object { [string]$_ })
+        if (-not (Test-ExactArray -Actual $currentCodes -Expected $expectedCurrentCodes)) {
+            throw "Current memory diagnosis findings for $fixtureName did not match fixture expectations. Actual: $($currentCodes -join ', ')"
+        }
+
+        $fixtureEvidence.Add([ordered]@{
+            fixture = $fixtureName
+            role = $fixtureRole
+            completed_entries = $completedEntryCount
+            current_finding_codes = @($currentCodes)
+            future_should_report = $shouldReport
+            future_acceptable_codes = @($acceptableCodes)
+        })
+    }
+
+    $script:evidence.structural_diagnostics_fixtures = [ordered]@{
+        family = "completed-list-growth"
+        fixtures = @($fixtureEvidence.ToArray())
+    }
+    Add-Check "structural memory diagnostics fixtures" "PASS" "Completed list growth positive and negative fixtures are public-safe, readable, and keep current memory_diagnose behavior unchanged." $evidence.structural_diagnostics_fixtures
+}
+catch {
+    Add-Check "structural memory diagnostics fixtures" "FAIL" $_.Exception.Message
 }
 
 try {

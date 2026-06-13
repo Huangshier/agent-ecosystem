@@ -1,0 +1,23 @@
+{
+  "fixture": "process-history-backlog",
+  "family": "completed-list-growth",
+  "role": "positive",
+  "current_diagnosis": {
+    "expected_finding_codes": []
+  },
+  "future_structural_diagnosis": {
+    "should_report": true,
+    "acceptable_finding_codes": [
+      "process_completed_list_growth"
+    ],
+    "expected_severity": "info",
+    "expected_path_suffix": ".agents/process.txt",
+    "recommendation_must_include": [
+      "compress",
+      "process.txt"
+    ]
+  },
+  "completed_entry_expectation": {
+    "minimum": 6
+  }
+}

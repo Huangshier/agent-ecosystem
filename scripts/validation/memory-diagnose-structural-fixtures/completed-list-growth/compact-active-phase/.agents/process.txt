@@ -1,0 +1,15 @@
+Status: active
+
+Current state
+- Draft PR is open for review and the current branch is waiting on hosted checks.
+- Memory sync has one recent completed action and one next action.
+
+Completed
+- 2026-06-13 validated the active branch and recorded the evidence summary.
+
+Next actions
+- Wait for maintainer review.
+- Keep process.txt focused on current state.
+
+Last updated
+- 2026-06-13
