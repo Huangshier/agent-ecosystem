@@ -53,6 +53,13 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
   missing scaffold files or `.agents/hub.lock.json`.
 - `bootstrap_project.ps1 -PlanMemoryUpgrade` writes a reviewable proposal under `.agents/upgrade/`.
 - `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
+- During Apply, `memory_upgrade.ps1` deterministically preserves compact bullet
+  facts only from explicit stable notes sections: `# Confirmed Notes`,
+  `## Stable Facts`, `# 已确认记录`, or `## 稳定事实`. It filters volatile task
+  and session-state lines such as TODOs, checkboxes, next-step notes, current
+  branch / waiting-PR status, and temporary runtime notes. It does not use NLP
+  or infer stable facts from arbitrary prose; the backup remains the source for
+  reviewing any material that was not safely preserved.
 - `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
 - When ordinary bootstrap detects memory upgrade candidates, the skill workflow decides whether to auto-upgrade, ask first, or skip based on the user's stated intent.
 - For existing projects moving to the post-`v0.4.2` template model, see

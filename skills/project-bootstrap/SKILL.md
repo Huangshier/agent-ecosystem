@@ -206,6 +206,12 @@ Behavior:
   before running the read-only memory analysis.
 - Plan mode writes a proposal for user review.
 - Apply mode requires a proposal path, backs up current memory under `.agents/_backup/<timestamp>/`, and normalizes hot memory (`process.txt`, `plan.md`, `notes.md`).
+- When Apply normalizes `notes.md`, it preserves compact bullet facts only from
+  explicit stable notes sections (`# Confirmed Notes`, `## Stable Facts`,
+  `# 已确认记录`, or `## 稳定事实`) and filters volatile TODO, checkbox,
+  next-step, branch / PR waiting, and temporary runtime lines. It does not infer
+  stable facts from arbitrary prose; use the backup for manual review of
+  anything outside the deterministic safe sections.
 - Auto-upgrade mode runs Analyze first, then Plan and Apply only when findings exist.
 - Durable multi-stage work should move into `docs/specs/`; `.agents` remains session-local.
 
