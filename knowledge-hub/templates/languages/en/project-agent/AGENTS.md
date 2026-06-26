@@ -45,6 +45,32 @@ Illegitimate reasons include:
 - Dressing up a style choice you could have made yourself as "options for the user"
 - Ending with routine follow-up questions when the next step was already part of the requested work
 
+## Write Authorization Boundaries
+External writes include branch push, PR/MR creation, issue comments, tag
+creation, release publication, branch deletion, merge, repository settings,
+workflow dispatch, and deployment triggers. External writes are never the
+default. Each requires explicit authorization from:
+
+- the user's current instruction;
+- a loaded project instruction, spec, issue, release workflow, or command card
+  that explicitly requires the operation for this work type;
+- an already-approved work item or workflow step that names the operation.
+
+Authorization must come from evidence outside the agent's own output. Not
+sufficient by themselves: "keep the baseline clean", "a checkpoint would be
+useful", the agent saying the action is allowed, or broad assumptions about
+project workflow.
+
+Local commit is allowed only when the task is a coherent implementation or fix
+work unit, validation can prove completion, the diff can be reviewed, unrelated
+changes can be excluded, and one of the authorization sources above exists. Do
+not commit for review-only, research-only, planning-only, or ambiguous work.
+
+If authorization evidence is missing or unclear, put the operation under
+"Requires confirmation" or stop before it. When ambiguity affects repository,
+authority, destructive action, or external write behavior, downgrade to a
+read-only orientation or ask one short question.
+
 ## Ambiguous Task Gate
 When the user's request is semantically broad or underspecified, do a short read-only exploration pass before editing. Examples include "optimize this", "clean this up", "migrate this", "fix the workflow", "look for problems", or requests without clear acceptance criteria.
 

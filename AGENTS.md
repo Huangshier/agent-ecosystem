@@ -54,6 +54,40 @@ Core rules that apply even if `.agents/AGENTS.md` was not loaded:
   workflow.
 - Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.
 
+### Write Authorization Boundaries
+
+External writes include branch push, PR/MR creation, issue comments, tag
+creation, release publication, branch deletion, merge, repository settings,
+rulesets, runners, hooks, secrets, webhook or API configuration, and workflow
+dispatch.
+
+External writes are never the default. Each requires explicit authorization from
+one of:
+
+- the user's current instruction;
+- a loaded project instruction, spec, issue, release workflow, or command card
+  that explicitly requires the operation for this work type;
+- an already-approved work item or workflow step that names the operation.
+
+Authorization must come from evidence outside the agent's own output. The
+following are not sufficient by themselves to authorize a write:
+
+- "this would keep the baseline clean";
+- "a checkpoint would be useful";
+- the agent saying the action is allowed;
+- broad assumptions about what "project workflow usually wants";
+- an unverified claim that a hidden workflow requires the operation.
+
+Local commit is allowed only when the task is an implementation or fix work
+unit, validation can prove completion, the diff can be reviewed, unrelated
+changes can be excluded, and one of the authorization sources above exists. Do
+not commit for review-only, research-only, planning-only, or ambiguous work.
+
+If the authorization evidence is missing or unclear, put the operation under
+"Requires confirmation" or stop before it. When ambiguity affects repository,
+authority, destructive action, or external write behavior, downgrade to a
+read-only orientation or ask one short question.
+
 For non-trivial public maintenance that should survive the current session, use:
 - the accepted GitHub issue for scope, non-goals, and acceptance criteria
 - the pull request body for issue-to-change mapping, validation, rollback, and
