@@ -189,6 +189,17 @@ Execution Contract fields:
 - `Phase list`: each phase's goal, inputs, outputs, validation, and next-phase entry condition
 - `Continue rule`: the condition that authorizes moving from one phase to the next without stopping
 - `Stop rule`: failures, ambiguity, high-risk actions, missing permissions, budget limits, or external blockers that require stopping
+
+When the work involves external writes (branch push, PR/MR creation, issue
+comments, tags, releases, repository settings, workflow dispatch, or deployment
+triggers), the Stop Rule must require stopping when explicit authorization
+evidence is missing. Authorization must come from the user's instruction, a
+loaded project instruction, or an approved work item that names the operation.
+The agent's own assessment that an action "should be fine" is not authorization
+evidence. Local commits require a coherent work unit, passable validation,
+reviewable diff, and an explicit authorization source. When ambiguity affects
+repository target, authority, destructive action, or external write behavior,
+degrade to read-only or ask before continuing.
 - `State record`: where current phase, completed phases, validation results, and next action are recorded
 
 For `/goal` workflows, map the goal to the active spec/tasks before execution. After each phase, update the state record and continue to the next task when the continue rule passes; do not stop merely because one phase was completed.
@@ -260,6 +271,10 @@ Ordinary intermediate commits do not require a full engineering-memory sync. Kee
 - If the task is reverse engineering or research, evidence and open questions are first-class outputs.
 - If the task depends on high-risk facts, missing evidence is a blocking open
   question before implementation.
+- When the work involves external writes, state the write authorization boundary
+  in the spec: which writes are authorized, by what evidence, and what must stop
+  before proceeding. Do not let the spec's own wording become its own
+  authorization source.
 - For multi-phase execution, write an Execution Contract instead of relying on a vague "work through the plan" instruction.
 - For repeated execution, write a bounded loop contract instead of relying on a vague "continue until done" instruction.
 - Use `scripts/validate_spec.ps1` when you need a read-only check that a spec has the required goals, non-goals, risks, acceptance, and Execution Contract stop rule fields. The helper reports findings only; it does not rewrite the spec.
