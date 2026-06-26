@@ -1,76 +1,82 @@
 # Test Workflow
 
-项目记忆语言：英文。
+Project memory language: English.
 
-## 用途
+## Purpose
 
-记录项目自身的测试运行入口、框架、常用命令和验证方式。当 spec 的
-验收标准要求测试证据时，使用本卡指引 agent 查找并运行项目的已有测试
-入口。
+Record the project's own test entry points, framework, common commands, and
+verification methods. When a spec's acceptance criteria require test evidence,
+use this card to guide the agent to find and run the project's existing test
+entry points.
 
-## 何时使用
+## When To Use
 
-- Agent 需要运行项目的测试套件来获取测试证据。
-- Spec 或任务清单的验收字段要求 test evidence（测试证据）。
-- Agent 需要了解项目的测试框架、命令或环境依赖。
+- The agent needs to run the project's test suite to collect test evidence.
+- A spec or task list acceptance field requires test evidence.
+- The agent needs to understand the project's test framework, commands, or
+  environment dependencies.
 
-## 前置条件
+## Prerequisites
 
-- 项目已安装并配置好测试框架。不要替项目发明测试框架。
-- 项目的测试命令已在 `package.json`、`Makefile`、`CI config` 或项目文档中
-  有记录。
+- The project has a test framework installed and configured. Do not invent
+  a test framework for the project.
+- The project's test commands are documented in `package.json`, `Makefile`,
+  CI config, or project documentation.
 
-## 使用方法
+## Usage
 
-### 1. 记录项目测试入口
+### 1. Record the project test entry points
 
-在本文件或项目 `.agents/context/tech/testing-conventions.md` 中记录：
+Record in this file or in the project's
+`.agents/context/tech/testing-conventions.md`:
 
-| 字段 | 说明 |
-|------|------|
-| 框架 | 项目的测试框架（如 pytest、Jest、go test、cargo test 等） |
-| 运行全部测试 | 运行完整测试套件的命令 |
-| 运行单个测试 | 运行单个测试文件或用例的命令 |
-| 覆盖率 | 如何获取覆盖率报告（如有） |
-| 环境依赖 | 测试运行所需的环境变量、服务或 fixtures |
-| CI 入口 | CI 中运行测试的 workflow 或 job 名称 |
+| Field | Description |
+|-------|-------------|
+| Framework | The project's test framework (e.g., pytest, Jest, go test, cargo test) |
+| Run all tests | Command to run the full test suite |
+| Run a single test | Command to run a single test file or case |
+| Coverage | How to get a coverage report (if available) |
+| Environment | Environment variables, services, or fixtures required for testing |
+| CI entry | Workflow or job name that runs tests in CI |
 
-### 2. 运行测试
+### 2. Run tests
 
-使用项目已记录的命令运行测试。例如：
+Use the project's documented commands. Examples:
 
 ```bash
-# 示例：Python / pytest
+# Example: Python / pytest
 pytest --tb=short
 
-# 示例：Node / npm
+# Example: Node / npm
 npm test
 
-# 示例：Go
+# Example: Go
 go test ./...
 
-# 示例：Rust
+# Example: Rust
 cargo test
 ```
 
-替换为项目实际使用的命令。
+Replace with the commands the project actually uses.
 
-### 3. 记录测试证据
+### 3. Record test evidence
 
-将测试结果记录在 spec 的 Acceptance / Evidence 段中：
+Record test results in the spec's Acceptance / Evidence section:
 
-- 运行了什么命令
-- 通过/失败状态
-- 失败用例（如有）
-- 覆盖率摘要（如有）
+- What command was run
+- Pass/fail status
+- Failed test cases (if any)
+- Coverage summary (if available)
 
-## 预期证据
+## Expected Evidence
 
-- 测试命令运行成功或失败，exit code 可用于判断。
-- 失败时显示实际错误输出，不要只转述"测试失败"。
-- 覆盖率数据（如有）来自工具输出，不要手动编造。
+- Test commands produce a pass or fail exit code.
+- On failure, show the actual error output; do not just state "tests failed".
+- Coverage data (if available) comes from tool output; do not fabricate it.
 
-## 安全说明
+## Safety Notes
 
-- 测试命令应在本地或 CI 环境运行；不要在生产环境运行测试套件。
-- 项目的测试框架和命令由项目自身决定；本卡不强制任何特定框架。
+- Test commands should run in a local or CI environment; do not run test
+  suites against production.
+- The project's test framework and commands are decided by the project itself;
+  this card does not mandate any specific framework.
