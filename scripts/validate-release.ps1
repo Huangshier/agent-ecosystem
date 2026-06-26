@@ -4135,7 +4135,7 @@ catch {
 }
 
 try {
-    $thinRoadmapPath = Join-Path $repoRoot "docs" "roadmap" "release-validator-thin-entrypoint-plan.md"
+    $thinRoadmapPath = Join-PathParts $repoRoot "docs" "roadmap" "release-validator-thin-entrypoint-plan.md"
     $thinRoadmapExists = Test-Path -LiteralPath $thinRoadmapPath
     $thinRoadmapTokens = @(
         "1,500 lines or less",
