@@ -4133,6 +4133,43 @@ catch {
     Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
 }
 
+try {
+    $thinRoadmapPath = Join-Path $repoRoot "docs" "roadmap" "release-validator-thin-entrypoint-plan.md"
+    $thinRoadmapExists = Test-Path -LiteralPath $thinRoadmapPath
+    $thinRoadmapTokens = @(
+        "1,500 lines or less",
+        "scripts/validation/**"
+    )
+    $thinRoadmapMissing = @()
+    if ($thinRoadmapExists) {
+        $thinRoadmapText = Get-Content -LiteralPath $thinRoadmapPath -Raw
+        foreach ($token in $thinRoadmapTokens) {
+            if ($thinRoadmapText -notlike "*$token*") {
+                $thinRoadmapMissing += $token
+            }
+        }
+    }
+
+    $script:evidence.thin_entrypoint_roadmap = [ordered]@{
+        path = "docs/roadmap/release-validator-thin-entrypoint-plan.md"
+        exists = [bool]$thinRoadmapExists
+        missing_tokens = @($thinRoadmapMissing)
+    }
+
+    if ($thinRoadmapExists -and $thinRoadmapMissing.Count -eq 0) {
+        Add-Check "thin entrypoint roadmap" "PASS" "The thin entrypoint roadmap document exists and contains the target threshold and growth rule tokens." $evidence.thin_entrypoint_roadmap
+    }
+    elseif (-not $thinRoadmapExists) {
+        Add-Check "thin entrypoint roadmap" "FAIL" "Missing docs/roadmap/release-validator-thin-entrypoint-plan.md." $evidence.thin_entrypoint_roadmap
+    }
+    else {
+        Add-Check "thin entrypoint roadmap" "FAIL" ("Roadmap document is missing required tokens: {0}" -f ($thinRoadmapMissing -join ", ")) $evidence.thin_entrypoint_roadmap
+    }
+}
+catch {
+    Add-Check "thin entrypoint roadmap" "FAIL" $_.Exception.Message
+}
+
 $result = [ordered]@{
     schema_version = 1
     validated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
