@@ -63,6 +63,17 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: an agent encounters an error and needs to present it to the user
     with structured context for actionable diagnosis.
+- [Test Strategy](knowledge/patterns/test-strategy.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: a project needs a documented testing approach, test level
+    priorities, and coverage targets before investing in test infrastructure.
+- [Test-Driven Development](knowledge/patterns/test-driven-development.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: desired behavior can be specified as observable inputs and outputs
+    before implementation, and the project benefits from writing failing tests
+    first.
 
 ### Standards
 

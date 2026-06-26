@@ -137,6 +137,11 @@ The spec must capture:
 - constraints, assumptions, and risks
 - proposed approach
 - how completion will be judged
+- when the project has test infrastructure, how test evidence supports
+  acceptance (run command, pass/fail status, coverage). Refer to the project's
+  `.agents/commands/test-workflow.md` and `.agents/context/tech/testing-conventions.md`
+  for framework-specific guidance. Do not treat test evidence as a universal
+  release-blocking gate; use it when the project and the task warrant it.
 - how scope drift, unrelated refactors, and skipped acceptance checks will be handled before claiming completion
 
 ### Step 3a: High-Risk Evidence Gate
