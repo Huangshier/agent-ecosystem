@@ -3732,6 +3732,7 @@ try {
         "docs/release-readiness.md",
         "docs/release-process.md",
         "docs/roadmap/evolution-plan.md",
+        "docs/roadmap/release-validator-thin-entrypoint-plan.md",
         "knowledge-hub/templates/languages/en/project-root/AGENTS.md",
         "knowledge-hub/templates/languages/en/project-agent/AGENTS.md",
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md",
