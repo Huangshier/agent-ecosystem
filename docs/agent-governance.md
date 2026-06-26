@@ -46,6 +46,78 @@ The maintainer:
 - decides whether a pull request may merge;
 - publishes releases.
 
+## Write Authorization Boundaries
+
+The "Agent may" and "Agent must not" lists above define the permission boundary.
+This section makes the underlying authorization model explicit.
+
+### External Writes
+
+External writes include branch push, PR/MR creation, issue comments, tag
+creation, release publication, branch deletion, merge, repository settings,
+rulesets, runners, hooks, secrets, webhook or API configuration, workflow
+dispatch, deployment trigger, and any operation that can affect external users
+or systems.
+
+External writes are never the default. Each requires explicit authorization from
+one of:
+
+- the user's current instruction, such as "push this branch" or "create a draft
+  PR";
+- a loaded project instruction, spec, issue, release workflow, or command card
+  that explicitly requires the operation for this work type;
+- an already-approved work item or workflow step that names the operation and
+  actor boundary.
+
+Authorization must come from evidence outside the agent's own output. The
+following are not sufficient by themselves to authorize an external write:
+
+- "this would keep the baseline clean";
+- "a checkpoint would be useful";
+- the agent saying the action is allowed;
+- broad assumptions about what "project workflow usually wants";
+- an unverified claim that a hidden workflow requires the operation.
+
+If the authorization evidence is missing or unclear, the agent must put the
+operation under "Requires confirmation" or stop before it.
+
+### Local Commits
+
+Local commits are not external writes, but they still require explicit
+authorization. A local commit is allowed only when all of the following are true:
+
+- the task is an implementation or fix work unit with a coherent diff;
+- validation can prove completion and is expected to pass;
+- the agent can review `git status`, `git diff`, and staged changes before
+  committing;
+- unrelated user changes can be excluded from the commit;
+- one of the authorization sources listed above exists: the user explicitly asks
+  for a commit, the user explicitly asks to keep the baseline clean and the
+  context shows a coherent work unit, or the project workflow explicitly
+  authorizes a local checkpoint.
+
+Do not commit for review-only, research-only, planning-only, or ambiguous work.
+If validation fails, is skipped, or unrelated dirty worktree state cannot be
+safely separated, stop and report instead of committing.
+
+### Ambiguity and Degradation
+
+When ambiguity affects repository target, authority, destructive action, or
+external write behavior, the agent must not generate an executable plan that
+over-authorizes under uncertainty. Instead:
+
+- ask one short question when a single answer unlocks the work, or
+- generate a read-only orientation or recommendation without editing or external
+  writes.
+
+### Actor Verification
+
+When an external write requires a specific actor identity (bot account, service
+account, or maintainer account), the agent should verify the actor before
+writing when possible. If the actor cannot be verified, stop before writing and
+report the missing verification. If post-write metadata does not match the
+intended actor, stop before further external writes and report the mismatch.
+
 ## Automation Identity
 
 Earlier maintenance work may have been performed by an agent operating through

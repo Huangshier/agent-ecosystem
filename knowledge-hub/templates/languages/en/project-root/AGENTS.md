@@ -32,6 +32,9 @@ Core rules that apply even if `.agents/AGENTS.md` was not loaded:
   creating a spec.
 - Keep `.agents/plan.md` session-local; do not duplicate full project specs or task lists there.
 - Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.
+- External writes (branch push, PR/MR creation, issue comments, tags, releases, repository settings, workflow dispatch, deployment triggers) are never the default. Each requires explicit authorization from a user instruction, loaded project instruction, or approved work item that names the operation. Authorization must come from evidence outside the agent's own output. The following are not sufficient by themselves: "keep the baseline clean", "a checkpoint would be useful", the agent saying the action is allowed, or broad assumptions about project workflow.
+- Local commit is allowed only when the task is a coherent implementation or fix work unit, validation can prove completion, the diff can be reviewed, unrelated changes can be excluded, and explicit authorization exists. Do not commit for review-only, research-only, planning-only, or ambiguous work.
+- If authorization evidence is missing or unclear, put the operation under "Requires confirmation" or stop before it. When ambiguity affects repository, authority, destructive action, or external write behavior, downgrade to read-only or ask one short question.
 
 For non-trivial work that should survive the current session, use:
 - `docs/specs/<slug>/spec.md` for durable goals, constraints, approach, and acceptance.
