@@ -137,6 +137,8 @@ try {
         "scripts/validation/release-repository-checks.ps1",
         "scripts/validation/release-parser-safety-checks.ps1",
         "scripts/validation/release-documentation-checks.ps1",
+        "scripts/validation/release-knowledge-hub-checks.ps1",
+        "scripts/validation/release-template-language-checks.ps1",
         "scripts/validate-release.ps1"
     )
     $keywordMatches = New-Object 'System.Collections.Generic.List[object]'
