@@ -46,6 +46,10 @@
 
 ## 11. Decision Validation
 - Optional. Use for high-risk or hard-to-reverse decisions.
+- **When to use this section**:
+  - Full ADR: cross-module architecture changes, hard-to-reverse infrastructure choices, decisions with long-term maintenance impact, team disagreements, or high-stakes trade-offs.
+  - Lightweight pre-mortem / reversibility only: reversible implementation choices, isolated features following established patterns, or work with low blast radius but non-trivial assumptions.
+  - Skip entirely: trivial edits, mechanical documentation updates, or low-risk work following clear existing patterns.
 - **Key assumptions and their risk**:
 - **Pre-mortem** (how this approach could fail):
 - **Reversibility** (cost to undo, fallback options):

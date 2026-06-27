@@ -292,7 +292,7 @@ Ordinary intermediate commits do not require a full engineering-memory sync. Kee
 - Put durable work intent in `docs/specs/`, not in `.agents`.
 - Prefer concise bullets over narrative prose.
 - Record assumptions explicitly instead of silently resolving ambiguity.
-- When key assumptions carry meaningful risk or the approach is hard to reverse, use the `Decision Validation` section to record a lightweight pre-mortem and reversibility assessment instead of leaving risk reasoning implicit.
+- When key assumptions carry meaningful risk or the approach is hard to reverse, use the `Decision Validation` section to record a lightweight pre-mortem and reversibility assessment instead of leaving risk reasoning implicit. Use a full ADR only for cross-module architecture changes, hard-to-reverse infrastructure choices, decisions with long-term maintenance impact, or high-stakes trade-offs. For trivial edits, mechanical documentation updates, or low-risk work following clear existing patterns, skip Decision Validation entirely.
 - If the task is reverse engineering or research, evidence and open questions are first-class outputs.
 - If the task depends on high-risk facts, missing evidence is a blocking open
   question before implementation.
