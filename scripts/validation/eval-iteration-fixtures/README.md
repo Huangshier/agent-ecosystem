@@ -69,7 +69,10 @@ records:
 
 The release validator verifies that baseline.json exists, is valid JSON,
 contains eval IDs matching evals.json, assertion totals matching
-evals.json, and status summary consistent with report.json.
+evals.json, status summary matching report.json summary (field-by-field
+consistency), baseline-source paths pinned to expected values, and
+comparison field numeric types and ranges (pass rates in 0..1,
+iteration_count as integer).
 
 ## Schema Validation Expectations
 

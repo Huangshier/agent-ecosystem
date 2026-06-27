@@ -668,6 +668,52 @@ try {
         }
     }
 
+    # Verify baseline_source path values match expected strings
+    $expectedSourcePaths = [ordered]@{
+        evals_path = "workflow-spec-lite/evals.json"
+        report_path = "workflow-spec-lite/report.json"
+        expected_path = "workflow-spec-lite/expected.json"
+    }
+    foreach ($key in $expectedSourcePaths.Keys) {
+        if ([string]$source.$key -ne $expectedSourcePaths[$key]) {
+            throw "baseline.json baseline_source.$key is '$($source.$key)', expected '$($expectedSourcePaths[$key])'."
+        }
+    }
+
+    # Verify status_summary matches report.json summary (cross-artifact consistency)
+    $reportSummary = $reportContent.summary
+    $statusSummaryReportPairs = [ordered]@{
+        evals_passed = [int]$reportSummary.evals_passed
+        evals_failed = [int]$reportSummary.evals_failed
+        assertions_passed = [int]$reportSummary.assertions_passed
+        assertions_failed = [int]$reportSummary.assertions_failed
+    }
+    foreach ($key in $statusSummaryReportPairs.Keys) {
+        if ([int]$statusSummary.$key -ne $statusSummaryReportPairs[$key]) {
+            throw "baseline.json status_summary.$key ($($statusSummary.$key)) conflicts with report.json summary.$key ($($statusSummaryReportPairs[$key]))."
+        }
+    }
+    if ([string]$statusSummary.status -ne [string]$reportSummary.status) {
+        throw "baseline.json status_summary.status ($($statusSummary.status)) conflicts with report.json summary.status ($($reportSummary.status))."
+    }
+
+    # Verify comparison_fields numeric types and range
+    foreach ($field in @("baseline_pass_rate", "with_skill_pass_rate", "delta")) {
+        $val = $comparisonFields.$field
+        if ($val -isnot [double] -and $val -isnot [int] -and $val -isnot [long]) {
+            throw "baseline.json comparison_fields.$field must be a number, got type $($val.GetType().Name)."
+        }
+    }
+    if ($comparisonFields.iteration_count -isnot [int] -and $comparisonFields.iteration_count -isnot [long]) {
+        throw "baseline.json comparison_fields.iteration_count must be an integer, got type $($comparisonFields.iteration_count.GetType().Name)."
+    }
+    foreach ($field in @("baseline_pass_rate", "with_skill_pass_rate")) {
+        $val = [double]$comparisonFields.$field
+        if ($val -lt 0.0 -or $val -gt 1.0) {
+            throw "baseline.json comparison_fields.$field ($val) must be in range 0..1."
+        }
+    }
+
     $script:evidence.eval_baseline_artifact = [ordered]@{
         path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/baseline.json"
         baseline_name = [string]$identity.name
@@ -676,7 +722,7 @@ try {
         overall_status = [string]$statusSummary.status
         comparison_field_count = @($comparisonFields.PSObject.Properties.Name).Count
     }
-    Add-Check "eval baseline artifact" "PASS" "Workflow-spec-lite eval baseline recording artifact is public-safe, JSON-valid, eval IDs match, assertion totals match, status summary is consistent, and comparison fields shape is stable." $evidence.eval_baseline_artifact
+    Add-Check "eval baseline artifact" "PASS" "Workflow-spec-lite eval baseline recording artifact is public-safe, JSON-valid, eval IDs match, assertion totals match, baseline-source paths are pinned, status summary matches report.json, and comparison field numeric shape is locked." $evidence.eval_baseline_artifact
 }
 catch {
     Add-Check "eval baseline artifact" "FAIL" $_.Exception.Message
