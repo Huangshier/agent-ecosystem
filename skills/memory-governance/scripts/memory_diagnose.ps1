@@ -1,7 +1,9 @@
 param(
     [string]$ProjectRoot = (Get-Location).Path,
     [switch]$Json,
-    [int]$LargeFileLineThreshold = 160
+    [int]$LargeFileLineThreshold = 160,
+    [int]$ProcessSoftLineLimit = 30,
+    [int]$PlanSoftLineLimit = 20
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +140,14 @@ foreach ($key in $memoryPaths.Keys) {
     } else {
         Add-Finding $findings "info" "missing_memory_file" $memoryPaths[$key] ("{0} is missing." -f $key) "Bootstrap can restore the default file when needed."
     }
+}
+
+if ($infos.ContainsKey("process") -and $infos["process"].line_count -gt $ProcessSoftLineLimit) {
+    Add-Finding $findings "info" "hot_memory_process_long" $infos["process"].path ("process.txt has {0} lines, exceeding the {1}-line soft limit for hot session memory." -f $infos["process"].line_count, $ProcessSoftLineLimit) "Compress hot session memory; move long-term history and completed tasks to docs/specs or context."
+}
+
+if ($infos.ContainsKey("plan") -and $infos["plan"].line_count -gt $PlanSoftLineLimit) {
+    Add-Finding $findings "info" "hot_memory_plan_long" $infos["plan"].path ("plan.md has {0} lines, exceeding the {1}-line soft limit for hot session memory." -f $infos["plan"].line_count, $PlanSoftLineLimit) "Compress hot session memory; move long-lived tasks and detailed descriptions to docs/specs or context."
 }
 
 if ($infos.ContainsKey("process") -and $infos["process"].text -match '(?i)(history|timeline|chronology|session\s+\d+|previous session)') {

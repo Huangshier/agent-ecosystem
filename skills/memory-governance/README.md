@@ -26,6 +26,14 @@ That design records #155 Part B goals, non-goals, false-positive boundaries,
 fixture expectations, and the staged implementation plan. It is intentionally
 design-first and does not change current helper behavior.
 
+### Implemented: Hot Memory Soft-Length (issue #167 first slice)
+The helper now includes `info`-level soft-length findings for hot session
+memory files. `process.txt` exceeding 30 lines triggers
+`hot_memory_process_long`; `plan.md` exceeding 20 lines triggers
+`hot_memory_plan_long`. These checks are independent of the existing
+`LargeFileLineThreshold` (default 160) warning. Fixtures live under
+`scripts/validation/memory-diagnose-structural-fixtures/hot-memory-soft-length/`.
+
 ## Legacy Memory Upgrade Stable Facts
 `skills/project-bootstrap/scripts/memory_upgrade.ps1 -Mode Apply` is backup-first
 and preserves stable notes only through deterministic section rules. Compact
