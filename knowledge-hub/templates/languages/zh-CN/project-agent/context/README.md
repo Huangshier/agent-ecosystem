@@ -8,4 +8,7 @@
 - `business/`：产品逻辑、状态机、领域规则。
 - `experience/`：踩坑、事故、修复和可复用 playbook。
 
+可选上下文文件（仅在项目确实受益时创建）：
+- `tech/terminology.md`：项目特有术语、缩写和领域行话——适用于领域术语密集、多团队协作或缩写较多的项目；小项目或文档完善的项目可跳过。
+
 渐进读取规则：非模板 context 文件应在靠前位置包含 `## Summary` 和 `## Keywords`，方便 agent 先读 README / index，再只打开匹配的上下文条目。

@@ -144,6 +144,7 @@ Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭
 
 ## 记忆路由
 - 稳定技术事实：`.agents/context/tech/`
+- 项目术语和领域行话（可选）：`.agents/context/tech/terminology.md`
 - 业务或产品规则：`.agents/context/business/`
 - 重复踩坑与修复：`.agents/context/experience/`
 - 结构化排障案例：`.agents/context/experience/cases/`
