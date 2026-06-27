@@ -142,6 +142,7 @@ try {
         "scripts/validation/release-bootstrap-checks.ps1",
         "scripts/validation/release-project-template-checks.ps1",
         "scripts/validation/release-template-language-checks.ps1",
+        "knowledge-hub/knowledge/patterns/examples/issue-decomposition-positive-fixture.md",
         "scripts/validate-release.ps1"
     )
     $keywordMatches = New-Object 'System.Collections.Generic.List[object]'
