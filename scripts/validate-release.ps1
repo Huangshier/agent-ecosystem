@@ -82,7 +82,7 @@ try {
         -SpecValidator $specValidator `
         -FixtureDir $fixtureDir `
         -ScratchRoot $scratchRootFull
-    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English, zh-CN bilingual, and UTF-8 no-BOM zh-CN specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
+    Add-Check "spec-lite validator" "PASS" "workflow-spec-lite validator accepts complete English, zh-CN bilingual, UTF-8 no-BOM zh-CN, and optional-sections specs and rejects missing metadata, goals, non-goals, acceptance, risks, and execution contract fixtures." $evidence.spec_lite
 }
 catch {
     Add-Check "spec-lite validator" "FAIL" $_.Exception.Message

@@ -77,6 +77,23 @@ For routing heuristics, read [references/complexity-routing.md](references/compl
 ### Step 0: Run the Project Context Gate
 Run the context gate described above. Do not continue with stale project rules when the task is non-trivial, multi-stage, resumed, or corrected by the user.
 
+### Step 0.5: Requirements Clarification
+After loading context and before routing or creating any spec, evaluate whether the user's intent is clear enough to proceed. This is a lightweight gate, not a formal review ceremony.
+
+Check whether these are sufficiently clear:
+- **Problem or goal**: what exactly is being built, changed, or investigated.
+- **Success criteria**: what "done" looks like and how it will be verified.
+- **Scope boundaries**: what is explicitly out of scope.
+- **Write authorization**: which writes are authorized and by what evidence.
+- **Key assumptions**: what is being taken for granted without proof.
+
+When any of the above is ambiguous:
+1. Ask the user targeted clarification questions instead of guessing.
+2. If the user confirms intent or authorizes proceeding, record default assumptions with rationale in the spec's `Requirements Clarification` section (Section 3).
+3. Do not proceed to implementation with unresolved ambiguity about goals, scope, or write authorization. Put unresolved items in `Open Questions`.
+
+When all of the above are clear, proceed directly to Step 1 without ceremony. The `Requirements Clarification` section is optional and should be omitted when no clarification was needed.
+
 ### Step 1: Check for an Existing Active Spec
 Before creating anything new:
 1. Search `docs/specs/` for a matching slug, feature name, or current work item.
@@ -133,10 +150,12 @@ The spec must capture:
 - what is being changed or investigated
 - why it matters
 - current artifacts or code paths already known
+- requirements clarification when the goal, scope, or authorization was not initially clear (Section 3, optional)
 - goals and non-goals
 - constraints, assumptions, and risks
 - proposed approach
 - how completion will be judged
+- decision validation for high-risk or hard-to-reverse choices (Section 11, optional)
 - when the project has test infrastructure, how test evidence supports
   acceptance (run command, pass/fail status, coverage). Refer to the project's
   `.agents/commands/test-workflow.md` and `.agents/context/tech/testing-conventions.md`
@@ -273,6 +292,7 @@ Ordinary intermediate commits do not require a full engineering-memory sync. Kee
 - Put durable work intent in `docs/specs/`, not in `.agents`.
 - Prefer concise bullets over narrative prose.
 - Record assumptions explicitly instead of silently resolving ambiguity.
+- When key assumptions carry meaningful risk or the approach is hard to reverse, use the `Decision Validation` section to record a lightweight pre-mortem and reversibility assessment instead of leaving risk reasoning implicit.
 - If the task is reverse engineering or research, evidence and open questions are first-class outputs.
 - If the task depends on high-risk facts, missing evidence is a blocking open
   question before implementation.
@@ -292,10 +312,12 @@ Ordinary intermediate commits do not require a full engineering-memory sync. Kee
 - Creating a new spec when an existing active spec should be extended
 - Stopping after a successful phase when an Execution Contract says to continue
 - Asking an agent to loop forever without a deterministic check, pass predicate, timeout, or abort conditions
+- Proceeding to implementation when the goal, scope, or write authorization is ambiguous, instead of asking clarification questions or recording default assumptions
 
 ## Output Contract
 When this skill is used, return:
 1. The chosen route: `quick`, `standard`, or `deep`
 2. The active slug and output path
 3. What file(s) were created or reused
-4. Any unresolved assumptions or questions before execution
+4. Whether requirements clarification was needed and any default assumptions recorded
+5. Any unresolved assumptions or questions before execution

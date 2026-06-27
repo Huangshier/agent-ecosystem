@@ -12,28 +12,28 @@
 ## 2. Current Context
 - Release validation needs a positive fixture with a Loop Contract.
 
-## 3. Goals
+## 4. Goals
 - Confirm loop specs pass when required sections are present.
 
-## 4. Non-Goals
+## 5. Non-Goals
 - Do not execute the loop action.
 
-## 5. Constraints
+## 6. Constraints
 - Run only against temporary fixture files.
 
-## 6. Assumptions
+## 7. Assumptions
 - The loop contract is agent-facing state, not executable code.
 
-## 7. Risks
+## 8. Risks
 - A vague loop can lead to unbounded repeated work.
 
-## 8. Proposed Approach
+## 9. Proposed Approach
 - Validate a bounded Loop Contract fixture.
 
-## 9. Acceptance / Evidence
+## 10. Acceptance / Evidence
 - The Loop Contract fixture passes validation.
 
-## 10. Loop Contract
+## 12. Loop Contract
 - **Variable**: retry count
 - **Source of truth**: temporary fixture text
 - **Check command**: inspect fixture
@@ -43,7 +43,7 @@
 - **Limits**: one validation attempt
 - **Abort conditions**: missing required spec sections
 
-## 11. Execution Contract
+## 13. Execution Contract
 
-## 12. Open Questions
+## 14. Open Questions
 - None for this fixture.
