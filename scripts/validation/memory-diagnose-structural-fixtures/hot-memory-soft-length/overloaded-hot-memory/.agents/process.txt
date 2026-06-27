@@ -1,0 +1,31 @@
+Status: active
+
+Current state
+- The feature branch implements hot memory soft-length diagnostics for
+  memory_diagnose.ps1. The main logic is complete and the new finding codes
+  have been integrated into the helper.
+- Two fixture families are under construction: the negative concise case
+  and the positive overloaded case. Both require expected.json definitions.
+- CI checks are pending on the draft branch while the validation suite runs.
+- The release validator fixture section needs an additional block for the
+  new hot-memory-soft-length family once the fixtures are finalized.
+- Documentation updates for the memory-governance README and the structural
+  diagnostics roadmap are drafted but not yet committed.
+- The helper now accepts ProcessSoftLineLimit and PlanSoftLineLimit as
+  optional parameters with defaults of 30 and 20 respectively.
+- The soft-length checks emit info-level findings only and do not replace
+  or conflict with the existing LargeFileLineThreshold warning.
+- Each soft-length check reports the current line count and the applicable
+  threshold so the finding is self-explanatory without reading the code.
+- The recommendation text directs agents to compress hot memory and to
+  migrate long-lived content to docs/specs or .agents/context.
+
+Next actions
+- Finalize the positive fixture expected.json and verify finding codes.
+- Update validate-release.ps1 to cover the new fixture family.
+- Run the full validation suite and capture evidence.
+- Submit the draft PR for maintainer review.
+- Update the memory-governance README with the new diagnostic family.
+
+Last updated
+- 2026-06-28

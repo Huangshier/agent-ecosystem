@@ -1,0 +1,19 @@
+{
+  "fixture": "concise-current-state",
+  "family": "hot-memory-soft-length",
+  "role": "negative",
+  "current_diagnosis": {
+    "expected_finding_codes": []
+  },
+  "future_structural_diagnosis": {
+    "should_report": false,
+    "acceptable_finding_codes": [],
+    "expected_severity": "",
+    "expected_path_suffixes": [],
+    "recommendation_must_include": []
+  },
+  "soft_line_expectation": {
+    "process_max": 30,
+    "plan_max": 20
+  }
+}

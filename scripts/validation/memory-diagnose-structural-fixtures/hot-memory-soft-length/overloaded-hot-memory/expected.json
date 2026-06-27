@@ -1,0 +1,32 @@
+{
+  "fixture": "overloaded-hot-memory",
+  "family": "hot-memory-soft-length",
+  "role": "positive",
+  "current_diagnosis": {
+    "expected_finding_codes": [
+      "hot_memory_process_long",
+      "hot_memory_plan_long"
+    ]
+  },
+  "future_structural_diagnosis": {
+    "should_report": true,
+    "acceptable_finding_codes": [
+      "hot_memory_process_long",
+      "hot_memory_plan_long"
+    ],
+    "expected_severity": "info",
+    "expected_path_suffixes": [
+      ".agents/process.txt",
+      ".agents/plan.md"
+    ],
+    "recommendation_must_include": [
+      "compress",
+      "hot session memory",
+      "docs/specs"
+    ]
+  },
+  "soft_line_expectation": {
+    "process_min": 31,
+    "plan_min": 21
+  }
+}

@@ -1,0 +1,12 @@
+Status: active
+
+Current state
+- The branch is on track and CI checks are passing.
+- One small follow-up remains before requesting review.
+
+Next actions
+- Write the final test assertion.
+- Request maintainer review.
+
+Last updated
+- 2026-06-28

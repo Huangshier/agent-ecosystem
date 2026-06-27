@@ -2,6 +2,12 @@
 
 Status: design boundary for issue #155 Part B.
 
+Hot memory soft-length detection (issue #167 first slice) has been
+implemented. The helper now reports `hot_memory_process_long` (process.txt
+exceeding 30 lines) and `hot_memory_plan_long` (plan.md exceeding 20 lines)
+at `info` severity. Fixtures live under
+`scripts/validation/memory-diagnose-structural-fixtures/hot-memory-soft-length/`.
+
 This document records the public-safe design boundary for future structural
 diagnostics in `skills/memory-governance/scripts/memory_diagnose.ps1`. PR #160 completed #155 Part A by connecting `workflow-spec-lite` phase-close guidance
 to the existing read-only diagnosis helper. Part B remains about what the
@@ -84,15 +90,17 @@ Future implementation PRs should add public-safe fixtures before adding or
 changing detection logic. Fixtures should be small synthetic projects under a
 release-validation scratch directory or a tracked validation fixture directory.
 
-| Fixture | Expected Result | Purpose |
+| Fixture | Expected Result | Status |
 | --- | --- | --- |
-| Fresh bootstrap project | No new structural findings | Prevent regressions for default templates. |
-| Compact active phase | No completed-list finding | Avoid penalizing a normal short process snapshot. |
-| Process history backlog | Completed-list or density finding | Prove historical entries are detected. |
-| Notes durable evidence | No runtime-state finding | Allow stable facts that cite an issue or PR as evidence. |
-| Notes live task state | Stable/runtime mixing finding | Detect active branch, next-action, or checkbox state in notes. |
-| Spec pointer only | No spec-duplication finding | Allow session-local pointers to `docs/specs/**`. |
-| Copied task list | Spec-duplication finding | Detect duplicated long-lived task lists in hot memory. |
+| Fresh bootstrap project | No new structural findings | existing baseline |
+| Compact active phase | No completed-list finding | implemented |
+| Process history backlog | Completed-list or density finding | implemented |
+| Concise current state (soft-length) | No soft-length finding | implemented (#167 first slice) |
+| Overloaded hot memory (soft-length) | Both soft-length findings at info | implemented (#167 first slice) |
+| Notes durable evidence | No runtime-state finding | future |
+| Notes live task state | Stable/runtime mixing finding | future |
+| Spec pointer only | No spec-duplication finding | future |
+| Copied task list | Spec-duplication finding | future |
 
 Each fixture should assert the finding code, severity, path, and recommendation
 shape. Negative fixtures should prove that concise current-state memory does
