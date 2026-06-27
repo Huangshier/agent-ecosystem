@@ -179,17 +179,24 @@ skill config and the Agent Skills standard's SKILL.md format is
 
 ## Cross-Field Mapping: Safe-to-Align
 
-These frontmatter fields are directly portable across all three
-target runtimes with no adapter:
+These fields and structural conventions are directly portable between
+agent-ecosystem, the Agent Skills standard, and Claude Code with no
+adapter. Codex uses a fundamentally different format (plain Markdown
+`AGENTS.md` with no YAML frontmatter), so these fields are N/A for
+Codex and would require a separate `AGENTS.md`-facing surface or
+adapter to expose.
 
 | agent-ecosystem | agentskills.io | Claude Code | Codex |
 | --- | --- | --- | --- |
-| `name` | `name` | `name` (optional, defaults to dir) | N/A (no frontmatter) |
-| `description` | `description` | `description` (recommended) | N/A (no frontmatter) |
+| `name` | `name` | `name` (optional, defaults to dir) | N/A → requires AGENTS.md adapter |
+| `description` | `description` | `description` (recommended) | N/A → requires AGENTS.md adapter |
 | `SKILL.md` filename | `SKILL.md` | `SKILL.md` | N/A (`AGENTS.md`) |
-| `scripts/` dir | `scripts/` | `scripts/` | N/A |
+| `scripts/` dir | `scripts/` | `scripts/` | N/A (TOML config selectors) |
 | `references/` dir | `references/` | N/A | N/A |
 | Directory-based skill | Yes | Yes | Config-based selectors |
+
+Codex compatibility for these fields is addressed in the
+"Cross-Field Mapping: Requires Adapter" section below.
 
 ## Cross-Field Mapping: Requires Adapter
 
@@ -203,6 +210,7 @@ These current fields or conventions need a translation layer:
 | `skills/` path | `.agents/skills/` or `.claude/skills/` | Symlink or install script |
 | `agents/openai.yaml` | N/A (no standard equivalent) | Keep as parallel layer; do not remove |
 | PowerShell scripts | Cross-runtime script exec | Document `pwsh` requirement in `compatibility` field |
+| SKILL.md frontmatter → Codex | `AGENTS.md` plain text (no frontmatter) | Generate `AGENTS.md` from `name` + `description` + body content |
 
 ## Do-Not-Change Items
 
@@ -300,7 +308,7 @@ Validation: Codex CLI skill loading test.
 | Agent Skills GitHub | Verified | https://github.com/agentskills/agentskills |
 | Claude Code skills docs | Verified | https://docs.anthropic.com/en/docs/claude-code/skills |
 | Claude Code memory docs | Verified | https://docs.anthropic.com/en/docs/claude-code/memory |
-| Codex source code | Verified (Tier 1) | https://github.com/openai/codex (Apache-2.0) |
+| Codex source code | Verified (Tier 1) | https://github.com/openai/codex (Apache-2.0). Key files: `codex-rs/core/src/agents_md.rs` (AGENTS.md loading), `codex-rs/core/src/config_toml.rs` (TOML config), `codex-rs/core/src/hook_config.rs` (hook system). |
 | Codex official docs | Inaccessible (Tier 2) | https://developers.openai.com/codex (404/auth) |
 | Codex blog summaries | Unverified (Tier 3) | Various community sources |
 
