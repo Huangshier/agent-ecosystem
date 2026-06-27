@@ -74,6 +74,11 @@ Use it before opening individual knowledge files.
   - Use when: desired behavior can be specified as observable inputs and outputs
     before implementation, and the project benefits from writing failing tests
     first.
+- [Eval-Driven Skill Iteration](knowledge/patterns/eval-driven-skill-iteration.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: a skill's output quality needs data-driven measurement,
+    comparison against baseline, or structured improvement across versions.
 
 ### Standards
 

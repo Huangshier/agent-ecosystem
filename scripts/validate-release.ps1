@@ -371,6 +371,85 @@ catch {
     Add-Check "hot memory soft-length fixtures" "FAIL" $_.Exception.Message
 }
 
+try {
+    $evalFixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "eval-iteration-fixtures"
+    $evalReadme = Get-FileText -RelativePath "scripts/validation/eval-iteration-fixtures/README.md"
+    foreach ($token in @("Eval Iteration Fixtures", "evals-schema-fixture", "evals.json", "expected.json", "assertion", "Non-Goals")) {
+        if (-not $evalReadme.Contains($token)) {
+            throw "Eval iteration fixture README is missing token: $token"
+        }
+    }
+
+    $evalsJsonPath = Join-PathParts $evalFixtureRoot "evals-schema-fixture" "evals.json"
+    if (-not (Test-Path -LiteralPath $evalsJsonPath)) {
+        throw "Missing evals-schema-fixture/evals.json."
+    }
+    $evalsContent = Get-Content -LiteralPath $evalsJsonPath -Raw | ConvertFrom-Json
+    foreach ($field in @("skill", "version", "evals")) {
+        if ($null -eq $evalsContent.$field) {
+            throw "evals.json is missing required top-level field: $field"
+        }
+    }
+    $evalCases = @($evalsContent.evals)
+    if ($evalCases.Count -lt 1) {
+        throw "evals.json must contain at least one eval case."
+    }
+    $allowedTypes = @("contains", "not_contains", "exact_match", "regex", "token_count_below", "file_created", "file_not_created")
+    $totalAssertions = 0
+    foreach ($evalCase in $evalCases) {
+        foreach ($field in @("id", "input", "assertions")) {
+            if ($null -eq $evalCase.$field) {
+                throw "Eval case is missing required field: $field"
+            }
+        }
+        $caseAssertions = @($evalCase.assertions)
+        $totalAssertions += $caseAssertions.Count
+        foreach ($assertion in $caseAssertions) {
+            if ($null -eq $assertion.type -or $null -eq $assertion.expected) {
+                throw "Assertion in eval case '$($evalCase.id)' is missing 'type' or 'expected'."
+            }
+            if ([string]$assertion.type -notin $allowedTypes) {
+                throw "Assertion type '$($assertion.type)' is not in the allowed enum."
+            }
+        }
+    }
+
+    $expectedPath = Join-PathParts $evalFixtureRoot "evals-schema-fixture" "expected.json"
+    $expectedContent = Get-Content -LiteralPath $expectedPath -Raw | ConvertFrom-Json
+    if ([string]$expectedContent.fixture -ne "evals-schema-fixture") {
+        throw "Eval fixture expected.json name mismatch."
+    }
+    if ([string]$expectedContent.family -ne "eval-iteration") {
+        throw "Eval fixture expected.json family mismatch."
+    }
+    if ([string]$expectedContent.role -ne "positive") {
+        throw "Eval fixture expected.json role mismatch."
+    }
+    if ($evalCases.Count -ne [int]$expectedContent.expected_eval_count) {
+        throw "Eval case count mismatch: expected $($expectedContent.expected_eval_count), got $($evalCases.Count)."
+    }
+    if ($totalAssertions -lt [int]$expectedContent.expected_assertion_count_minimum) {
+        throw "Assertion count below minimum: expected >= $($expectedContent.expected_assertion_count_minimum), got $totalAssertions."
+    }
+    foreach ($readmeToken in @($expectedContent.required_readme_tokens | ForEach-Object { [string]$_ })) {
+        if (-not $evalReadme.Contains($readmeToken)) {
+            throw "Eval README is missing expected token: $readmeToken"
+        }
+    }
+
+    $script:evidence.eval_iteration_fixtures = [ordered]@{
+        family = "eval-iteration"
+        fixture = "evals-schema-fixture"
+        eval_count = $evalCases.Count
+        assertion_count = $totalAssertions
+        allowed_types = @($allowedTypes)
+    }
+    Add-Check "eval iteration fixtures" "PASS" "Eval iteration schema fixture is public-safe, JSON-valid, and conforms to the evals schema shape." $evidence.eval_iteration_fixtures
+}
+catch {
+    Add-Check "eval iteration fixtures" "FAIL" $_.Exception.Message
+}
+
 
 try {
     $triageWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-label-sync.yml"

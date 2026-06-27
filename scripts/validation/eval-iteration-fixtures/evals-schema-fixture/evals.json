@@ -1,0 +1,54 @@
+{
+  "skill": "example-skill",
+  "version": 1,
+  "evals": [
+    {
+      "id": "happy-path-basic-output",
+      "description": "Skill produces structured output with summary section when given a standard input.",
+      "input": {
+        "prompt": "Analyze this module and produce a summary.",
+        "context": {
+          "module": "example-module",
+          "language": "en"
+        }
+      },
+      "assertions": [
+        {
+          "type": "contains",
+          "expected": "## Summary",
+          "description": "Output includes a Summary section header."
+        },
+        {
+          "type": "not_contains",
+          "expected": "private key",
+          "description": "Output does not leak private key references."
+        },
+        {
+          "type": "token_count_below",
+          "expected": "500",
+          "description": "Output stays within token budget."
+        }
+      ]
+    },
+    {
+      "id": "edge-case-empty-input",
+      "description": "Skill handles empty context gracefully without crashing or producing garbage.",
+      "input": {
+        "prompt": "",
+        "context": {}
+      },
+      "assertions": [
+        {
+          "type": "not_contains",
+          "expected": "Error:",
+          "description": "Output does not contain unhandled error text."
+        },
+        {
+          "type": "not_contains",
+          "expected": "undefined",
+          "description": "Output does not contain undefined variable references."
+        }
+      ]
+    }
+  ]
+}
