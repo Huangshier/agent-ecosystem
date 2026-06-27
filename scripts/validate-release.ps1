@@ -459,6 +459,126 @@ catch {
     Add-Check "eval iteration fixtures" "FAIL" $_.Exception.Message
 }
 
+# Slice 2: verify eval report artifact shape
+try {
+    $reportPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "report.json"
+    if (-not (Test-Path -LiteralPath $reportPath)) {
+        throw "Missing workflow-spec-lite/report.json."
+    }
+    $reportContent = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+
+    foreach ($field in @("skill", "version", "fixture", "report_type", "eval_results", "failure_reason_shape", "summary")) {
+        if ($null -eq $reportContent.$field) {
+            throw "report.json is missing required top-level field: $field"
+        }
+    }
+    if ([string]$reportContent.report_type -ne "static") {
+        throw "report.json report_type must be 'static', got: $($reportContent.report_type)"
+    }
+
+    $reportResults = @($reportContent.eval_results)
+    foreach ($result in $reportResults) {
+        foreach ($field in @("eval_id", "status", "assertions_total", "assertions_passed", "assertions_failed")) {
+            if ($null -eq $result.$field) {
+                throw "report.json eval_result is missing required field: $field"
+            }
+        }
+    }
+
+    # Verify eval IDs match evals.json
+    $reportEvalIds = @($reportResults | ForEach-Object { [string]$_.eval_id })
+    if (-not (Test-ExactArray -Actual $reportEvalIds -Expected $expectedEvalIds)) {
+        throw "Report eval ID mismatch. Expected: $($expectedEvalIds -join ', '). Actual: $($reportEvalIds -join ', ')."
+    }
+
+    # Verify failure_reason_shape contains required example fields
+    $failureExample = $reportContent.failure_reason_shape.example
+    foreach ($field in @("eval_id", "assertion_type", "expected", "actual")) {
+        if ($null -eq $failureExample.$field) {
+            throw "report.json failure_reason_shape.example is missing required field: $field"
+        }
+    }
+
+    # Verify summary totals are consistent
+    $summary = $reportContent.summary
+    foreach ($field in @("eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status")) {
+        if ($null -eq $summary.$field) {
+            throw "report.json summary is missing required field: $field"
+        }
+    }
+    $totalReportAssertions = 0
+    $totalReportAssertionsPassed = 0
+    foreach ($result in $reportResults) {
+        $totalReportAssertions += [int]$result.assertions_total
+        $totalReportAssertionsPassed += [int]$result.assertions_passed
+    }
+    if ([int]$summary.eval_count -ne $reportResults.Count) {
+        throw "report.json summary.eval_count ($($summary.eval_count)) does not match eval_results count ($($reportResults.Count))."
+    }
+    if ([int]$summary.assertions_total -ne $totalReportAssertions) {
+        throw "report.json summary.assertions_total ($($summary.assertions_total)) does not match sum of eval_results ($totalReportAssertions)."
+    }
+    if ([int]$summary.assertions_passed -ne $totalReportAssertionsPassed) {
+        throw "report.json summary.assertions_passed ($($summary.assertions_passed)) does not match sum of eval_results ($totalReportAssertionsPassed)."
+    }
+    if ([int]$summary.assertions_total -ne $totalAssertions) {
+        throw "report.json summary.assertions_total ($($summary.assertions_total)) does not match evals.json assertion count ($totalAssertions)."
+    }
+
+    # Verify PASS/FAIL status semantics
+    $allowedStatuses = @("PASS", "FAIL")
+    $evalsPassedCount = 0
+    $evalsFailedCount = 0
+    $totalReportAssertionsFailed = 0
+    foreach ($result in $reportResults) {
+        if ([string]$result.status -notin $allowedStatuses) {
+            throw "report.json eval_result '$($result.eval_id)' has invalid status '$($result.status)'; must be PASS or FAIL."
+        }
+        if ([string]$result.status -eq "PASS") { $evalsPassedCount++ }
+        else { $evalsFailedCount++ }
+        $totalReportAssertionsFailed += [int]$result.assertions_failed
+        $perEvalTotal = [int]$result.assertions_total
+        $perEvalPassed = [int]$result.assertions_passed
+        $perEvalFailed = [int]$result.assertions_failed
+        if ($perEvalTotal -ne ($perEvalPassed + $perEvalFailed)) {
+            throw "report.json eval_result '$($result.eval_id)' assertions_total ($perEvalTotal) does not equal assertions_passed ($perEvalPassed) + assertions_failed ($perEvalFailed)."
+        }
+    }
+
+    # summary.status must match expected_status from expected.json
+    $expectedStatus = [string]$expectedContent.report_artifact.expected_status
+    if ([string]$summary.status -ne $expectedStatus) {
+        throw "report.json summary.status ($($summary.status)) does not match expected_status ($expectedStatus) from expected.json."
+    }
+
+    # summary.evals_passed / evals_failed must match per-eval status counts
+    if ([int]$summary.evals_passed -ne $evalsPassedCount) {
+        throw "report.json summary.evals_passed ($($summary.evals_passed)) does not match per-eval PASS count ($evalsPassedCount)."
+    }
+    if ([int]$summary.evals_failed -ne $evalsFailedCount) {
+        throw "report.json summary.evals_failed ($($summary.evals_failed)) does not match per-eval FAIL count ($evalsFailedCount)."
+    }
+
+    # summary.assertions_failed must match per-eval sum and equal assertions_total - assertions_passed
+    if ([int]$summary.assertions_failed -ne $totalReportAssertionsFailed) {
+        throw "report.json summary.assertions_failed ($($summary.assertions_failed)) does not match sum of per-eval assertions_failed ($totalReportAssertionsFailed)."
+    }
+    if ([int]$summary.assertions_failed -ne ([int]$summary.assertions_total - [int]$summary.assertions_passed)) {
+        throw "report.json summary.assertions_failed ($($summary.assertions_failed)) does not equal assertions_total ($($summary.assertions_total)) - assertions_passed ($($summary.assertions_passed))."
+    }
+
+    $script:evidence.eval_report_artifact = [ordered]@{
+        path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/report.json"
+        eval_count = $reportResults.Count
+        assertion_count = [int]$summary.assertions_total
+        overall_status = [string]$summary.status
+        failure_reason_example_fields = @($failureExample.PSObject.Properties.Name)
+    }
+    Add-Check "eval report artifact" "PASS" "Workflow-spec-lite eval report artifact is public-safe, JSON-valid, eval IDs match, summary totals are consistent, failure reason shape is stable, and PASS/FAIL status semantics are locked." $evidence.eval_report_artifact
+}
+catch {
+    Add-Check "eval report artifact" "FAIL" $_.Exception.Message
+}
 
 try {
     $triageWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-label-sync.yml"

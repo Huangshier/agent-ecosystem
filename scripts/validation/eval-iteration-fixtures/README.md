@@ -31,7 +31,24 @@ eval-iteration-fixtures/
   workflow-spec-lite/
     evals.json            (eval suite for workflow-spec-lite)
     expected.json         (static validation expectations)
+    report.json           (static PASS/FAIL report artifact)
 ```
+
+## Report Artifact
+
+`workflow-spec-lite/report.json` is a deterministic static report artifact
+that represents the expected shape of an eval report. It does not invoke
+an eval runner or LLM. The artifact records:
+
+- Per-eval-case results: eval_id, status (PASS/FAIL), assertion counts.
+- Failure reason shape: when an assertion fails, the finding includes
+  eval_id, assertion_type, expected, and actual fields.
+- Summary totals: eval_count, evals_passed, evals_failed,
+  assertions_total, assertions_passed, assertions_failed, overall status.
+
+The release validator verifies that report.json exists, is valid JSON,
+contains eval IDs matching evals.json, and that summary totals are
+consistent with the per-eval results.
 
 ## Schema Validation Expectations
 
