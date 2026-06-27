@@ -251,6 +251,7 @@ try {
         "docs/template-path-reference-audit.md",
         "scripts/validation/release-repository-checks.ps1",
         "scripts/validation/release-documentation-checks.ps1",
+        "scripts/validation/release-project-template-checks.ps1",
         "scripts/validate-release.ps1",
         "skills/project-bootstrap/scripts/init_hub.ps1"
     )

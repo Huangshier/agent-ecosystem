@@ -138,6 +138,9 @@ try {
         "scripts/validation/release-parser-safety-checks.ps1",
         "scripts/validation/release-documentation-checks.ps1",
         "scripts/validation/release-knowledge-hub-checks.ps1",
+        "scripts/validation/release-runtime-smoke-checks.ps1",
+        "scripts/validation/release-bootstrap-checks.ps1",
+        "scripts/validation/release-project-template-checks.ps1",
         "scripts/validation/release-template-language-checks.ps1",
         "scripts/validate-release.ps1"
     )
