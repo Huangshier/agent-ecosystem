@@ -1,4 +1,4 @@
-﻿# Get-WorkflowSpecLiteFixtureRoot: RepositoryRoot is the checkout root; returns the tracked fixture source directory.
+# Get-WorkflowSpecLiteFixtureRoot: RepositoryRoot is the checkout root; returns the tracked fixture source directory.
 function Get-WorkflowSpecLiteFixtureRoot {
     param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
 
@@ -139,7 +139,7 @@ function Invoke-WorkflowSpecLiteValidatorFixtureSuite {
         throw ("UTF-8 no-BOM Chinese section spec fixture failed: {0}" -f (($chineseNoBomPositive.findings | ConvertTo-Json -Compress -Depth 5)))
     }
 
-    # 正例：可选章节（Requirements Clarification、Decision Validation）不影响验证
+    # Positive fixture: optional Requirements Clarification and Decision Validation sections do not affect validation.
     $optionalSpec = Get-WorkflowSpecLiteFixtureText -FixtureRoot $fixtureRoot -Name "optional-sections-spec.md"
     $optionalPath = Join-PathParts $FixtureDir "optional-sections-spec.md"
     Write-WorkflowSpecLiteScratchFixture -Path $optionalPath -Text $optionalSpec
