@@ -1,6 +1,6 @@
 # Eval-Driven Skill Iteration Plan
 
-Status: first slice (docs + fixture only). Issue #166.
+Status: active (multiple slices merged). Issue #166.
 
 This plan defines the eval-driven skill iteration mechanism for
 agent-ecosystem. The first slice establishes the public-safe design
@@ -114,7 +114,11 @@ The first slice validation is entirely static:
 4. Each eval case has `id`, `input`, and `assertions`.
 5. Each assertion has `type` and `expected` fields.
 6. Assertion `type` values are from the defined enum.
-7. README fixture documents the required tokens.
+7. `report.json` records per-eval PASS/FAIL status with consistent
+   summary totals and locked status semantics.
+8. `baseline.json` records baseline identity, source references, eval
+   coverage, and status summary for future comparison.
+9. README fixture documents the required tokens.
 
 No eval runner is invoked. No skill output is generated. No LLM calls
 are made.
@@ -139,6 +143,8 @@ scripts/validation/eval-iteration-fixtures/
   workflow-spec-lite/
     evals.json
     expected.json
+    report.json
+    baseline.json
 ```
 
 ## Rollback

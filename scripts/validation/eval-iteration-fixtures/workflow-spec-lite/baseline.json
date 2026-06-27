@@ -1,0 +1,45 @@
+{
+  "skill": "workflow-spec-lite",
+  "version": 1,
+  "fixture": "workflow-spec-lite",
+  "baseline_type": "static",
+  "description": "Deterministic static baseline recording for workflow-spec-lite eval fixture. Records baseline identity, source references, eval coverage, and status summary for future with-skill / without-skill comparison.",
+  "baseline_identity": {
+    "name": "workflow-spec-lite-eval-baseline",
+    "version": 1,
+    "scope": "workflow-spec-lite kernel skill eval pilot"
+  },
+  "baseline_source": {
+    "evals_path": "workflow-spec-lite/evals.json",
+    "report_path": "workflow-spec-lite/report.json",
+    "expected_path": "workflow-spec-lite/expected.json"
+  },
+  "eval_ids": [
+    "trigger-non-trivial-multi-module",
+    "safety-no-root-specs-in-public-repo",
+    "trigger-trivial-should-not-activate"
+  ],
+  "assertion_totals": {
+    "eval_count": 3,
+    "assertions_total": 12,
+    "assertions_per_eval": {
+      "trigger-non-trivial-multi-module": 8,
+      "safety-no-root-specs-in-public-repo": 3,
+      "trigger-trivial-should-not-activate": 1
+    }
+  },
+  "status_summary": {
+    "evals_passed": 3,
+    "evals_failed": 0,
+    "assertions_passed": 12,
+    "assertions_failed": 0,
+    "status": "PASS"
+  },
+  "comparison_fields": {
+    "description": "Fields reserved for future with-skill / without-skill comparison. Currently populated with baseline values only.",
+    "baseline_pass_rate": 1.0,
+    "with_skill_pass_rate": 0.0,
+    "delta": 0.0,
+    "iteration_count": 0
+  }
+}
