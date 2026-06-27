@@ -1,0 +1,111 @@
+{
+  "skill": "workflow-spec-lite",
+  "version": 1,
+  "evals": [
+    {
+      "id": "trigger-non-trivial-multi-module",
+      "description": "Skill triggers for non-trivial multi-module refactoring requests with meaningful constraints.",
+      "input": {
+        "prompt": "Refactor the authentication system across the API gateway, user service, and shared middleware. The current implementation mixes session tokens with JWT and has inconsistent error handling.",
+        "context": {
+          "work_type": "refactor",
+          "file_count_estimate": 8,
+          "modules": ["api-gateway", "user-service", "shared-middleware"],
+          "has_constraints": true
+        }
+      },
+      "assertions": [
+        {
+          "type": "skill_should_trigger",
+          "expected": "true",
+          "description": "Non-trivial multi-module refactor should trigger workflow-spec-lite."
+        },
+        {
+          "type": "output_file_created",
+          "expected": "docs/specs/<slug>/spec.md",
+          "description": "A spec file should be created under docs/specs/."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Summary",
+          "description": "Spec must include a Summary section."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Goals",
+          "description": "Spec must include a Goals section."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Non-Goals",
+          "description": "Spec must include a Non-Goals section."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Constraints",
+          "description": "Spec must include a Constraints section."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Risks",
+          "description": "Spec must include a Risks section."
+        },
+        {
+          "type": "output_contains",
+          "expected": "## Acceptance",
+          "description": "Spec must include an Acceptance section."
+        }
+      ]
+    },
+    {
+      "id": "safety-no-root-specs-in-public-repo",
+      "description": "Skill does not create root docs/specs/** when maintaining the public agent-ecosystem repository.",
+      "input": {
+        "prompt": "Add a new validation check to the release validator script.",
+        "context": {
+          "work_type": "feature",
+          "repo_type": "public_agent_ecosystem",
+          "file_count_estimate": 2,
+          "has_constraints": true
+        }
+      },
+      "assertions": [
+        {
+          "type": "skill_should_trigger",
+          "expected": "true",
+          "description": "Non-trivial feature work should still trigger the skill."
+        },
+        {
+          "type": "output_file_not_created",
+          "expected": "docs/specs/",
+          "description": "Skill must not create root docs/specs/ in the public agent-ecosystem repo."
+        },
+        {
+          "type": "output_not_contains",
+          "expected": "docs/specs/<slug>/plan.md",
+          "description": "Skill must never create a plan.md under docs/specs/."
+        }
+      ]
+    },
+    {
+      "id": "trigger-trivial-should-not-activate",
+      "description": "Skill does not activate for trivial single-file fixes with clear acceptance criteria.",
+      "input": {
+        "prompt": "Fix the typo in README.md line 42: 'teh' should be 'the'.",
+        "context": {
+          "work_type": "fix",
+          "file_count_estimate": 1,
+          "modules": [],
+          "has_constraints": false
+        }
+      },
+      "assertions": [
+        {
+          "type": "skill_should_not_trigger",
+          "expected": "true",
+          "description": "Trivial single-file typo fix should not trigger workflow-spec-lite."
+        }
+      ]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ try {
         "knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge/patterns/eval-driven-skill-iteration.md",
         "knowledge/standards/public-knowledge-boundary.md",
         "knowledge/standards/bilingual-public-private-routing.md",
         "knowledge/domain-packs/embedded-core/catalog.md"
@@ -25,6 +26,7 @@ try {
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge-hub/knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md",
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
         "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/catalog.md",
