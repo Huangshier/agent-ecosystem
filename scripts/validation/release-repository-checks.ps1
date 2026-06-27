@@ -607,4 +607,27 @@ else {
     Add-Check "skill metadata" "FAIL" "Skill metadata mismatch." @($metadataErrors.ToArray())
 }
 
+# Slice 3: verify compatibility field exists with stable tokens
+$compatErrors = New-Object 'System.Collections.Generic.List[string]'
+foreach ($skillName in $skillNames) {
+    $skillPath = "skills/$skillName/SKILL.md"
+    $content = Get-FileText -RelativePath $skillPath
+    if ($content -notmatch '(?m)^\s*compatibility:\s*\S') {
+        $compatErrors.Add("$skillPath missing compatibility field")
+    }
+    else {
+        foreach ($token in @("PowerShell 7+", "metadata", "aliases")) {
+            if ($content -notmatch [regex]::Escape($token)) {
+                $compatErrors.Add("$skillPath compatibility field missing token: $token")
+            }
+        }
+    }
+}
+if ($compatErrors.Count -eq 0) {
+    Add-Check "skill compatibility" "PASS" "All Workflow Kernel skills declare compatibility with stable tokens for PowerShell requirement, metadata layer, and alias support."
+}
+else {
+    Add-Check "skill compatibility" "FAIL" "Skill compatibility field is missing or incomplete." @($compatErrors.ToArray())
+}
+
 }

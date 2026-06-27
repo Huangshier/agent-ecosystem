@@ -8,6 +8,7 @@ metadata:
   category: kernel
   stability: stable
   scope: cross-project
+compatibility: Bundled scripts require PowerShell 7+. The metadata map is an additive compatibility layer; top-level category, stability, and scope aliases remain supported.
 ---
 
 # Project Context Gate
