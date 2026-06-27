@@ -1,0 +1,54 @@
+{
+  "fixture": "workflow-spec-lite",
+  "family": "eval-iteration",
+  "role": "positive",
+  "skill_under_eval": "workflow-spec-lite",
+  "eval_focus": [
+    "trigger-accuracy",
+    "output-structure",
+    "safety-boundary"
+  ],
+  "schema_validation": {
+    "must_parse_as_json": true,
+    "required_top_level_fields": ["skill", "version", "evals"],
+    "eval_case_required_fields": ["id", "input", "assertions"],
+    "assertion_required_fields": ["type", "expected"],
+    "allowed_assertion_types": [
+      "skill_should_trigger",
+      "skill_should_not_trigger",
+      "output_contains",
+      "output_not_contains",
+      "output_exact_match",
+      "output_regex",
+      "output_token_count_below",
+      "output_file_created",
+      "output_file_not_created"
+    ]
+  },
+  "expected_eval_count": 3,
+  "expected_assertion_count": 12,
+  "expected_eval_ids": [
+    "trigger-non-trivial-multi-module",
+    "safety-no-root-specs-in-public-repo",
+    "trigger-trivial-should-not-activate"
+  ],
+  "report_shape": {
+    "pass": {
+      "eval_count": 3,
+      "assertions_passed": 12,
+      "assertions_failed": 0
+    },
+    "fail": {
+      "description": "Any assertion failure produces a finding with eval_id, assertion_type, expected, and actual fields."
+    }
+  },
+  "required_readme_tokens": [
+    "workflow-spec-lite",
+    "Eval Iteration Fixtures",
+    "evals.json",
+    "expected.json",
+    "trigger-accuracy",
+    "safety-boundary",
+    "Non-Goals"
+  ]
+}

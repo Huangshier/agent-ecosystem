@@ -374,17 +374,20 @@ catch {
 try {
     $evalFixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "eval-iteration-fixtures"
     $evalReadme = Get-FileText -RelativePath "scripts/validation/eval-iteration-fixtures/README.md"
-    foreach ($token in @("Eval Iteration Fixtures", "evals-schema-fixture", "evals.json", "expected.json", "assertion", "Non-Goals")) {
+    foreach ($token in @("workflow-spec-lite", "Eval Iteration Fixtures", "evals.json", "expected.json", "trigger-accuracy", "safety-boundary", "Non-Goals")) {
         if (-not $evalReadme.Contains($token)) {
             throw "Eval iteration fixture README is missing token: $token"
         }
     }
 
-    $evalsJsonPath = Join-PathParts $evalFixtureRoot "evals-schema-fixture" "evals.json"
+    $evalsJsonPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "evals.json"
     if (-not (Test-Path -LiteralPath $evalsJsonPath)) {
-        throw "Missing evals-schema-fixture/evals.json."
+        throw "Missing workflow-spec-lite/evals.json."
     }
     $evalsContent = Get-Content -LiteralPath $evalsJsonPath -Raw | ConvertFrom-Json
+    if ([string]$evalsContent.skill -ne "workflow-spec-lite") {
+        throw "evals.json skill field must be 'workflow-spec-lite', got: $($evalsContent.skill)"
+    }
     foreach ($field in @("skill", "version", "evals")) {
         if ($null -eq $evalsContent.$field) {
             throw "evals.json is missing required top-level field: $field"
@@ -394,7 +397,7 @@ try {
     if ($evalCases.Count -lt 1) {
         throw "evals.json must contain at least one eval case."
     }
-    $allowedTypes = @("contains", "not_contains", "exact_match", "regex", "token_count_below", "file_created", "file_not_created")
+    $allowedTypes = @("skill_should_trigger", "skill_should_not_trigger", "output_contains", "output_not_contains", "output_exact_match", "output_regex", "output_token_count_below", "output_file_created", "output_file_not_created")
     $totalAssertions = 0
     foreach ($evalCase in $evalCases) {
         foreach ($field in @("id", "input", "assertions")) {
@@ -414,10 +417,10 @@ try {
         }
     }
 
-    $expectedPath = Join-PathParts $evalFixtureRoot "evals-schema-fixture" "expected.json"
+    $expectedPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "expected.json"
     $expectedContent = Get-Content -LiteralPath $expectedPath -Raw | ConvertFrom-Json
-    if ([string]$expectedContent.fixture -ne "evals-schema-fixture") {
-        throw "Eval fixture expected.json name mismatch."
+    if ([string]$expectedContent.fixture -ne "workflow-spec-lite") {
+        throw "Eval fixture expected.json fixture name mismatch."
     }
     if ([string]$expectedContent.family -ne "eval-iteration") {
         throw "Eval fixture expected.json family mismatch."
@@ -428,8 +431,13 @@ try {
     if ($evalCases.Count -ne [int]$expectedContent.expected_eval_count) {
         throw "Eval case count mismatch: expected $($expectedContent.expected_eval_count), got $($evalCases.Count)."
     }
-    if ($totalAssertions -lt [int]$expectedContent.expected_assertion_count_minimum) {
-        throw "Assertion count below minimum: expected >= $($expectedContent.expected_assertion_count_minimum), got $totalAssertions."
+    if ($totalAssertions -ne [int]$expectedContent.expected_assertion_count) {
+        throw "Assertion count mismatch: expected $($expectedContent.expected_assertion_count), got $totalAssertions."
+    }
+    $expectedEvalIds = @($expectedContent.expected_eval_ids | ForEach-Object { [string]$_ })
+    $actualEvalIds = @($evalCases | ForEach-Object { [string]$_.id })
+    if (-not (Test-ExactArray -Actual $actualEvalIds -Expected $expectedEvalIds)) {
+        throw "Eval ID mismatch. Expected: $($expectedEvalIds -join ', '). Actual: $($actualEvalIds -join ', ')."
     }
     foreach ($readmeToken in @($expectedContent.required_readme_tokens | ForEach-Object { [string]$_ })) {
         if (-not $evalReadme.Contains($readmeToken)) {
@@ -439,12 +447,13 @@ try {
 
     $script:evidence.eval_iteration_fixtures = [ordered]@{
         family = "eval-iteration"
-        fixture = "evals-schema-fixture"
+        fixture = "workflow-spec-lite"
+        skill = [string]$evalsContent.skill
         eval_count = $evalCases.Count
         assertion_count = $totalAssertions
         allowed_types = @($allowedTypes)
     }
-    Add-Check "eval iteration fixtures" "PASS" "Eval iteration schema fixture is public-safe, JSON-valid, and conforms to the evals schema shape." $evidence.eval_iteration_fixtures
+    Add-Check "eval iteration fixtures" "PASS" "Workflow-spec-lite eval pilot fixture is public-safe, JSON-valid, and conforms to the evals schema shape." $evidence.eval_iteration_fixtures
 }
 catch {
     Add-Check "eval iteration fixtures" "FAIL" $_.Exception.Message

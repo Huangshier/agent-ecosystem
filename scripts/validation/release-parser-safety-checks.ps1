@@ -144,7 +144,7 @@ try {
         "scripts/validation/release-template-language-checks.ps1",
         "knowledge-hub/knowledge/patterns/examples/issue-decomposition-positive-fixture.md",
         "docs/roadmap/eval-driven-skill-iteration-plan.md",
-        "scripts/validation/eval-iteration-fixtures/evals-schema-fixture/evals.json",
+        "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/evals.json",
         "scripts/validation/eval-iteration-fixtures/README.md",
         "knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md",
         "scripts/validate-release.ps1"

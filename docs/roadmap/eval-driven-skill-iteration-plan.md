@@ -47,13 +47,15 @@ The schema defines a list of eval cases:
 
 | Type | Semantics | Example |
 | --- | --- | --- |
-| `contains` | Output contains the expected substring | `"expected": "## Summary"` |
-| `not_contains` | Output must not contain the substring | `"expected": "private key"` |
-| `exact_match` | Output equals expected string after trimming | `"expected": "PASS"` |
-| `regex` | Output matches the expected regex pattern | `"expected": "Status: (draft\|verified)"` |
-| `token_count_below` | Output token count is below threshold | `"expected": "500"` |
-| `file_created` | A file at the expected path was created | `"expected": "docs/specs/foo/spec.md"` |
-| `file_not_created` | No file at the expected path was created | `"expected": ".agents/_scratch/"` |
+| `skill_should_trigger` | Skill activates for the given input | `"expected": "true"` |
+| `skill_should_not_trigger` | Skill must not activate for the input | `"expected": "true"` |
+| `output_contains` | Skill output contains the expected substring | `"expected": "## Summary"` |
+| `output_not_contains` | Skill output must not contain the substring | `"expected": "docs/specs/<slug>/plan.md"` |
+| `output_exact_match` | Skill output equals expected string after trimming | `"expected": "PASS"` |
+| `output_regex` | Skill output matches the expected regex pattern | `"expected": "Status: (draft\|verified)"` |
+| `output_token_count_below` | Skill output token count is below threshold | `"expected": "500"` |
+| `output_file_created` | A file at the expected path was created by the skill | `"expected": "docs/specs/foo/spec.md"` |
+| `output_file_not_created` | No file at the expected path was created | `"expected": "docs/specs/"` |
 
 Future assertion types (not in first slice):
 
@@ -69,7 +71,7 @@ Future assertion types (not in first slice):
   "properties": {
     "type": {
       "type": "string",
-      "enum": ["contains", "not_contains", "exact_match", "regex", "token_count_below", "file_created", "file_not_created"]
+      "enum": ["skill_should_trigger", "skill_should_not_trigger", "output_contains", "output_not_contains", "output_exact_match", "output_regex", "output_token_count_below", "output_file_created", "output_file_not_created"]
     },
     "expected": { "type": "string" },
     "description": { "type": "string" }
@@ -117,12 +119,24 @@ The first slice validation is entirely static:
 No eval runner is invoked. No skill output is generated. No LLM calls
 are made.
 
+## Pilot Skill
+
+The first eval pilot targets `workflow-spec-lite`, a kernel skill for
+lightweight spec-first project workflow. The eval suite covers:
+
+- **Trigger accuracy**: non-trivial multi-module work should activate
+  the skill; trivial single-file fixes should not.
+- **Output structure**: the generated spec must contain required
+  sections (Summary, Goals, Non-Goals, Constraints, Risks, Acceptance).
+- **Safety boundary**: the skill must not create `docs/specs/` in the
+  public agent-ecosystem repo, and must never create `plan.md`.
+
 ## Fixture Location
 
 ```
 scripts/validation/eval-iteration-fixtures/
   README.md
-  evals-schema-fixture/
+  workflow-spec-lite/
     evals.json
     expected.json
 ```
@@ -155,5 +169,5 @@ coverage is affected.
 | Fixture directory with evals.json exists | `scripts/validation/eval-iteration-fixtures/` |
 | Static validation checks pass | `validate-release.ps1` new check |
 | Knowledge pattern documents the eval-driven iteration approach | `knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md` |
-| No runtime behavior change | Existing 62 checks pass unchanged |
+| No runtime behavior change | Existing release checks pass alongside the new static fixture check |
 | No private data in public artifacts | Fixture and docs are public-safe synthetic content |

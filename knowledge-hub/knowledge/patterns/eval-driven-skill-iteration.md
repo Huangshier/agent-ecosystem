@@ -36,8 +36,10 @@ each skill version.
    representative input prompts and expected output characteristics.
    Cover happy path, edge cases, and known regression scenarios.
 2. **Write assertions**: for each eval case, define assertions using
-   the standardized types (contains, not_contains, exact_match, regex,
-   token_count_below, file_created, file_not_created). Start with
+   the standardized types (skill_should_trigger,
+   skill_should_not_trigger, output_contains, output_not_contains,
+   output_exact_match, output_regex, output_token_count_below,
+   output_file_created, output_file_not_created). Start with
    structural assertions before adding semantic ones.
 3. **Establish baseline**: run the eval suite with the current skill
    version. Record `pass_rate` as the baseline. If running without
@@ -66,13 +68,15 @@ each skill version.
 
 | Type | What it checks |
 | --- | --- |
-| `contains` | Output includes the expected substring |
-| `not_contains` | Output excludes the expected substring |
-| `exact_match` | Output equals expected value (trimmed) |
-| `regex` | Output matches a regex pattern |
-| `token_count_below` | Output token count is under threshold |
-| `file_created` | A file at the expected path was created |
-| `file_not_created` | No file at the expected path exists |
+| `skill_should_trigger` | Skill activates for the given input |
+| `skill_should_not_trigger` | Skill must not activate for the input |
+| `output_contains` | Skill output includes the expected substring |
+| `output_not_contains` | Skill output excludes the expected substring |
+| `output_exact_match` | Skill output equals expected value (trimmed) |
+| `output_regex` | Skill output matches a regex pattern |
+| `output_token_count_below` | Skill output token count is under threshold |
+| `output_file_created` | A file at the expected path was created by the skill |
+| `output_file_not_created` | No file at the expected path was created |
 
 Future types: `llm_grade` (LLM-based quality grading with rubric),
 `human_review` (flags for manual review).
