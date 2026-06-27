@@ -1,0 +1,48 @@
+{
+  "skill": "workflow-spec-lite",
+  "version": 1,
+  "fixture": "workflow-spec-lite",
+  "report_type": "static",
+  "description": "Deterministic static eval report artifact for workflow-spec-lite. This file represents the expected report shape; no eval runner or LLM is invoked.",
+  "eval_results": [
+    {
+      "eval_id": "trigger-non-trivial-multi-module",
+      "status": "PASS",
+      "assertions_total": 8,
+      "assertions_passed": 8,
+      "assertions_failed": 0
+    },
+    {
+      "eval_id": "safety-no-root-specs-in-public-repo",
+      "status": "PASS",
+      "assertions_total": 3,
+      "assertions_passed": 3,
+      "assertions_failed": 0
+    },
+    {
+      "eval_id": "trigger-trivial-should-not-activate",
+      "status": "PASS",
+      "assertions_total": 1,
+      "assertions_passed": 1,
+      "assertions_failed": 0
+    }
+  ],
+  "failure_reason_shape": {
+    "description": "When an assertion fails, the finding includes these fields.",
+    "example": {
+      "eval_id": "<eval-case-id>",
+      "assertion_type": "<assertion-type>",
+      "expected": "<expected-value>",
+      "actual": "<actual-value>"
+    }
+  },
+  "summary": {
+    "eval_count": 3,
+    "evals_passed": 3,
+    "evals_failed": 0,
+    "assertions_total": 12,
+    "assertions_passed": 12,
+    "assertions_failed": 0,
+    "status": "PASS"
+  }
+}

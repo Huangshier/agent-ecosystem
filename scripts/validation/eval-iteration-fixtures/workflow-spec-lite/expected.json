@@ -42,11 +42,20 @@
       "description": "Any assertion failure produces a finding with eval_id, assertion_type, expected, and actual fields."
     }
   },
+  "report_artifact": {
+    "path": "workflow-spec-lite/report.json",
+    "required_top_level_fields": ["skill", "version", "fixture", "report_type", "eval_results", "failure_reason_shape", "summary"],
+    "required_eval_result_fields": ["eval_id", "status", "assertions_total", "assertions_passed", "assertions_failed"],
+    "required_summary_fields": ["eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status"],
+    "failure_reason_example_fields": ["eval_id", "assertion_type", "expected", "actual"],
+    "expected_status": "PASS"
+  },
   "required_readme_tokens": [
     "workflow-spec-lite",
     "Eval Iteration Fixtures",
     "evals.json",
     "expected.json",
+    "report.json",
     "trigger-accuracy",
     "safety-boundary",
     "Non-Goals"
