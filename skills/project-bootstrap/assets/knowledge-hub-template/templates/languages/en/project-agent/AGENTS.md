@@ -166,6 +166,7 @@ For multi-phase work, write an Execution Contract in `spec.md`: autonomy level, 
 
 ## Memory Routing
 - Stable technical facts: `.agents/context/tech/`
+- Project terminology and domain jargon (optional): `.agents/context/tech/terminology.md`
 - Business or product rules: `.agents/context/business/`
 - Repeated pitfalls and fixes: `.agents/context/experience/`
 - Structured troubleshooting cases: `.agents/context/experience/cases/`
