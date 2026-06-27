@@ -32,6 +32,7 @@ eval-iteration-fixtures/
     evals.json            (eval suite for workflow-spec-lite)
     expected.json         (static validation expectations)
     report.json           (static PASS/FAIL report artifact)
+    baseline.json         (static baseline recording for comparison)
 ```
 
 ## Report Artifact
@@ -49,6 +50,26 @@ an eval runner or LLM. The artifact records:
 The release validator verifies that report.json exists, is valid JSON,
 contains eval IDs matching evals.json, and that summary totals are
 consistent with the per-eval results.
+
+## Baseline Artifact
+
+`workflow-spec-lite/baseline.json` is a deterministic static baseline
+recording that captures the baseline identity, source references, eval
+coverage, and status summary for future with-skill / without-skill
+comparison. It does not invoke an eval runner or LLM. The artifact
+records:
+
+- Baseline identity: name, version, scope.
+- Baseline source: paths to evals.json, report.json, expected.json.
+- Eval IDs: matching evals.json eval case IDs.
+- Assertion totals: eval_count, assertions_total, per-eval assertion counts.
+- Status summary: evals_passed/failed, assertions_passed/failed, overall status.
+- Comparison fields: baseline_pass_rate, with_skill_pass_rate, delta,
+  iteration_count (reserved for future use).
+
+The release validator verifies that baseline.json exists, is valid JSON,
+contains eval IDs matching evals.json, assertion totals matching
+evals.json, and status summary consistent with report.json.
 
 ## Schema Validation Expectations
 

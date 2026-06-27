@@ -56,8 +56,18 @@
     "evals.json",
     "expected.json",
     "report.json",
+    "baseline.json",
     "trigger-accuracy",
     "safety-boundary",
     "Non-Goals"
-  ]
+  ],
+  "baseline_artifact": {
+    "path": "workflow-spec-lite/baseline.json",
+    "required_top_level_fields": ["skill", "version", "fixture", "baseline_type", "baseline_identity", "baseline_source", "eval_ids", "assertion_totals", "status_summary", "comparison_fields"],
+    "required_baseline_identity_fields": ["name", "version", "scope"],
+    "required_baseline_source_fields": ["evals_path", "report_path", "expected_path"],
+    "required_assertion_totals_fields": ["eval_count", "assertions_total", "assertions_per_eval"],
+    "required_status_summary_fields": ["evals_passed", "evals_failed", "assertions_passed", "assertions_failed", "status"],
+    "required_comparison_fields": ["baseline_pass_rate", "with_skill_pass_rate", "delta", "iteration_count"]
+  }
 }

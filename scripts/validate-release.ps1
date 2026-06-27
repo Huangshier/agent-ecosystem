@@ -580,6 +580,108 @@ catch {
     Add-Check "eval report artifact" "FAIL" $_.Exception.Message
 }
 
+# Slice 3: verify eval baseline recording artifact
+try {
+    $baselinePath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "baseline.json"
+    if (-not (Test-Path -LiteralPath $baselinePath)) {
+        throw "Missing workflow-spec-lite/baseline.json."
+    }
+    $baselineContent = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+
+    foreach ($field in @("skill", "version", "fixture", "baseline_type", "baseline_identity", "baseline_source", "eval_ids", "assertion_totals", "status_summary", "comparison_fields")) {
+        if ($null -eq $baselineContent.$field) {
+            throw "baseline.json is missing required top-level field: $field"
+        }
+    }
+    if ([string]$baselineContent.baseline_type -ne "static") {
+        throw "baseline.json baseline_type must be 'static', got: $($baselineContent.baseline_type)"
+    }
+
+    # Verify baseline_identity fields
+    $identity = $baselineContent.baseline_identity
+    foreach ($field in @("name", "version", "scope")) {
+        if ($null -eq $identity.$field) {
+            throw "baseline.json baseline_identity is missing required field: $field"
+        }
+    }
+
+    # Verify baseline_source fields
+    $source = $baselineContent.baseline_source
+    foreach ($field in @("evals_path", "report_path", "expected_path")) {
+        if ($null -eq $source.$field) {
+            throw "baseline.json baseline_source is missing required field: $field"
+        }
+    }
+
+    # Verify eval_ids match evals.json
+    $baselineEvalIds = @($baselineContent.eval_ids | ForEach-Object { [string]$_ })
+    if (-not (Test-ExactArray -Actual $baselineEvalIds -Expected $expectedEvalIds)) {
+        throw "Baseline eval ID mismatch. Expected: $($expectedEvalIds -join ', '). Actual: $($baselineEvalIds -join ', ')."
+    }
+
+    # Verify assertion_totals
+    $assertionTotals = $baselineContent.assertion_totals
+    foreach ($field in @("eval_count", "assertions_total", "assertions_per_eval")) {
+        if ($null -eq $assertionTotals.$field) {
+            throw "baseline.json assertion_totals is missing required field: $field"
+        }
+    }
+    if ([int]$assertionTotals.eval_count -ne $evalCases.Count) {
+        throw "baseline.json assertion_totals.eval_count ($($assertionTotals.eval_count)) does not match evals.json eval count ($($evalCases.Count))."
+    }
+    if ([int]$assertionTotals.assertions_total -ne $totalAssertions) {
+        throw "baseline.json assertion_totals.assertions_total ($($assertionTotals.assertions_total)) does not match evals.json assertion count ($totalAssertions)."
+    }
+    # Verify per-eval assertion counts match evals.json
+    $perEvalCounts = $assertionTotals.assertions_per_eval
+    foreach ($evalCase in $evalCases) {
+        $evalId = [string]$evalCase.id
+        $expectedCount = @($evalCase.assertions).Count
+        if ($null -eq $perEvalCounts.$evalId) {
+            throw "baseline.json assertion_totals.assertions_per_eval is missing eval_id: $evalId"
+        }
+        if ([int]$perEvalCounts.$evalId -ne $expectedCount) {
+            throw "baseline.json assertions_per_eval.$evalId ($($perEvalCounts.$evalId)) does not match evals.json assertion count ($expectedCount)."
+        }
+    }
+
+    # Verify status_summary fields
+    $statusSummary = $baselineContent.status_summary
+    foreach ($field in @("evals_passed", "evals_failed", "assertions_passed", "assertions_failed", "status")) {
+        if ($null -eq $statusSummary.$field) {
+            throw "baseline.json status_summary is missing required field: $field"
+        }
+    }
+    # Verify status_summary is consistent with report.json (not conflicting)
+    if ([int]$statusSummary.assertions_passed + [int]$statusSummary.assertions_failed -ne [int]$assertionTotals.assertions_total) {
+        throw "baseline.json status_summary assertions_passed + assertions_failed does not equal assertions_total."
+    }
+    if ([int]$statusSummary.evals_passed + [int]$statusSummary.evals_failed -ne [int]$assertionTotals.eval_count) {
+        throw "baseline.json status_summary evals_passed + evals_failed does not equal eval_count."
+    }
+
+    # Verify comparison_fields shape
+    $comparisonFields = $baselineContent.comparison_fields
+    foreach ($field in @("baseline_pass_rate", "with_skill_pass_rate", "delta", "iteration_count")) {
+        if ($null -eq $comparisonFields.$field) {
+            throw "baseline.json comparison_fields is missing required field: $field"
+        }
+    }
+
+    $script:evidence.eval_baseline_artifact = [ordered]@{
+        path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/baseline.json"
+        baseline_name = [string]$identity.name
+        eval_count = [int]$assertionTotals.eval_count
+        assertion_count = [int]$assertionTotals.assertions_total
+        overall_status = [string]$statusSummary.status
+        comparison_field_count = @($comparisonFields.PSObject.Properties.Name).Count
+    }
+    Add-Check "eval baseline artifact" "PASS" "Workflow-spec-lite eval baseline recording artifact is public-safe, JSON-valid, eval IDs match, assertion totals match, status summary is consistent, and comparison fields shape is stable." $evidence.eval_baseline_artifact
+}
+catch {
+    Add-Check "eval baseline artifact" "FAIL" $_.Exception.Message
+}
+
 try {
     $triageWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-label-sync.yml"
     $decisionCommandWorkflow = Get-FileText -RelativePath ".github/workflows/issue-triage-decision-command.yml"
