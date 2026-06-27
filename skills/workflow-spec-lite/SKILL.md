@@ -4,6 +4,10 @@ description: Lightweight spec-first workflow for non-trivial target-project work
 category: kernel
 stability: stable
 scope: cross-project
+metadata:
+  category: kernel
+  stability: stable
+  scope: cross-project
 ---
 
 # Workflow Spec Lite

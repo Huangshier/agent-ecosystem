@@ -4,6 +4,10 @@ description: Load and refresh repository-level agent instructions before non-tri
 category: kernel
 stability: stable
 scope: cross-project
+metadata:
+  category: kernel
+  stability: stable
+  scope: cross-project
 ---
 
 # Project Context Gate

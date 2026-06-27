@@ -577,9 +577,31 @@ foreach ($skillName in $skillNames) {
             $metadataErrors.Add("$skillPath missing $line")
         }
     }
+    # Slice 2: verify metadata map exists with matching category / stability / scope
+    if ($content -notmatch '(?m)^\s*metadata:\s*$') {
+        $metadataErrors.Add("$skillPath missing metadata map")
+    }
+    else {
+        $frontmatterMatch = [regex]::Match($content, '(?s)^---\s*\n(.*?)\n---', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+        if ($frontmatterMatch.Success) {
+            $frontmatter = $frontmatterMatch.Groups[1].Value
+            if ($frontmatter -match '(?s)metadata:\s*\n((?:\s+.*\n?)*)') {
+                $metadataBlock = $Matches[1]
+                foreach ($metaField in @("category: kernel", "stability: stable", "scope: cross-project")) {
+                    $metaPattern = "(?m)^\s*{0}\s*$" -f [regex]::Escape($metaField)
+                    if ($metadataBlock -notmatch $metaPattern) {
+                        $metadataErrors.Add("$skillPath metadata map missing $metaField")
+                    }
+                }
+            }
+            else {
+                $metadataErrors.Add("$skillPath metadata map is empty or malformed")
+            }
+        }
+    }
 }
 if ($metadataErrors.Count -eq 0) {
-    Add-Check "skill metadata" "PASS" "All Workflow Kernel skills include category, stability, and scope metadata."
+    Add-Check "skill metadata" "PASS" "All Workflow Kernel skills include category, stability, scope metadata, and a consistent metadata map."
 }
 else {
     Add-Check "skill metadata" "FAIL" "Skill metadata mismatch." @($metadataErrors.ToArray())
