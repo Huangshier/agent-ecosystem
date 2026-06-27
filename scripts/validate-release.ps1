@@ -757,6 +757,48 @@ catch {
     Add-Check "thin entrypoint roadmap" "FAIL" $_.Exception.Message
 }
 
+try {
+    $compatAuditPath = Join-PathParts $repoRoot "docs" "roadmap" "cross-runtime-skill-compatibility-audit.md"
+    $compatAuditExists = Test-Path -LiteralPath $compatAuditPath
+    $compatAuditTokens = @(
+        "safe-to-align",
+        "requires-adapter",
+        "do-not-change",
+        "needs-follow-up",
+        "agentskills.io",
+        "Claude Code",
+        "OpenAI Codex"
+    )
+    $compatAuditMissing = @()
+    if ($compatAuditExists) {
+        $compatAuditText = Get-Content -LiteralPath $compatAuditPath -Raw
+        foreach ($token in $compatAuditTokens) {
+            if ($compatAuditText -notlike "*$token*") {
+                $compatAuditMissing += $token
+            }
+        }
+    }
+
+    $script:evidence.cross_runtime_compatibility_audit = [ordered]@{
+        path = "docs/roadmap/cross-runtime-skill-compatibility-audit.md"
+        exists = [bool]$compatAuditExists
+        missing_tokens = @($compatAuditMissing)
+    }
+
+    if ($compatAuditExists -and $compatAuditMissing.Count -eq 0) {
+        Add-Check "cross-runtime compatibility audit" "PASS" "The cross-runtime skill compatibility audit document exists and contains all required alignment category and runtime tokens." $evidence.cross_runtime_compatibility_audit
+    }
+    elseif (-not $compatAuditExists) {
+        Add-Check "cross-runtime compatibility audit" "FAIL" "Missing docs/roadmap/cross-runtime-skill-compatibility-audit.md." $evidence.cross_runtime_compatibility_audit
+    }
+    else {
+        Add-Check "cross-runtime compatibility audit" "FAIL" ("Compatibility audit document is missing required tokens: {0}" -f ($compatAuditMissing -join ", ")) $evidence.cross_runtime_compatibility_audit
+    }
+}
+catch {
+    Add-Check "cross-runtime compatibility audit" "FAIL" $_.Exception.Message
+}
+
 $result = [ordered]@{
     schema_version = 1
     validated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
