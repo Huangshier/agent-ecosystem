@@ -59,22 +59,22 @@ function Get-WorkflowSpecLiteNegativeFixtureCases {
         [ordered]@{
             name = "missing-goals"
             expected_finding = "section_goals_missing"
-            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 3\. Goals\s*\r?\n.*?(?=^## 4\.)', '')
+            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 4\. Goals\s*\r?\n.*?(?=^## 5\.)', '')
         },
         [ordered]@{
             name = "missing-non-goals"
             expected_finding = "section_non_goals_missing"
-            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 4\. Non-Goals\s*\r?\n.*?(?=^## 5\.)', '')
+            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 5\. Non-Goals\s*\r?\n.*?(?=^## 6\.)', '')
         },
         [ordered]@{
             name = "missing-acceptance"
             expected_finding = "section_acceptance_missing"
-            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 9\. Acceptance / Evidence\s*\r?\n.*?(?=^## 10\.)', '')
+            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 10\. Acceptance / Evidence\s*\r?\n.*?(?=^## 11\.)', '')
         },
         [ordered]@{
             name = "missing-risks"
             expected_finding = "section_risks_missing"
-            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 7\. Risks\s*\r?\n.*?(?=^## 8\.)', '')
+            text = [regex]::Replace($CompleteSpecText, '(?ms)^## 8\. Risks\s*\r?\n.*?(?=^## 9\.)', '')
         },
         [ordered]@{
             name = "missing-stop-rule"
@@ -139,6 +139,15 @@ function Invoke-WorkflowSpecLiteValidatorFixtureSuite {
         throw ("UTF-8 no-BOM Chinese section spec fixture failed: {0}" -f (($chineseNoBomPositive.findings | ConvertTo-Json -Compress -Depth 5)))
     }
 
+    # Positive fixture: optional Requirements Clarification and Decision Validation sections do not affect validation.
+    $optionalSpec = Get-WorkflowSpecLiteFixtureText -FixtureRoot $fixtureRoot -Name "optional-sections-spec.md"
+    $optionalPath = Join-PathParts $FixtureDir "optional-sections-spec.md"
+    Write-WorkflowSpecLiteScratchFixture -Path $optionalPath -Text $optionalSpec
+    $optionalPositive = Invoke-WorkflowSpecLiteFixtureValidation -SpecValidator $SpecValidator -SpecPath $optionalPath
+    if (-not [bool]$optionalPositive.pass) {
+        throw ("Optional sections spec fixture failed: {0}" -f (($optionalPositive.findings | ConvertTo-Json -Compress -Depth 5)))
+    }
+
     $negativeEvidence = New-Object 'System.Collections.Generic.List[object]'
     foreach ($fixture in @(Get-WorkflowSpecLiteNegativeFixtureCases -CompleteSpecText $completeSpec)) {
         $path = Join-PathParts $FixtureDir ("{0}.md" -f $fixture.name)
@@ -164,7 +173,8 @@ function Invoke-WorkflowSpecLiteValidatorFixtureSuite {
         positive_variants = @(
             [ordered]@{ name = "loop-contract"; path = $loopPath },
             [ordered]@{ name = "chinese-sections"; path = $chinesePath },
-            [ordered]@{ name = "chinese-sections-utf8-no-bom"; path = $chineseNoBomPath }
+            [ordered]@{ name = "chinese-sections-utf8-no-bom"; path = $chineseNoBomPath },
+            [ordered]@{ name = "optional-sections"; path = $optionalPath }
         )
         negative_fixtures = @($negativeEvidence.ToArray())
     }
