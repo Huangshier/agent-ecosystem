@@ -4,7 +4,25 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.5.0` release.
+- No unreleased public changes after the `v0.5.1` release.
+
+## v0.5.1 - 2026-06-27
+
+- Hardened memory governance with project memory template guidance, aligned
+  commands index startup guidance, integrated memory diagnosis into the
+  phase-close gate, defined structural memory diagnostics, added completed-list
+  growth detection, and fixed stable notes preservation during memory upgrade.
+  (Issues #151, #152, #153, #154, #155, #158; PRs #157, #159, #160, #161,
+  #162, #163, #164)
+- Clarified public-safe write authorization boundaries for cross-repository
+  write scope. (Issue #170, PR #173)
+- Added testing capability foundations as the first slice toward full testing
+  coverage: TDD and test-strategy knowledge patterns, project-agent test
+  workflow command cards, testing convention context entries, and workflow-spec-lite
+  test guidance. (Issue #168, PR #174)
+- Refactored `scripts/validate-release.ps1` from 2,496 lines to a 566-line
+  main entrypoint with 10 extracted validation helper modules, completing the
+  release validator thin-entrypoint closeout. (Issue #175, PRs #176-#180)
 
 ## v0.5.0 - 2026-06-09
 

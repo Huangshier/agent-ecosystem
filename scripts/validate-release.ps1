@@ -2,7 +2,7 @@
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
-    [string]$TargetVersion = "v0.5.0",
+    [string]$TargetVersion = "v0.5.1",
     [switch]$Json
 )
 
@@ -57,7 +57,7 @@ $evidence = [ordered]@{
 
 $targetReleaseVersion = $TargetVersion.Trim()
 if ([string]::IsNullOrWhiteSpace($targetReleaseVersion)) {
-    $targetReleaseVersion = "v0.5.0"
+    $targetReleaseVersion = "v0.5.1"
 }
 if ($targetReleaseVersion -notmatch '^v\d+\.\d+\.\d+$') {
     throw "TargetVersion must look like vMAJOR.MINOR.PATCH."

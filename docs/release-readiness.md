@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.5.0` published public release.
+Status: `v0.5.1` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -20,7 +20,29 @@ UTF-8 no-BOM, release-validation permissions, and issue template fixes.
 patterns, and release body hygiene. `v0.5.0` packages the stabilization-first
 maintenance closeout, public maintenance-record boundary, release validator
 modularization, old-release upgrade rehearsal evidence, Claude Code adoption
-shim, agent issue triage hardening, and hosted PR identity guard.
+shim, agent issue triage hardening, and hosted PR identity guard. `v0.5.1`
+packages memory governance hardening, public-safe write authorization boundary
+clarification, testing capability foundations, and release validator
+thin-entrypoint closeout.
+
+## v0.5.1 Published State
+
+Current `main` includes the post-`v0.5.0` memory-governance / authorization /
+testing-foundations / release-validator changes summarized in
+`docs/releases/v0.5.1.md`. `v0.5.1` is aligned for maintainer tag and GitHub
+Release publication from the merge commit of the `v0.5.1` publish-finalization
+PR.
+
+GitHub Release `v0.5.1` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.1
+
+Tag target: merge commit for the `v0.5.1` publish-finalization PR.
+
+Local release validation for this alignment passed with
+`PASS=62 FAIL=0 WARN=0 DEFERRED=0`.
+
+Release body source: `docs/releases/v0.5.1.md`, between
+`RELEASE_BODY_START` and `RELEASE_BODY_END`.
 
 ## v0.5.0 Published State
 
@@ -231,6 +253,21 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   project memory schema.
 - Old-release rehearsal evidence is recorded in
   `docs/old-release-rehearsal-evidence.md`.
+- Public release notes are present at `docs/releases/v0.5.1.md` as bilingual
+  published release notes.
+- `v0.5.1` final local release validation passed with
+  `PASS=62 FAIL=0 WARN=0 DEFERRED=0`.
+- Release validator thin-entrypoint closeout: `scripts/validate-release.ps1`
+  refactored from 2,496 lines to 566 lines with 10 extracted validation helper
+  modules; 62 checks preserved with identical output contract.
+- Memory governance hardened: structural diagnostics design, phase-close
+  integration, completed-list growth detection, stable notes preservation, and
+  template governance guidance.
+- Public-safe write authorization boundaries clarified in public governance
+  documentation.
+- Testing capability foundations established: TDD and test-strategy patterns,
+  test workflow command cards, testing conventions, and workflow-spec-lite test
+  guidance.
 
 ## v0.4.5 Published State
 
