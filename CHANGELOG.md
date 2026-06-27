@@ -12,8 +12,8 @@ All notable public changes are summarized here.
   commands index startup guidance, integrated memory diagnosis into the
   phase-close gate, defined structural memory diagnostics, added completed-list
   growth detection, and fixed stable notes preservation during memory upgrade.
-  (Issues #157, #159, #160, #161, #162, #163, #164; PRs #157, #159, #160,
-  #161, #162, #163, #164)
+  (Issues #151, #152, #153, #154, #155, #158; PRs #157, #159, #160, #161,
+  #162, #163, #164)
 - Clarified public-safe write authorization boundaries for cross-repository
   write scope. (Issue #170, PR #173)
 - Added testing capability foundations as the first slice toward full testing
