@@ -700,7 +700,7 @@ try {
     # Verify comparison_fields numeric types and range
     foreach ($field in @("baseline_pass_rate", "with_skill_pass_rate", "delta")) {
         $val = $comparisonFields.$field
-        if ($val -isnot [double] -and $val -isnot [int] -and $val -isnot [long]) {
+        if ($val -isnot [double] -and $val -isnot [decimal] -and $val -isnot [int] -and $val -isnot [long]) {
             throw "baseline.json comparison_fields.$field must be a number, got type $($val.GetType().Name)."
         }
     }
