@@ -3,7 +3,7 @@
 Maturity: draft
 Scope: cross-project
 Source: manual
-Last reviewed: 2026-05-29
+Last reviewed: 2026-06-27
 
 ## Summary
 
