@@ -4,6 +4,10 @@ description: Normalize and maintain Agent memory files after implementation sess
 category: kernel
 stability: stable
 scope: cross-project
+metadata:
+  category: kernel
+  stability: stable
+  scope: cross-project
 ---
 
 # Agent Memory Governance

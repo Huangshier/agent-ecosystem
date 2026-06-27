@@ -4,6 +4,10 @@ description: Initialize and maintain project-level `.agents` memory scaffolds fr
 category: kernel
 stability: stable
 scope: cross-project
+metadata:
+  category: kernel
+  stability: stable
+  scope: cross-project
 ---
 
 # Agent Project Bootstrap
