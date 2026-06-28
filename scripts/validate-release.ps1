@@ -60,6 +60,7 @@ $evidence = [ordered]@{
     eval_report_artifact = [ordered]@{}
     eval_baseline_artifact = [ordered]@{}
     eval_report_regeneration = [ordered]@{}
+    eval_report_generation_smoke = [ordered]@{}
     spec_state_boundary = [ordered]@{}
     hot_memory_soft_length_fixtures = [ordered]@{}
 }
@@ -120,6 +121,45 @@ try {
 }
 catch {
     Add-Check "eval report regeneration" "FAIL" $_.Exception.Message
+}
+
+# Slice 4b: standalone generator smoke check (invokes as subprocess, not dot-source)
+try {
+    $generatorPath = Join-PathParts $repoRoot "scripts" "validation" "release-eval-report-generator.ps1"
+    $smokeResult = Invoke-IsolatedPowerShellScript -ScriptPath $generatorPath -Arguments @(
+        "-EvalsJsonPath", $evalsJsonPath,
+        "-ExpectedJsonPath", $expectedJsonPath
+    )
+    if ($smokeResult.exit_code -ne 0) {
+        throw "Standalone generator exited with code $($smokeResult.exit_code). Output: $($smokeResult.output -join "`n")"
+    }
+    $smokeOutput = $smokeResult.output -join "`n"
+    $smokeReport = $smokeOutput | ConvertFrom-Json
+    # Read expected.json for cross-validation
+    $smokeExpected = Get-Content -LiteralPath $expectedJsonPath -Raw | ConvertFrom-Json
+    $smokeExpectedEvalCount = [int]$smokeExpected.expected_eval_count
+    $smokeExpectedAssertionCount = [int]$smokeExpected.expected_assertion_count
+    if ([int]$smokeReport.summary.eval_count -ne $smokeExpectedEvalCount) {
+        throw "Standalone generator summary.eval_count ($($smokeReport.summary.eval_count)) does not match expected ($smokeExpectedEvalCount)."
+    }
+    if ([int]$smokeReport.summary.assertions_total -ne $smokeExpectedAssertionCount) {
+        throw "Standalone generator summary.assertions_total ($($smokeReport.summary.assertions_total)) does not match expected ($smokeExpectedAssertionCount)."
+    }
+    if ([string]$smokeReport.summary.status -ne "PASS") {
+        throw "Standalone generator summary.status is '$($smokeReport.summary.status)', expected 'PASS'."
+    }
+    $smokeEvidence = [ordered]@{
+        script = "scripts/validation/release-eval-report-generator.ps1"
+        exit_code = $smokeResult.exit_code
+        eval_count = [int]$smokeReport.summary.eval_count
+        assertion_count = [int]$smokeReport.summary.assertions_total
+        status = [string]$smokeReport.summary.status
+    }
+    $script:evidence.eval_report_generation_smoke = $smokeEvidence
+    Add-Check "eval report generation smoke" "PASS" "Standalone generator produces valid JSON report with correct eval count, assertion count, and PASS status when invoked with -File." $smokeEvidence
+}
+catch {
+    Add-Check "eval report generation smoke" "FAIL" $_.Exception.Message
 }
 
 Invoke-ReleaseGovernanceWorkflowChecks -RepositoryRoot $repoRoot

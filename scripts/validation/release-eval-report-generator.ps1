@@ -167,6 +167,71 @@ function New-EvalReportArtifact {
 .PARAMETER CommittedReportPath
     Absolute path to the committed report.json.
 #>
+<#
+.SYNOPSIS
+    Compare-EvalReportFields
+    Compares generated and committed report objects field-by-field.
+    Returns $true if all fields match, throws on first mismatch.
+    Uses structured field comparison (not JSON string comparison) to avoid
+    property-order sensitivity across PowerShell versions.
+.PARAMETER Generated
+    Generated report object from New-EvalReportArtifact.
+.PARAMETER Committed
+    Committed report object parsed from report.json.
+#>
+function Compare-EvalReportFields {
+    param(
+        [Parameter(Mandatory = $true)]$Generated,
+        [Parameter(Mandatory = $true)]$Committed
+    )
+
+    # Scalar top-level fields
+    foreach ($field in @("skill", "version", "fixture", "report_type", "description")) {
+        if ([string]$Generated.$field -ne [string]$Committed.$field) {
+            throw "Regeneration mismatch on field '$field': generated='$($Generated.$field)', committed='$($Committed.$field)'."
+        }
+    }
+
+    # eval_results array: compare count, then each entry by eval_id
+    $genResults = @($Generated.eval_results)
+    $comResults = @($Committed.eval_results)
+    if ($genResults.Count -ne $comResults.Count) {
+        throw "Regeneration mismatch: eval_results count differs (generated=$($genResults.Count), committed=$($comResults.Count))."
+    }
+    $comById = @{}
+    foreach ($r in $comResults) { $comById[[string]$r.eval_id] = $r }
+    foreach ($gen in $genResults) {
+        $evalId = [string]$gen.eval_id
+        $com = $comById[$evalId]
+        if ($null -eq $com) {
+            throw "Regeneration mismatch: eval_id '$evalId' present in generated but missing from committed."
+        }
+        foreach ($f in @("status", "assertions_total", "assertions_passed", "assertions_failed")) {
+            if ([string]$gen.$f -ne [string]$com.$f) {
+                throw "Regeneration mismatch on eval '${evalId}' field '${f}': generated='$($gen.${f})', committed='$($com.${f})'."
+            }
+        }
+    }
+
+    # failure_reason_shape: compare example fields by name
+    $genExample = $Generated.failure_reason_shape.example
+    $comExample = $Committed.failure_reason_shape.example
+    foreach ($f in @("eval_id", "assertion_type", "expected", "actual")) {
+        if ([string]$genExample.$f -ne [string]$comExample.$f) {
+            throw "Regeneration mismatch on failure_reason_shape.example.$f."
+        }
+    }
+
+    # summary: compare all fields
+    foreach ($f in @("eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status")) {
+        if ([string]$Generated.summary.$f -ne [string]$Committed.summary.$f) {
+            throw "Regeneration mismatch on summary field '${f}': generated='$($Generated.summary.${f})', committed='$($Committed.summary.${f})'."
+        }
+    }
+
+    return $true
+}
+
 function Test-EvalReportRegeneration {
     param(
         [Parameter(Mandatory = $true)][string]$EvalsJsonPath,
@@ -183,18 +248,51 @@ function Test-EvalReportRegeneration {
     }
     $committed = [System.IO.File]::ReadAllText($CommittedReportPath) | ConvertFrom-Json
 
-    # Deterministic key-by-key comparison using JSON serialization for nested objects
-    $generatedJson = $generated | ConvertTo-Json -Depth 10 -Compress
-    $committedJson = $committed | ConvertTo-Json -Depth 10 -Compress
-
-    if ($generatedJson -ne $committedJson) {
-        throw "Regeneration mismatch: generated report does not match committed report.json."
-    }
+    # Structured field-by-field comparison (deterministic across PS versions)
+    [void](Compare-EvalReportFields -Generated $generated -Committed $committed)
 
     return [ordered]@{
         generated_eval_count = @($generated.eval_results).Count
         generated_assertion_count = [int]$generated.summary.assertions_total
         generated_status = [string]$generated.summary.status
         match = $true
+    }
+}
+
+<#
+.SYNOPSIS
+    Direct invocation entry point.
+    When invoked with -File and -EvalsJsonPath / -ExpectedJsonPath,
+    generates the eval report artifact and writes JSON to stdout.
+    When dot-sourced (InvocationName is '.'), does nothing.
+#>
+$isDirectInvocation = $MyInvocation.InvocationName -ne '.'
+if ($isDirectInvocation) {
+    # Parse named arguments from $args (safe: dot-source sets InvocationName to '.')
+    $evalsPath = ""
+    $expectedPath = ""
+    for ($ai = 0; $ai -lt $args.Count; $ai++) {
+        if ($args[$ai] -eq '-EvalsJsonPath' -and ($ai + 1) -lt $args.Count) {
+            $evalsPath = [string]$args[$ai + 1]; $ai++
+        }
+        elseif ($args[$ai] -eq '-ExpectedJsonPath' -and ($ai + 1) -lt $args.Count) {
+            $expectedPath = [string]$args[$ai + 1]; $ai++
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($evalsPath) -and -not [string]::IsNullOrWhiteSpace($expectedPath)) {
+        # Resolve relative paths against caller's working directory
+        if (-not [System.IO.Path]::IsPathRooted($evalsPath)) {
+            $evalsPath = [System.IO.Path]::GetFullPath((Join-Path $PWD $evalsPath))
+        }
+        if (-not [System.IO.Path]::IsPathRooted($expectedPath)) {
+            $expectedPath = [System.IO.Path]::GetFullPath((Join-Path $PWD $expectedPath))
+        }
+
+        $report = New-EvalReportArtifact -EvalsJsonPath $evalsPath -ExpectedJsonPath $expectedPath
+        $report | ConvertTo-Json -Depth 10
+    }
+    else {
+        Write-Error "Direct invocation requires -EvalsJsonPath and -ExpectedJsonPath."
     }
 }
