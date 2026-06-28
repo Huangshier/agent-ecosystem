@@ -119,6 +119,8 @@ The first slice validation is entirely static:
 8. `baseline.json` records baseline identity, source references, eval
    coverage, and status summary for future comparison.
 9. README fixture documents the required tokens.
+10. `report.json` is deterministically reproducible from `evals.json`
+    and `expected.json` via the standalone report generator.
 
 No eval runner is invoked. No skill output is generated. No LLM calls
 are made.
@@ -145,6 +147,7 @@ scripts/validation/eval-iteration-fixtures/
     expected.json
     report.json
     baseline.json
+scripts/validation/release-eval-report-generator.ps1
 ```
 
 ## Rollback
@@ -175,5 +178,6 @@ coverage is affected.
 | Fixture directory with evals.json exists | `scripts/validation/eval-iteration-fixtures/` |
 | Static validation checks pass | `validate-release.ps1` new check |
 | Knowledge pattern documents the eval-driven iteration approach | `knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md` |
+| Report artifact is deterministically reproducible | `validate-release.ps1` "eval report regeneration" check |
 | No runtime behavior change | Existing release checks pass alongside the new static fixture check |
 | No private data in public artifacts | Fixture and docs are public-safe synthetic content |

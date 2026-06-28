@@ -59,7 +59,8 @@
     "baseline.json",
     "trigger-accuracy",
     "safety-boundary",
-    "Non-Goals"
+    "Non-Goals",
+    "eval report regeneration"
   ],
   "baseline_artifact": {
     "path": "workflow-spec-lite/baseline.json",

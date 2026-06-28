@@ -35,6 +35,30 @@ eval-iteration-fixtures/
     baseline.json         (static baseline recording for comparison)
 ```
 
+## Report Generation
+
+`release-eval-report-generator.ps1` provides a deterministic, offline report
+generation path. It reads `evals.json` and `expected.json`, validates the
+fixture shape, computes the eval results, and produces a report artifact
+matching the committed `report.json` structure.
+
+The release validator includes a "eval report regeneration" check that
+invokes this generator and compares the output against the committed
+`report.json`. This proves the report artifact is deterministically
+reproducible from source fixtures, not hand-maintained.
+
+The generator is standalone: it can be used outside the release validator
+to regenerate the report artifact on demand.
+
+```powershell
+# Regenerate report.json (writes to stdout)
+pwsh -NoProfile -File scripts/validation/release-eval-report-generator.ps1 `
+  -EvalsJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/evals.json `
+  -ExpectedJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/expected.json
+```
+
+No eval runner, LLM calls, or network access occurs during generation.
+
 ## Report Artifact
 
 `workflow-spec-lite/report.json` is a deterministic static report artifact

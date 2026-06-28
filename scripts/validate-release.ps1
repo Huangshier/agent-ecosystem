@@ -23,6 +23,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "validation/release-project-template-checks.ps1")
 . (Join-Path $scriptDir "validation/release-memory-diagnostics-fixture-checks.ps1")
 . (Join-Path $scriptDir "validation/release-eval-iteration-checks.ps1")
+. (Join-Path $scriptDir "validation/release-eval-report-generator.ps1")
 . (Join-Path $scriptDir "validation/release-governance-workflow-checks.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
@@ -58,6 +59,7 @@ $evidence = [ordered]@{
     eval_iteration_fixtures = [ordered]@{}
     eval_report_artifact = [ordered]@{}
     eval_baseline_artifact = [ordered]@{}
+    eval_report_regeneration = [ordered]@{}
     spec_state_boundary = [ordered]@{}
     hot_memory_soft_length_fixtures = [ordered]@{}
 }
@@ -100,6 +102,25 @@ Invoke-ReleaseDocumentationBoundaryChecks
 Invoke-ReleaseMemoryDiagnosticsFixtureChecks -RepositoryRoot $repoRoot
 
 Invoke-ReleaseEvalIterationChecks -RepositoryRoot $repoRoot -ScratchRootFull $scratchRootFull
+
+# Slice 4: deterministic eval report regeneration path
+try {
+    $evalFixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "eval-iteration-fixtures"
+    $evalsJsonPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "evals.json"
+    $expectedJsonPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "expected.json"
+    $reportJsonPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "report.json"
+
+    $regenEvidence = Test-EvalReportRegeneration `
+        -EvalsJsonPath $evalsJsonPath `
+        -ExpectedJsonPath $expectedJsonPath `
+        -CommittedReportPath $reportJsonPath
+
+    $script:evidence.eval_report_regeneration = $regenEvidence
+    Add-Check "eval report regeneration" "PASS" "Committed report.json is deterministically reproducible from evals.json and expected.json via the standalone report generator." $regenEvidence
+}
+catch {
+    Add-Check "eval report regeneration" "FAIL" $_.Exception.Message
+}
 
 Invoke-ReleaseGovernanceWorkflowChecks -RepositoryRoot $repoRoot
 
