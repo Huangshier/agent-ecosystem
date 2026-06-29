@@ -262,20 +262,35 @@ function Compare-RunnerOutputFields {
         }
     }
 
-    foreach ($f in @("comparison_mode", "paired_run_id", "baseline_pass_rate", "current_pass_rate", "delta")) {
+    foreach ($f in @("comparison_mode", "paired_run_id")) {
         $gv3 = [string]$Generated.comparison_metadata.$f
         $cv3 = [string]$Committed.comparison_metadata.$f
         if ($gv3 -ne $cv3) {
             throw ("Runner output regeneration mismatch on comparison_metadata." + $f + ": generated='" + $gv3 + "', committed='" + $cv3 + "'.")
         }
     }
-
-    foreach ($f in @("eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status")) {
-        $gv4 = [string]$Generated.summary.$f
-        $cv4 = [string]$Committed.summary.$f
-        if ($gv4 -ne $cv4) {
-            throw ("Runner output regeneration mismatch on summary field '" + $f + "': generated='" + $gv4 + "', committed='" + $cv4 + "'.")
+    # 浮点字段用 double 比较：PS 5.1 ConvertFrom-Json 反序列化为 decimal，
+    # 而内存中 ordered hash 为 double，字符串化后 "0" vs "0.0" 会误判不匹配。
+    foreach ($f in @("baseline_pass_rate", "current_pass_rate", "delta")) {
+        $gv3n = [double]$Generated.comparison_metadata.$f
+        $cv3n = [double]$Committed.comparison_metadata.$f
+        if ($gv3n -ne $cv3n) {
+            throw ("Runner output regeneration mismatch on comparison_metadata." + $f + ": generated=" + $gv3n + ", committed=" + $cv3n + ".")
         }
+    }
+
+    # 数值字段用数值比较，避免 PS 5.1 decimal/int 与 PS 7 double/int 之间类型差异
+    foreach ($f in @("eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed")) {
+        $gv4n = [int]$Generated.summary.$f
+        $cv4n = [int]$Committed.summary.$f
+        if ($gv4n -ne $cv4n) {
+            throw ("Runner output regeneration mismatch on summary field '" + $f + "': generated=" + $gv4n + ", committed=" + $cv4n + ".")
+        }
+    }
+    $gs = [string]$Generated.summary.status
+    $cs = [string]$Committed.summary.status
+    if ($gs -ne $cs) {
+        throw ("Runner output regeneration mismatch on summary field 'status': generated='" + $gs + "', committed='" + $cs + "'.")
     }
 
     return $true
