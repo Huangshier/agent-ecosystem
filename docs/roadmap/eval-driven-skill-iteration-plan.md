@@ -3,8 +3,10 @@
 Status: active (multiple slices merged). Issue #166.
 
 This plan defines the eval-driven skill iteration mechanism for
-agent-ecosystem. The first slice establishes the public-safe design
-boundary, eval schema draft, fixture shape, and non-goals. It does not
+agent-ecosystem. The first five slices established the public-safe design
+boundary, eval schema draft, fixture shape, deterministic report generation,
+and runner output contract. The sixth slice adds a deterministic runner
+output artifact generator and regeneration verification. It does not
 implement a working eval runner, LLM grading, or external service
 integration.
 
@@ -128,6 +130,16 @@ The first slice validation is entirely static:
     schema, with eval IDs matching `evals.json`, per-assertion
     `assertion_details` structurally consistent, comparison_metadata
     present, and summary totals coherent.
+13. `release-eval-runner-generator.ps1` provides a deterministic, offline
+    runner output artifact generation path that reads `evals.json` and
+    `expected.json`, expands assertions into per-assertion
+    `assertion_details`, and produces an artifact matching
+    `runner-output-example.json`.
+14. The release validator includes a "runner output regeneration" check
+    that invokes the generator and verifies the committed example is
+    deterministically reproducible from source fixtures.
+15. In static deterministic mode, every `actual` field equals the
+    corresponding `expected` field and every `passed` field is `true`.
 
 No eval runner is invoked. No skill output is generated. No LLM calls
 are made.
@@ -157,6 +169,7 @@ scripts/validation/eval-iteration-fixtures/
     runner-output-schema.json
     runner-output-example.json
 scripts/validation/release-eval-report-generator.ps1
+scripts/validation/release-eval-runner-generator.ps1
 ```
 
 ## Runner Output Contract
@@ -229,5 +242,6 @@ coverage is affected.
 | Runner output contract schema is defined | `runner-output-schema.json` with JSON Schema draft 2020-12 |
 | Runner output example conforms to schema | `runner-output-example.json` with static fixture data |
 | Runner output contract is statically validated | `validate-release.ps1` "runner output contract" check |
+| Runner output example is deterministically reproducible | `validate-release.ps1` "runner output regeneration" check |
 | No runtime behavior change | Existing release checks pass alongside the new static fixture check |
 | No private data in public artifacts | Fixture and docs are public-safe synthetic content |

@@ -63,6 +63,8 @@ $evidence = [ordered]@{
     eval_report_generation_smoke = [ordered]@{}
     spec_state_boundary = [ordered]@{}
     hot_memory_soft_length_fixtures = [ordered]@{}
+    runner_output_contract = [ordered]@{}
+    runner_output_regeneration = [ordered]@{}
 }
 
 $targetReleaseVersion = $TargetVersion.Trim()

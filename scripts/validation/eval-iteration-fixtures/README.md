@@ -35,7 +35,35 @@ eval-iteration-fixtures/
     baseline.json         (static baseline recording for comparison)
     runner-output-schema.json   (runner output JSON Schema contract)
     runner-output-example.json  (static example conforming to the schema)
+scripts/validation/
+  release-eval-report-generator.ps1  (deterministic report artifact generator)
+  release-eval-runner-generator.ps1  (deterministic runner output artifact generator)
 ```
+
+## Runner Output Generator
+
+`release-eval-runner-generator.ps1` provides a deterministic, offline runner
+output artifact generation path. It reads `evals.json` and `expected.json`,
+validates the fixture shape, expands assertions into per-assertion
+`assertion_details`, and produces an artifact matching the committed
+`runner-output-example.json` structure.
+
+The release validator includes a "runner output regeneration" check that
+invokes this generator and compares the output against the committed
+`runner-output-example.json`. This proves the example is deterministically
+reproducible from source fixtures, not hand-maintained.
+
+The generator is standalone: it can be used outside the release validator
+to regenerate the runner output artifact on demand.
+
+```powershell
+# Regenerate runner-output-example.json (writes to stdout)
+pwsh -NoProfile -File scripts/validation/release-eval-runner-generator.ps1 `
+  -EvalsJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/evals.json `
+  -ExpectedJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/expected.json
+```
+
+No eval runner, LLM calls, or network access occurs during generation.
 
 ## Report Generation
 
@@ -142,6 +170,32 @@ The release validator verifies that:
 - The example's assertion_details count matches evals.json assertion count
   per eval case.
 - The example's summary totals are consistent with per-eval results.
+
+## Runner Output Regeneration
+
+`release-eval-runner-generator.ps1` is a standalone, offline, deterministic
+script that reads `evals.json` and `expected.json`, validates fixture shape,
+expands each assertion into per-assertion `assertion_details`, and produces
+a runner output artifact conforming to `runner-output-schema.json`. It does
+not invoke an eval runner, LLM, or external service.
+
+The generator is the canonical source for the committed
+`runner-output-example.json`. The release validator includes a "runner output
+regeneration" check that invokes this generator and compares the output against
+the committed example. This proves the example is deterministically reproducible
+from source fixtures, not hand-maintained:
+
+```powershell
+# 重新生成 runner-output-example.json（输出到 stdout）
+pwsh -NoProfile -File scripts/validation/release-eval-runner-generator.ps1 `
+  -EvalsJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/evals.json `
+  -ExpectedJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/expected.json
+```
+
+The comparison is structured (field-by-field), not JSON-string-based, to be
+deterministic across PowerShell versions. Execution timestamps are excluded
+from comparison. In static deterministic mode, every `actual` field equals
+the corresponding `expected` field and every `passed` field is `true`.
 
 ## Schema Validation Expectations
 
