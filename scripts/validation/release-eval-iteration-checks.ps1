@@ -455,9 +455,10 @@ function Invoke-ReleaseEvalIterationChecks {
                 throw "runner-output-example.json eval '$($result.eval_id)' assertions_total ($($result.assertions_total)) does not match assertion_details count ($($details.Count))."
             }
             $totalExampleAssertions += $details.Count
-            # Verify each assertion_detail has required fields
+            # Verify each assertion_detail has required fields (sourced from expected.json)
+            $assertionDetailFields = @($expectedContent.runner_output_contract.example_required_assertion_detail_fields | ForEach-Object { [string]$_ })
             foreach ($detail in $details) {
-                foreach ($field in @("type", "expected", "passed")) {
+                foreach ($field in $assertionDetailFields) {
                     if ($null -eq $detail.$field) {
                         throw "runner-output-example.json eval '$($result.eval_id)' assertion_detail is missing required field: $field"
                     }
@@ -468,9 +469,10 @@ function Invoke-ReleaseEvalIterationChecks {
             throw "runner-output-example.json total assertion_details ($totalExampleAssertions) does not match evals.json total assertions ($totalAssertions)."
         }
 
-        # Verify comparison_metadata exists with required fields
+        # Verify comparison_metadata exists with required fields (sourced from expected.json)
         $comparisonMeta = $exampleContent.comparison_metadata
-        foreach ($field in @("comparison_mode", "paired_run_id", "baseline_pass_rate", "current_pass_rate", "delta")) {
+        $comparisonMetaFields = @($expectedContent.runner_output_contract.example_required_comparison_metadata_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $comparisonMetaFields) {
             if ($null -eq $comparisonMeta.$field) {
                 throw "runner-output-example.json comparison_metadata is missing required field: $field"
             }

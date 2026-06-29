@@ -4,7 +4,7 @@
   "title": "Eval Runner Output Schema",
   "description": "JSON Schema for the output artifact produced by a future eval runner when executing an eval suite against a skill. This schema is the contract that eval runner implementations must conform to. No actual runner is invoked for this static fixture; the schema defines the expected shape for future integration.",
   "type": "object",
-  "required": ["schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary"],
+  "required": ["schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "failure_reason_shape", "comparison_metadata", "summary"],
   "properties": {
     "schema_version": {
       "type": "integer",
@@ -159,7 +159,7 @@
     },
     "assertion_detail": {
       "type": "object",
-      "required": ["type", "expected", "passed"],
+      "required": ["type", "expected", "actual", "passed"],
       "properties": {
         "type": {
           "type": "string",
