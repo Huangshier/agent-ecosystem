@@ -121,6 +121,13 @@ The first slice validation is entirely static:
 9. README fixture documents the required tokens.
 10. `report.json` is deterministically reproducible from `evals.json`
     and `expected.json` via the standalone report generator.
+11. `runner-output-schema.json` defines the runner output JSON Schema
+    contract with required properties, `$defs` sub-schemas, and
+    structural constraints.
+12. `runner-output-example.json` is a static fixture conforming to the
+    schema, with eval IDs matching `evals.json`, per-assertion
+    `assertion_details` structurally consistent, comparison_metadata
+    present, and summary totals coherent.
 
 No eval runner is invoked. No skill output is generated. No LLM calls
 are made.
@@ -147,8 +154,48 @@ scripts/validation/eval-iteration-fixtures/
     expected.json
     report.json
     baseline.json
+    runner-output-schema.json
+    runner-output-example.json
 scripts/validation/release-eval-report-generator.ps1
 ```
+
+## Runner Output Contract
+
+The runner output contract defines the output artifact shape for a future
+eval runner. It is specified as a JSON Schema (draft 2020-12) in
+`runner-output-schema.json` with a static example in
+`runner-output-example.json`.
+
+### Contract Design Decisions
+
+- **schema_version vs contract_version**: `schema_version` (integer)
+  tracks the JSON Schema structure; `contract_version` (semver string)
+  tracks the semantic contract independently of the eval suite version.
+  This allows the schema to evolve without changing the contract version
+  if the change is purely structural.
+- **mode field**: `runner_metadata.mode` distinguishes `static` (fixture-
+  based, deterministic) from `live` (actual skill execution, possibly
+  with LLM grading). The current example uses `static` mode only.
+- **assertion_details**: Per-assertion results are required (not optional)
+  in the runner output, even though `report.json` only has per-eval
+  counts. This is because the runner must produce per-assertion evidence
+  for debugging and comparison, while report.json is a summary artifact.
+- **comparison_metadata**: Reserved for future with-skill vs without-skill
+  comparison. The example uses `comparison_mode: "none"` to indicate no
+  comparison is active.
+- **ERROR status**: The eval_result status enum includes `ERROR` in
+  addition to `PASS` and `FAIL`, to represent runner execution failures
+  (e.g., skill crash, timeout). The current static example does not use
+  `ERROR`.
+
+### Future Work
+
+- Implement a live eval runner that produces artifacts conforming to
+  `runner-output-schema.json`.
+- Add `llm_grade` assertion type and corresponding runner support.
+- Implement with-skill vs without-skill comparison using
+  `comparison_metadata`.
+- Add convergence detection based on delta trends across iterations.
 
 ## Rollback
 
@@ -179,5 +226,8 @@ coverage is affected.
 | Static validation checks pass | `validate-release.ps1` new check |
 | Knowledge pattern documents the eval-driven iteration approach | `knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md` |
 | Report artifact is deterministically reproducible | `validate-release.ps1` "eval report regeneration" check |
+| Runner output contract schema is defined | `runner-output-schema.json` with JSON Schema draft 2020-12 |
+| Runner output example conforms to schema | `runner-output-example.json` with static fixture data |
+| Runner output contract is statically validated | `validate-release.ps1` "runner output contract" check |
 | No runtime behavior change | Existing release checks pass alongside the new static fixture check |
 | No private data in public artifacts | Fixture and docs are public-safe synthetic content |

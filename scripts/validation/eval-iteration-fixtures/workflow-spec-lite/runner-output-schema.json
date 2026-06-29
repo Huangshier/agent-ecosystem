@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "runner-output-schema-v1",
+  "title": "Eval Runner Output Schema",
+  "description": "JSON Schema for the output artifact produced by a future eval runner when executing an eval suite against a skill. This schema is the contract that eval runner implementations must conform to. No actual runner is invoked for this static fixture; the schema defines the expected shape for future integration.",
+  "type": "object",
+  "required": ["schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Increment when the contract shape changes in a backwards-incompatible way."
+    },
+    "contract_version": {
+      "type": "string",
+      "enum": ["1.0.0"],
+      "description": "Semantic contract version. Tracks the runner output contract independently of the eval suite version."
+    },
+    "runner_metadata": {
+      "type": "object",
+      "required": ["name", "version", "mode", "skill", "skill_version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Identifier of the eval runner implementation."
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version of the runner implementation."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["static", "live"],
+          "description": "Execution mode. 'static' = deterministic fixture-based (no LLM). 'live' = actual skill execution with possible LLM grading."
+        },
+        "skill": {
+          "type": "string",
+          "description": "Name of the skill under evaluation."
+        },
+        "skill_version": {
+          "type": "string",
+          "description": "Version or commit ref of the skill under evaluation."
+        }
+      }
+    },
+    "execution_metadata": {
+      "type": "object",
+      "required": ["started_at", "finished_at", "duration_ms"],
+      "properties": {
+        "started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp when the eval run started."
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp when the eval run finished."
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total execution duration in milliseconds."
+        }
+      }
+    },
+    "eval_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eval_result"
+      },
+      "description": "Per-eval-case results. One entry per eval case in evals.json."
+    },
+    "failure_reason_shape": {
+      "type": "object",
+      "description": "Documents the shape of failure findings when assertions fail.",
+      "properties": {
+        "description": { "type": "string" },
+        "example": {
+          "type": "object",
+          "properties": {
+            "eval_id": { "type": "string" },
+            "assertion_type": { "type": "string" },
+            "expected": { "type": "string" },
+            "actual": { "type": "string" }
+          }
+        }
+      }
+    },
+    "comparison_metadata": {
+      "type": "object",
+      "description": "Metadata for future with-skill vs without-skill comparison. Populated only when comparison mode is active.",
+      "properties": {
+        "comparison_mode": {
+          "type": "string",
+          "enum": ["none", "with_skill", "without_skill"],
+          "description": "Current comparison mode. 'none' = standalone run."
+        },
+        "paired_run_id": {
+          "type": "string",
+          "description": "ID of the paired run (with-skill or without-skill) for comparison."
+        },
+        "baseline_pass_rate": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Baseline pass rate from the paired run."
+        },
+        "current_pass_rate": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Pass rate of the current run."
+        },
+        "delta": {
+          "type": "number",
+          "description": "current_pass_rate - baseline_pass_rate."
+        }
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/report_summary"
+    }
+  },
+  "$defs": {
+    "eval_result": {
+      "type": "object",
+      "required": ["eval_id", "status", "assertions_total", "assertions_passed", "assertions_failed", "assertion_details"],
+      "properties": {
+        "eval_id": {
+          "type": "string",
+          "description": "Matches the eval case ID from evals.json."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "ERROR"],
+          "description": "Overall eval case status. PASS = all assertions passed. FAIL = at least one assertion failed. ERROR = runner could not execute the eval case."
+        },
+        "assertions_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assertions_passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assertions_failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assertion_details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assertion_detail"
+          },
+          "description": "Per-assertion results for this eval case."
+        }
+      }
+    },
+    "assertion_detail": {
+      "type": "object",
+      "required": ["type", "expected", "passed"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Assertion type, matching the enum in evals.json."
+        },
+        "expected": {
+          "type": "string",
+          "description": "Expected value from evals.json."
+        },
+        "actual": {
+          "type": "string",
+          "description": "Actual value observed by the runner. May be empty for trigger/anti-trigger checks."
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether this specific assertion passed."
+        }
+      }
+    },
+    "report_summary": {
+      "type": "object",
+      "required": ["eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status"],
+      "properties": {
+        "eval_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of eval cases executed."
+        },
+        "evals_passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of eval cases with status PASS."
+        },
+        "evals_failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of eval cases with status FAIL or ERROR."
+        },
+        "assertions_total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total assertions across all eval cases."
+        },
+        "assertions_passed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total assertions that passed."
+        },
+        "assertions_failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total assertions that failed."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL"],
+          "description": "Overall run status. PASS = all evals passed. FAIL = at least one eval failed."
+        }
+      }
+    }
+  }
+}

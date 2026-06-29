@@ -33,6 +33,8 @@ eval-iteration-fixtures/
     expected.json         (static validation expectations)
     report.json           (static PASS/FAIL report artifact)
     baseline.json         (static baseline recording for comparison)
+    runner-output-schema.json   (runner output JSON Schema contract)
+    runner-output-example.json  (static example conforming to the schema)
 ```
 
 ## Report Generation
@@ -98,6 +100,49 @@ consistency), baseline-source paths pinned to expected values, and
 comparison field numeric types and ranges (pass rates in 0..1,
 iteration_count as integer).
 
+## Runner Output Contract
+
+`runner-output-schema.json` is a JSON Schema (draft 2020-12) that
+defines the output artifact contract for a future eval runner. It
+specifies:
+
+- **runner_metadata**: name, version, mode (static/live), skill, skill_version.
+- **execution_metadata**: started_at, finished_at, duration_ms.
+- **eval_results[]**: per-eval-case results with eval_id, status
+  (PASS/FAIL/ERROR), assertion counts, and assertion_details[].
+- **assertion_details[]**: per-assertion results with type, expected,
+  actual, and passed boolean.
+- **comparison_metadata**: fields for future with-skill vs without-skill
+  comparison (comparison_mode, paired_run_id, pass rates, delta).
+- **summary**: overall counts and status, consistent with report.json
+  summary shape.
+
+The schema uses `$defs` for reusable sub-schemas (eval_result,
+assertion_detail, report_summary) and defines both the structural
+contract and the failure reason shape.
+
+`runner-output-example.json` is a static fixture that conforms to the
+schema. It demonstrates what a future eval runner would produce for the
+workflow-spec-lite eval suite in static mode (all assertions pass, no
+LLM invoked). The example includes:
+
+- Synthetic runner_metadata (name: "eval-runner-static-fixture",
+  mode: "static").
+- Placeholder execution_metadata (duration_ms: 0).
+- Per-assertion details for all 12 assertions across 3 eval cases.
+- comparison_metadata with comparison_mode "none".
+- Summary totals matching report.json and evals.json.
+
+The release validator verifies that:
+- Both schema and example files exist and are valid JSON.
+- The schema defines the required top-level properties.
+- The example conforms to all required fields (runner_metadata,
+  execution_metadata, eval_results with assertion_details, summary).
+- The example's eval IDs match evals.json.
+- The example's assertion_details count matches evals.json assertion count
+  per eval case.
+- The example's summary totals are consistent with per-eval results.
+
 ## Schema Validation Expectations
 
 `workflow-spec-lite/expected.json` defines the static validation
@@ -123,6 +168,10 @@ The release validator performs only static checks:
 - Required field presence and type checking.
 - Assertion type enum validation.
 - Eval count, assertion count, and eval ID validation.
+- Report artifact PASS/FAIL status semantics and summary consistency.
+- Baseline artifact source paths, assertion totals, and comparison field shape.
+- Runner output schema and example structural conformance.
+- Per-assertion detail count consistency between example and evals.json.
 - README token presence.
 
 No skill execution, LLM calls, or eval runner invocation occurs.

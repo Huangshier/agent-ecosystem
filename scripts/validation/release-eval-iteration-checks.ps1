@@ -375,4 +375,135 @@ function Invoke-ReleaseEvalIterationChecks {
     catch {
         Add-Check "eval baseline artifact" "FAIL" $_.Exception.Message
     }
+
+    # Slice 5: verify runner output contract schema and example fixture
+    try {
+        # Verify runner-output-schema.json exists and has required fields
+        $schemaPath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "runner-output-schema.json"
+        if (-not (Test-Path -LiteralPath $schemaPath)) {
+            throw "Missing workflow-spec-lite/runner-output-schema.json."
+        }
+        $schemaContent = Get-Content -LiteralPath $schemaPath -Raw | ConvertFrom-Json
+        foreach ($field in @("`$schema", "`$id", "title", "type", "required", "properties", "`$defs")) {
+            if ($null -eq $schemaContent.$field) {
+                throw "runner-output-schema.json is missing required top-level field: $field"
+            }
+        }
+        # Verify the schema defines the required top-level properties
+        $schemaProps = @($schemaContent.properties.PSObject.Properties.Name)
+        foreach ($requiredProp in @("schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary")) {
+            if ($requiredProp -notin $schemaProps) {
+                throw "runner-output-schema.json properties is missing required key: $requiredProp"
+            }
+        }
+        # Verify $defs defines reusable sub-schemas
+        $defs = @($schemaContent.'$defs'.PSObject.Properties.Name)
+        foreach ($requiredDef in @("eval_result", "assertion_detail", "report_summary")) {
+            if ($requiredDef -notin $defs) {
+                throw "runner-output-schema.json `$defs is missing required definition: $requiredDef"
+            }
+        }
+
+        # Verify runner-output-example.json exists and has required fields
+        $examplePath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "runner-output-example.json"
+        if (-not (Test-Path -LiteralPath $examplePath)) {
+            throw "Missing workflow-spec-lite/runner-output-example.json."
+        }
+        $exampleContent = Get-Content -LiteralPath $examplePath -Raw | ConvertFrom-Json
+        foreach ($field in @("schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary")) {
+            if ($null -eq $exampleContent.$field) {
+                throw "runner-output-example.json is missing required top-level field: $field"
+            }
+        }
+
+        # Verify runner_metadata fields
+        $runnerMeta = $exampleContent.runner_metadata
+        foreach ($field in @("name", "version", "mode", "skill", "skill_version")) {
+            if ($null -eq $runnerMeta.$field) {
+                throw "runner-output-example.json runner_metadata is missing required field: $field"
+            }
+        }
+        if ([string]$runnerMeta.mode -ne "static") {
+            throw "runner-output-example.json runner_metadata.mode must be 'static', got: $($runnerMeta.mode)"
+        }
+
+        # Verify execution_metadata fields
+        $execMeta = $exampleContent.execution_metadata
+        foreach ($field in @("started_at", "finished_at", "duration_ms")) {
+            if ($null -eq $execMeta.$field) {
+                throw "runner-output-example.json execution_metadata is missing required field: $field"
+            }
+        }
+
+        # Verify eval_results match evals.json eval IDs
+        $exampleResults = @($exampleContent.eval_results)
+        $exampleEvalIds = @($exampleResults | ForEach-Object { [string]$_.eval_id })
+        if (-not (Test-ExactArray -Actual $exampleEvalIds -Expected $expectedEvalIds)) {
+            throw "Runner output example eval ID mismatch. Expected: $($expectedEvalIds -join ', '). Actual: $($exampleEvalIds -join ', ')."
+        }
+
+        # Verify per-eval assertion_details and counts
+        $totalExampleAssertions = 0
+        foreach ($result in $exampleResults) {
+            foreach ($field in @("eval_id", "status", "assertions_total", "assertions_passed", "assertions_failed", "assertion_details")) {
+                if ($null -eq $result.$field) {
+                    throw "runner-output-example.json eval_result is missing required field: $field"
+                }
+            }
+            $details = @($result.assertion_details)
+            if ([int]$result.assertions_total -ne $details.Count) {
+                throw "runner-output-example.json eval '$($result.eval_id)' assertions_total ($($result.assertions_total)) does not match assertion_details count ($($details.Count))."
+            }
+            $totalExampleAssertions += $details.Count
+            # Verify each assertion_detail has required fields
+            foreach ($detail in $details) {
+                foreach ($field in @("type", "expected", "passed")) {
+                    if ($null -eq $detail.$field) {
+                        throw "runner-output-example.json eval '$($result.eval_id)' assertion_detail is missing required field: $field"
+                    }
+                }
+            }
+        }
+        if ($totalExampleAssertions -ne $totalAssertions) {
+            throw "runner-output-example.json total assertion_details ($totalExampleAssertions) does not match evals.json total assertions ($totalAssertions)."
+        }
+
+        # Verify comparison_metadata exists with required fields
+        $comparisonMeta = $exampleContent.comparison_metadata
+        foreach ($field in @("comparison_mode", "paired_run_id", "baseline_pass_rate", "current_pass_rate", "delta")) {
+            if ($null -eq $comparisonMeta.$field) {
+                throw "runner-output-example.json comparison_metadata is missing required field: $field"
+            }
+        }
+        if ([string]$comparisonMeta.comparison_mode -notin @("none", "with_skill", "without_skill")) {
+            throw "runner-output-example.json comparison_metadata.comparison_mode is invalid: $($comparisonMeta.comparison_mode)"
+        }
+
+        # Verify summary consistency
+        $exampleSummary = $exampleContent.summary
+        foreach ($field in @("eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status")) {
+            if ($null -eq $exampleSummary.$field) {
+                throw "runner-output-example.json summary is missing required field: $field"
+            }
+        }
+        if ([int]$exampleSummary.eval_count -ne $exampleResults.Count) {
+            throw "runner-output-example.json summary.eval_count ($($exampleSummary.eval_count)) does not match eval_results count ($($exampleResults.Count))."
+        }
+        if ([int]$exampleSummary.assertions_total -ne $totalExampleAssertions) {
+            throw "runner-output-example.json summary.assertions_total ($($exampleSummary.assertions_total)) does not match total assertion_details ($totalExampleAssertions)."
+        }
+
+        $script:evidence.runner_output_contract = [ordered]@{
+            schema_path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/runner-output-schema.json"
+            example_path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/runner-output-example.json"
+            eval_count = $exampleResults.Count
+            assertion_count = $totalExampleAssertions
+            schema_defs = @($defs)
+            overall_status = [string]$exampleSummary.status
+        }
+        Add-Check "runner output contract" "PASS" "Workflow-spec-lite runner output contract schema and example fixture are public-safe, JSON-valid, eval IDs match, assertion_details are structurally consistent with evals.json, and summary totals are coherent." $evidence.runner_output_contract
+    }
+    catch {
+        Add-Check "runner output contract" "FAIL" $_.Exception.Message
+    }
 }
