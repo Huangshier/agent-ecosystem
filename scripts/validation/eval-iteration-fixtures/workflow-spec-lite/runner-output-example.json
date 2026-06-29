@@ -31,7 +31,7 @@
         {
           "type": "output_file_created",
           "expected": "docs/specs/<slug>/spec.md",
-          "actual": "docs/specs/refactor-auth/spec.md",
+          "actual": "docs/specs/<slug>/spec.md",
           "passed": true
         },
         {
@@ -88,13 +88,13 @@
         {
           "type": "output_file_not_created",
           "expected": "docs/specs/",
-          "actual": "",
+          "actual": "docs/specs/",
           "passed": true
         },
         {
           "type": "output_not_contains",
           "expected": "docs/specs/<slug>/plan.md",
-          "actual": "",
+          "actual": "docs/specs/<slug>/plan.md",
           "passed": true
         }
       ]

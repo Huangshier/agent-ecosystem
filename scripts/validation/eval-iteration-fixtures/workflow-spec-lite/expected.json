@@ -64,6 +64,8 @@
     "runner-output-schema.json",
     "runner-output-example.json",
     "Runner Output Contract",
+    "Runner Output Regeneration",
+    "release-eval-runner-generator.ps1",
     "assertion_details"
   ],
   "baseline_artifact": {
@@ -90,5 +92,12 @@
     "example_contract_version": "1.0.0",
     "example_mode": "static",
     "expected_status": "PASS"
+  },
+  "runner_output_regeneration": {
+    "generator_path": "scripts/validation/release-eval-runner-generator.ps1",
+    "example_path": "workflow-spec-lite/runner-output-example.json",
+    "description": "The committed runner-output-example.json must be deterministically reproducible from evals.json and expected.json via the standalone runner output generator.",
+    "required_match_fields": ["schema_version", "contract_version", "runner_metadata", "eval_results", "failure_reason_shape", "comparison_metadata", "summary"],
+    "assertion_detail_actual_equals_expected": "In static deterministic mode all assertions pass with actual equal to expected."
   }
 }

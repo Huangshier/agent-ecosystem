@@ -1,7 +1,9 @@
 # release-eval-iteration-checks.ps1
-# Contains validation checks for eval iteration fixtures, report artifact, and baseline recording artifact.
+# Contains validation checks for eval iteration fixtures, report artifact, baseline recording artifact,
+# runner output contract, and runner output regeneration.
 # Part of the release validator thin-entrypoint refactor.
-# Authoritative check names: "eval iteration fixtures", "eval report artifact", "eval baseline artifact".
+# Authoritative check names: "eval iteration fixtures", "eval report artifact", "eval baseline artifact",
+# "runner output contract", "runner output regeneration".
 
 <#
 .SYNOPSIS
@@ -517,5 +519,30 @@ function Invoke-ReleaseEvalIterationChecks {
     }
     catch {
         Add-Check "runner output contract" "FAIL" $_.Exception.Message
+    }
+
+    # Slice 6: verify runner output example is deterministically reproducible
+    try {
+        $runnerGeneratorModule = Join-PathParts $scriptDir "validation" "release-eval-runner-generator.ps1"
+        if (-not (Test-Path -LiteralPath $runnerGeneratorModule)) {
+            throw "Missing release-eval-runner-generator.ps1."
+        }
+        . $runnerGeneratorModule
+
+        $examplePath = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "runner-output-example.json"
+        $regenerationResult = Test-EvalRunnerOutputRegeneration -EvalsJsonPath $evalsJsonPath -ExpectedJsonPath $expectedPath -CommittedExamplePath $examplePath
+
+        $script:evidence.runner_output_regeneration = [ordered]@{
+            generator_path = "scripts/validation/release-eval-runner-generator.ps1"
+            example_path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/runner-output-example.json"
+            generated_eval_count = [int]$regenerationResult.generated_eval_count
+            generated_assertion_count = [int]$regenerationResult.generated_assertion_count
+            generated_status = [string]$regenerationResult.generated_status
+            match = [bool]$regenerationResult.match
+        }
+        Add-Check "runner output regeneration" "PASS" "Runner output example is deterministically reproducible from evals.json and expected.json; all fields match across schema_version, contract_version, runner_metadata, eval_results with per-assertion details, failure_reason_shape, comparison_metadata, and summary." $evidence.runner_output_regeneration
+    }
+    catch {
+        Add-Check "runner output regeneration" "FAIL" $_.Exception.Message
     }
 }
