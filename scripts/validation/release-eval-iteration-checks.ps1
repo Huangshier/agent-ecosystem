@@ -389,9 +389,10 @@ function Invoke-ReleaseEvalIterationChecks {
                 throw "runner-output-schema.json is missing required top-level field: $field"
             }
         }
-        # Verify the schema defines the required top-level properties
+        # Verify the schema defines the required top-level properties (sourced from expected.json)
         $schemaProps = @($schemaContent.properties.PSObject.Properties.Name)
-        foreach ($requiredProp in @("schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary")) {
+        $expectedSchemaProps = @($expectedContent.runner_output_contract.schema_required_properties | ForEach-Object { [string]$_ })
+        foreach ($requiredProp in $expectedSchemaProps) {
             if ($requiredProp -notin $schemaProps) {
                 throw "runner-output-schema.json properties is missing required key: $requiredProp"
             }
@@ -410,9 +411,18 @@ function Invoke-ReleaseEvalIterationChecks {
             throw "Missing workflow-spec-lite/runner-output-example.json."
         }
         $exampleContent = Get-Content -LiteralPath $examplePath -Raw | ConvertFrom-Json
-        foreach ($field in @("schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "summary")) {
+        $exampleTopLevelFields = @($expectedContent.runner_output_contract.example_required_top_level_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $exampleTopLevelFields) {
             if ($null -eq $exampleContent.$field) {
                 throw "runner-output-example.json is missing required top-level field: $field"
+            }
+        }
+
+        # Verify failure_reason_shape example has required fields
+        $frsExample = $exampleContent.failure_reason_shape.example
+        foreach ($field in @("eval_id", "assertion_type", "expected", "actual")) {
+            if ($null -eq $frsExample.$field) {
+                throw "runner-output-example.json failure_reason_shape.example is missing required field: $field"
             }
         }
 
