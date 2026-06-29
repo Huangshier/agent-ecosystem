@@ -60,7 +60,11 @@
     "trigger-accuracy",
     "safety-boundary",
     "Non-Goals",
-    "eval report regeneration"
+    "eval report regeneration",
+    "runner-output-schema.json",
+    "runner-output-example.json",
+    "Runner Output Contract",
+    "assertion_details"
   ],
   "baseline_artifact": {
     "path": "workflow-spec-lite/baseline.json",
@@ -70,5 +74,21 @@
     "required_assertion_totals_fields": ["eval_count", "assertions_total", "assertions_per_eval"],
     "required_status_summary_fields": ["evals_passed", "evals_failed", "assertions_passed", "assertions_failed", "status"],
     "required_comparison_fields": ["baseline_pass_rate", "with_skill_pass_rate", "delta", "iteration_count"]
+  },
+  "runner_output_contract": {
+    "schema_path": "workflow-spec-lite/runner-output-schema.json",
+    "example_path": "workflow-spec-lite/runner-output-example.json",
+    "schema_required_top_level_fields": ["$schema", "$id", "title", "type", "required", "properties", "$defs"],
+    "schema_required_properties": ["schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "failure_reason_shape", "comparison_metadata", "summary"],
+    "example_required_top_level_fields": ["schema_version", "contract_version", "runner_metadata", "execution_metadata", "eval_results", "failure_reason_shape", "comparison_metadata", "summary"],
+    "example_required_runner_metadata_fields": ["name", "version", "mode", "skill", "skill_version"],
+    "example_required_execution_metadata_fields": ["started_at", "finished_at", "duration_ms"],
+    "example_required_eval_result_fields": ["eval_id", "status", "assertions_total", "assertions_passed", "assertions_failed", "assertion_details"],
+    "example_required_assertion_detail_fields": ["type", "expected", "actual", "passed"],
+    "example_required_summary_fields": ["eval_count", "evals_passed", "evals_failed", "assertions_total", "assertions_passed", "assertions_failed", "status"],
+    "example_required_comparison_metadata_fields": ["comparison_mode", "paired_run_id", "baseline_pass_rate", "current_pass_rate", "delta"],
+    "example_contract_version": "1.0.0",
+    "example_mode": "static",
+    "expected_status": "PASS"
   }
 }
