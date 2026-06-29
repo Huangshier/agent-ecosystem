@@ -1,0 +1,46 @@
+{
+  "skill": "workflow-spec-lite",
+  "version": 1,
+  "fixture": "workflow-spec-lite",
+  "iteration_type": "static",
+  "description": "Deterministic static benchmark artifact for eval iteration-001 of workflow-spec-lite. Records baseline pass rate, comparison metadata, delta placeholder, iteration index, and source references. No eval runner or LLM is invoked.",
+  "iteration_index": 1,
+  "benchmark_identity": {
+    "name": "workflow-spec-lite-iteration-001",
+    "iteration": 1,
+    "description": "Static baseline benchmark for workflow-spec-lite eval pilot. Records identity, pass rate, source refs, and comparison metadata before any live eval iteration."
+  },
+  "source_refs": {
+    "evals_path": "workflow-spec-lite/evals.json",
+    "report_path": "workflow-spec-lite/report.json",
+    "baseline_path": "workflow-spec-lite/baseline.json",
+    "runner_output_path": "workflow-spec-lite/runner-output-example.json",
+    "runner_output_schema_path": "workflow-spec-lite/runner-output-schema.json"
+  },
+  "pass_rate": {
+    "description": "Overall pass rate from the report artifact for this iteration.",
+    "rate": 1.0,
+    "eval_count": 3,
+    "evals_passed": 3,
+    "evals_failed": 0,
+    "assertions_total": 12,
+    "assertions_passed": 12,
+    "assertions_failed": 0,
+    "status": "PASS"
+  },
+  "comparison_metadata": {
+    "comparison_mode": "baseline",
+    "description": "Static baseline recording for future with-skill / without-skill comparison. All comparison fields are placeholder values representing pre-live-eval state.",
+    "baseline_pass_rate": 1.0,
+    "comparison_pass_rate": 0.0,
+    "delta": 0.0,
+    "delta_placeholder": "Used in static baseline mode. Populated by a live eval runner during comparison.",
+    "iteration_count": 0,
+    "paired_benchmark_id": ""
+  },
+  "eval_ids": [
+    "trigger-non-trivial-multi-module",
+    "safety-no-root-specs-in-public-repo",
+    "trigger-trivial-should-not-activate"
+  ]
+}
