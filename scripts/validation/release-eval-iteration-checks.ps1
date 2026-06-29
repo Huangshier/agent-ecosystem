@@ -1,9 +1,9 @@
 # release-eval-iteration-checks.ps1
 # Contains validation checks for eval iteration fixtures, report artifact, baseline recording artifact,
-# runner output contract, and runner output regeneration.
+# runner output contract, runner output regeneration, and iteration benchmark contract.
 # Part of the release validator thin-entrypoint refactor.
 # Authoritative check names: "eval iteration fixtures", "eval report artifact", "eval baseline artifact",
-# "runner output contract", "runner output regeneration".
+# "runner output contract", "runner output regeneration", "benchmark artifact", "benchmark regeneration".
 
 <#
 .SYNOPSIS
@@ -544,5 +544,183 @@ function Invoke-ReleaseEvalIterationChecks {
     }
     catch {
         Add-Check "runner output regeneration" "FAIL" $_.Exception.Message
+    }
+
+    # Slice 7: verify iteration artifact / benchmark contract
+    try {
+        # Verify iterations directory structure exists
+        $iterationsRoot = Join-PathParts $evalFixtureRoot "workflow-spec-lite" "iterations"
+        if (-not (Test-Path -LiteralPath $iterationsRoot)) {
+            throw "Missing workflow-spec-lite/iterations directory."
+        }
+        $iteration001Dir = Join-PathParts $iterationsRoot "iteration-001"
+        if (-not (Test-Path -LiteralPath $iteration001Dir)) {
+            throw "Missing workflow-spec-lite/iterations/iteration-001 directory."
+        }
+
+        # Verify benchmark.json exists and is valid JSON
+        $benchmarkPath = Join-PathParts $iteration001Dir "benchmark.json"
+        if (-not (Test-Path -LiteralPath $benchmarkPath)) {
+            throw "Missing workflow-spec-lite/iterations/iteration-001/benchmark.json."
+        }
+        $benchmarkContent = Get-Content -LiteralPath $benchmarkPath -Raw | ConvertFrom-Json
+
+        # Verify required top-level fields (sourced from expected.json)
+        $benchmarkTopLevelFields = @($expectedContent.benchmark_artifact.required_top_level_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $benchmarkTopLevelFields) {
+            if ($null -eq $benchmarkContent.$field) {
+                throw "benchmark.json is missing required top-level field: $field"
+            }
+        }
+
+        # Verify iteration_type is static
+        if ([string]$benchmarkContent.iteration_type -ne "static") {
+            throw "benchmark.json iteration_type must be 'static', got: $($benchmarkContent.iteration_type)"
+        }
+
+        # Verify iteration_index matches expected
+        $expectedIterationIndex = [int]$expectedContent.benchmark_artifact.expected_iteration_index
+        if ([int]$benchmarkContent.iteration_index -ne $expectedIterationIndex) {
+            throw "benchmark.json iteration_index ($($benchmarkContent.iteration_index)) does not match expected ($expectedIterationIndex)."
+        }
+
+        # Verify benchmark_identity fields
+        $identityFields = @($expectedContent.benchmark_artifact.required_benchmark_identity_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $identityFields) {
+            if ($null -eq $benchmarkContent.benchmark_identity.$field) {
+                throw "benchmark.json benchmark_identity is missing required field: $field"
+            }
+        }
+        if ([int]$benchmarkContent.benchmark_identity.iteration -ne $expectedIterationIndex) {
+            throw "benchmark.json benchmark_identity.iteration ($($benchmarkContent.benchmark_identity.iteration)) does not match expected ($expectedIterationIndex)."
+        }
+
+        # Verify source_refs fields
+        $sourceRefsFields = @($expectedContent.benchmark_artifact.required_source_refs_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $sourceRefsFields) {
+            if ($null -eq $benchmarkContent.source_refs.$field) {
+                throw "benchmark.json source_refs is missing required field: $field"
+            }
+        }
+        # Verify source_refs path values
+        $expectedSourceRefs = [ordered]@{
+            evals_path = "workflow-spec-lite/evals.json"
+            report_path = "workflow-spec-lite/report.json"
+            baseline_path = "workflow-spec-lite/baseline.json"
+            runner_output_path = "workflow-spec-lite/runner-output-example.json"
+            runner_output_schema_path = "workflow-spec-lite/runner-output-schema.json"
+        }
+        foreach ($key in $expectedSourceRefs.Keys) {
+            if ([string]$benchmarkContent.source_refs.$key -ne $expectedSourceRefs[$key]) {
+                throw "benchmark.json source_refs.$key is '$($benchmarkContent.source_refs.$key)', expected '$($expectedSourceRefs[$key])'."
+            }
+        }
+
+        # Verify pass_rate fields
+        $passRateFields = @($expectedContent.benchmark_artifact.required_pass_rate_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $passRateFields) {
+            if ($null -eq $benchmarkContent.pass_rate.$field) {
+                throw "benchmark.json pass_rate is missing required field: $field"
+            }
+        }
+        # Verify pass_rate consistency with evals.json and report.json
+        if ([int]$benchmarkContent.pass_rate.eval_count -ne $evalCases.Count) {
+            throw "benchmark.json pass_rate.eval_count ($($benchmarkContent.pass_rate.eval_count)) does not match evals.json eval count ($($evalCases.Count))."
+        }
+        if ([int]$benchmarkContent.pass_rate.assertions_total -ne $totalAssertions) {
+            throw "benchmark.json pass_rate.assertions_total ($($benchmarkContent.pass_rate.assertions_total)) does not match evals.json assertion count ($totalAssertions)."
+        }
+        if ([int]$benchmarkContent.pass_rate.assertions_passed + [int]$benchmarkContent.pass_rate.assertions_failed -ne $totalAssertions) {
+            throw "benchmark.json pass_rate assertions_passed + assertions_failed does not equal assertions_total ($totalAssertions)."
+        }
+        if ([int]$benchmarkContent.pass_rate.evals_passed + [int]$benchmarkContent.pass_rate.evals_failed -ne $evalCases.Count) {
+            throw "benchmark.json pass_rate evals_passed + evals_failed does not equal eval_count ($($evalCases.Count))."
+        }
+        # Verify pass_rate status matches expected
+        $expectedBenchmarkStatus = [string]$expectedContent.benchmark_artifact.expected_status
+        if ([string]$benchmarkContent.pass_rate.status -ne $expectedBenchmarkStatus) {
+            throw "benchmark.json pass_rate.status ($($benchmarkContent.pass_rate.status)) does not match expected ($expectedBenchmarkStatus)."
+        }
+        # Verify pass_rate rate is in range 0..1
+        $benchRate = [double]$benchmarkContent.pass_rate.rate
+        if ($benchRate -lt 0.0 -or $benchRate -gt 1.0) {
+            throw "benchmark.json pass_rate.rate ($benchRate) must be in range 0..1."
+        }
+
+        # Verify comparison_metadata fields
+        $comparisonFields = @($expectedContent.benchmark_artifact.required_comparison_metadata_fields | ForEach-Object { [string]$_ })
+        foreach ($field in $comparisonFields) {
+            if ($null -eq $benchmarkContent.comparison_metadata.$field) {
+                throw "benchmark.json comparison_metadata is missing required field: $field"
+            }
+        }
+        # Verify comparison_mode matches expected
+        $expectedComparisonMode = [string]$expectedContent.benchmark_artifact.expected_comparison_mode
+        if ([string]$benchmarkContent.comparison_metadata.comparison_mode -ne $expectedComparisonMode) {
+            throw "benchmark.json comparison_metadata.comparison_mode ($($benchmarkContent.comparison_metadata.comparison_mode)) does not match expected ($expectedComparisonMode)."
+        }
+        # Verify numeric types in comparison_metadata
+        $compMeta = $benchmarkContent.comparison_metadata
+        foreach ($field in @("baseline_pass_rate", "comparison_pass_rate", "delta")) {
+            $val = $compMeta.$field
+            if ($val -isnot [double] -and $val -isnot [decimal] -and $val -isnot [int] -and $val -isnot [long]) {
+                throw "benchmark.json comparison_metadata.$field must be a number, got type $($val.GetType().Name)."
+            }
+        }
+        if ($compMeta.iteration_count -isnot [int] -and $compMeta.iteration_count -isnot [long]) {
+            throw "benchmark.json comparison_metadata.iteration_count must be an integer."
+        }
+        foreach ($field in @("baseline_pass_rate", "comparison_pass_rate")) {
+            $val = [double]$compMeta.$field
+            if ($val -lt 0.0 -or $val -gt 1.0) {
+                throw "benchmark.json comparison_metadata.$field ($val) must be in range 0..1."
+            }
+        }
+
+        # Verify eval_ids match evals.json
+        $benchmarkEvalIds = @($benchmarkContent.eval_ids | ForEach-Object { [string]$_ })
+        if (-not (Test-ExactArray -Actual $benchmarkEvalIds -Expected $expectedEvalIds)) {
+            throw "Benchmark eval ID mismatch. Expected: $($expectedEvalIds -join ', '). Actual: $($benchmarkEvalIds -join ', ')."
+        }
+
+        $script:evidence.benchmark_artifact = [ordered]@{
+            path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/iterations/iteration-001/benchmark.json"
+            iteration_index = [int]$benchmarkContent.iteration_index
+            comparison_mode = [string]$benchmarkContent.comparison_metadata.comparison_mode
+            pass_rate = [double]$benchmarkContent.pass_rate.rate
+            eval_count = [int]$benchmarkContent.pass_rate.eval_count
+            assertion_count = [int]$benchmarkContent.pass_rate.assertions_total
+            source_ref_count = @($benchmarkContent.source_refs.PSObject.Properties.Name).Count
+        }
+        Add-Check "benchmark artifact" "PASS" "Iteration benchmark artifact is public-safe, JSON-valid, iteration_index matches expected, source_refs paths are pinned, pass_rate counts are consistent with evals.json and report.json, comparison_metadata fields are complete with correct types, and eval_ids match evals.json." $evidence.benchmark_artifact
+    }
+    catch {
+        Add-Check "benchmark artifact" "FAIL" $_.Exception.Message
+    }
+
+    # Slice 7b: verify benchmark artifact is deterministically reproducible
+    try {
+        $benchmarkGeneratorModule = Join-PathParts $scriptDir "validation" "release-eval-benchmark-generator.ps1"
+        if (-not (Test-Path -LiteralPath $benchmarkGeneratorModule)) {
+            throw "Missing release-eval-benchmark-generator.ps1."
+        }
+        . $benchmarkGeneratorModule
+
+        $benchmarkRegenResult = Test-EvalBenchmarkRegeneration -EvalsJsonPath $evalsJsonPath -ExpectedJsonPath $expectedPath -CommittedBenchmarkPath $benchmarkPath
+
+        $script:evidence.benchmark_regeneration = [ordered]@{
+            generator_path = "scripts/validation/release-eval-benchmark-generator.ps1"
+            benchmark_path = "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/iterations/iteration-001/benchmark.json"
+            generated_eval_count = [int]$benchmarkRegenResult.generated_eval_count
+            generated_assertion_count = [int]$benchmarkRegenResult.generated_assertion_count
+            generated_pass_rate = [double]$benchmarkRegenResult.generated_pass_rate
+            generated_status = [string]$benchmarkRegenResult.generated_status
+            match = [bool]$benchmarkRegenResult.match
+            differences = @($benchmarkRegenResult.differences)
+        }
+        Add-Check "benchmark regeneration" "PASS" "Iteration benchmark artifact is deterministically reproducible from evals.json and expected.json; all fields match across skill, version, fixture, iteration_index, benchmark_identity, source_refs, pass_rate, comparison_metadata, and eval_ids." $evidence.benchmark_regeneration
+    }
+    catch {
+        Add-Check "benchmark regeneration" "FAIL" $_.Exception.Message
     }
 }

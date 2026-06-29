@@ -1,6 +1,6 @@
 # Eval Iteration Fixtures
 
-Status: first slice (fixture shape only). Issue #166.
+Status: seventh slice (iteration artifact + benchmark contract). Issue #166.
 
 These fixtures validate the static structure of eval case definitions
 for a kernel skill eval pilot. They do not invoke an eval runner,
@@ -35,9 +35,13 @@ eval-iteration-fixtures/
     baseline.json         (static baseline recording for comparison)
     runner-output-schema.json   (runner output JSON Schema contract)
     runner-output-example.json  (static example conforming to the schema)
+    iterations/
+      iteration-001/
+        benchmark.json    (static benchmark artifact for iteration 001)
 scripts/validation/
-  release-eval-report-generator.ps1  (deterministic report artifact generator)
-  release-eval-runner-generator.ps1  (deterministic runner output artifact generator)
+  release-eval-report-generator.ps1     (deterministic report artifact generator)
+  release-eval-runner-generator.ps1     (deterministic runner output artifact generator)
+  release-eval-benchmark-generator.ps1  (deterministic benchmark artifact generator)
 ```
 
 ## Runner Output Generator
@@ -171,6 +175,65 @@ The release validator verifies that:
   per eval case.
 - The example's summary totals are consistent with per-eval results.
 
+## Iteration Artifact / Benchmark Contract
+
+`iterations/iteration-001/benchmark.json` is a deterministic static
+benchmark artifact that records pass rate, comparison metadata, delta
+placeholder, iteration index, and source references for a synthetic
+iteration. It does not invoke an eval runner or LLM.
+
+The benchmark artifact:
+
+- **benchmark_identity**: unique name, iteration number, and description.
+- **source_refs**: pinned paths to evals.json, report.json, baseline.json,
+  runner-output-example.json, and runner-output-schema.json.
+- **pass_rate**: overall pass rate, eval counts, assertion counts, and
+  status back-linked to the report artifact.
+- **comparison_metadata**: comparison_mode, baseline_pass_rate,
+  comparison_pass_rate, delta, delta_placeholder, iteration_count, and
+  paired_benchmark_id — all placeholder values for pre-live-eval state.
+- **eval_ids**: eval case IDs matching evals.json.
+
+The release validator verifies that:
+- benchmark.json parses as valid JSON.
+- Required top-level fields exist (skill, version, fixture, iteration_type,
+  iteration_index, benchmark_identity, source_refs, pass_rate,
+  comparison_metadata, eval_ids).
+- Benchmark identity contains name, iteration, and description.
+- Source refs contain all five expected paths.
+- Pass rate contains rate, eval_count, evals_passed/failed,
+  assertions_total/passed/failed, and status.
+- Comparison metadata contains comparison_mode, baseline_pass_rate,
+  comparison_pass_rate, delta, delta_placeholder, iteration_count, and
+  paired_benchmark_id.
+- Pass rate counts and summary are consistent with evals.json and
+  report.json.
+- Eval IDs match evals.json.
+- Iteration index is 1 and comparison mode is "baseline" (expected
+  baseline values from expected.json).
+
+### Benchmark Generation
+
+`release-eval-benchmark-generator.ps1` provides a deterministic, offline
+benchmark artifact generation path. It reads `evals.json` and
+`expected.json`, validates the fixture shape, computes pass rate and
+comparison metadata, and produces an artifact matching the committed
+`benchmark.json` structure.
+
+The release validator includes a "benchmark regeneration" check that
+invokes this generator and compares the output against the committed
+`benchmark.json`. This proves the benchmark artifact is deterministically
+reproducible from source fixtures, not hand-maintained.
+
+```powershell
+# Regenerate benchmark.json (writes to stdout)
+pwsh -NoProfile -File scripts/validation/release-eval-benchmark-generator.ps1 `
+  -EvalsJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/evals.json `
+  -ExpectedJsonPath scripts/validation/eval-iteration-fixtures/workflow-spec-lite/expected.json
+```
+
+No eval runner, LLM calls, or network access occurs during generation.
+
 ## Runner Output Regeneration
 
 `release-eval-runner-generator.ps1` is a standalone, offline, deterministic
@@ -213,6 +276,8 @@ expectations:
   `output_file_not_created`.
 - Expected eval count, assertion count, and eval IDs must match.
 - README must contain required tokens documenting the pilot scope.
+- Benchmark artifact structure, required fields, summary consistency,
+  path references, and deterministic regeneration.
 
 ## Validation Boundary
 
@@ -226,6 +291,8 @@ The release validator performs only static checks:
 - Baseline artifact source paths, assertion totals, and comparison field shape.
 - Runner output schema and example structural conformance.
 - Per-assertion detail count consistency between example and evals.json.
+- Benchmark artifact structural conformance, pass rate consistency, and
+  source ref validation.
 - README token presence.
 
 No skill execution, LLM calls, or eval runner invocation occurs.

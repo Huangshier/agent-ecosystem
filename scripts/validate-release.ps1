@@ -24,7 +24,9 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "validation/release-memory-diagnostics-fixture-checks.ps1")
 . (Join-Path $scriptDir "validation/release-eval-iteration-checks.ps1")
 . (Join-Path $scriptDir "validation/release-eval-report-generator.ps1")
+. (Join-Path $scriptDir "validation/release-eval-runner-generator.ps1")
 . (Join-Path $scriptDir "validation/release-governance-workflow-checks.ps1")
+. (Join-Path $scriptDir "validation/release-eval-benchmark-generator.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -65,6 +67,8 @@ $evidence = [ordered]@{
     hot_memory_soft_length_fixtures = [ordered]@{}
     runner_output_contract = [ordered]@{}
     runner_output_regeneration = [ordered]@{}
+    benchmark_artifact = [ordered]@{}
+    benchmark_regeneration = [ordered]@{}
 }
 
 $targetReleaseVersion = $TargetVersion.Trim()

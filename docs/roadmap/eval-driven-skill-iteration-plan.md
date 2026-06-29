@@ -5,8 +5,10 @@ Status: active (multiple slices merged). Issue #166.
 This plan defines the eval-driven skill iteration mechanism for
 agent-ecosystem. The first five slices established the public-safe design
 boundary, eval schema draft, fixture shape, deterministic report generation,
-and runner output contract. The sixth slice adds a deterministic runner
-output artifact generator and regeneration verification. It does not
+and runner output contract. The sixth slice added a deterministic runner
+output artifact generator and regeneration verification. The seventh slice
+adds an iteration artifact / benchmark contract for recording eval iteration
+pass rates, comparison metadata, and source references. It does not
 implement a working eval runner, LLM grading, or external service
 integration.
 
@@ -168,8 +170,12 @@ scripts/validation/eval-iteration-fixtures/
     baseline.json
     runner-output-schema.json
     runner-output-example.json
+    iterations/
+      iteration-001/
+        benchmark.json
 scripts/validation/release-eval-report-generator.ps1
 scripts/validation/release-eval-runner-generator.ps1
+scripts/validation/release-eval-benchmark-generator.ps1
 ```
 
 ## Runner Output Contract
@@ -209,12 +215,62 @@ eval runner. It is specified as a JSON Schema (draft 2020-12) in
 - Implement with-skill vs without-skill comparison using
   `comparison_metadata`.
 - Add convergence detection based on delta trends across iterations.
+- Expand the iterations/ tree with additional synthetic or live
+  iteration-N/ benchmark.json artifacts.
+
+### Benchmark Contract
+
+The benchmark contract defines an iteration-level artifact that records
+pass rate, comparison metadata, delta placeholder, iteration index, and
+source references for each eval iteration.
+
+`iterations/iteration-001/benchmark.json` is a deterministic static
+benchmark artifact:
+
+- **benchmark_identity**: unique name, iteration number, and description
+  for this iteration.
+- **source_refs**: pinned paths to evals.json, report.json, baseline.json,
+  runner-output-example.json, and runner-output-schema.json.
+- **pass_rate**: overall pass rate, eval counts, assertion counts, and
+  status back-linked to the report artifact.
+- **comparison_metadata**: comparison_mode ("baseline" for static baseline
+  recordings), pass rates, delta placeholder, iteration_count, and
+  paired_benchmark_id — all reserved for future live eval comparison.
+- **eval_ids**: eval case IDs matching evals.json.
+
+`release-eval-benchmark-generator.ps1` provides a deterministic, offline
+benchmark artifact generation path. It reads `evals.json` and
+`expected.json`, validates the fixture shape, computes pass rate and
+comparison metadata, and produces an artifact matching the committed
+`benchmark.json` structure. The release validator includes a "benchmark
+regeneration" check that verifies deterministic reproducibility.
+
+### Benchmark Contract Design Decisions
+
+- **iteration_index vs iteration in identity**: `iteration_index` (top-level
+  integer) is the canonical iteration number for ordering and comparison;
+  `benchmark_identity.iteration` mirrors it for self-contained identity.
+- **source_refs covers all fixtures**: The benchmark references evals.json,
+  report.json, baseline.json, runner-output-example.json, and
+  runner-output-schema.json — the full set of static artifacts that define
+  an iteration snapshot.
+- **pass_rate mirrors report.json summary**: pass_rate fields (rate,
+  eval_count, evals_passed/failed, assertions_total/passed/failed, status)
+  are cross-validated against report.json and evals.json to prevent drift.
+- **comparison_metadata comparison_mode "baseline"**: Pre-live-eval
+  recordings use mode "baseline". Live iterations would use
+  "with_skill" or "without_skill".
+- **delta_placeholder**: A string field explaining that delta is populated
+  during live comparison; keeps the schema self-documenting.
+- **paired_benchmark_id**: Empty string in baseline mode. Links to the
+  counterpart iteration's benchmark_id during with-skill vs without-skill
+  comparison.
 
 ## Rollback
 
 This change is docs and fixture only. Reverting the PR removes the
-roadmap document, knowledge pattern, fixture files, and static check
-addition. No runtime behavior, skill logic, or existing validation
+roadmap additions, benchmark fixture files, benchmark generator, and static
+check additions. No runtime behavior, skill logic, or existing validation
 coverage is affected.
 
 ## Non-Goals
