@@ -867,7 +867,7 @@ try {
     Add-Content -LiteralPath $processPath -Value "`n$processSentinel"
     Add-Content -LiteralPath $replaceableTemplatePath -Value "`n$replaceableSentinel"
 
-    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
+    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis 3>&1)
 
     if ((Get-Content -LiteralPath $rootAgentsPath -Raw) -notlike ("*{0}*" -f $rootSentinel)) {
         throw "Bootstrap refresh overwrote customized root AGENTS.md content."
@@ -952,7 +952,7 @@ try {
     if ((Get-Content -LiteralPath $evidenceMarkdownPath -Raw) -notmatch '(?m)^## Skipped\r?$') {
         throw "Bootstrap Markdown evidence report did not include a Skipped section."
     }
-    $forceOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ForceResetScaffold -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
+    $forceOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ForceResetScaffold -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis 3>&1)
     if (@($forceOutput | Where-Object { [string]$_ -match '-ForceResetScaffold can replace existing scaffold and memory template files' }).Count -lt 1) {
         throw "Force reset did not emit the expected warning."
     }

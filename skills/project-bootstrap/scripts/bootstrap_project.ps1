@@ -530,8 +530,7 @@ if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or
 $preflightLockPath = Join-PathParts $ProjectDir ".agents" "hub.lock.json"
 $lockedProjectLanguage = Read-BootstrapLockLanguage -LockPath $preflightLockPath
 $declaredProjectLanguage = Read-ProjectGuideLanguage -ProjectPath $ProjectDir
-if (-not $projectLanguageWasProvided -and
-    -not [string]::IsNullOrWhiteSpace($lockedProjectLanguage) -and
+if (-not [string]::IsNullOrWhiteSpace($lockedProjectLanguage) -and
     -not [string]::IsNullOrWhiteSpace($declaredProjectLanguage) -and
     $lockedProjectLanguage -ne $declaredProjectLanguage) {
     throw "Project language conflict: .agents/hub.lock.json declares '$lockedProjectLanguage' but .agents/AGENTS.md declares '$declaredProjectLanguage'. No bootstrap files were written."

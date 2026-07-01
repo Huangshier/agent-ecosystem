@@ -129,17 +129,29 @@ $projectRootFailure = Assert-ExpectedFailure -Name "project-root-mistake" -Expec
 Assert-Unchanged -Root $projectRootMistake -Before $projectRootBefore -Name "project-root-mistake"
 $results.Add([ordered]@{ name = "project-root-mistake"; status = "PASS"; error = $projectRootFailure.error }) | Out-Null
 
-$conflictProject = Join-Path $scratchFull "language-conflict"
-New-Item -ItemType Directory -Path $conflictProject | Out-Null
-& $BootstrapScript -ProjectDir $conflictProject -HubDir $HubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Null
-$conflictGuide = Join-Path $conflictProject ".agents/AGENTS.md"
-Set-Content -LiteralPath $conflictGuide -Value "Project memory language: English." -Encoding ASCII
-$conflictBefore = Get-TreeFingerprint -Root $conflictProject
-$conflictFailure = Assert-ExpectedFailure -Name "language-conflict" -ExpectedToken "Project language conflict" -Command {
-    & $BootstrapScript -ProjectDir $conflictProject -HubDir $HubDir -AnalyzeMemoryUpgrade
+$conflictOmittedProject = Join-Path $scratchFull "language-conflict-omitted"
+New-Item -ItemType Directory -Path $conflictOmittedProject | Out-Null
+& $BootstrapScript -ProjectDir $conflictOmittedProject -HubDir $HubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Null
+$conflictOmittedGuide = Join-Path $conflictOmittedProject ".agents/AGENTS.md"
+Set-Content -LiteralPath $conflictOmittedGuide -Value "Project memory language: English." -Encoding ASCII
+$conflictOmittedBefore = Get-TreeFingerprint -Root $conflictOmittedProject
+$conflictOmittedFailure = Assert-ExpectedFailure -Name "language-conflict-omitted" -ExpectedToken "Project language conflict" -Command {
+    & $BootstrapScript -ProjectDir $conflictOmittedProject -HubDir $HubDir -AnalyzeMemoryUpgrade
 }
-Assert-Unchanged -Root $conflictProject -Before $conflictBefore -Name "language-conflict"
-$results.Add([ordered]@{ name = "language-conflict"; status = "PASS"; error = $conflictFailure.error }) | Out-Null
+Assert-Unchanged -Root $conflictOmittedProject -Before $conflictOmittedBefore -Name "language-conflict-omitted"
+$results.Add([ordered]@{ name = "language-conflict-omitted"; status = "PASS"; error = $conflictOmittedFailure.error }) | Out-Null
+
+$conflictExplicitProject = Join-Path $scratchFull "language-conflict-explicit"
+New-Item -ItemType Directory -Path $conflictExplicitProject | Out-Null
+& $BootstrapScript -ProjectDir $conflictExplicitProject -HubDir $HubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Null
+$conflictExplicitGuide = Join-Path $conflictExplicitProject ".agents/AGENTS.md"
+Set-Content -LiteralPath $conflictExplicitGuide -Value "Project memory language: English." -Encoding ASCII
+$conflictExplicitBefore = Get-TreeFingerprint -Root $conflictExplicitProject
+$conflictExplicitFailure = Assert-ExpectedFailure -Name "language-conflict-explicit" -ExpectedToken "Project language conflict" -Command {
+    & $BootstrapScript -ProjectDir $conflictExplicitProject -HubDir $HubDir -ProjectLanguage "zh-CN" -AnalyzeMemoryUpgrade
+}
+Assert-Unchanged -Root $conflictExplicitProject -Before $conflictExplicitBefore -Name "language-conflict-explicit"
+$results.Add([ordered]@{ name = "language-conflict-explicit"; status = "PASS"; error = $conflictExplicitFailure.error }) | Out-Null
 
 $missingProject = Join-Path $scratchFull "missing-target"
 $missingFailure = Assert-ExpectedFailure -Name "missing-target" -ExpectedToken "does not exist" -Command {

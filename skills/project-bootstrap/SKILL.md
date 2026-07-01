@@ -70,9 +70,8 @@ Default behavior:
   `.agents/hub.lock.json` when `-ProjectLanguage` is omitted, with the
   `.agents/AGENTS.md` declaration as a fallback when no lock language exists.
   Conflicting lock and guide declarations fail before scaffold or lock writes
-  when no explicit language resolves the conflict. Callers may still pass
-  `-ProjectLanguage` explicitly. Do not infer project memory language from the
-  current chat.
+  even when callers pass `-ProjectLanguage` explicitly. Do not infer project
+  memory language from the current chat.
 - Unknown named parameters fail before bootstrap writes. The common
   `-ProjectRoot` mistake reports that callers must use `-ProjectDir`.
 - The resolved project directory is printed before any bootstrap write.
