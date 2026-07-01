@@ -1,3 +1,4 @@
+﻿[CmdletBinding()]
 param(
     [string]$ProjectDir = (Get-Location).Path,
     [string]$HubDir = "$env:USERPROFILE\.agents\knowledge-hub",
@@ -20,11 +21,16 @@ param(
     [string]$MigrationPlan = "",
     [string]$SourceLanguage = "",
     [string]$TargetLanguage = "",
-    [string]$ProjectLanguage = "en"
+    [string]$ProjectLanguage = "en",
+    [Parameter(DontShow = $true)][string]$ProjectRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
 $projectLanguageWasProvided = $PSBoundParameters.ContainsKey("ProjectLanguage")
+
+if ($PSBoundParameters.ContainsKey("ProjectRoot")) {
+    throw "-ProjectRoot is not supported. Use -ProjectDir to select the bootstrap target."
+}
 
 $memoryUpgradeModeCount = 0
 foreach ($modeSwitch in @($AnalyzeMemoryUpgrade, $PlanMemoryUpgrade, $ApplyMemoryUpgrade, $AutoUpgrade)) {
@@ -135,6 +141,56 @@ function Resolve-BootstrapProjectLanguage {
     }
 
     throw "Unsupported project language: $Language. Supported values: en, en-US, English, zh-CN, zh-Hans, Chinese, Chinese aliases for Simplified Chinese."
+}
+
+# Read-BootstrapLockLanguage: 读取既有 lock 的项目语言；参数 LockPath 为 hub.lock.json 路径。
+function Read-BootstrapLockLanguage {
+    param([string]$LockPath)
+
+    if (-not (Test-Path -LiteralPath $LockPath -PathType Leaf)) {
+        return ""
+    }
+
+    try {
+        $lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json
+    } catch {
+        throw "Cannot read existing bootstrap lock before writing: $LockPath. $($_.Exception.Message)"
+    }
+
+    if ($lock.PSObject.Properties.Name -notcontains "project_language") {
+        return ""
+    }
+
+    $language = ([string]$lock.project_language).Trim()
+    if ([string]::IsNullOrWhiteSpace($language)) {
+        return ""
+    }
+
+    return Resolve-BootstrapProjectLanguage -Language $language
+}
+
+# Read-ProjectGuideLanguage: 读取 .agents/AGENTS.md 的语言声明；参数 ProjectPath 为已解析的项目目录。
+function Read-ProjectGuideLanguage {
+    param([string]$ProjectPath)
+
+    $guidePath = Join-PathParts $ProjectPath ".agents" "AGENTS.md"
+    if (-not (Test-Path -LiteralPath $guidePath -PathType Leaf)) {
+        return ""
+    }
+
+    $guideText = Get-Content -LiteralPath $guidePath -Raw
+    $hasEnglishMarker = $guideText -match '(?im)^\s*Project memory language:\s*English\.\s*$'
+    $hasChineseMarker = $guideText -match '(?im)^\s*项目记忆语言：\s*简体中文。\s*$'
+    if ($hasEnglishMarker -and $hasChineseMarker) {
+        throw "Conflicting project memory language declarations in $guidePath. No bootstrap files were written."
+    }
+    if ($hasChineseMarker) {
+        return "zh-CN"
+    }
+    if ($hasEnglishMarker) {
+        return "en"
+    }
+    return ""
 }
 
 function Test-ProtectedMemoryPath {
@@ -437,9 +493,15 @@ function Get-TemplateTreeHash {
     }
 }
 
-if (-not (Test-Path -LiteralPath $ProjectDir)) {
+if ([string]::IsNullOrWhiteSpace($ProjectDir)) {
+    throw "Project directory must not be empty."
+}
+if (-not (Test-Path -LiteralPath $ProjectDir -PathType Container)) {
     throw "Project directory does not exist: $ProjectDir"
 }
+
+$ProjectDir = (Resolve-Path -LiteralPath $ProjectDir).Path
+Write-Output "Resolved project dir: $ProjectDir"
 
 $languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
 if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent -or $PlanNarrativeMigration.IsPresent -or $ApplyNarrativeMigration.IsPresent -or $ValidateNarrativeMigration.IsPresent) {
@@ -463,6 +525,24 @@ if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or
         & $languageMigrationScript -ProjectDir $ProjectDir -Mode ValidateNarrative -MigrationPlan $MigrationPlan
     }
     return
+}
+
+$preflightLockPath = Join-PathParts $ProjectDir ".agents" "hub.lock.json"
+$lockedProjectLanguage = Read-BootstrapLockLanguage -LockPath $preflightLockPath
+$declaredProjectLanguage = Read-ProjectGuideLanguage -ProjectPath $ProjectDir
+if (-not $projectLanguageWasProvided -and
+    -not [string]::IsNullOrWhiteSpace($lockedProjectLanguage) -and
+    -not [string]::IsNullOrWhiteSpace($declaredProjectLanguage) -and
+    $lockedProjectLanguage -ne $declaredProjectLanguage) {
+    throw "Project language conflict: .agents/hub.lock.json declares '$lockedProjectLanguage' but .agents/AGENTS.md declares '$declaredProjectLanguage'. No bootstrap files were written."
+}
+
+if (-not $projectLanguageWasProvided) {
+    if (-not [string]::IsNullOrWhiteSpace($lockedProjectLanguage)) {
+        $ProjectLanguage = $lockedProjectLanguage
+    } elseif (-not [string]::IsNullOrWhiteSpace($declaredProjectLanguage)) {
+        $ProjectLanguage = $declaredProjectLanguage
+    }
 }
 
 $projectLanguageCode = Resolve-BootstrapProjectLanguage -Language $ProjectLanguage

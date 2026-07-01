@@ -90,8 +90,8 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
   can be discarded, and keep the backup-first safety record.
 
 ## Operating Modes
-- Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds.
-- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. This is the conservative response to "refresh old project memory" when the user has not asked to rewrite content. For existing non-English projects, read `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass the current project language explicitly.
+- Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds. English remains the default when no project language metadata exists.
+- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. This is the conservative response to "refresh old project memory" when the user has not asked to rewrite content. When `-ProjectLanguage` is omitted, the wrapper inherits `.agents/hub.lock.json` `project_language`, or the `.agents/AGENTS.md` declaration when the lock has no language. Conflicting declarations fail before writes unless the caller explicitly selects the language.
 - Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review. This is a safe template upgrade, not a reset.
 - Compatibility overwrite: `-OverwriteTemplates` is retained as a warning-emitting alias for unmodified-template refresh. It is not a force reset.
 - Conservative memory migration: use Analyze, Plan, Apply, and Validate modes with reviewable proposals and backups. Use legacy memory upgrade modes for layout normalization, and language migration modes for `en` / `zh-CN` project memory language changes.
@@ -99,10 +99,11 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Project Memory Templates
 - `en` and `zh-CN` are the only first-class project memory template languages.
-- English remains the public default and fallback language. Plain bootstrap is equivalent to `-ProjectLanguage en`.
+- English remains the public default and fallback language for projects without existing language metadata.
 - The bootstrap helper does not infer project memory language from chat. Agents
-  and workflows should pass `-ProjectLanguage` from project rules or existing
-  lock metadata when refreshing or analyzing established projects.
+  and workflows may pass `-ProjectLanguage` explicitly. When omitted during an
+  established-project refresh or analysis, the wrapper inherits existing lock
+  metadata instead of silently changing the project to English.
 - The authoritative source lives under `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
 - The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
 - Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
