@@ -51,6 +51,7 @@ $evidence = [ordered]@{
     language_migration = [ordered]@{}
     memory_language_audit = [ordered]@{}
     bootstrap_command_boundary = [ordered]@{}
+    bootstrap_safety = [ordered]@{}
     routing = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}

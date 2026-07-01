@@ -64,12 +64,17 @@ Default behavior:
 - When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
 - Language scaffolds are loaded from the bundled hub snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.
-- Supported project memory template languages are `en` and `zh-CN` only. English remains the default and fallback; plain bootstrap is equivalent to `-ProjectLanguage en`.
+- Supported project memory template languages are `en` and `zh-CN` only. English remains the default for a new project without language metadata.
 - If a `zh-CN` template file is missing, the language helper falls back to the matching English template and reports fallback metadata. Treat that as a validation finding to fix, not as a reason to overwrite project-specific memory.
-- For existing projects, read the current project memory language from
-  `.agents/AGENTS.md` or `.agents/hub.lock.json` and pass it explicitly with
-  `-ProjectLanguage` when using bootstrap wrapper refresh/analyze flows. Do not
-  infer project memory language from the current chat.
+- For existing projects, the wrapper inherits `project_language` from
+  `.agents/hub.lock.json` when `-ProjectLanguage` is omitted, with the
+  `.agents/AGENTS.md` declaration as a fallback when no lock language exists.
+  Conflicting lock and guide declarations fail before scaffold or lock writes
+  even when callers pass `-ProjectLanguage` explicitly. Do not infer project
+  memory language from the current chat.
+- Unknown named parameters fail before bootstrap writes. The common
+  `-ProjectRoot` mistake reports that callers must use `-ProjectDir`.
+- The resolved project directory is printed before any bootstrap write.
 
 Optional flags:
 - `-HubDir <path>`: custom hub location.

@@ -371,6 +371,33 @@ try {
         throw "Recommended copy runtime was not created."
     }
 
+    $bootstrapSafetyFixture = Join-PathParts $repoRoot "scripts" "validation" "project-bootstrap-safety-fixture.ps1"
+    $bootstrapSafetyScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $bootstrapSafetyHub = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapSafetyScratch = Join-PathParts $scratchRootFull "project-bootstrap-safety-fixtures"
+    $bootstrapSafetyJson = (& $bootstrapSafetyFixture `
+        -RepositoryRoot $repoRoot `
+        -ScratchRoot $bootstrapSafetyScratch `
+        -BootstrapScript $bootstrapSafetyScript `
+        -HubDir $bootstrapSafetyHub `
+        -Json) -join "`n"
+    $bootstrapSafety = $bootstrapSafetyJson | ConvertFrom-Json
+    if ([string]$bootstrapSafety.status -ne "PASS" -or [int]$bootstrapSafety.fixture_count -lt 6) {
+        throw "Project bootstrap safety fixture suite did not report all expected passing cases."
+    }
+
+    $script:evidence.bootstrap_safety = $bootstrapSafety
+    Add-Check "project bootstrap safety" "PASS" "Bootstrap inherits existing language metadata, rejects unsafe parameters and conflicts, reports the resolved target, and preserves zero-write error paths." $bootstrapSafety
+}
+catch {
+    Add-Check "project bootstrap safety" "FAIL" $_.Exception.Message
+}
+
+try {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
     $fixtureRoot = Join-PathParts $repoRoot "scripts" "validation" "memory-upgrade-stable-notes-fixtures"
     $fixtureReadme = Get-FileText -RelativePath "scripts/validation/memory-upgrade-stable-notes-fixtures/README.md"
     foreach ($token in @("positive-stable-section", "negative-volatile-only", "stable-section preservation")) {
@@ -840,7 +867,7 @@ try {
     Add-Content -LiteralPath $processPath -Value "`n$processSentinel"
     Add-Content -LiteralPath $replaceableTemplatePath -Value "`n$replaceableSentinel"
 
-    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
+    $preserveOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -OverwriteTemplates -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis 3>&1)
 
     if ((Get-Content -LiteralPath $rootAgentsPath -Raw) -notlike ("*{0}*" -f $rootSentinel)) {
         throw "Bootstrap refresh overwrote customized root AGENTS.md content."
@@ -925,7 +952,7 @@ try {
     if ((Get-Content -LiteralPath $evidenceMarkdownPath -Raw) -notmatch '(?m)^## Skipped\r?$') {
         throw "Bootstrap Markdown evidence report did not include a Skipped section."
     }
-    $forceOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ForceResetScaffold -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 3>&1)
+    $forceOutput = @(& $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ForceResetScaffold -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis 3>&1)
     if (@($forceOutput | Where-Object { [string]$_ -match '-ForceResetScaffold can replace existing scaffold and memory template files' }).Count -lt 1) {
         throw "Force reset did not emit the expected warning."
     }
