@@ -66,6 +66,17 @@ $fixture = [System.IO.File]::ReadAllText($fixturePath) | ConvertFrom-Json
 if ([int]$fixture.schema_version -ne 1 -or [string]$fixture.source -ne "public-deterministic-hook-io-fixtures") {
     throw "Claude hooks runtime fixture metadata is invalid."
 }
+$requiredCases = @(
+    "powershell-external-write-asks",
+    "powershell-dangerous-memory-reset-asks",
+    "monitor-external-write-asks"
+)
+$fixtureCaseNames = @($fixture.cases | ForEach-Object { [string]$_.name })
+foreach ($requiredCase in $requiredCases) {
+    if ($requiredCase -notin $fixtureCaseNames) {
+        throw "Claude hooks runtime fixtures are missing required case: $requiredCase"
+    }
+}
 
 $authorityRoot = Join-Path $RepositoryRoot "knowledge-hub/templates/languages/en"
 $projectRootTemplate = Join-Path $authorityRoot "project-root"

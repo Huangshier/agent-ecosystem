@@ -127,7 +127,7 @@ function Test-ExternalWrite {
         [object]$ToolInput
     )
 
-    if ($ToolName -eq "Bash") {
+    if ($ToolName -in @("Bash", "PowerShell", "Monitor")) {
         $command = [string]$ToolInput.command
         return ($command -match '(?i)(\bgit\s+push\b|\bgh\s+(issue|pr|release|repo|workflow)\s+(create|edit|close|reopen|merge|ready|delete|run)\b|\bapi\.github\.com\b)')
     }
@@ -140,7 +140,7 @@ function Test-DangerousMemoryOperation {
         [object]$ToolInput
     )
 
-    if ($ToolName -ne "Bash") {
+    if ($ToolName -notin @("Bash", "PowerShell", "Monitor")) {
         return $false
     }
     $command = [string]$ToolInput.command

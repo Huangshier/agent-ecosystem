@@ -69,6 +69,8 @@ Claude Code lifecycle points:
 - `PreToolUse` denies writes outside the project and obvious raw-artifact
   publication paths. It asks for confirmation before dangerous memory reset
   modes or external writes that require confirmation under the active profile.
+  Command checks cover `Bash`, native `PowerShell`, and command-based `Monitor`
+  calls; Monitor WebSocket sources remain under Claude Code network approval.
 - `Stop` returns a `needs-human` block when required context is incomplete and
   honors `stop_hook_active` so that the hook does not create a stop loop.
 

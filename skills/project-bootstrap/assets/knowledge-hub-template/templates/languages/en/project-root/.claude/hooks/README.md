@@ -14,6 +14,9 @@ uses `.claude/guardrails/profile.json` as its write-authorization contract,
 denies writes outside the project or obvious raw-artifact publication paths,
 asks for confirmation before local-only external writes or dangerous memory
 refresh operations, and reports `needs-human` when required context is absent.
+Command-risk checks cover the native `Bash` and `PowerShell` tools plus the
+command form of `Monitor`. A Monitor WebSocket source has no command and remains
+under Claude Code's own host approval and network policy.
 
 The default `local-only` profile does not authorize external writes. The
 `public-contributor` profile keeps ordinary issue, fork pull request, CI, and

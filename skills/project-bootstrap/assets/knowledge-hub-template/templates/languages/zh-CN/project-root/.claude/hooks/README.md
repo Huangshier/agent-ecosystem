@@ -12,6 +12,9 @@ runtime 检查生成的入口和项目上下文是否存在，使用
 `.claude/guardrails/profile.json` 作为 write authorization contract，拒绝项目外
 写入和明显的 raw artifact 发布路径，在 `local-only` 外部写入或危险 memory refresh
 前请求确认，并在必要上下文缺失时返回 `needs-human`。
+command 风险检查覆盖原生 `Bash`、`PowerShell`，以及 `Monitor` 的 command 形态。
+Monitor WebSocket source 不包含 command，继续由 Claude Code 自身的 host approval 和
+network policy 管理。
 
 默认 `local-only` profile 不授权外部写入。`public-contributor` profile 保持普通
 issue、fork pull request、CI 和 maintainer review 路径可用，不要求 bot。只有项目

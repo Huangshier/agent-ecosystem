@@ -110,6 +110,12 @@ try {
                         $templateFailures.Add("$settingsPath $eventName does not invoke the public guardrail runner")
                     }
                 }
+                $preToolMatchers = @($settings.hooks.PreToolUse | ForEach-Object { [string]$_.matcher }) -join "|"
+                foreach ($requiredTool in @("Bash", "PowerShell", "Monitor")) {
+                    if ($preToolMatchers -notmatch ("(^|\|){0}(\||$)" -f [regex]::Escape($requiredTool))) {
+                        $templateFailures.Add("$settingsPath PreToolUse matcher missing command tool: $requiredTool")
+                    }
+                }
             }
 
             $runnerPath = "$root/$language/project-root/.claude/hooks/guardrail.ps1"
