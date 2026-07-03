@@ -6,3 +6,4 @@
 @.agents/plan.md
 @.agents/context/README.md
 @.agents/commands/README.md
+@.claude/guardrails/README.md

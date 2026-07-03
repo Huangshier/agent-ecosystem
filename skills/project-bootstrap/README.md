@@ -17,6 +17,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 - `assets/knowledge-hub-template/templates/languages/zh-CN/`: bundled Simplified Chinese project memory template snapshot used for language setup
 - `references/maintenance-model.md`: long-term maintenance model
 - `assets/knowledge-hub-template/templates/languages/<language>/project-root/`: root-level committed docs and scaffolds, including `docs/specs/_templates/`
+- `assets/knowledge-hub-template/templates/languages/<language>/project-root/.claude/guardrails/`: declarative Claude Code template reliability guardrails
 
 ## Lock Metadata
 - `bootstrap_project.ps1` writes hub git metadata plus `template_tree_hash_sha256`.
@@ -106,7 +107,7 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
   metadata instead of silently changing the project to English.
 - The authoritative source lives under `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
 - The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
-- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md` and `docs/specs/_templates/`.
+- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md`, `CLAUDE.md`, `.claude/guardrails/`, and `docs/specs/_templates/`.
 - Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
 - The templates are structural baselines for scaffold generation, language updates, and future conservative migration planning. They do not authorize overwriting project-specialized memory.
 - Conservative language migration uses these templates to replace exact source-template matches and to frame customized content for manual review without dropping it.

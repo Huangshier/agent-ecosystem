@@ -27,6 +27,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "validation/release-eval-runner-generator.ps1")
 . (Join-Path $scriptDir "validation/release-governance-workflow-checks.ps1")
 . (Join-Path $scriptDir "validation/release-eval-benchmark-generator.ps1")
+. (Join-Path $scriptDir "validation/release-claude-hooks-guardrails-checks.ps1")
 $runStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -70,6 +71,9 @@ $evidence = [ordered]@{
     runner_output_regeneration = [ordered]@{}
     benchmark_artifact = [ordered]@{}
     benchmark_regeneration = [ordered]@{}
+    claude_hooks_guardrails_contract = [ordered]@{}
+    claude_hooks_guardrails_templates = [ordered]@{}
+    claude_hooks_guardrails_fixtures = [ordered]@{}
 }
 
 $targetReleaseVersion = $TargetVersion.Trim()
@@ -170,6 +174,8 @@ catch {
 }
 
 Invoke-ReleaseGovernanceWorkflowChecks -RepositoryRoot $repoRoot
+
+Invoke-ReleaseClaudeHooksGuardrailsChecks
 
 
 }
