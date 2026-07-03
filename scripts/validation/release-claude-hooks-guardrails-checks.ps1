@@ -42,8 +42,11 @@ try {
     $languages = @("en", "zh-CN")
     $requiredRelativePaths = @(
         "project-root/CLAUDE.md",
+        "project-root/.claude/settings.json",
         "project-root/.claude/guardrails/README.md",
-        "project-root/.claude/guardrails/profile.json"
+        "project-root/.claude/guardrails/profile.json",
+        "project-root/.claude/hooks/README.md",
+        "project-root/.claude/hooks/guardrail.ps1"
     )
     $requiredProfileChecks = @(
         "entry-loading",
@@ -86,6 +89,44 @@ try {
                 $claudeText = Get-FileText -RelativePath $claudePath
                 if (-not $claudeText.Contains("@.claude/guardrails/README.md")) {
                     $templateFailures.Add("$claudePath missing guardrails import")
+                }
+                if (-not $claudeText.Contains("@.claude/hooks/README.md")) {
+                    $templateFailures.Add("$claudePath missing hooks runtime import")
+                }
+            }
+
+            $settingsPath = "$root/$language/project-root/.claude/settings.json"
+            if (Test-RequiredPath -RelativePath $settingsPath) {
+                $settings = Get-FileText -RelativePath $settingsPath | ConvertFrom-Json
+                foreach ($eventName in @("SessionStart", "PreToolUse", "Stop")) {
+                    $groups = @($settings.hooks.$eventName)
+                    if ($groups.Count -eq 0) {
+                        $templateFailures.Add("$settingsPath missing $eventName registration")
+                        continue
+                    }
+                    $handlers = @($groups | ForEach-Object { @($_.hooks) } | ForEach-Object { $_ })
+                    $runnerHandlers = @($handlers | Where-Object {
+                        [string]$_.command -eq "pwsh" -and
+                        (@($_.args) -contains '${CLAUDE_PROJECT_DIR}/.claude/hooks/guardrail.ps1')
+                    })
+                    if ($runnerHandlers.Count -eq 0) {
+                        $templateFailures.Add("$settingsPath $eventName does not invoke the public guardrail runner")
+                    }
+                }
+            }
+
+            $runnerPath = "$root/$language/project-root/.claude/hooks/guardrail.ps1"
+            if (Test-RequiredPath -RelativePath $runnerPath) {
+                $runnerText = Get-FileText -RelativePath $runnerPath
+                foreach ($token in @("SessionStart", "PreToolUse", "Stop", "stop_hook_active", "default_profile", "public-contributor", "needs-human")) {
+                    if (-not $runnerText.Contains($token)) {
+                        $templateFailures.Add("$runnerPath missing runtime token: $token")
+                    }
+                }
+                foreach ($persistenceToken in @("Add-Content", "Out-File", "WriteAllText", "AppendAllText")) {
+                    if ($runnerText.Contains($persistenceToken)) {
+                        $templateFailures.Add("$runnerPath must not persist raw hook input: $persistenceToken")
+                    }
                 }
             }
 
@@ -135,7 +176,7 @@ try {
         Add-Check "Claude hooks guardrails templates" "FAIL" "Guardrails templates or bundled snapshots are incomplete or unsafe." $evidence.claude_hooks_guardrails_templates
     }
     else {
-        Add-Check "Claude hooks guardrails templates" "PASS" "English and Simplified Chinese templates include the Claude guardrails import, profile contract, no default bot requirement, and matching bundled snapshots." $evidence.claude_hooks_guardrails_templates
+        Add-Check "Claude hooks guardrails templates" "PASS" "English and Simplified Chinese templates include lifecycle settings, executable runner, guardrails imports, no default bot requirement, and matching bundled snapshots." $evidence.claude_hooks_guardrails_templates
     }
 }
 catch {
@@ -202,6 +243,28 @@ try {
 }
 catch {
     Add-Check "Claude hooks guardrails fixtures" "FAIL" $_.Exception.Message
+}
+
+try {
+    $runtimeValidatorPath = Join-PathParts $repoRoot "scripts" "validation" "test-claude-hooks-runtime.ps1"
+    $runtimeResult = Invoke-IsolatedPowerShellScript -ScriptPath $runtimeValidatorPath -Arguments @(
+        "-RepositoryRoot", $repoRoot,
+        "-Json"
+    )
+    if ($runtimeResult.exit_code -ne 0) {
+        throw "Targeted runtime validator exited with code $($runtimeResult.exit_code)."
+    }
+    $runtimeEvidence = ($runtimeResult.output -join "`n") | ConvertFrom-Json
+    $script:evidence.claude_hooks_runtime_fixtures = $runtimeEvidence
+    if ([string]$runtimeEvidence.status -ne "PASS" -or [int]$runtimeEvidence.failed -ne 0) {
+        Add-Check "Claude hooks runtime fixtures" "FAIL" "One or more executable stdin/stdout fixtures failed." $runtimeEvidence
+    }
+    else {
+        Add-Check "Claude hooks runtime fixtures" "PASS" "Executable SessionStart, PreToolUse, and Stop stdin/stdout fixtures passed, including boundary, authorization, dangerous refresh, no-bot contributor, quarantine, and stop-loop behavior." $runtimeEvidence
+    }
+}
+catch {
+    Add-Check "Claude hooks runtime fixtures" "FAIL" $_.Exception.Message
 }
 
 }

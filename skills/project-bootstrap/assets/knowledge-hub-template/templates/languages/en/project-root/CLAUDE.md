@@ -7,3 +7,4 @@
 @.agents/context/README.md
 @.agents/commands/README.md
 @.claude/guardrails/README.md
+@.claude/hooks/README.md

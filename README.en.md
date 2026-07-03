@@ -102,8 +102,8 @@ should not be committed to a project repository.
 In a project, bootstrap usually creates or maintains:
 
 - `AGENTS.md`: project-level agent entrypoint and fallback instructions.
-- `CLAUDE.md` and `.claude/guardrails/`: Claude Code adoption surface and
-  template reliability guardrails.
+- `CLAUDE.md`, `.claude/settings.json`, and `.claude/guardrails|hooks/`: Claude
+  Code adoption surface and executable template reliability guardrails.
 - `.agents/`: local runtime memory, context indexes, command cards, and lessons.
 - `docs/specs/`: optional target-project work packages, task lists, and spec
   templates.

@@ -64,6 +64,10 @@ Default behavior:
 - Install the declarative `.claude/guardrails/` template reliability contract
   for Claude Code projects. This is not a security sandbox, permission
   isolation layer, or automatic external-write authorization.
+- Install `.claude/settings.json` and the `.claude/hooks/guardrail.ps1` runner
+  so SessionStart, PreToolUse, and Stop checks execute against that contract.
+  The runner must leave ordinary permissions and no-bot public contributor
+  paths intact.
 - When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
 - Language scaffolds are loaded from the bundled hub snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.

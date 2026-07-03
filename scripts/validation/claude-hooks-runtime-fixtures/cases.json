@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "source": "public-deterministic-hook-io-fixtures",
+  "cases": [
+    {
+      "name": "session-start-loads-entry-and-context",
+      "event": {
+        "hook_event_name": "SessionStart",
+        "source": "startup"
+      },
+      "expected": {
+        "additional_context_contains": "Template reliability hooks runtime is active"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "write-outside-project-is-denied",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "../outside.txt",
+          "content": "synthetic"
+        }
+      },
+      "expected": {
+        "permission_decision": "deny",
+        "reason_contains": "outside the project boundary"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "tool-cwd-outside-project-is-denied",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "cwd": "../outside",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo synthetic"
+        }
+      },
+      "expected": {
+        "permission_decision": "deny",
+        "reason_contains": "working directory is outside"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "local-only-external-write-asks",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git push origin topic"
+        }
+      },
+      "expected": {
+        "permission_decision": "ask",
+        "reason_contains": "explicit confirmation"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "dangerous-memory-reset-asks",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "pwsh ./bootstrap_project.ps1 -ForceReset"
+        }
+      },
+      "expected": {
+        "permission_decision": "ask",
+        "reason_contains": "Dangerous memory refresh"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "public-contributor-does-not-require-bot",
+      "profile_override": "public-contributor",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh issue create --title example"
+        }
+      },
+      "expected": {
+        "no_output": true
+      },
+      "public_safe": true
+    },
+    {
+      "name": "raw-artifact-publication-is-denied",
+      "event": {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "docs/hook-payload.json",
+          "content": "synthetic fixture only"
+        }
+      },
+      "expected": {
+        "permission_decision": "deny",
+        "reason_contains": "quarantine raw transcripts"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "missing-context-blocks-stop-with-needs-human",
+      "remove_paths": [
+        ".agents/process.txt"
+      ],
+      "event": {
+        "hook_event_name": "Stop",
+        "stop_hook_active": false
+      },
+      "expected": {
+        "decision": "block",
+        "reason_contains": "needs-human"
+      },
+      "public_safe": true
+    },
+    {
+      "name": "stop-reentry-does-not-loop",
+      "remove_paths": [
+        ".agents/process.txt"
+      ],
+      "event": {
+        "hook_event_name": "Stop",
+        "stop_hook_active": true
+      },
+      "expected": {
+        "no_output": true
+      },
+      "public_safe": true
+    }
+  ]
+}

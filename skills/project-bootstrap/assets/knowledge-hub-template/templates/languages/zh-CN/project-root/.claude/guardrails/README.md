@@ -34,3 +34,6 @@ CI 和 maintainer review 不需要 bot 身份。
 该 profile 是项目特化规则，不是 project-bootstrap 的通用要求。
 
 `profile.json` 给出 release validator 检查的 deterministic profile 结构。
+
+可执行生命周期接入由 `.claude/settings.json` 注册，并在 `../hooks/README.md` 中说明。
+runtime 使用本 profile，但不会替代此静态 contract 或 Claude Code 的正常权限流程。

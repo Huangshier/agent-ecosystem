@@ -64,8 +64,8 @@ The validator checks:
 - experience promotion, index rebuild, and search closure against a temporary
   hub copy
 - no-op experience index rebuilds that preserve registry file hashes
-- Claude Code hooks guardrails contract, template surface, bundled snapshot,
-  and public-safe deterministic fixtures
+- Claude Code hooks guardrails contract, executable lifecycle settings and
+  runner, bundled snapshot, and public-safe deterministic stdin/stdout fixtures
 - PowerShell parser checks and JSON parsing
 - Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
 - public sensitive-pattern audit

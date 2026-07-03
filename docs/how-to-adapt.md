@@ -83,10 +83,11 @@ For an existing project, treat bootstrap as a conservative refresh:
 ## 3. Use The Workflow Kernel
 
 - Start non-trivial work with `project-context-gate`.
-- For Claude Code projects, keep the generated `CLAUDE.md` import surface and
-  `.claude/guardrails/` contract in place so template reliability guardrails can
-  check entry loading, project context, write authorization profiles, and stop
-  points without becoming a security sandbox.
+- For Claude Code projects, keep the generated `CLAUDE.md`,
+  `.claude/settings.json`, `.claude/guardrails/`, and `.claude/hooks/` surfaces
+  in place. The lifecycle hooks check entry loading, project context, write
+  authorization profiles, dangerous memory reset modes, and stop points without
+  becoming a security sandbox or bypassing normal permissions.
 - Optionally use `workflow-spec-lite` in the target project for work that needs
   durable goals, non-goals, acceptance evidence, risks, or multi-phase
   execution.
