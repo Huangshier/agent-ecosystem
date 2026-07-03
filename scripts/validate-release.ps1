@@ -74,6 +74,7 @@ $evidence = [ordered]@{
     claude_hooks_guardrails_contract = [ordered]@{}
     claude_hooks_guardrails_templates = [ordered]@{}
     claude_hooks_guardrails_fixtures = [ordered]@{}
+    claude_hooks_runtime_fixtures = [ordered]@{}
 }
 
 $targetReleaseVersion = $TargetVersion.Trim()

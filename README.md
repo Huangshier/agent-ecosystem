@@ -95,7 +95,7 @@ manifest 可能包含本机绝对路径，不应提交到项目仓库。
 在项目侧，bootstrap 通常会创建或维护：
 
 - `AGENTS.md`：项目级 agent 入口和 fallback 指令。
-- `CLAUDE.md` 和 `.claude/guardrails/`：Claude Code adoption surface 与模板可靠性 guardrails。
+- `CLAUDE.md`、`.claude/settings.json` 和 `.claude/guardrails|hooks/`：Claude Code adoption surface 与可执行模板可靠性 guardrails。
 - `.agents/`：本地运行态记忆、上下文索引、命令卡和经验记录。
 - `docs/specs/`：目标项目可选的跨会话工作包、任务清单和 spec 模板。
 

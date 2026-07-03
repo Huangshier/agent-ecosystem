@@ -42,3 +42,7 @@ project-specific; it is not a universal project-bootstrap requirement.
 
 See `profile.json` for the deterministic profile shape validated by the release
 validator.
+
+The executable lifecycle integration is registered in `.claude/settings.json`
+and documented in `../hooks/README.md`. The runtime consumes this profile; it
+does not replace this static contract or Claude Code's normal permission flow.
