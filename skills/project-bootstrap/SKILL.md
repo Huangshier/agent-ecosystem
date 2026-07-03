@@ -61,6 +61,9 @@ Default behavior:
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Use` guidance from the hub template so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
+- Install the declarative `.claude/guardrails/` template reliability contract
+  for Claude Code projects. This is not a security sandbox, permission
+  isolation layer, or automatic external-write authorization.
 - When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
 - Language scaffolds are loaded from the bundled hub snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.

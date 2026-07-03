@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "guardrail_type": "template-reliability",
+  "default_profile": "local-only",
+  "non_goals": [
+    "security-sandbox",
+    "permissions-isolation",
+    "automatic-github-write",
+    "maintainer-decision-replacement"
+  ],
+  "required_checks": [
+    "entry-loading",
+    "project-context-loading",
+    "project-language-awareness",
+    "agents-file-awareness",
+    "hub-lock-awareness",
+    "public-private-boundary",
+    "write-authorization-profile",
+    "wrong-write-path",
+    "dangerous-memory-refresh-confirmation",
+    "stop-point-needs-human",
+    "raw-artifact-quarantine",
+    "public-contributor-no-bot-required"
+  ],
+  "write_authorization_profiles": {
+    "local-only": {
+      "requires_bot": false,
+      "external_writes": "explicit-confirmation-required",
+      "allowed_paths": [
+        "local-files"
+      ]
+    },
+    "public-contributor": {
+      "requires_bot": false,
+      "external_writes": "ordinary-public-collaboration",
+      "allowed_paths": [
+        "issues",
+        "fork-pull-requests",
+        "ci",
+        "maintainer-review"
+      ]
+    },
+    "project-maintenance": {
+      "requires_bot": false,
+      "external_writes": "project-declared-profile-required",
+      "allowed_paths": [
+        "project-declared-automation",
+        "maintainer-authorized-workflow"
+      ]
+    }
+  },
+  "stop_points": [
+    "missing-entry-loading",
+    "missing-project-context",
+    "wrong-write-path",
+    "dangerous-memory-refresh-without-confirmation",
+    "unclear-public-private-boundary",
+    "needs-human"
+  ],
+  "raw_artifact_policy": "local-or-private-only"
+}

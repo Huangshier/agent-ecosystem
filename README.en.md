@@ -102,6 +102,8 @@ should not be committed to a project repository.
 In a project, bootstrap usually creates or maintains:
 
 - `AGENTS.md`: project-level agent entrypoint and fallback instructions.
+- `CLAUDE.md` and `.claude/guardrails/`: Claude Code adoption surface and
+  template reliability guardrails.
 - `.agents/`: local runtime memory, context indexes, command cards, and lessons.
 - `docs/specs/`: optional target-project work packages, task lists, and spec
   templates.
@@ -153,6 +155,7 @@ User adoption paths:
 - [Old-release upgrade path](docs/old-release-upgrade-path.md)
 - [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 - [Language policy](docs/language-policy.md)
+- [Claude Code hooks guardrails](docs/claude-code-hooks-guardrails.md)
 
 Maintainer and advanced references:
 

@@ -125,6 +125,9 @@ try {
         )
         $requiredRelativePaths = @(
             "project-root/AGENTS.md",
+            "project-root/CLAUDE.md",
+            "project-root/.claude/guardrails/README.md",
+            "project-root/.claude/guardrails/profile.json",
             "project-root/docs/specs/README.md",
             "project-root/docs/specs/_templates/spec-lite.md",
             "project-root/docs/specs/_templates/tasks-lite.md",
