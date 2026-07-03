@@ -5,6 +5,10 @@
 stdin and returns only the minimal structured stdout decision needed by Claude
 Code. It does not persist hook input, transcripts, or an event ledger.
 
+This README is operational documentation and is not imported by `CLAUDE.md`.
+The settings file activates the runtime; `CLAUDE.md` keeps the project context
+and static guardrails contract that the runtime validates but does not replace.
+
 The runtime checks that the generated entrypoint and project context exist,
 uses `.claude/guardrails/profile.json` as its write-authorization contract,
 denies writes outside the project or obvious raw-artifact publication paths,

@@ -4,6 +4,10 @@
 注册 `guardrail.ps1`。runner 从 stdin 读取事件 JSON，只向 stdout 返回 Claude Code
 需要的最小结构化判断；不会持久化 hook 输入、transcript 或 event ledger。
 
+本 README 是运行维护文档，不由 `CLAUDE.md` 导入。settings 文件负责激活 runtime；
+`CLAUDE.md` 继续加载项目上下文和静态 guardrails contract，这些内容只由 runtime
+校验，不会被 runtime 替代。
+
 runtime 检查生成的入口和项目上下文是否存在，使用
 `.claude/guardrails/profile.json` 作为 write authorization contract，拒绝项目外
 写入和明显的 raw artifact 发布路径，在 `local-only` 外部写入或危险 memory refresh

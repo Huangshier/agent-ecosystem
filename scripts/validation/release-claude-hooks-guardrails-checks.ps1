@@ -90,9 +90,6 @@ try {
                 if (-not $claudeText.Contains("@.claude/guardrails/README.md")) {
                     $templateFailures.Add("$claudePath missing guardrails import")
                 }
-                if (-not $claudeText.Contains("@.claude/hooks/README.md")) {
-                    $templateFailures.Add("$claudePath missing hooks runtime import")
-                }
             }
 
             $settingsPath = "$root/$language/project-root/.claude/settings.json"

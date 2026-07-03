@@ -43,8 +43,10 @@ or other external writes. In short: this is not a security sandbox.
 ## Default Template Behavior
 
 Project-bootstrap installs `.claude/guardrails/`, `.claude/settings.json`, and
-`.claude/hooks/` into generated projects. `CLAUDE.md` imports both the static
-guardrails contract and the runtime README.
+`.claude/hooks/` into generated projects. `CLAUDE.md` continues to import the
+project context and static guardrails contract. The settings file activates the
+runtime directly, so the operational hooks README is not imported into every
+Claude session.
 
 The default profile is `local-only`. It allows local project work when the user
 or project instructions authorize it, and treats external writes as requiring

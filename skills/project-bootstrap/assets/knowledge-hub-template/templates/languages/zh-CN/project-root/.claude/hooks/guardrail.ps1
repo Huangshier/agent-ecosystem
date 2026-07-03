@@ -47,8 +47,7 @@ function Get-ProjectState {
         $claudeText = [System.IO.File]::ReadAllText($claudePath)
         foreach ($requiredImport in @(
             "@AGENTS.md",
-            "@.claude/guardrails/README.md",
-            "@.claude/hooks/README.md"
+            "@.claude/guardrails/README.md"
         )) {
             if (-not $claudeText.Contains($requiredImport)) {
                 $missing.Add("CLAUDE.md import: $requiredImport")
