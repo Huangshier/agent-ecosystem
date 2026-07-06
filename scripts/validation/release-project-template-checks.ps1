@@ -153,6 +153,7 @@ try {
 
         $missing = New-Object 'System.Collections.Generic.List[string]'
         $mismatched = New-Object 'System.Collections.Generic.List[string]'
+        $testingGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
         foreach ($language in @("en", "zh-CN")) {
             foreach ($relativePath in $requiredRelativePaths) {
                 $authorityPath = Join-PathParts $authorityRoot $language $relativePath
@@ -172,14 +173,48 @@ try {
                 }
             }
         }
+
+        $testingGuidanceTokens = @(
+            "Testing / Verification Evidence",
+            ".agents/commands/test-workflow.md",
+            ".agents/context/tech/testing-conventions.md"
+        )
+        foreach ($language in @("en", "zh-CN")) {
+            $authoritySpecPath = Join-PathParts $authorityRoot $language "project-root" "docs" "specs" "_templates" "spec-lite.md"
+            $snapshotSpecPath = Join-PathParts $snapshotRoot $language "project-root" "docs" "specs" "_templates" "spec-lite.md"
+            foreach ($specPath in @($authoritySpecPath, $snapshotSpecPath)) {
+                if (-not (Test-Path -LiteralPath $specPath)) {
+                    $testingGuidanceErrors.Add("missing spec-lite template for testing guidance: $specPath")
+                    continue
+                }
+                $specText = Get-Content -LiteralPath $specPath -Raw
+                foreach ($token in $testingGuidanceTokens) {
+                    if ($specText -notlike ("*{0}*" -f $token)) {
+                        $testingGuidanceErrors.Add("$specPath missing testing guidance token: $token")
+                    }
+                }
+            }
+        }
+        $workflowSpecReference = Join-PathParts $RuntimeDir "skills" "workflow-spec-lite" "references" "spec-template.md"
+        if (-not (Test-Path -LiteralPath $workflowSpecReference)) {
+            $testingGuidanceErrors.Add("missing workflow-spec-lite reference template: $workflowSpecReference")
+        }
+        else {
+            $workflowSpecReferenceText = Get-Content -LiteralPath $workflowSpecReference -Raw
+            foreach ($token in $testingGuidanceTokens) {
+                if ($workflowSpecReferenceText -notlike ("*{0}*" -f $token)) {
+                    $testingGuidanceErrors.Add("$workflowSpecReference missing testing guidance token: $token")
+                }
+            }
+        }
         foreach ($legacyRoot in $legacyRoots) {
             if (Test-Path -LiteralPath $legacyRoot) {
                 $missing.Add("legacy template directory should not exist: $legacyRoot")
             }
         }
 
-        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0) {
-            throw ("Project language file templates are missing, mismatched, or legacy paths remain. Missing: {0}; mismatched: {1}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "))
+        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0 -or $testingGuidanceErrors.Count -gt 0) {
+            throw ("Project language file templates are missing, mismatched, missing testing guidance, or legacy paths remain. Missing: {0}; mismatched: {1}; testing guidance: {2}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "), ($testingGuidanceErrors.ToArray() -join "; "))
         }
 
         return [ordered]@{
@@ -188,6 +223,10 @@ try {
             legacy_roots_absent = -not [bool](@($legacyRoots | Where-Object { Test-Path -LiteralPath $_ }).Count)
             languages = @("en", "zh-CN")
             checked_files_per_language = @($requiredRelativePaths)
+            testing_evidence_guidance = [ordered]@{
+                workflow_spec_reference = $workflowSpecReference
+                checked_tokens = @($testingGuidanceTokens)
+            }
         }
     }
 

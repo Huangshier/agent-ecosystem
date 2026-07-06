@@ -46,6 +46,11 @@ Project memory language: English.
 - What proof or output should exist when done
 - How skipped or unavailable acceptance checks will be recorded before claiming completion
 
+### Testing / Verification Evidence (optional)
+- When the project has test infrastructure, name the relevant test command(s), pass/fail status, and coverage or fixture evidence when applicable.
+- Use `.agents/commands/test-workflow.md` and `.agents/context/tech/testing-conventions.md` to choose project-specific test evidence.
+- If automated tests are unavailable or not warranted for this task, record manual verification or the reason tests are skipped; do not block unrelated work only because no test framework exists.
+
 ## 11. Decision Validation
 - Optional. Use for high-risk or hard-to-reverse decisions.
 - **When to use this section**:
