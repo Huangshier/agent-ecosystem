@@ -34,6 +34,7 @@ docs/
 - Tasks are **actionable, ordered, independently checkable** items mapping back to the spec.
 - Project-local templates at `docs/specs/_templates/` are preferred when present.
 - Specs should make scope drift explicit through goals, non-goals, acceptance evidence, and stop rules for unrelated refactors or skipped checks.
+- Acceptance evidence can include project-specific test commands and coverage or fixture evidence when the project has test infrastructure. Use `.agents/commands/test-workflow.md` and `.agents/context/tech/testing-conventions.md` for test selection; do not treat tests as a universal release-blocking gate.
 
 ## Repeated Execution
 
