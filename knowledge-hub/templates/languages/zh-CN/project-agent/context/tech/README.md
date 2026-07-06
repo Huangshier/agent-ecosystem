@@ -4,6 +4,12 @@
 
 在这里记录稳定的技术知识。
 
+## 条目索引
+
+| 文件 | 摘要 | 关键词 |
+| --- | --- | --- |
+| `testing-conventions.md` | 项目特定的测试框架、命令、fixtures、覆盖率、CI 和手工验证约定。 | testing, test command, coverage, fixtures, CI |
+
 建议章节：
 1. Background（背景）
 2. Constraints（约束）

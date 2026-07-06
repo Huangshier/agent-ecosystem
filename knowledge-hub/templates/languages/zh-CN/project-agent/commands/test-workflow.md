@@ -19,6 +19,9 @@
 - 项目已安装并配置好测试框架。不要替项目发明测试框架。
 - 项目的测试命令已在 `package.json`、`Makefile`、`CI config` 或项目文档中
   有记录。
+- 如果项目没有已记录的测试入口，将缺口记录到
+  `.agents/context/tech/testing-conventions.md` 或 active spec 中，不要把本仓库的
+  release validator 当作目标项目的测试套件。
 
 ## 使用方法
 
@@ -74,3 +77,5 @@ cargo test
 
 - 测试命令应在本地或 CI 环境运行；不要在生产环境运行测试套件。
 - 项目的测试框架和命令由项目自身决定；本卡不强制任何特定框架。
+- 本卡不会把测试变成无关仓库变更的 release-blocking gate；应按当前工作包的
+  acceptance criteria 选择相关测试证据。

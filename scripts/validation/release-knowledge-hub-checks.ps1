@@ -15,6 +15,8 @@ try {
         "knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge/patterns/test-strategy.md",
+        "knowledge/patterns/test-driven-development.md",
         "knowledge/patterns/eval-driven-skill-iteration.md",
         "knowledge/standards/public-knowledge-boundary.md",
         "knowledge/standards/bilingual-public-private-routing.md",
@@ -22,10 +24,20 @@ try {
     )
     $missingCatalogTokens = @(Get-MissingRequiredText -Text $catalogText -RequiredText $catalogRequiredTokens)
 
+    $patternsIndexPath = "knowledge-hub/knowledge/patterns/README.md"
+    $patternsIndexText = Get-FileText -RelativePath $patternsIndexPath
+    $patternsIndexRequiredTokens = @(
+        "test-strategy.md",
+        "test-driven-development.md"
+    )
+    $missingPatternsIndexTokens = @(Get-MissingRequiredText -Text $patternsIndexText -RequiredText $patternsIndexRequiredTokens)
+
     $metadataFiles = @(
         "knowledge-hub/knowledge/experience/windows-powershell-command-chaining.md",
         "knowledge-hub/knowledge/experience/stacked-pr-merge-incident-recovery.md",
         "knowledge-hub/knowledge/patterns/context-gate-spec-validation-loop.md",
+        "knowledge-hub/knowledge/patterns/test-strategy.md",
+        "knowledge-hub/knowledge/patterns/test-driven-development.md",
         "knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md",
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
         "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
@@ -42,9 +54,10 @@ try {
         }
     }
 
-    if ($missingCatalogTokens.Count -gt 0 -or $metadataErrors.Count -gt 0) {
+    if ($missingCatalogTokens.Count -gt 0 -or $missingPatternsIndexTokens.Count -gt 0 -or $metadataErrors.Count -gt 0) {
         Add-Check "knowledge hub catalog" "FAIL" "Knowledge catalog or entry metadata is incomplete." ([ordered]@{
             missing_catalog_entries = @($missingCatalogTokens)
+            missing_patterns_index_entries = @($missingPatternsIndexTokens)
             metadata_errors = @($metadataErrors.ToArray())
         })
     }
@@ -52,6 +65,8 @@ try {
         Add-Check "knowledge hub catalog" "PASS" "Catalog links experience, patterns, and standards entries with required metadata." ([ordered]@{
             catalog = $catalogPath
             entries = @($catalogRequiredTokens)
+            patterns_index = $patternsIndexPath
+            patterns_index_entries = @($patternsIndexRequiredTokens)
             metadata_files = @($metadataFiles)
         })
     }
