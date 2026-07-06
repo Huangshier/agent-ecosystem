@@ -72,11 +72,13 @@ try {
             ".agents/notes.md" = $ExpectedMarker
             ".agents/context/README.md" = $ExpectedContextToken
             ".agents/context/tech/README.md" = $ExpectedMarker
+            ".agents/context/tech/testing-conventions.md" = "test framework"
             ".agents/context/business/README.md" = $ExpectedMarker
             ".agents/context/experience/README.md" = $ExpectedMarker
             ".agents/context/experience/cases/README.md" = $ExpectedMarker
             ".agents/context/experience/cases/case_template.md" = $ExpectedMarker
             ".agents/commands/README.md" = $ExpectedCommandToken
+            ".agents/commands/test-workflow.md" = "test evidence"
             "docs/specs/README.md" = $ExpectedSpecToken
             "docs/specs/_templates/spec-lite.md" = $ExpectedMarker
             "docs/specs/_templates/tasks-lite.md" = $ExpectedMarker
@@ -139,8 +141,10 @@ try {
             "project-agent/plan.md",
             "project-agent/notes.md",
             "project-agent/commands/README.md",
+            "project-agent/commands/test-workflow.md",
             "project-agent/context/README.md",
             "project-agent/context/tech/README.md",
+            "project-agent/context/tech/testing-conventions.md",
             "project-agent/context/business/README.md",
             "project-agent/context/experience/README.md",
             "project-agent/context/experience/cases/README.md",
@@ -282,7 +286,7 @@ try {
     }
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         Add-Check "language policy templates" "PASS" "Project Language Policy is present in root guidance and bootstrap output; bootstrap hot memory files are generated in temporary projects." $evidence.language_policy
-        Add-Check "file-based memory template sources" "PASS" "English and Simplified Chinese project memory templates exist as files for root, hot memory, context, commands, and spec scaffolds." @($fileTemplateEvidence)
+        Add-Check "file-based memory template sources" "PASS" "English and Simplified Chinese project memory templates exist as files for root, hot memory, context, commands, testing surfaces, and spec scaffolds." @($fileTemplateEvidence)
         Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap can write English and Simplified Chinese project memory scaffolds when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
         Add-Check "missing language template fallback" "PASS" "A missing Simplified Chinese template file falls back to the English template with fallback metadata." @($fallbackEvidence)
     }

@@ -75,3 +75,6 @@ Record how tests run in CI:
 - This template does not mandate any specific test framework.
 - Fill in only the sections relevant to the current project.
 - Update this file when the project's testing approach changes.
+- If the project has no automated tests yet, record manual verification and the
+  smallest useful next testability improvement instead of blocking unrelated
+  work.

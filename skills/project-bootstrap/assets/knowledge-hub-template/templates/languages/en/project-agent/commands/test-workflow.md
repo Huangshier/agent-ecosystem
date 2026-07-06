@@ -22,6 +22,10 @@ entry points.
   a test framework for the project.
 - The project's test commands are documented in `package.json`, `Makefile`,
   CI config, or project documentation.
+- If no documented test entry point exists, record the gap in
+  `.agents/context/tech/testing-conventions.md` or the active spec instead of
+  treating this repository's release validator as the target project's test
+  suite.
 
 ## Usage
 
@@ -80,3 +84,6 @@ Record test results in the spec's Acceptance / Evidence section:
   suites against production.
 - The project's test framework and commands are decided by the project itself;
   this card does not mandate any specific framework.
+- This card does not make tests a release-blocking gate for unrelated
+  repository changes; use the current work package's acceptance criteria to
+  choose the relevant test evidence.
