@@ -19,3 +19,5 @@ rules are defined in
 
 - [Embedded Core](embedded-core/catalog.md): public-safe embedded workflow
   patterns and checklists.
+- [Testing Core](testing-core/catalog.md): public-safe testing validation
+  boundaries and evidence checklists.

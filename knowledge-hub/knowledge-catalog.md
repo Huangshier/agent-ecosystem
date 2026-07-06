@@ -110,6 +110,11 @@ Use it before opening individual knowledge files.
   - Scope: cross-project
   - Use when: firmware build, flash, monitor, or device validation tasks need
     public-safe boundaries before project-local or private domain automation.
+- [Testing Core](knowledge/domain-packs/testing-core/catalog.md)
+  - Maturity: draft
+  - Scope: cross-project
+  - Use when: target-project work needs reusable testing validation boundaries,
+    evidence checklists, or public-safe separation from project-only harnesses.
 
 ## Maintenance
 

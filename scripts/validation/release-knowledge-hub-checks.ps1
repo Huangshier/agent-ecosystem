@@ -20,9 +20,18 @@ try {
         "knowledge/patterns/eval-driven-skill-iteration.md",
         "knowledge/standards/public-knowledge-boundary.md",
         "knowledge/standards/bilingual-public-private-routing.md",
-        "knowledge/domain-packs/embedded-core/catalog.md"
+        "knowledge/domain-packs/embedded-core/catalog.md",
+        "knowledge/domain-packs/testing-core/catalog.md"
     )
     $missingCatalogTokens = @(Get-MissingRequiredText -Text $catalogText -RequiredText $catalogRequiredTokens)
+
+    $domainPacksIndexPath = "knowledge-hub/knowledge/domain-packs/README.md"
+    $domainPacksIndexText = Get-FileText -RelativePath $domainPacksIndexPath
+    $domainPacksIndexRequiredTokens = @(
+        "embedded-core/catalog.md",
+        "testing-core/catalog.md"
+    )
+    $missingDomainPacksIndexTokens = @(Get-MissingRequiredText -Text $domainPacksIndexText -RequiredText $domainPacksIndexRequiredTokens)
 
     $patternsIndexPath = "knowledge-hub/knowledge/patterns/README.md"
     $patternsIndexText = Get-FileText -RelativePath $patternsIndexPath
@@ -42,7 +51,9 @@ try {
         "knowledge-hub/knowledge/standards/public-knowledge-boundary.md",
         "knowledge-hub/knowledge/standards/bilingual-public-private-routing.md",
         "knowledge-hub/knowledge/domain-packs/embedded-core/catalog.md",
-        "knowledge-hub/knowledge/domain-packs/embedded-core/validation-checklist.md"
+        "knowledge-hub/knowledge/domain-packs/embedded-core/validation-checklist.md",
+        "knowledge-hub/knowledge/domain-packs/testing-core/catalog.md",
+        "knowledge-hub/knowledge/domain-packs/testing-core/validation-checklist.md"
     )
     $metadataErrors = New-Object 'System.Collections.Generic.List[string]'
     foreach ($metadataFile in $metadataFiles) {
@@ -54,9 +65,10 @@ try {
         }
     }
 
-    if ($missingCatalogTokens.Count -gt 0 -or $missingPatternsIndexTokens.Count -gt 0 -or $metadataErrors.Count -gt 0) {
+    if ($missingCatalogTokens.Count -gt 0 -or $missingDomainPacksIndexTokens.Count -gt 0 -or $missingPatternsIndexTokens.Count -gt 0 -or $metadataErrors.Count -gt 0) {
         Add-Check "knowledge hub catalog" "FAIL" "Knowledge catalog or entry metadata is incomplete." ([ordered]@{
             missing_catalog_entries = @($missingCatalogTokens)
+            missing_domain_packs_index_entries = @($missingDomainPacksIndexTokens)
             missing_patterns_index_entries = @($missingPatternsIndexTokens)
             metadata_errors = @($metadataErrors.ToArray())
         })
@@ -65,6 +77,8 @@ try {
         Add-Check "knowledge hub catalog" "PASS" "Catalog links experience, patterns, and standards entries with required metadata." ([ordered]@{
             catalog = $catalogPath
             entries = @($catalogRequiredTokens)
+            domain_packs_index = $domainPacksIndexPath
+            domain_packs_index_entries = @($domainPacksIndexRequiredTokens)
             patterns_index = $patternsIndexPath
             patterns_index_entries = @($patternsIndexRequiredTokens)
             metadata_files = @($metadataFiles)
