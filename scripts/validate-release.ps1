@@ -250,7 +250,9 @@ try {
         "needs-follow-up",
         "agentskills.io",
         "Claude Code",
-        "OpenAI Codex"
+        "OpenAI Codex",
+        "GitHub Copilot",
+        "https://developers.openai.com/codex/skills"
     )
     $compatAuditMissing = @()
     if ($compatAuditExists) {

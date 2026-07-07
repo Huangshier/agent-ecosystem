@@ -16,6 +16,9 @@ project surface first.
 - `test-workflow.md`: record project-specific test framework, commands, CI
   entry points, and evidence expectations. Use existing project commands; do
   not select a new test framework from this template alone.
+- `skills.md`: discover available skills from existing `SKILL.md` frontmatter
+  and installed locations. Read-only; do not install, enable, validate, or
+  claim client compatibility from metadata shape alone.
 
 Add one short Markdown file per reusable workflow when the details no longer
 fit this README. Useful fields:

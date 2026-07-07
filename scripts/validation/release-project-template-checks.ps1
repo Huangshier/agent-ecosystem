@@ -79,6 +79,7 @@ try {
             ".agents/context/experience/cases/case_template.md" = $ExpectedMarker
             ".agents/commands/README.md" = $ExpectedCommandToken
             ".agents/commands/test-workflow.md" = "test evidence"
+            ".agents/commands/skills.md" = "SKILL.md"
             "docs/specs/README.md" = $ExpectedSpecToken
             "docs/specs/_templates/spec-lite.md" = $ExpectedMarker
             "docs/specs/_templates/tasks-lite.md" = $ExpectedMarker
@@ -142,6 +143,7 @@ try {
             "project-agent/notes.md",
             "project-agent/commands/README.md",
             "project-agent/commands/test-workflow.md",
+            "project-agent/commands/skills.md",
             "project-agent/context/README.md",
             "project-agent/context/tech/README.md",
             "project-agent/context/tech/testing-conventions.md",
