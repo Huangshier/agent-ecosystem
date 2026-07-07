@@ -21,6 +21,30 @@ public source of truth.
 ## Maintenance Rule
 - `index.json` is the lightweight discovery registry for this directory, not the primary editing target.
 - Maintain this registry through installed `knowledge-hub/scripts`: `promote_experience.ps1` for reviewed project-to-hub promotion and `rebuild_experience_index.ps1` for backfill or repair when hub files already exist.
-- Experience files should include `Maturity`, `Scope`, `Source`, and
-  `Last reviewed` metadata near the top so the catalog can distinguish draft,
-  verified, proven, and deprecated entries.
+- Experience files should include public lifecycle metadata near the top so
+  the catalog and generated index can distinguish draft, verified, proven, and
+  deprecated entries without relying on local runtime usage telemetry.
+
+## Lifecycle Metadata Contract
+- `Maturity`: one of `draft`, `verified`, `proven`, or `deprecated`.
+- `Scope`: public-safe reuse boundary, such as `cross-project`.
+- `Source`: public-safe source evidence or migration record. Do not include
+  private paths, raw local logs, private repository mappings, or private-only
+  identifiers.
+- `Last reviewed`: ISO date (`YYYY-MM-DD`) for the last public review.
+- `Decay policy`: human-reviewed lifecycle guidance for when the entry should
+  be rechecked, downgraded, deprecated, or left stable.
+
+`rebuild_experience_index.ps1` derives index lifecycle fields from these
+Markdown metadata lines:
+
+- `maturity`
+- `scope`
+- `source`
+- `reviewed_at`
+- `decay_policy`
+
+The generated index is public durable metadata. It must not record
+`last_accessed`, search/read telemetry, local runtime usage, scratch paths, or
+private overlay evidence. Reading experience entries with
+`search_experience.ps1` is intentionally non-mutating.

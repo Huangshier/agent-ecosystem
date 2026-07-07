@@ -4,6 +4,7 @@ Maturity: verified
 Scope: cross-project
 Source: migration backfill
 Last reviewed: 2026-05-08
+Decay policy: Re-review when PowerShell host handling or supported shell guidance changes; otherwise keep verified.
 
 ## Keywords
 PowerShell, command chaining, &&, cmd /c, shell_command, Windows, parser error

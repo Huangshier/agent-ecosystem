@@ -4,6 +4,7 @@ Maturity: verified
 Scope: cross-project
 Source: public post-v0.4.3 maintenance review
 Last reviewed: 2026-05-21
+Decay policy: Re-review after a merge workflow, branch protection, or PR identity policy change; otherwise keep verified.
 
 ## Summary
 When a stacked PR is accidentally merged into another feature branch instead of
