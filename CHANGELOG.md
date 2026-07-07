@@ -4,7 +4,32 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.5.1` release.
+- No unreleased public changes after the `v0.5.2` release.
+
+## v0.5.2 - 2026-07-07
+
+- Added Claude Code hooks guardrails and an executable template reliability
+  runtime for project-bootstrap outputs, covering lifecycle hook registration,
+  command-risk checks, public-safe fixtures, and release validation. (Issue
+  #205; PRs #206, #207)
+- Expanded testing and evaluation support with testing workflow templates, spec
+  testing evidence guidance, a testing-core knowledge domain pack, and
+  eval-driven skill iteration contracts, fixtures, report generation, runner
+  output artifacts, and benchmark guidance. (Issues #166, #168, #210; PRs
+  #191, #195-#201, #208, #209, #212)
+- Improved skill discovery and metadata compatibility with a cross-runtime
+  compatibility audit, additive frontmatter metadata, compatibility fields, and
+  read-only skills discovery command cards. (Issue #165; PRs #192-#194, #213)
+- Completed the public-safe #167 knowledge lifecycle split with hot memory
+  soft-length diagnostics, human-reviewed experience lifecycle metadata,
+  generated index lifecycle fields, context index guidance, and deterministic
+  release validation. (Issue #167; PRs #190, #214, #215)
+- Added smaller workflow-spec-lite, project-memory, and knowledge pattern
+  improvements, including requirements clarification, decision validation, ADR
+  usage guidance, terminology guidance, and an issue-decomposition fixture.
+  (Issues #169, #183, #185, #188; PRs #182, #186, #187, #189)
+- Grew release validation from the `v0.5.1` `PASS=62` baseline to the current
+  `PASS=81 FAIL=0 WARN=0 DEFERRED=0` state.
 
 ## v0.5.1 - 2026-06-27
 

@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.5.1` published public release.
+Status: `v0.5.2` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -17,13 +17,34 @@ Chinese homepage, domain-pack governance, and spec-state reconciliation work.
 `v0.4.5` packaged the issue triage label-sync, spec validator zh-CN anchor,
 UTF-8 no-BOM, release-validation permissions, and issue template fixes.
 `v0.4.6` packaged spec lifecycle governance, public-safe reusable knowledge
-patterns, and release body hygiene. `v0.5.0` packages the stabilization-first
+patterns, and release body hygiene. `v0.5.0` packaged the stabilization-first
 maintenance closeout, public maintenance-record boundary, release validator
 modularization, old-release upgrade rehearsal evidence, Claude Code adoption
 shim, agent issue triage hardening, and hosted PR identity guard. `v0.5.1`
-packages memory governance hardening, public-safe write authorization boundary
+packaged memory governance hardening, public-safe write authorization boundary
 clarification, testing capability foundations, and release validator
-thin-entrypoint closeout.
+thin-entrypoint closeout. `v0.5.2` packages Claude Code lifecycle hooks,
+skill metadata and discovery compatibility, eval-driven iteration and testing
+guidance, public-safe knowledge lifecycle metadata, context index guidance, and
+release validation growth to 81 passing checks.
+
+## v0.5.2 Published State
+
+Current `main` includes the post-`v0.5.1` Claude hooks / skill discovery /
+testing and evaluation / knowledge lifecycle changes summarized in
+`docs/releases/v0.5.2.md`. `v0.5.2` is aligned for tag and GitHub Release
+publication from the merge commit of the `v0.5.2` publish-finalization PR.
+
+GitHub Release `v0.5.2` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.2
+
+Tag target: merge commit for the `v0.5.2` publish-finalization PR.
+
+Local release validation for this alignment passed with
+`PASS=81 FAIL=0 WARN=0 DEFERRED=0`.
+
+Release body source: `docs/releases/v0.5.2.md`, between
+`RELEASE_BODY_START` and `RELEASE_BODY_END`.
 
 ## v0.5.1 Published State
 
@@ -257,6 +278,10 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   published release notes.
 - `v0.5.1` final local release validation passed with
   `PASS=62 FAIL=0 WARN=0 DEFERRED=0`.
+- Public release notes are present at `docs/releases/v0.5.2.md` as bilingual
+  published release notes.
+- `v0.5.2` final local release validation passed with
+  `PASS=81 FAIL=0 WARN=0 DEFERRED=0`.
 - Release validator thin-entrypoint closeout: `scripts/validate-release.ps1`
   refactored from 2,496 lines to 566 lines with 10 extracted validation helper
   modules; 62 checks preserved with identical output contract.
@@ -268,6 +293,18 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - Testing capability foundations established: TDD and test-strategy patterns,
   test workflow command cards, testing conventions, and workflow-spec-lite test
   guidance.
+- Claude Code lifecycle hooks and guardrails are available in project-bootstrap
+  templates for `SessionStart`, `PreToolUse`, and `Stop` with public-safe
+  deterministic validation.
+- Skill metadata and discovery compatibility is documented through the
+  cross-runtime compatibility audit, additive metadata maps, compatibility
+  fields, and read-only skills discovery command cards.
+- Eval-driven skill iteration now has deterministic fixture, report, runner
+  output, regeneration, and benchmark contracts.
+- Knowledge lifecycle management completed its public-safe split with hot memory
+  soft-length diagnostics, human-reviewed experience lifecycle metadata,
+  generated index lifecycle fields, no search/read telemetry writeback, and
+  context index guidance.
 
 ## v0.4.5 Published State
 
