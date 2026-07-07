@@ -1,44 +1,54 @@
-﻿{
-    "schema_version":  1,
-    "updated_at_utc":  "2026-05-21T13:11:02.6210118Z",
-    "entries":  [
-                    {
-                        "id":  "reindexed-stacked-pr-merge-incident-recovery-0c680f83",
-                        "promoted_at_utc":  "2026-05-21T13:08:46.1819852Z",
-                        "source_project":  "",
-                        "source_project_tag":  "",
-                        "source_relative_path":  "",
-                        "source_file":  "",
-                        "hash_sha256":  "0c680f83ec480574cc83205ed415ed6ca9c78ca787c7623338e29210351fb0ae",
-                        "title":  "Stacked PR Merge Incident Recovery",
-                        "keywords":  [
-                                         "stacked-pr",
-                                         "merge-incident",
-                                         "replacement-pr",
-                                         "pull-request-checks",
-                                         "agents-memory"
-                                     ],
-                        "hub_file":  "stacked-pr-merge-incident-recovery.md"
-                    },
-                    {
-                        "id":  "reindexed-windows-powershell-command-chaining-86598847",
-                        "promoted_at_utc":  "2026-04-23T02:03:39.1417284Z",
-                        "source_project":  "",
-                        "source_project_tag":  "",
-                        "source_relative_path":  "",
-                        "source_file":  "",
-                        "hash_sha256":  "a15e1937988151ff3b348b694d06b0f44952c0f5a3eaacb3d51969256b0b210f",
-                        "title":  "Windows PowerShell Command Chaining",
-                        "keywords":  [
-                                         "PowerShell",
-                                         "command chaining",
-                                         "\u0026\u0026",
-                                         "cmd /c",
-                                         "shell_command",
-                                         "Windows",
-                                         "parser error"
-                                     ],
-                        "hub_file":  "windows-powershell-command-chaining.md"
-                    }
-                ]
+{
+  "schema_version": 2,
+  "updated_at_utc": "2026-07-07T08:40:37.3829251Z",
+  "entries": [
+    {
+      "id": "reindexed-stacked-pr-merge-incident-recovery-0c680f83",
+      "promoted_at_utc": "2026-05-21T13:08:46.1819852Z",
+      "source_project": "",
+      "source_project_tag": "",
+      "source_relative_path": "",
+      "source_file": "",
+      "hash_sha256": "3aa0ad1d2e947fd2383e516d17e6b67db65fe21361d7c875667026aaceee4757",
+      "title": "Stacked PR Merge Incident Recovery",
+      "keywords": [
+        "stacked-pr",
+        "merge-incident",
+        "replacement-pr",
+        "pull-request-checks",
+        "agents-memory"
+      ],
+      "maturity": "verified",
+      "scope": "cross-project",
+      "source": "public post-v0.4.3 maintenance review",
+      "reviewed_at": "2026-05-21",
+      "decay_policy": "Re-review after a merge workflow, branch protection, or PR identity policy change; otherwise keep verified.",
+      "hub_file": "stacked-pr-merge-incident-recovery.md"
+    },
+    {
+      "id": "reindexed-windows-powershell-command-chaining-86598847",
+      "promoted_at_utc": "2026-04-23T02:03:39.1417284Z",
+      "source_project": "",
+      "source_project_tag": "",
+      "source_relative_path": "",
+      "source_file": "",
+      "hash_sha256": "2d31cfc075becd864a7399b9aa6066b319b7a158157d3fe8bd64a1d9dd8954e7",
+      "title": "Windows PowerShell Command Chaining",
+      "keywords": [
+        "PowerShell",
+        "command chaining",
+        "&&",
+        "cmd /c",
+        "shell_command",
+        "Windows",
+        "parser error"
+      ],
+      "maturity": "verified",
+      "scope": "cross-project",
+      "source": "migration backfill",
+      "reviewed_at": "2026-05-08",
+      "decay_policy": "Re-review when PowerShell host handling or supported shell guidance changes; otherwise keep verified.",
+      "hub_file": "windows-powershell-command-chaining.md"
+    }
+  ]
 }

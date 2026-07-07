@@ -90,6 +90,101 @@ catch {
 }
 
 try {
+    $experienceDir = Join-PathParts $repoRoot "knowledge-hub" "knowledge" "experience"
+    $indexPath = Join-PathParts $experienceDir "index.json"
+    $indexRaw = Get-Content -LiteralPath $indexPath -Raw
+    $index = $indexRaw | ConvertFrom-Json
+    $allowedMaturity = @("draft", "verified", "proven", "deprecated")
+    $lifecycleErrors = New-Object 'System.Collections.Generic.List[string]'
+    $experienceFiles = @(
+        Get-ChildItem -LiteralPath $experienceDir -File -Filter "*.md" |
+            Where-Object { $_.Name -ne "README.md" } |
+            Sort-Object Name
+    )
+    $entriesByFile = @{}
+    foreach ($entry in @($index.entries)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$entry.hub_file)) {
+            $entriesByFile[[string]$entry.hub_file] = $entry
+        }
+    }
+
+    if ([int]$index.schema_version -lt 2) {
+        $lifecycleErrors.Add(("experience index schema_version should be >= 2, got {0}" -f [string]$index.schema_version))
+    }
+
+    foreach ($file in $experienceFiles) {
+        $text = Get-Content -LiteralPath $file.FullName -Raw
+        $metadata = [ordered]@{}
+        foreach ($field in @("Maturity", "Scope", "Source", "Last reviewed", "Decay policy")) {
+            $match = [regex]::Match($text, ("(?m)^{0}\s*:\s*(.+?)\s*$" -f [regex]::Escape($field)))
+            if (-not $match.Success) {
+                $lifecycleErrors.Add(("{0} missing {1}" -f $file.Name, $field))
+                $metadata[$field] = ""
+            }
+            else {
+                $metadata[$field] = $match.Groups[1].Value.Trim()
+            }
+        }
+
+        $maturity = ([string]$metadata["Maturity"]).ToLowerInvariant()
+        if ($maturity -notin $allowedMaturity) {
+            $lifecycleErrors.Add(("{0} has invalid Maturity: {1}" -f $file.Name, [string]$metadata["Maturity"]))
+        }
+
+        if ([string]$metadata["Last reviewed"] -notmatch '^\d{4}-\d{2}-\d{2}$') {
+            $lifecycleErrors.Add(("{0} Last reviewed is not YYYY-MM-DD: {1}" -f $file.Name, [string]$metadata["Last reviewed"]))
+        }
+
+        if (-not $entriesByFile.ContainsKey($file.Name)) {
+            $lifecycleErrors.Add(("{0} is missing from experience index" -f $file.Name))
+            continue
+        }
+
+        $entry = $entriesByFile[$file.Name]
+        $comparisons = [ordered]@{
+            maturity = $maturity
+            scope = [string]$metadata["Scope"]
+            source = [string]$metadata["Source"]
+            reviewed_at = [string]$metadata["Last reviewed"]
+            decay_policy = [string]$metadata["Decay policy"]
+        }
+        foreach ($key in $comparisons.Keys) {
+            if ([string]$entry.$key -ne [string]$comparisons[$key]) {
+                $lifecycleErrors.Add(("{0} index {1} mismatch: markdown='{2}' index='{3}'" -f $file.Name, $key, [string]$comparisons[$key], [string]$entry.$key))
+            }
+        }
+    }
+
+    $searchScriptPath = Join-PathParts $repoRoot "knowledge-hub" "scripts" "search_experience.ps1"
+    $searchScriptText = Get-Content -LiteralPath $searchScriptPath -Raw
+    if ($searchScriptText -match "last_accessed") {
+        $lifecycleErrors.Add("search_experience.ps1 must not implement last_accessed read-path mutation.")
+    }
+
+    if ($indexRaw -match "last_accessed") {
+        $lifecycleErrors.Add("experience index must not record runtime last_accessed telemetry.")
+    }
+
+    if ($lifecycleErrors.Count -gt 0) {
+        Add-Check "experience lifecycle metadata" "FAIL" "Experience lifecycle metadata is incomplete or inconsistent." ([ordered]@{
+            errors = @($lifecycleErrors.ToArray())
+        })
+    }
+    else {
+        Add-Check "experience lifecycle metadata" "PASS" "Experience Markdown lifecycle metadata matches the generated index without search-path telemetry mutation." ([ordered]@{
+            index_path = $indexPath
+            schema_version = [int]$index.schema_version
+            experience_files = @($experienceFiles | ForEach-Object { $_.Name })
+            allowed_maturity = @($allowedMaturity)
+            search_read_path_mutates_last_accessed = $false
+        })
+    }
+}
+catch {
+    Add-Check "experience lifecycle metadata" "FAIL" $_.Exception.Message
+}
+
+try {
     $indexPath = Join-PathParts $repoRoot "knowledge-hub" "knowledge" "experience" "index.json"
     $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
     $searchScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "search_experience.ps1"
@@ -132,6 +227,10 @@ validation promote closure, release gate, temporary hub
 
 Scope: Cross-project reusable
 Global candidate: Yes
+Maturity: draft
+Source: release validation temporary fixture
+Last reviewed: 2026-07-07
+Decay policy: Temporary fixture only; regenerate during release validation and do not promote to public source.
 
 ## Prevention Rule
 Validate experience promotion with a temporary hub so the public source tree is not mutated during release checks.

@@ -63,6 +63,7 @@ function Load-Registry {
 function Save-Registry {
     param(
         [string]$RegistryPath,
+        [int]$SchemaVersion,
         [array]$Entries
     )
 
@@ -71,9 +72,10 @@ function Save-Registry {
         if (-not [string]::IsNullOrWhiteSpace($raw)) {
             $parsed = $raw | ConvertFrom-Json
             if ($parsed.PSObject.Properties.Name -contains "entries") {
+                $existingSchemaVersion = if ($parsed.schema_version) { [int]$parsed.schema_version } else { 1 }
                 $existingEntriesJson = ConvertTo-Json -InputObject @($parsed.entries) -Depth 8 -Compress
                 $newEntriesJson = ConvertTo-Json -InputObject @($Entries) -Depth 8 -Compress
-                if ($existingEntriesJson -eq $newEntriesJson) {
+                if ($existingSchemaVersion -eq $SchemaVersion -and $existingEntriesJson -eq $newEntriesJson) {
                     return
                 }
             }
@@ -81,7 +83,7 @@ function Save-Registry {
     }
 
     $payload = [ordered]@{
-        schema_version = 1
+        schema_version = $SchemaVersion
         updated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
         entries = @($Entries)
     }
@@ -147,6 +149,40 @@ function Get-ExperienceKeywords {
     return $words
 }
 
+function Get-ExperienceMetadataField {
+    param(
+        [string]$Path,
+        [string]$Field
+    )
+
+    $lines = Get-Content -LiteralPath $Path -TotalCount 40
+    $pattern = '^\s*{0}\s*:\s*(.+?)\s*$' -f [regex]::Escape($Field)
+    foreach ($line in $lines) {
+        $match = [regex]::Match($line, $pattern)
+        if ($match.Success) {
+            return $match.Groups[1].Value.Trim()
+        }
+    }
+
+    return ""
+}
+
+function Get-ExperienceLifecycleMetadata {
+    param([string]$Path)
+
+    $maturity = (Get-ExperienceMetadataField -Path $Path -Field "Maturity").ToLowerInvariant()
+    $lastReviewed = Get-ExperienceMetadataField -Path $Path -Field "Last reviewed"
+
+    return [ordered]@{
+        maturity = $maturity
+        scope = Get-ExperienceMetadataField -Path $Path -Field "Scope"
+        source = Get-ExperienceMetadataField -Path $Path -Field "Source"
+        reviewed_at = $lastReviewed
+        decay_policy = Get-ExperienceMetadataField -Path $Path -Field "Decay policy"
+    }
+}
+
+$registrySchemaVersion = 2
 $hubExperienceDir = Join-PathParts $HubDir "knowledge" "experience"
 if (-not (Test-Path -LiteralPath $hubExperienceDir)) {
     throw "Hub experience directory not found: $hubExperienceDir"
@@ -176,6 +212,7 @@ $experienceFiles = @(
 
 foreach ($fileItem in $experienceFiles) {
     $hash = (Get-FileHash -LiteralPath $fileItem.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $lifecycleMetadata = Get-ExperienceLifecycleMetadata -Path $fileItem.FullName
     $existing = $null
     if ($existingByHash.ContainsKey($hash)) {
         $existing = $existingByHash[$hash]
@@ -206,11 +243,16 @@ foreach ($fileItem in $experienceFiles) {
         hash_sha256 = $hash
         title = Get-ExperienceTitle -Path $fileItem.FullName
         keywords = @(Get-ExperienceKeywords -Path $fileItem.FullName)
+        maturity = $lifecycleMetadata.maturity
+        scope = $lifecycleMetadata.scope
+        source = $lifecycleMetadata.source
+        reviewed_at = $lifecycleMetadata.reviewed_at
+        decay_policy = $lifecycleMetadata.decay_policy
         hub_file = $fileItem.Name
     }
 }
 
-Save-Registry -RegistryPath $registryPath -Entries $entries
+Save-Registry -RegistryPath $registryPath -SchemaVersion $registrySchemaVersion -Entries $entries
 
 Write-Output ("Rebuilt experience index: entries={0}" -f $entries.Count)
 Write-Output "Hub experience dir: $hubExperienceDir"
