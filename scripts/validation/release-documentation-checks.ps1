@@ -161,6 +161,113 @@ catch {
 }
 
 try {
+    $contextTemplateRoots = @(
+        "knowledge-hub/templates/languages",
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages"
+    )
+    $contextIndexExpectations = [ordered]@{
+        "en/project-agent/context/README.md" = @(
+            "## Optional Entry Index",
+            "| File | Summary | Keywords |",
+            "public-safe and human-maintained",
+            "telemetry-derived fields",
+            '`last_accessed`',
+            "automatic decay state"
+        )
+        "en/project-agent/context/business/README.md" = @(
+            "## Entry Index",
+            "| File | Summary | Keywords |",
+            "public-safe discovery metadata",
+            '`Maturity`',
+            '`Reviewed`',
+            "runtime telemetry",
+            '`last_accessed`'
+        )
+        "en/project-agent/context/experience/README.md" = @(
+            "## Entry Index",
+            "| File | Summary | Keywords |",
+            "public-safe discovery metadata",
+            '`Maturity`',
+            '`Reviewed`',
+            "runtime telemetry",
+            '`last_accessed`'
+        )
+        "en/project-agent/context/tech/README.md" = @(
+            "## Entry Index",
+            "| File | Summary | Keywords |",
+            "human-maintained",
+            "public-safe discovery metadata",
+            '`Maturity` or `Reviewed`',
+            '`last_accessed`'
+        )
+        "zh-CN/project-agent/context/README.md" = @(
+            "example.md",
+            "keyword-a, keyword-b",
+            "public-safe",
+            "telemetry-derived",
+            "runtime usage counts",
+            '`last_accessed`',
+            "automatic decay state"
+        )
+        "zh-CN/project-agent/context/business/README.md" = @(
+            "example-rule.md",
+            "public-safe discovery metadata",
+            '`Maturity`',
+            '`Reviewed`',
+            "runtime telemetry",
+            "usage counts",
+            '`last_accessed`'
+        )
+        "zh-CN/project-agent/context/experience/README.md" = @(
+            "example-fix.md",
+            "public-safe discovery metadata",
+            '`Maturity`',
+            '`Reviewed`',
+            "runtime telemetry",
+            "usage counts",
+            '`last_accessed`'
+        )
+        "zh-CN/project-agent/context/tech/README.md" = @(
+            "testing-conventions.md",
+            "public-safe discovery metadata",
+            '`Maturity`',
+            '`Reviewed`',
+            "usage counts",
+            '`last_accessed`'
+        )
+    }
+
+    $contextIndexMissing = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($root in $contextTemplateRoots) {
+        foreach ($relativePath in $contextIndexExpectations.Keys) {
+            $fullRelativePath = "{0}/{1}" -f $root, $relativePath
+            $text = Get-FileText -RelativePath $fullRelativePath
+            foreach ($token in $contextIndexExpectations[$relativePath]) {
+                if (-not $text.Contains($token)) {
+                    $contextIndexMissing.Add("$fullRelativePath missing token: $token")
+                }
+            }
+        }
+    }
+
+    $script:evidence.context_index_guidance = [ordered]@{
+        template_roots = @($contextTemplateRoots)
+        checked_files_per_root = @($contextIndexExpectations.Keys)
+        missing = @($contextIndexMissing.ToArray())
+    }
+
+    if ($contextIndexMissing.Count -gt 0) {
+        Add-Check "context index guidance" "FAIL" "Project-agent context README templates are missing public-safe optional Entry Index guidance." $evidence.context_index_guidance
+    }
+    else {
+        Add-Check "context index guidance" "PASS" "English and Simplified Chinese context README templates and project-bootstrap snapshots include public-safe optional Entry Index guidance without telemetry-derived fields." $evidence.context_index_guidance
+    }
+}
+catch {
+    Add-Check "context index guidance" "FAIL" $_.Exception.Message
+}
+
+try {
     $adoptionFiles = [ordered]@{
         "docs/how-to-adapt.md" = @("Install A Runtime", "Bootstrap A Project", "Use The Workflow Kernel", "Keep Layers Separate", "examples/minimal-project")
         "examples/README.md" = @("Minimal Project", "How To Adapt")
