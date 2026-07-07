@@ -5,7 +5,7 @@ English: [README.en.md](README.en.md) | 简体中文（当前）
 > 面向 agent-assisted software projects（Agent 辅助软件项目）的轻量
 > Workflow Kernel（工作流内核）。
 
-当前版本：`v0.5.1`
+当前版本：`v0.5.2`
 
 ## 一句话理解
 
