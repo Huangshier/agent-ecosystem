@@ -179,7 +179,7 @@ Start with:
 For reusable workflow lessons, use the public search script:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\knowledge-hub\scripts\search_experience.ps1 -HubRoot <runtime>\knowledge-hub -Query "PowerShell command chaining"
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\knowledge-hub\scripts\search_experience.ps1 -HubDir <runtime>\knowledge-hub -Query "PowerShell command chaining"
 ```
 
 When a lesson is project-specific, keep it under:
