@@ -1,14 +1,13 @@
 {
   "schema_version": 2,
-  "updated_at_utc": "2026-07-07T08:40:37.3829251Z",
+  "updated_at_utc": "2026-07-09T15:33:39.0329091Z",
   "entries": [
     {
       "id": "reindexed-stacked-pr-merge-incident-recovery-0c680f83",
       "promoted_at_utc": "2026-05-21T13:08:46.1819852Z",
-      "source_project": "",
+      "source_kind": "",
       "source_project_tag": "",
-      "source_relative_path": "",
-      "source_file": "",
+      "source_ref": "",
       "hash_sha256": "3aa0ad1d2e947fd2383e516d17e6b67db65fe21361d7c875667026aaceee4757",
       "title": "Stacked PR Merge Incident Recovery",
       "keywords": [
@@ -28,10 +27,9 @@
     {
       "id": "reindexed-windows-powershell-command-chaining-86598847",
       "promoted_at_utc": "2026-04-23T02:03:39.1417284Z",
-      "source_project": "",
+      "source_kind": "",
       "source_project_tag": "",
-      "source_relative_path": "",
-      "source_file": "",
+      "source_ref": "",
       "hash_sha256": "2d31cfc075becd864a7399b9aa6066b319b7a158157d3fe8bd64a1d9dd8954e7",
       "title": "Windows PowerShell Command Chaining",
       "keywords": [

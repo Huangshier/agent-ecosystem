@@ -219,6 +219,7 @@ if ($sourceFiles.Count -eq 0) {
 
 $projectKey = if ([string]::IsNullOrWhiteSpace($ProjectTag)) { Split-Path -Leaf $projectFull } else { $ProjectTag }
 $projectSlug = Normalize-Slug -Text $projectKey
+$sourceProjectTag = if ([string]::IsNullOrWhiteSpace($ProjectTag)) { "" } else { $ProjectTag }
 
 $promoted = 0
 $skippedDuplicate = 0
@@ -267,9 +268,6 @@ foreach ($fileItem in $sourceFiles) {
         $title = $baseName
     }
 
-    $relativePath = $fileItem.FullName.Substring($projectFull.Length).TrimStart([char[]]"\/")
-    $relativePath = $relativePath -replace "\\", "/"
-
     # Extract keywords from ## Keywords section, fallback to title words
     $keywords = @()
     $inKw = $false
@@ -291,10 +289,9 @@ foreach ($fileItem in $sourceFiles) {
     $entries += [ordered]@{
         id = "{0}-{1}" -f (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss"), $hash.Substring(0, 8)
         promoted_at_utc = (Get-Date).ToUniversalTime().ToString("o")
-        source_project = $projectFull
-        source_project_tag = $projectKey
-        source_relative_path = $relativePath
-        source_file = $fileItem.FullName
+        source_kind = "project-local"
+        source_project_tag = $sourceProjectTag
+        source_ref = ""
         hash_sha256 = $hash
         title = $title
         keywords = @($keywords)

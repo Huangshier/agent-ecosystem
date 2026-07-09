@@ -236,10 +236,9 @@ foreach ($fileItem in $experienceFiles) {
     $entries += [ordered]@{
         id = $entryId
         promoted_at_utc = $promotedAt
-        source_project = if ($existing -and $existing.source_project) { $existing.source_project } else { "" }
+        source_kind = if ($existing -and $existing.source_kind) { $existing.source_kind } else { "" }
         source_project_tag = if ($existing -and $existing.source_project_tag) { $existing.source_project_tag } else { "" }
-        source_relative_path = if ($existing -and $existing.source_relative_path) { $existing.source_relative_path } else { "" }
-        source_file = if ($existing -and $existing.source_file) { $existing.source_file } else { "" }
+        source_ref = if ($existing -and $existing.source_ref) { $existing.source_ref } else { "" }
         hash_sha256 = $hash
         title = Get-ExperienceTitle -Path $fileItem.FullName
         keywords = @(Get-ExperienceKeywords -Path $fileItem.FullName)
