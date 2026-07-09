@@ -8,6 +8,34 @@
 # experience promotion closure, and duplicate helper hash checks in the original order.
 function Invoke-ReleaseKnowledgeHubChecks {
 
+function Get-ExperiencePublicSafeMetadataErrors {
+    param([object]$Registry)
+
+    $errors = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($entry in @($Registry.entries)) {
+        $entryId = if ($entry.id) { [string]$entry.id } else { [string]$entry.hub_file }
+        foreach ($field in @("source_project", "source_file", "source_relative_path")) {
+            if ($entry.PSObject.Properties.Name -contains $field) {
+                $errors.Add(("entry {0} contains forbidden legacy field {1}" -f $entryId, $field))
+            }
+        }
+
+        foreach ($property in @($entry.PSObject.Properties)) {
+            foreach ($value in @($property.Value)) {
+                $text = [string]$value
+                if ([string]::IsNullOrWhiteSpace($text)) {
+                    continue
+                }
+                if ($text -match '^[A-Za-z]:[\\/]' -or $text -match '^\\\\' -or $text -match '^/(Users|home|private|tmp|var|mnt|Volumes)(/|$)') {
+                    $errors.Add(("entry {0} field {1} contains absolute path-like metadata" -f $entryId, $property.Name))
+                }
+            }
+        }
+    }
+
+    return @($errors.ToArray())
+}
+
 try {
     $catalogPath = "knowledge-hub/knowledge-catalog.md"
     $catalogText = Get-FileText -RelativePath $catalogPath
@@ -165,6 +193,11 @@ try {
         $lifecycleErrors.Add("experience index must not record runtime last_accessed telemetry.")
     }
 
+    $publicSafeMetadataErrors = @(Get-ExperiencePublicSafeMetadataErrors -Registry $index)
+    foreach ($metadataError in $publicSafeMetadataErrors) {
+        $lifecycleErrors.Add($metadataError)
+    }
+
     if ($lifecycleErrors.Count -gt 0) {
         Add-Check "experience lifecycle metadata" "FAIL" "Experience lifecycle metadata is incomplete or inconsistent." ([ordered]@{
             errors = @($lifecycleErrors.ToArray())
@@ -240,9 +273,36 @@ Validate experience promotion with a temporary hub so the public source tree is 
     $promoteScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "promote_experience.ps1"
     $rebuildScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "rebuild_experience_index.ps1"
     $searchScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "search_experience.ps1"
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -eq $git) {
+        throw "git is required to validate the public worktree experience promotion fixture."
+    }
+    & git -C $tempHub init | Out-Null
+
     $promoteOutput = @(& $promoteScript -ProjectDir $tempProject -HubDir $tempHub -ProjectTag "validation")
-    & $rebuildScript -HubDir $tempHub | Out-Host
     $registryPath = Join-PathParts $tempHub "knowledge" "experience" "index.json"
+    $promotedRegistry = Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json
+    $promotionMetadataErrors = @(Get-ExperiencePublicSafeMetadataErrors -Registry $promotedRegistry)
+    if ($promotionMetadataErrors.Count -gt 0) {
+        throw ("Experience promotion wrote unsafe public metadata: {0}" -f ($promotionMetadataErrors -join "; "))
+    }
+
+    $promotedEntry = @($promotedRegistry.entries | Where-Object { [string]$_.title -eq "Validation Promote Closure" } | Select-Object -First 1)
+    if ($promotedEntry.Count -lt 1) {
+        throw "Promoted validation entry was not found in the temporary registry."
+    }
+    $promotedEntry[0] | Add-Member -NotePropertyName "source_project" -NotePropertyValue $tempProject -Force
+    $promotedEntry[0] | Add-Member -NotePropertyName "source_file" -NotePropertyValue $candidatePath -Force
+    $promotedEntry[0] | Add-Member -NotePropertyName "source_relative_path" -NotePropertyValue ".agents/context/experience/validation-promote-closure.md" -Force
+    $promotedRegistry | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $registryPath -Encoding UTF8
+
+    & $rebuildScript -HubDir $tempHub | Out-Host
+    $rebuiltRegistry = Get-Content -LiteralPath $registryPath -Raw | ConvertFrom-Json
+    $rebuildMetadataErrors = @(Get-ExperiencePublicSafeMetadataErrors -Registry $rebuiltRegistry)
+    if ($rebuildMetadataErrors.Count -gt 0) {
+        throw ("Experience rebuild propagated unsafe public metadata: {0}" -f ($rebuildMetadataErrors -join "; "))
+    }
+
     $registryHashAfterRebuild = (Get-FileHash -LiteralPath $registryPath -Algorithm SHA256).Hash
     & $rebuildScript -HubDir $tempHub | Out-Host
     $registryHashAfterNoop = (Get-FileHash -LiteralPath $registryPath -Algorithm SHA256).Hash
@@ -266,6 +326,9 @@ Validate experience promotion with a temporary hub so the public source tree is 
         temp_hub = $tempHub
         temp_project = $tempProject
         promote_output = @($promoteOutput)
+        public_worktree_fixture = $true
+        promotion_public_safe_metadata = $true
+        rebuild_dropped_legacy_source_paths = $true
         noop_rebuild_preserved_hash = $true
         search_results = $resultCount
         top_result = [string]$topResult.title
