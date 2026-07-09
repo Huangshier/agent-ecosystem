@@ -117,6 +117,7 @@ Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭
 5. `.agents/notes.md` 只记录需要跨会话保留的持久已验证事实、最终决策或证据链接。
 6. 当 `memory_diagnose.ps1` 可用时，在声明记忆同步完成前针对项目根目录运行：
    `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`。
+   `<runtime-or-repo>` 指安装后的 runtime 或包含该脚本的仓库检出，不是正在诊断的项目。诊断从 `-ProjectRoot` 开始，检查 `.agents/process.txt`、`.agents/plan.md`、`.agents/notes.md`、热记忆引用的 active `docs/specs/<slug>/(spec|tasks).md`，并递归检查非模板 `.agents/context/**/*.md` 的 `Summary` / `Keywords` 发现元数据。它不扫描 `.agents/commands/**`；命令发现仍由 `.agents/commands/README.md` 和匹配的命令卡承载。
    阶段收尾前先处理 warnings；若有意延期，记录原因。将 finding count 与摘要记录到 active spec/tasks、PR body 或阶段收尾证据中。
 7. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
 8. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。

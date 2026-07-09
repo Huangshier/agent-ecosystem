@@ -139,6 +139,7 @@ Checklist:
 5. Update `.agents/notes.md` only for durable verified facts, final decisions, or evidence links that should survive the session.
 6. When `memory_diagnose.ps1` is available, run it against the project root before claiming the memory sync is complete:
    `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`.
+   `<runtime-or-repo>` is the installed runtime or repository checkout that contains the script, not the project being diagnosed. The diagnosis starts at `-ProjectRoot`, checks `.agents/process.txt`, `.agents/plan.md`, `.agents/notes.md`, active `docs/specs/<slug>/(spec|tasks).md` references from hot memory, and non-template `.agents/context/**/*.md` files for `Summary` / `Keywords` discovery metadata. It does not scan `.agents/commands/**`; command discovery stays in `.agents/commands/README.md` and matching command cards.
    Address warnings before closing the phase, or record why they are intentionally deferred. Record the finding count and summary in the active spec/tasks, PR body, or phase-close evidence.
 7. Confirm no stale hosted-check, ready-for-review, or wait-for-review item still appears as active after it is complete.
 8. Record hosted check results once at the relevant boundary. After a PR has been opened, do not push memory-only commits solely to refresh state or hosted-check timestamps unless explicitly approved.
