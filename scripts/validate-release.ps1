@@ -19,6 +19,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "validation/release-knowledge-hub-checks.ps1")
 . (Join-Path $scriptDir "validation/release-template-language-checks.ps1")
 . (Join-Path $scriptDir "validation/release-installer-contract-checks.ps1")
+. (Join-Path $scriptDir "validation/release-agent-skill-bridge-checks.ps1")
 . (Join-Path $scriptDir "validation/release-runtime-smoke-checks.ps1")
 . (Join-Path $scriptDir "validation/release-bootstrap-checks.ps1")
 . (Join-Path $scriptDir "validation/release-project-template-checks.ps1")
@@ -45,6 +46,7 @@ $checks = New-Object 'System.Collections.Generic.List[object]'
 $evidence = [ordered]@{
     profile_matrix = @()
     installer_contract = @()
+    agent_skill_bridge = @()
     runtime_smoke = [ordered]@{}
     audit = [ordered]@{}
     knowledge_hub = [ordered]@{}

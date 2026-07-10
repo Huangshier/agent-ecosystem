@@ -153,6 +153,15 @@ try {
 catch {
     Add-Check "installer contract fixtures" "FAIL" $_.Exception.Message
 }
+try {
+    $script:evidence.agent_skill_bridge = Invoke-AgentSkillBridgeFixtureChecks `
+        -RepositoryRoot $repoRoot `
+        -ScratchRoot $scratchRootFull
+    Add-Check "agent skill bridge fixtures" "PASS" "Explicit opt-in, installed-copy ownership, full preflight, idempotence, local bridge metadata, and conflict isolation scenarios passed." $evidence.agent_skill_bridge
+}
+catch {
+    Add-Check "agent skill bridge fixtures" "FAIL" $_.Exception.Message
+}
 if ($installFailures.Count -eq 0) {
     Add-Check "installer profile matrix" "PASS" "All requested profiles and install modes produced valid manifests." $evidence.profile_matrix
 }

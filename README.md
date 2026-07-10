@@ -65,6 +65,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profi
 直接跟随当前 source checkout 时，才显式添加 `-DevLink`。兼容参数 `-Copy`
 仍可使用；`-ReplaceManaged` 用于覆盖受管项且始终保留未知文件。
 
+普通安装不会写入任何 agent-specific skill 目录。需要让某个 agent client
+发现已安装 runtime 中的公开 skill 时，再通过显式 runtime 和显式目标目录运行
+独立的 opt-in bridge；用法与安全边界见
+[Agent-specific skill link bridge](docs/agent-skill-bridge.md)。
+
 初始化一个项目：
 
 ```powershell
