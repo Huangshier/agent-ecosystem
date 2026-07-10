@@ -165,7 +165,7 @@ $runtimeScriptCopied = 0
 $runtimeScriptUpdated = 0
 $runtimeScriptSkipped = 0
 $hubScriptsDir = Join-PathParts $HubDir "scripts"
-foreach ($scriptName in @("promote_experience.ps1", "rebuild_experience_index.ps1")) {
+foreach ($scriptName in @("manage_candidates.ps1", "promote_experience.ps1", "rebuild_experience_index.ps1")) {
     $sourceScript = Join-Path $PSScriptRoot $scriptName
     if (-not (Test-Path -LiteralPath $sourceScript)) {
         continue

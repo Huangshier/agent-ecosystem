@@ -74,6 +74,7 @@ Apply this routing model every time:
 - Keep project-specific experience local by default.
 - Promote only cross-project toolchain/host/workflow lessons into the global knowledge hub when they can be stated as stable prevention rules.
 - When a lesson becomes a global hub candidate, mark it locally and point to the installed `knowledge-hub/scripts` promotion workflow; `memory-governance` does not mutate the global hub by itself.
+- A marked local lesson may be collected into an explicit runtime candidate inbox with `knowledge-hub/scripts/manage_candidates.ps1`. Candidate intake is a separate review lifecycle and does not call `promote_experience.ps1` or write `knowledge/experience/**`.
 
 ## Workflow
 Follow this exact sequence:
@@ -114,6 +115,7 @@ Follow this exact sequence:
 - If an experience item is primarily about shell behavior, build systems, toolchains, caches, ports, permissions, path handling, or other cross-project workflow failures, treat it as a global experience candidate rather than duplicating it into many projects.
 - Do not preload global experience into project memory; rely on lightweight project rules that trigger on-demand lookup from the global experience index.
 - If the user wants that candidate promoted immediately, run or point to the installed `knowledge-hub/scripts/promote_experience.ps1` workflow rather than duplicating promotion logic inside memory cleanup.
+- If the user wants cross-project comparison before promotion, use `manage_candidates.ps1 -Mode Intake` with explicit project roots, explicit languages, and an explicit `<runtime>/state/knowledge-candidates/` path. Project-root scanning is read-only and is intended for legacy import or recovery; normal discovery starts from the inbox.
 
 5. Consistency check:
    - Version labels and branch status should not conflict across files.
