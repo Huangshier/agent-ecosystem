@@ -288,6 +288,7 @@ Last reviewed: 2026-07-07
 Decay policy: Temporary fixture only; regenerate during release validation and do not promote to public source.
 "@
     Set-Content -LiteralPath $aliasesOnlyCandidatePath -Value $aliasesOnlyCandidateText -Encoding UTF8
+    $aliasesOnlyCandidateHash = (Get-FileHash -LiteralPath $aliasesOnlyCandidatePath -Algorithm SHA256).Hash.ToLowerInvariant()
 
     $promoteScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "promote_experience.ps1"
     $rebuildScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "rebuild_experience_index.ps1"
@@ -310,6 +311,12 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
     if ($promotedEntry.Count -lt 1) {
         throw "Localized validation entry with English anchors was not found in the temporary registry."
     }
+    $indexedKeywords = @($promotedEntry[0].keywords | ForEach-Object { [string]$_ })
+    foreach ($keyword in @("验证", "晋升")) {
+        if ($indexedKeywords -notcontains $keyword) {
+            throw ("Promoted localized validation entry is missing indexed Chinese keyword: {0}" -f $keyword)
+        }
+    }
     $promotedPath = Join-PathParts $tempHub "knowledge" "experience" ([string]$promotedEntry[0].hub_file)
     $promotedText = Get-Content -LiteralPath $promotedPath -Raw
     foreach ($anchor in @("## Summary", "## Keywords", "Scope: Cross-project reusable", "Global candidate: Yes", "Maturity:", "Source:", "Last reviewed:", "Decay policy:")) {
@@ -317,9 +324,15 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
             throw ("Promoted localized validation entry is missing English anchor: {0}" -f $anchor)
         }
     }
-    $aliasesOnlyHubPath = Join-PathParts $tempHub "knowledge" "experience" "validation-localized-alias-only.md"
-    if (Test-Path -LiteralPath $aliasesOnlyHubPath) {
+    $aliasesOnlyEntries = @($promotedRegistry.entries | Where-Object {
+        [string]$_.title -eq "仅中文别名候选" -or [string]$_.hash_sha256 -eq $aliasesOnlyCandidateHash
+    })
+    if ($aliasesOnlyEntries.Count -ne 0) {
         throw "Aliases-only localized validation candidate was promoted unexpectedly."
+    }
+    $promotionSummary = @($promoteOutput | Where-Object { $_ -match '^Promotion summary:' } | Select-Object -First 1)
+    if ($promotionSummary.Count -ne 1 -or [string]$promotionSummary[0] -notmatch 'skipped_not_candidate=1\b') {
+        throw "Aliases-only localized validation candidate did not increment skipped_not_candidate exactly once."
     }
     $promotedEntry[0] | Add-Member -NotePropertyName "source_project" -NotePropertyValue $tempProject -Force
     $promotedEntry[0] | Add-Member -NotePropertyName "source_file" -NotePropertyValue $candidatePath -Force
@@ -331,6 +344,22 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
     $rebuildMetadataErrors = @(Get-ExperiencePublicSafeMetadataErrors -Registry $rebuiltRegistry)
     if ($rebuildMetadataErrors.Count -gt 0) {
         throw ("Experience rebuild propagated unsafe public metadata: {0}" -f ($rebuildMetadataErrors -join "; "))
+    }
+    $rebuiltEntry = @($rebuiltRegistry.entries | Where-Object { [string]$_.hash_sha256 -eq [string]$promotedEntry[0].hash_sha256 } | Select-Object -First 1)
+    if ($rebuiltEntry.Count -ne 1) {
+        throw "Rebuilt localized validation entry was not found by hash."
+    }
+    $expectedLifecycle = [ordered]@{
+        maturity = "draft"
+        scope = "Cross-project reusable"
+        source = "public-safe release validation fixture"
+        reviewed_at = "2026-07-07"
+        decay_policy = "Temporary fixture only; regenerate during release validation and do not promote to public source."
+    }
+    foreach ($field in $expectedLifecycle.Keys) {
+        if ([string]$rebuiltEntry[0].$field -ne [string]$expectedLifecycle[$field]) {
+            throw ("Rebuilt localized validation lifecycle field mismatch for {0}: expected '{1}', got '{2}'" -f $field, [string]$expectedLifecycle[$field], [string]$rebuiltEntry[0].$field)
+        }
     }
 
     $registryHashAfterRebuild = (Get-FileHash -LiteralPath $registryPath -Algorithm SHA256).Hash
@@ -351,6 +380,9 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
     if ([string]$topResult.title -ne "验证晋升闭环") {
         throw ("Unexpected promoted experience search result: {0}" -f [string]$topResult.title)
     }
+    if ([string]::IsNullOrWhiteSpace([string]$topResult.prevention_rule)) {
+        throw "Promoted localized experience search result is missing prevention_rule."
+    }
 
     Add-Check "experience promote closure" "PASS" "Localized experience with English anchors promoted, rebuilt, and searched; aliases-only candidate was skipped without mutating public source." ([ordered]@{
         temp_hub = $tempHub
@@ -361,7 +393,12 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
         rebuild_dropped_legacy_source_paths = $true
         noop_rebuild_preserved_hash = $true
         localized_body_with_english_anchors_promoted = $true
+        localized_keywords_indexed = @($indexedKeywords)
         aliases_only_candidate_skipped = $true
+        aliases_only_registry_entry_count = $aliasesOnlyEntries.Count
+        skipped_not_candidate = 1
+        rebuilt_lifecycle_metadata = $expectedLifecycle
+        search_prevention_rule_present = $true
         search_results = $resultCount
         top_result = [string]$topResult.title
     })

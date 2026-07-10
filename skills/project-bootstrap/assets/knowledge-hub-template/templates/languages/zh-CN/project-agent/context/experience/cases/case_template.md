@@ -2,10 +2,17 @@
 
 项目记忆语言：简体中文。
 
-## Summary（摘要）
+Maturity: draft
+Scope: Project-specific
+Source: project-local experience
+Last reviewed: YYYY-MM-DD
+Decay policy: Review when the relevant toolchain or workflow changes.
+Global candidate: No
+
+## Summary
 [一到两句话说明这条可复用经验及适用场景]
 
-## Keywords（关键词）
+## Keywords
 [keyword1], [keyword2], [keyword3]
 
 ## Symptoms（症状）
@@ -21,13 +28,13 @@
 ## Verification（验证）
 [列出验证命令或确认方法]
 
-## Prevention Rule（预防规则）
+## Prevention Rule
 [可执行的预防规则]
 
 ## Scope（适用范围）
-- Scope: Project-specific
-- Global candidate: No
-- Date: YYYY-MM-DD
+
+默认 `Scope: Project-specific` 与 `Global candidate: No` 表示项目本地经验；`Date` 可按项目
+需要在正文或复核记录中维护。
 
 ## 全局晋升指引
 
@@ -45,9 +52,6 @@ aliases：
 仅使用 `摘要`、`关键词`、`全局候选` 或 `范围` 等中文 aliases 的候选会被默认跳过。本模板
 不要求中文 metadata aliases、schema v3 或语言自动检测。
 
-可 promotion 条目的生命周期字段示例：
-
-- Maturity: draft
-- Source: public-safe reviewed project-local experience
-- Last reviewed: YYYY-MM-DD
-- Decay policy: Review when the relevant toolchain or workflow changes.
+晋升前，将 metadata block 中的 `Scope` 改为 `Scope: Cross-project reusable` 和/或将
+`Global candidate` 改为 `Global candidate: Yes`，并将 `Source`、`Last reviewed`、`Decay policy`
+更新为公开安全的实际值。
