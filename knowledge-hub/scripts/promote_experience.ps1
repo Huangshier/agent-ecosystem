@@ -271,16 +271,20 @@ foreach ($fileItem in $sourceFiles) {
     # Extract keywords from ## Keywords section, fallback to title words
     $keywords = @()
     $inKw = $false
+    $kwLines = @()
     foreach ($kl in $previewLines) {
         if ($kl -match '^\s*##\s+Keywords\s*$') { $inKw = $true; continue }
         if ($inKw) {
             if ($kl -match '^\s*##\s+') { break }
             $kt = $kl.Trim()
             if ($kt.Length -gt 0) {
-                $keywords = @($kt -split '\s*,\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
-                break
+                $kwLines += $kt
             }
         }
+    }
+    $kwText = ($kwLines -join ' ')
+    if ($kwText.Length -gt 0) {
+        $keywords = @($kwText -split '\s*,\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
     }
     if ($keywords.Count -eq 0) {
         $keywords = @($title -split '[\s\-_]+' | Where-Object { $_.Length -gt 2 })
