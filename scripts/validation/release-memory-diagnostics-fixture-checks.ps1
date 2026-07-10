@@ -16,6 +16,88 @@ function Invoke-ReleaseMemoryDiagnosticsFixtureChecks {
         [string]$RepositoryRoot
     )
 
+    # Directory index reference, maintenance rules, and pilot index
+    try {
+        $directoryIndexReference = Get-FileText -RelativePath "skills/memory-governance/references/directory-index-template.md"
+        foreach ($token in @(
+            "initial navigation cost",
+            "lifecycle status",
+            "README.md",
+            "INDEX.md",
+            "Entry",
+            "Summary",
+            "Status",
+            "Refs",
+            "Last reviewed",
+            "temporary branches",
+            "waiting for checks",
+            "next actions",
+            "local machine paths",
+            "private evidence"
+        )) {
+            if (-not $directoryIndexReference.Contains($token)) {
+                throw "Directory index reference is missing token: $token"
+            }
+        }
+
+        $memoryGovernanceSkill = Get-FileText -RelativePath "skills/memory-governance/SKILL.md"
+        foreach ($token in @(
+            "creating or moving an indexed entry",
+            "parent directory index",
+            "completed",
+            "archived",
+            "Last reviewed",
+            "public-safe facts",
+            "Do not automatically create or rewrite directory indexes",
+            "directory_missing_index",
+            "warning and recommendation only"
+        )) {
+            if (-not $memoryGovernanceSkill.Contains($token)) {
+                throw "Memory governance directory index rules are missing token: $token"
+            }
+        }
+
+        $memoryGovernanceReadme = Get-FileText -RelativePath "skills/memory-governance/README.md"
+        foreach ($token in @("references/directory-index-template.md", "DirectoryIndexRoots", "directory_missing_index", "does not create or modify an index")) {
+            if (-not $memoryGovernanceReadme.Contains($token)) {
+                throw "Memory governance README directory index entry is missing token: $token"
+            }
+        }
+
+        $fixtureFamiliesRoot = Join-PathParts $RepositoryRoot "scripts" "validation" "memory-diagnose-structural-fixtures"
+        $fixturePilot = Get-FileText -RelativePath "scripts/validation/memory-diagnose-structural-fixtures/README.md"
+        foreach ($token in @("Entry", "Summary", "Status", "Refs", "Last reviewed", "repository-relative links", "issue #217 remains open")) {
+            if (-not $fixturePilot.Contains($token)) {
+                throw "Structural fixture pilot index is missing token: $token"
+            }
+        }
+
+        $actualFixtureFamilies = @(
+            Get-ChildItem -LiteralPath $fixtureFamiliesRoot -Directory |
+                Select-Object -ExpandProperty Name |
+                Sort-Object
+        )
+        $indexedFixtureFamilies = @(
+            [regex]::Matches($fixturePilot, '\]\((?<target>[a-z0-9][a-z0-9-]*/)\)') |
+                ForEach-Object { $_.Groups["target"].Value.TrimEnd('/') } |
+                Sort-Object -Unique
+        )
+        if (-not (Test-ExactArray -Actual $indexedFixtureFamilies -Expected $actualFixtureFamilies)) {
+            throw "Structural fixture pilot index does not exactly cover direct fixture families. Indexed: $($indexedFixtureFamilies -join ', '); actual: $($actualFixtureFamilies -join ', ')"
+        }
+
+        $script:evidence.directory_index_governance = [ordered]@{
+            reference = "skills/memory-governance/references/directory-index-template.md"
+            pilot = "scripts/validation/memory-diagnose-structural-fixtures/README.md"
+            fixture_families = @($actualFixtureFamilies)
+            exact_family_coverage = $true
+        }
+        Add-Check "directory index governance" "PASS" "Directory index guidance, maintenance rules, public-safe boundaries, and exact pilot fixture-family coverage are present." $evidence.directory_index_governance
+    }
+    catch {
+        Add-Check "directory index governance" "FAIL" $_.Exception.Message
+    }
+
     # Completed list growth fixture checks
     try {
         $fixtureRoot = Join-PathParts $RepositoryRoot "scripts" "validation" "memory-diagnose-structural-fixtures" "completed-list-growth"

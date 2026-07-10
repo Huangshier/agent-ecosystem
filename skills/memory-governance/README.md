@@ -13,11 +13,20 @@ Memory maintenance skill for project-level `.agents` files.
 ## Key Files
 - `SKILL.md`: skill workflow and output contract.
 - `scripts/memory_diagnose.ps1`: read-only memory health diagnosis.
+- `references/directory-index-template.md`: lightweight guidance for choosing,
+  structuring, and safely maintaining a directory `README.md` or `INDEX.md`.
 - `agents/openai.yaml`: skill metadata for local Agent usage.
 
 Public templates use `## Summary` and `## Keywords` for context discovery
 metadata. The diagnosis helper also recognizes localized equivalents for
 project memory files.
+
+The diagnosis helper also supports opt-in directory index health warnings with
+`-DirectoryIndexRoots`. Directories over the configured direct-file threshold
+without `README.md` or `INDEX.md` report `directory_missing_index`; the warning
+does not create or modify an index. See
+[`references/directory-index-template.md`](references/directory-index-template.md)
+for the maintenance guidance.
 
 ## Structural Diagnostics Design
 Future structural diagnostics for `memory_diagnose.ps1` should follow

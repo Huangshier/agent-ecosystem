@@ -76,6 +76,18 @@ Apply this routing model every time:
 - When a lesson becomes a global hub candidate, mark it locally and point to the installed `knowledge-hub/scripts` promotion workflow; `memory-governance` does not mutate the global hub by itself.
 - A marked local lesson may be collected into an explicit runtime candidate inbox with `knowledge-hub/scripts/manage_candidates.ps1`. Candidate intake is a separate review lifecycle and does not call `promote_experience.ps1` or write `knowledge/experience/**`.
 
+## Directory Index Maintenance
+
+- When creating or moving an indexed entry, update its parent directory index
+  in the same change.
+- When an entry is completed, deprecated, archived, or changes responsibility,
+  update its status or remove it from the parent directory index.
+- Update `Last reviewed` only after actually checking the indexed content.
+- Keep indexes limited to current, public-safe facts that can be maintained over
+  time.
+- Do not automatically create or rewrite directory indexes. The opt-in
+  `directory_missing_index` diagnosis from phase 1 is a warning and recommendation only; it does not authorize writes.
+
 ## Workflow
 Follow this exact sequence:
 
