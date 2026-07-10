@@ -157,7 +157,7 @@ try {
     $script:evidence.agent_skill_bridge = Invoke-AgentSkillBridgeFixtureChecks `
         -RepositoryRoot $repoRoot `
         -ScratchRoot $scratchRootFull
-    Add-Check "agent skill bridge fixtures" "PASS" "Explicit opt-in, exact canonical ownership, platform path semantics, runtime/source containment, full preflight, idempotence, transaction rollback, local bridge metadata, and conflict isolation scenarios passed." $evidence.agent_skill_bridge
+    Add-Check "agent skill bridge fixtures" "PASS" "Explicit opt-in, exact canonical ownership, physical ancestor alias resolution, platform path semantics, runtime/source containment, full preflight, idempotence, transaction rollback, local bridge metadata, and conflict isolation scenarios passed." $evidence.agent_skill_bridge
 }
 catch {
     Add-Check "agent skill bridge fixtures" "FAIL" $_.Exception.Message

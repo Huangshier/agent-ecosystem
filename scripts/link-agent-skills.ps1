@@ -89,7 +89,9 @@ function Write-Utf8NoBomFile {
 }
 
 $runtimeRoot = Get-NormalizedFullPath -Path $RuntimeDir
-$agentSkillsRoot = Get-NormalizedFullPath -Path $AgentSkillsDir
+$runtimePhysicalRoot = Resolve-PhysicalPathForWrite -Path $runtimeRoot
+$agentSkillsRequestedRoot = Get-NormalizedFullPath -Path $AgentSkillsDir
+$agentSkillsRoot = Resolve-PhysicalPathForWrite -Path $agentSkillsRequestedRoot
 $installManifestPath = Join-Path $runtimeRoot "install-manifest.json"
 $bridgeManifestPath = Join-Path $runtimeRoot "agent-skill-bridge-manifest.json"
 $runtimeSkillsRoot = Join-Path $runtimeRoot "skills"
@@ -162,7 +164,7 @@ if ($requestedSkills.Count -eq 0) {
 if (Test-IsFileSystemRoot -Path $agentSkillsRoot) {
     $preflightErrors.Add("AgentSkillsDir cannot be a filesystem root: $agentSkillsRoot")
 }
-if (Test-PathIsEqualOrChild -Path $agentSkillsRoot -Root $runtimeRoot) {
+if (Test-PathIsEqualOrChild -Path $agentSkillsRoot -Root $runtimePhysicalRoot) {
     $preflightErrors.Add("AgentSkillsDir must be outside RuntimeDir: $agentSkillsRoot")
 }
 
@@ -207,7 +209,7 @@ foreach ($skillName in @($requestedSkills.ToArray())) {
         continue
     }
 
-    $source = Get-NormalizedFullPath -Path (Join-PathParts $runtimeRoot $canonicalDestination)
+    $source = Resolve-PhysicalPathForWrite -Path (Join-PathParts $runtimeRoot $canonicalDestination)
     $target = Get-NormalizedFullPath -Path (Join-Path $agentSkillsRoot $canonicalSkill)
     $candidateValid = $true
 

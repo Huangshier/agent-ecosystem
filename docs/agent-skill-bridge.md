@@ -77,8 +77,14 @@ created by that run are rolled back.
 `AgentSkillsDir` must be a non-root directory outside the installed runtime and
 outside every selected skill source. The final per-skill target must also be
 outside its source, preventing recursive links or writes into managed runtime
-content. These checks use path-segment boundaries, so a sibling such as
-`<root>/runtime-client-skills` is not treated as a child of `<root>/runtime`.
+content. Before any directory, link, or manifest write, the helper resolves the
+nearest existing ancestor and every symbolic-link or junction hop in its
+ancestor chain, then appends the still-missing path segments to that canonical
+physical location and repeats the containment checks there. Relative symbolic
+link targets are supported. Broken links, unresolvable reparse points, link
+cycles, and excessive alias chains fail fast without writing. These checks use
+path-segment boundaries, so a sibling such as `<root>/runtime-client-skills` is
+not treated as a child of `<root>/runtime`.
 
 Successful runs write `<runtime>/agent-skill-bridge-manifest.json`. This file is
 independent of the installer schema-2 manifest and records the actual skill,

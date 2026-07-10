@@ -34,6 +34,64 @@ function Get-AgentSkillBridgeLinkTarget {
     return Get-NormalizedFullPath -Path $target
 }
 
+function New-AgentSkillBridgeAncestorAlias {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Target
+    )
+
+    if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
+        return "junction"
+    }
+
+    $relativeTarget = [System.IO.Path]::GetRelativePath((Split-Path -Parent $Path), $Target)
+    New-Item -ItemType SymbolicLink -Path $Path -Target $relativeTarget | Out-Null
+    return "relative-symbolic-link"
+}
+
+function New-AgentSkillBridgeBrokenAlias {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$MissingTarget
+    )
+
+    if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        & cmd.exe /d /c "mklink /J `"$Path`" `"$MissingTarget`"" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create broken junction fixture: $Path"
+        }
+        return "broken-junction"
+    }
+
+    $relativeTarget = [System.IO.Path]::GetRelativePath((Split-Path -Parent $Path), $MissingTarget)
+    New-Item -ItemType SymbolicLink -Path $Path -Target $relativeTarget | Out-Null
+    return "broken-relative-symbolic-link"
+}
+
+function New-AgentSkillBridgeAliasCycle {
+    param(
+        [Parameter(Mandatory = $true)][string]$FirstPath,
+        [Parameter(Mandatory = $true)][string]$SecondPath
+    )
+
+    if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        & cmd.exe /d /c "mklink /J `"$FirstPath`" `"$SecondPath`"" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create first junction in cycle fixture: $FirstPath"
+        }
+        & cmd.exe /d /c "mklink /J `"$SecondPath`" `"$FirstPath`"" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create second junction in cycle fixture: $SecondPath"
+        }
+        return "junction-cycle"
+    }
+
+    New-Item -ItemType SymbolicLink -Path $FirstPath -Target ([System.IO.Path]::GetFileName($SecondPath)) | Out-Null
+    New-Item -ItemType SymbolicLink -Path $SecondPath -Target ([System.IO.Path]::GetFileName($FirstPath)) | Out-Null
+    return "relative-symbolic-link-cycle"
+}
+
 function New-AgentSkillBridgeFixtureRuntime {
     param(
         [Parameter(Mandatory = $true)][string]$Installer,
@@ -279,6 +337,88 @@ function Invoke-AgentSkillBridgeFixtureChecks {
     Assert-AgentSkillBridgeCondition -Condition ($prefixRun.exit_code -eq 0) -Message ("Shared-prefix sibling target was rejected: {0}" -f ($prefixRun.output -join "`n"))
     Assert-AgentSkillBridgeCondition -Condition (Test-AgentSkillBridgeReparsePoint -Path (Join-PathParts $prefixTarget "project-bootstrap")) -Message "Shared-prefix sibling target did not create the expected bridge."
     $evidence.Add([ordered]@{ scenario = "runtime-source-containment-boundaries"; runtime_child_exit_code = $runtimeChildRun.exit_code; source_child_exit_code = $sourceChildRun.exit_code; equal_target_exit_code = $equalTargetRun.exit_code; shared_prefix_result = "created" })
+
+    # Resolve the nearest existing target ancestor through every junction or
+    # symbolic-link hop before containment checks or any write.
+    $ancestorRuntime = Join-PathParts $fixtureRoot "ancestor-runtime"
+    New-AgentSkillBridgeFixtureRuntime -Installer $installer -Root $ancestorRuntime | Out-Null
+    $ancestorInstallManifestPath = Join-PathParts $ancestorRuntime "install-manifest.json"
+    $ancestorInstallManifestHash = (Get-FileHash -LiteralPath $ancestorInstallManifestPath -Algorithm SHA256).Hash
+    $runtimeAlias = Join-PathParts $fixtureRoot "runtime-alias"
+    $runtimeAliasMode = New-AgentSkillBridgeAncestorAlias -Path $runtimeAlias -Target $ancestorRuntime
+    $runtimeAliasTarget = Join-PathParts $runtimeAlias "agent-skills"
+    $runtimeAliasRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $ancestorRuntime -Target $runtimeAliasTarget -SkillName "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($runtimeAliasRun.exit_code -ne 0) -Message "Runtime ancestor alias bypassed physical containment."
+    Assert-AgentSkillBridgeCondition -Condition (($runtimeAliasRun.output -join "`n").Contains("outside RuntimeDir")) -Message "Runtime ancestor alias failure did not report runtime containment."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skills"))) -Message "Runtime ancestor alias failure wrote into managed runtime content."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skill-bridge-manifest.json"))) -Message "Runtime ancestor alias failure wrote bridge metadata."
+    Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $ancestorInstallManifestPath -Algorithm SHA256).Hash -eq $ancestorInstallManifestHash) -Message "Runtime ancestor alias failure modified the installer manifest."
+
+    $sourceAlias = Join-PathParts $fixtureRoot "source-alias"
+    $ancestorSource = Join-PathParts $ancestorRuntime "skills" "project-bootstrap"
+    $sourceAliasMode = New-AgentSkillBridgeAncestorAlias -Path $sourceAlias -Target $ancestorSource
+    $sourceAliasRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $ancestorRuntime -Target (Join-PathParts $sourceAlias "agent-skills") -SkillName "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($sourceAliasRun.exit_code -ne 0) -Message "Selected-source ancestor alias bypassed physical containment."
+    Assert-AgentSkillBridgeCondition -Condition (($sourceAliasRun.output -join "`n").Contains("outside selected skill source")) -Message "Selected-source ancestor alias failure did not report source containment."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorSource "agent-skills"))) -Message "Selected-source ancestor alias failure wrote into the managed skill source."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skill-bridge-manifest.json"))) -Message "Selected-source ancestor alias failure wrote bridge metadata."
+    Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $ancestorInstallManifestPath -Algorithm SHA256).Hash -eq $ancestorInstallManifestHash) -Message "Selected-source ancestor alias failure modified the installer manifest."
+
+    $aliasB = Join-PathParts $fixtureRoot "runtime-alias-b"
+    $aliasA = Join-PathParts $fixtureRoot "runtime-alias-a"
+    New-AgentSkillBridgeAncestorAlias -Path $aliasB -Target $ancestorRuntime | Out-Null
+    New-AgentSkillBridgeAncestorAlias -Path $aliasA -Target $aliasB | Out-Null
+    $multiAliasRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $ancestorRuntime -Target (Join-PathParts $aliasA "agent-skills") -SkillName "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($multiAliasRun.exit_code -ne 0) -Message "Multi-level ancestor aliases bypassed physical runtime containment."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skills"))) -Message "Multi-level ancestor alias failure wrote into managed runtime content."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skill-bridge-manifest.json"))) -Message "Multi-level ancestor alias failure wrote bridge metadata."
+    Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $ancestorInstallManifestPath -Algorithm SHA256).Hash -eq $ancestorInstallManifestHash) -Message "Multi-level ancestor alias failure modified the installer manifest."
+    $evidence.Add([ordered]@{ scenario = "physical-runtime-and-source-ancestor-containment"; platform_alias = $runtimeAliasMode; source_alias = $sourceAliasMode; runtime_exit_code = $runtimeAliasRun.exit_code; source_exit_code = $sourceAliasRun.exit_code; multi_level_exit_code = $multiAliasRun.exit_code; zero_write = $true })
+
+    # A safe alias is canonicalized to its external physical destination and is
+    # allowed to create the bridge there.
+    $safeRuntime = Join-PathParts $fixtureRoot "safe-alias-runtime"
+    $safeExternalRoot = Join-PathParts $fixtureRoot "external-agent-skills"
+    $safeAlias = Join-PathParts $fixtureRoot "safe-alias"
+    New-AgentSkillBridgeFixtureRuntime -Installer $installer -Root $safeRuntime | Out-Null
+    New-Item -ItemType Directory -Force -Path $safeExternalRoot | Out-Null
+    $safeAliasMode = New-AgentSkillBridgeAncestorAlias -Path $safeAlias -Target $safeExternalRoot
+    $safeRun = Invoke-IsolatedPowerShellScript -ScriptPath $bridgeScript -Arguments @(
+        "-RuntimeDir", $safeRuntime,
+        "-AgentSkillsDir", (Join-PathParts $safeAlias "agent-skills"),
+        "-Skill", "project-bootstrap",
+        "-Json"
+    )
+    $safePhysicalTarget = Join-PathParts $safeExternalRoot "agent-skills" "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($safeRun.exit_code -eq 0) -Message ("Safe ancestor alias was rejected: {0}" -f ($safeRun.output -join "`n"))
+    Assert-AgentSkillBridgeCondition -Condition (Test-AgentSkillBridgeReparsePoint -Path $safePhysicalTarget) -Message "Safe ancestor alias did not create the bridge at its physical destination."
+    Assert-AgentSkillBridgeCondition -Condition (Test-Path -LiteralPath (Join-PathParts $safeRuntime "agent-skill-bridge-manifest.json") -PathType Leaf) -Message "Safe ancestor alias did not write bridge metadata after successful preflight."
+    $evidence.Add([ordered]@{ scenario = "safe-ancestor-alias"; platform_alias = $safeAliasMode; result = "created"; physical_target = $safePhysicalTarget })
+
+    # Broken and cyclic ancestor links are rejected before creating a target,
+    # bridge link, temporary manifest, or bridge manifest.
+    $invalidAliasRuntime = Join-PathParts $fixtureRoot "invalid-alias-runtime"
+    New-AgentSkillBridgeFixtureRuntime -Installer $installer -Root $invalidAliasRuntime | Out-Null
+    $invalidInstallManifestPath = Join-PathParts $invalidAliasRuntime "install-manifest.json"
+    $invalidInstallManifestHash = (Get-FileHash -LiteralPath $invalidInstallManifestPath -Algorithm SHA256).Hash
+    $brokenAlias = Join-PathParts $fixtureRoot "broken-alias"
+    $brokenMode = New-AgentSkillBridgeBrokenAlias -Path $brokenAlias -MissingTarget (Join-PathParts $fixtureRoot "missing-alias-target")
+    $brokenRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $invalidAliasRuntime -Target (Join-PathParts $brokenAlias "agent-skills") -SkillName "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($brokenRun.exit_code -ne 0) -Message "Broken ancestor link was accepted."
+    Assert-AgentSkillBridgeCondition -Condition (($brokenRun.output -join "`n").Contains("Broken reparse point")) -Message "Broken ancestor link failure did not identify the unresolved reparse point."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $invalidAliasRuntime "agent-skill-bridge-manifest.json"))) -Message "Broken ancestor link failure wrote bridge metadata."
+    Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $invalidInstallManifestPath -Algorithm SHA256).Hash -eq $invalidInstallManifestHash) -Message "Broken ancestor link failure modified the installer manifest."
+
+    $cycleAliasA = Join-PathParts $fixtureRoot "cycle-alias-a"
+    $cycleAliasB = Join-PathParts $fixtureRoot "cycle-alias-b"
+    $cycleMode = New-AgentSkillBridgeAliasCycle -FirstPath $cycleAliasA -SecondPath $cycleAliasB
+    $cycleRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $invalidAliasRuntime -Target (Join-PathParts $cycleAliasA "agent-skills") -SkillName "project-bootstrap"
+    Assert-AgentSkillBridgeCondition -Condition ($cycleRun.exit_code -ne 0) -Message "Ancestor link cycle was accepted."
+    Assert-AgentSkillBridgeCondition -Condition (($cycleRun.output -join "`n").Contains("cycle detected")) -Message "Ancestor link cycle failure did not identify the cycle."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $invalidAliasRuntime "agent-skill-bridge-manifest.json"))) -Message "Ancestor link cycle failure wrote bridge metadata."
+    Assert-AgentSkillBridgeCondition -Condition (@(Get-ChildItem -LiteralPath $invalidAliasRuntime -Filter ".agent-skill-bridge-manifest.*.tmp" -Force).Count -eq 0) -Message "Invalid ancestor link failure left a temporary bridge manifest."
+    Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $invalidInstallManifestPath -Algorithm SHA256).Hash -eq $invalidInstallManifestHash) -Message "Ancestor link cycle failure modified the installer manifest."
+    $evidence.Add([ordered]@{ scenario = "broken-and-cyclic-ancestor-aliases"; broken_alias = $brokenMode; cycle_alias = $cycleMode; broken_exit_code = $brokenRun.exit_code; cycle_exit_code = $cycleRun.exit_code; zero_write = $true })
 
     # Existing non-link targets fail before metadata or links are written.
     $nonLinkRuntime = Join-PathParts $fixtureRoot "non-link-runtime"
