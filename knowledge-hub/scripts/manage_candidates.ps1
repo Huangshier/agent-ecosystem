@@ -41,7 +41,138 @@ function Get-FullPath {
 
 function Get-PathWithSeparator {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return (Get-FullPath -Path $Path) + [System.IO.Path]::DirectorySeparatorChar
+    $full = Get-FullPath -Path $Path
+    if ($full.EndsWith([string][System.IO.Path]::DirectorySeparatorChar, $script:PathComparison) -or $full.EndsWith([string][System.IO.Path]::AltDirectorySeparatorChar, $script:PathComparison)) {
+        return $full
+    }
+    return $full + [System.IO.Path]::DirectorySeparatorChar
+}
+
+function Get-ChildPathEntry {
+    param(
+        [Parameter(Mandatory = $true)][string]$Parent,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $candidatePath = Join-Path $Parent $Name
+    try {
+        return (Get-Item -LiteralPath $candidatePath -Force -ErrorAction Stop)
+    }
+    catch {
+        try {
+            foreach ($item in @(Get-ChildItem -LiteralPath $Parent -Force -ErrorAction Stop)) {
+                if ($item.Name.Equals($Name, $script:PathComparison)) {
+                    return $item
+                }
+            }
+        }
+        catch {
+            throw "Physical path resolution could not read an existing ancestor."
+        }
+    }
+    return $null
+}
+
+function Get-PhysicalPathInternal {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][hashtable]$State,
+        [switch]$RequireExisting
+    )
+
+    $full = Get-FullPath -Path $Path
+    $root = [System.IO.Path]::GetPathRoot($full)
+    if ([string]::IsNullOrWhiteSpace($root)) {
+        throw "Physical path resolution requires an absolute path."
+    }
+    try {
+        $rootItem = Get-Item -LiteralPath $root -Force -ErrorAction Stop
+    }
+    catch {
+        throw "Physical path resolution could not read the path root."
+    }
+    if (-not $rootItem.PSIsContainer) {
+        throw "Physical path resolution found a non-directory path root."
+    }
+
+    $current = Get-FullPath -Path $root
+    $remainder = $full.Substring($root.Length)
+    $segments = @($remainder -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    for ($index = 0; $index -lt $segments.Count; $index++) {
+        $segment = [string]$segments[$index]
+        $entry = Get-ChildPathEntry -Parent $current -Name $segment
+        if ($null -eq $entry) {
+            if ($RequireExisting.IsPresent) {
+                throw "Physical path resolution found a broken symbolic link or missing required target."
+            }
+            for ($remaining = $index; $remaining -lt $segments.Count; $remaining++) {
+                $current = Join-Path $current ([string]$segments[$remaining])
+            }
+            return (Get-FullPath -Path $current)
+        }
+
+        $entryPath = Get-FullPath -Path $entry.FullName
+        if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            $linkType = if ($entry.PSObject.Properties.Name -contains "LinkType") { [string]$entry.LinkType } else { "" }
+            if ($linkType -notin @("Junction", "SymbolicLink")) {
+                throw "Physical path resolution encountered an unsupported reparse point."
+            }
+            $targetProperty = $entry.PSObject.Properties["Target"]
+            $targets = @(if ($null -eq $targetProperty) { @() } else { @($targetProperty.Value) })
+            if ($targets.Count -ne 1 -or [string]::IsNullOrWhiteSpace([string]$targets[0])) {
+                throw "Physical path resolution could not read a link target."
+            }
+
+            $State.Hops = [int]$State.Hops + 1
+            if ([int]$State.Hops -gt [int]$State.HopLimit) {
+                throw "Physical path resolution exceeded the symbolic-link hop limit."
+            }
+            if (-not $State.ActiveLinks.Add($entryPath)) {
+                throw "Physical path resolution detected a symbolic-link cycle."
+            }
+            try {
+                $target = [string]$targets[0]
+                if (-not [System.IO.Path]::IsPathRooted($target)) {
+                    $target = Join-Path ([System.IO.Path]::GetDirectoryName($entryPath)) $target
+                }
+                $current = Get-PhysicalPathInternal -Path $target -State $State -RequireExisting
+            }
+            finally {
+                [void]$State.ActiveLinks.Remove($entryPath)
+            }
+        }
+        else {
+            $current = $entryPath
+        }
+
+        if ($index -lt ($segments.Count - 1)) {
+            try {
+                $currentItem = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            }
+            catch {
+                throw "Physical path resolution could not read an existing ancestor."
+            }
+            if (-not $currentItem.PSIsContainer) {
+                throw "Physical path resolution encountered a file before the final path segment."
+            }
+        }
+    }
+    return (Get-FullPath -Path $current)
+}
+
+function Get-PhysicalPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [switch]$RequireExisting
+    )
+
+    $comparer = if ($env:OS -eq "Windows_NT") { [System.StringComparer]::OrdinalIgnoreCase } else { [System.StringComparer]::Ordinal }
+    $state = @{
+        Hops = 0
+        HopLimit = 64
+        ActiveLinks = New-Object 'System.Collections.Generic.HashSet[string]' ($comparer)
+    }
+    return (Get-PhysicalPathInternal -Path $Path -State $state -RequireExisting:$RequireExisting.IsPresent)
 }
 
 function Test-PathContainedBy {
@@ -235,16 +366,37 @@ function Test-GlobalCandidateAnchor {
     return $false
 }
 
+function Get-PublicSafeRuleViolation {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $rules = @(
+        [pscustomobject]@{ Category = "absolute path"; Pattern = '(?i)(?:[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/]|/(?:Users|home|private|tmp|var|mnt|Volumes|Applications|Library|System|workspace|workspaces|data|repo|project|etc|opt|srv|root|usr|run|boot|dev|proc|sys)(?:/|\b))' },
+        [pscustomobject]@{ Category = "GitHub token"; Pattern = '(?i)\b(?:ghp_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,})' },
+        [pscustomobject]@{ Category = "OpenAI key"; Pattern = '(?i)\bsk-[A-Za-z0-9_-]{8,}' },
+        [pscustomobject]@{ Category = "AWS access key"; Pattern = '\bAKIA[0-9A-Z]{12,}' },
+        [pscustomobject]@{ Category = "Slack token"; Pattern = '(?i)\bxox[a-z]-[A-Za-z0-9-]{8,}' },
+        [pscustomobject]@{ Category = "private key"; Pattern = '(?i)-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----' },
+        [pscustomobject]@{ Category = "authorization header"; Pattern = '(?i)\bAuthorization\s*:\s*Bearer\s+\S+' },
+        [pscustomobject]@{ Category = "secret assignment"; Pattern = '(?i)\b(?:cookie|credential|password|passwd|api[ _-]?key|client[ _-]?secret|secret|access[ _-]?token|refresh[ _-]?token|auth[ _-]?token|token)\b\s*[:=]\s*\S+' },
+        [pscustomobject]@{ Category = "raw evidence"; Pattern = '(?i)(?:\b(?:raw[ _-]?(?:log|transcript)|transcript|stack trace|command output)(?:[ _-]?sentinel)?\b\s*[:=\-]|\bTraceback\s*\(most recent call last\):)' },
+        [pscustomobject]@{ Category = "private repository mapping"; Pattern = '(?i)\b(?:private[ _-]?(?:repository|repo)[ _-]?mapping|(?:repository|repo)[ _-]?mapping\s*[:=]|(?:access|sensitive)[ _-]?(?:material|value)\s*[:=])' }
+    )
+    foreach ($rule in $rules) {
+        if ($Value -match $rule.Pattern) {
+            return [string]$rule.Category
+        }
+    }
+    return ""
+}
+
 function Assert-PublicSafeValue {
     param(
         [Parameter(Mandatory = $true)][string]$Value,
         [Parameter(Mandatory = $true)][string]$Field
     )
-    if ($Value -match '(?i)(^|[\s"''(])(?:[A-Za-z]:[\\/]|\\\\|/(?:Users|home|private|tmp|var|mnt|Volumes)/)') {
-        throw "Public-safe field '$Field' contains an absolute path. Move local review pointers under _local."
-    }
-    if ($Value -match '(?i)\b(?:access|sensitive)[ _-]?(?:material|value)\s*[:=]\s*\S+') {
-        throw "Public-safe field '$Field' contains access material."
+    $category = Get-PublicSafeRuleViolation -Value $Value
+    if (-not [string]::IsNullOrWhiteSpace($category)) {
+        throw "Public-safe field '$Field' violates the '$category' rule. Move private evidence under _local."
     }
 }
 
@@ -354,17 +506,16 @@ function Find-ProjectCandidates {
         throw "ProjectRoot is required for explicit legacy/import discovery."
     }
     $resolvedLanguages = @(Get-ProjectLanguages -Roots $Roots -Languages $Languages)
+    $physicalInbox = if ([string]::IsNullOrWhiteSpace($WritableInbox)) { "" } else { Get-PhysicalPath -Path $WritableInbox }
     $results = New-Object 'System.Collections.Generic.List[object]'
     for ($index = 0; $index -lt $Roots.Count; $index++) {
-        $root = Get-FullPath -Path $Roots[$index]
+        $root = Get-PhysicalPath -Path $Roots[$index] -RequireExisting
         if (-not (Test-Path -LiteralPath $root -PathType Container)) {
             throw "Project root not found: $root"
         }
-        Assert-NoReparsePoint -Path $root -Label "Project root"
-        if (-not [string]::IsNullOrWhiteSpace($WritableInbox)) {
-            $inbox = Get-FullPath -Path $WritableInbox
-            if ((Test-PathContainedBy -Path $inbox -Root $root) -or (Test-PathContainedBy -Path $root -Root $inbox)) {
-                throw "Project root and writable inbox must not overlap: project=$root inbox=$inbox"
+        if (-not [string]::IsNullOrWhiteSpace($physicalInbox)) {
+            if ((Test-PathContainedBy -Path $physicalInbox -Root $root) -or (Test-PathContainedBy -Path $root -Root $physicalInbox)) {
+                throw "Project root and writable inbox must not physically overlap."
             }
         }
 
@@ -414,7 +565,7 @@ function ConvertFrom-CandidateMarkdown {
         $candidate = $match.Groups['json'].Value | ConvertFrom-Json
     }
     catch {
-        throw "Malformed candidate JSON front matter: $Path. $($_.Exception.Message)"
+        throw "Malformed candidate JSON front matter: $Path"
     }
     $candidate | Add-Member -NotePropertyName "__path" -NotePropertyValue $Path -Force
     $candidate | Add-Member -NotePropertyName "__body" -NotePropertyValue $match.Groups['body'].Value -Force
@@ -498,14 +649,13 @@ function Assert-Candidate {
 
 function Read-CandidateInbox {
     param([Parameter(Mandatory = $true)][string]$Path)
-    $inbox = Get-FullPath -Path $Path
+    $inbox = Get-PhysicalPath -Path $Path
     if (-not (Test-Path -LiteralPath $inbox)) {
         return @()
     }
     if (-not (Test-Path -LiteralPath $inbox -PathType Container)) {
         throw "Inbox path is not a directory: $inbox"
     }
-    Assert-NoReparsePoint -Path $inbox -Label "Candidate inbox"
     $items = @(Get-ChildItem -LiteralPath $inbox -Force | Sort-Object Name)
     foreach ($item in $items) {
         if ($item.PSIsContainer -or $item.Extension -cne ".md") {
@@ -543,18 +693,55 @@ function Assert-InboxConsistency {
         $ids[$id] = $candidate
         $dedupe[$key] = $candidate
     }
+    $mergeOwners = @{}
     foreach ($candidate in $Candidates) {
         $id = [string]$candidate.candidate_id
         $target = [string]$candidate.superseded_by
         if (-not [string]::IsNullOrWhiteSpace($target) -and -not $ids.ContainsKey($target)) {
             throw "Candidate $id references missing superseded_by target: $target"
         }
+        $localMerged = @{}
         foreach ($mergedId in @($candidate.merged_from)) {
             $merged = [string]$mergedId
-            if ($merged -eq $id -or -not $ids.ContainsKey($merged)) {
+            if ([string]::IsNullOrWhiteSpace($merged) -or $merged -eq $id -or -not $ids.ContainsKey($merged)) {
                 throw "Candidate $id has invalid merged_from reference: $merged"
             }
+            if ($localMerged.ContainsKey($merged)) {
+                throw "Candidate $id contains a duplicate merged_from reference."
+            }
+            $localMerged[$merged] = $true
+            if ($mergeOwners.ContainsKey($merged) -and [string]$mergeOwners[$merged] -cne $id) {
+                throw "A source candidate cannot belong to multiple merged_from targets: $merged"
+            }
+            $mergeOwners[$merged] = $id
         }
+    }
+    foreach ($sourceId in @($mergeOwners.Keys)) {
+        $ownerId = [string]$mergeOwners[$sourceId]
+        $source = $ids[$sourceId]
+        if ([string]$source.status -cne "superseded" -or [string]$source.superseded_by -cne $ownerId) {
+            throw "A merged_from source must be superseded by its declaring target: $sourceId"
+        }
+    }
+    foreach ($candidate in $Candidates) {
+        $reviewMergeOwners = @(
+            $candidate._local.reviews |
+                ForEach-Object { [string]$_.action } |
+                Where-Object { $_ -like "merged-into:*" } |
+                ForEach-Object { $_.Substring("merged-into:".Length) } |
+                Sort-Object -Unique
+        )
+        if ($reviewMergeOwners.Count -gt 1) {
+            throw "A source candidate contains conflicting merge review records."
+        }
+        if ($reviewMergeOwners.Count -eq 1) {
+            $candidateId = [string]$candidate.candidate_id
+            if (-not $mergeOwners.ContainsKey($candidateId) -or [string]$mergeOwners[$candidateId] -cne [string]$reviewMergeOwners[0]) {
+                throw "A recorded merge source must be present in its target merged_from relation."
+            }
+        }
+    }
+    foreach ($candidate in $Candidates) {
         $visited = @{}
         $current = $candidate
         while (-not [string]::IsNullOrWhiteSpace([string]$current.superseded_by)) {
@@ -625,12 +812,11 @@ function Write-InboxTransaction {
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][object[]]$Candidates
     )
-    $inbox = Get-FullPath -Path $Path
-    $parent = [System.IO.Path]::GetDirectoryName($inbox)
+    $inbox = Get-PhysicalPath -Path $Path
+    $parent = Get-PhysicalPath -Path ([System.IO.Path]::GetDirectoryName($inbox)) -RequireExisting
     if ([string]::IsNullOrWhiteSpace($parent) -or -not (Test-Path -LiteralPath $parent -PathType Container)) {
         throw "Inbox parent directory must already exist: $parent"
     }
-    Assert-NoReparsePoint -Path $parent -Label "Inbox parent"
     Assert-InboxConsistency -Candidates $Candidates
     foreach ($candidate in $Candidates) {
         Assert-Candidate -Candidate $candidate
@@ -638,9 +824,10 @@ function Write-InboxTransaction {
 
     $leaf = [System.IO.Path]::GetFileName($inbox)
     $transactionId = [guid]::NewGuid().ToString("N")
-    $stage = Join-Path $parent (".{0}.stage.{1}" -f $leaf, $transactionId)
-    $backup = Join-Path $parent (".{0}.backup.{1}" -f $leaf, $transactionId)
-    if (-not (Test-PathContainedBy -Path $stage -Root $parent) -or -not (Test-PathContainedBy -Path $backup -Root $parent)) {
+    $stage = Get-PhysicalPath -Path (Join-Path $parent (".{0}.stage.{1}" -f $leaf, $transactionId))
+    $backup = Get-PhysicalPath -Path (Join-Path $parent (".{0}.backup.{1}" -f $leaf, $transactionId))
+    $finalInbox = Get-PhysicalPath -Path $inbox
+    if (-not (Test-PathContainedBy -Path $stage -Root $parent) -or -not (Test-PathContainedBy -Path $backup -Root $parent) -or -not (Test-PathContainedBy -Path $finalInbox -Root $parent)) {
         throw "Transaction paths escaped the inbox parent."
     }
     [System.IO.Directory]::CreateDirectory($stage) | Out-Null
@@ -652,16 +839,16 @@ function Write-InboxTransaction {
         }
         [void](Read-CandidateInbox -Path $stage)
 
-        $hadInbox = Test-Path -LiteralPath $inbox
+        $hadInbox = Test-Path -LiteralPath $finalInbox
         if ($hadInbox) {
-            Move-Item -LiteralPath $inbox -Destination $backup
+            Move-Item -LiteralPath $finalInbox -Destination $backup
         }
         try {
-            Move-Item -LiteralPath $stage -Destination $inbox
+            Move-Item -LiteralPath $stage -Destination $finalInbox
         }
         catch {
-            if ($hadInbox -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $inbox)) {
-                Move-Item -LiteralPath $backup -Destination $inbox
+            if ($hadInbox -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $finalInbox)) {
+                Move-Item -LiteralPath $backup -Destination $finalInbox
             }
             throw
         }
@@ -674,8 +861,8 @@ function Write-InboxTransaction {
             [System.IO.Directory]::Delete($stage, $true)
         }
         if (Test-Path -LiteralPath $backup) {
-            if (-not (Test-Path -LiteralPath $inbox)) {
-                Move-Item -LiteralPath $backup -Destination $inbox
+            if (-not (Test-Path -LiteralPath $finalInbox)) {
+                Move-Item -LiteralPath $backup -Destination $finalInbox
             }
             else {
                 [System.IO.Directory]::Delete($backup, $true)
@@ -709,6 +896,11 @@ function Add-ReviewRecord {
 
 function ConvertTo-PublicCandidate {
     param([Parameter(Mandatory = $true)][object]$Candidate)
+    Assert-PublicSafeValue -Value ([string]$Candidate.title) -Field "title"
+    Assert-PublicSafeValue -Value ([string]$Candidate.summary) -Field "summary"
+    foreach ($keyword in @($Candidate.keywords)) {
+        Assert-PublicSafeValue -Value ([string]$keyword) -Field "keywords"
+    }
     $public = [pscustomobject][ordered]@{
         schema_version = 1
         candidate_id = [string]$Candidate.candidate_id
@@ -766,7 +958,8 @@ switch ($Mode) {
             if ([string]::IsNullOrWhiteSpace($InboxDir)) {
                 throw "Discover defaults to the candidate inbox. Supply InboxDir, or explicitly supply ProjectRoot and Language for legacy/import scanning."
             }
-            Write-CandidateOutput -Candidates @(Read-CandidateInbox -Path $InboxDir) -AsJson:$Json.IsPresent
+            $physicalInbox = Get-PhysicalPath -Path $InboxDir
+            Write-CandidateOutput -Candidates @(Read-CandidateInbox -Path $physicalInbox) -AsJson:$Json.IsPresent
         }
         else {
             $discovered = @(Find-ProjectCandidates -Roots $ProjectRoot -Languages $Language -Date $ObservedOn)
@@ -777,8 +970,9 @@ switch ($Mode) {
         if ([string]::IsNullOrWhiteSpace($InboxDir)) {
             throw "InboxDir is required for Intake. No runtime or home directory is auto-detected."
         }
-        $existing = @(Read-CandidateInbox -Path $InboxDir)
-        $discovered = @(Find-ProjectCandidates -Roots $ProjectRoot -Languages $Language -Date $ObservedOn -WritableInbox $InboxDir)
+        $physicalInbox = Get-PhysicalPath -Path $InboxDir
+        $existing = @(Read-CandidateInbox -Path $physicalInbox)
+        $discovered = @(Find-ProjectCandidates -Roots $ProjectRoot -Languages $Language -Date $ObservedOn -WritableInbox $physicalInbox)
         $incoming = @(Merge-DiscoveredCandidates -Candidates $discovered)
         if ($incoming.Count -eq 0) {
             Write-Output "Candidate intake: discovered=0 changed=0"
@@ -808,14 +1002,15 @@ switch ($Mode) {
             }
         }
         $updated = @($map.Values | Sort-Object candidate_id)
-        Write-InboxTransaction -Path $InboxDir -Candidates $updated
+        Write-InboxTransaction -Path $physicalInbox -Candidates $updated
         Write-Output ("Candidate intake: discovered={0} created={1} merged={2} total={3}" -f $incoming.Count, $created, $merged, $updated.Count)
     }
     "List" {
         if ([string]::IsNullOrWhiteSpace($InboxDir)) {
             throw "InboxDir is required for List."
         }
-        $items = @(Read-CandidateInbox -Path $InboxDir)
+        $physicalInbox = Get-PhysicalPath -Path $InboxDir
+        $items = @(Read-CandidateInbox -Path $physicalInbox)
         if ($PSBoundParameters.ContainsKey("Status")) {
             $items = @($items | Where-Object { [string]$_.status -eq $Status })
         }
@@ -825,7 +1020,8 @@ switch ($Mode) {
         if ([string]::IsNullOrWhiteSpace($InboxDir)) {
             throw "InboxDir is required for Export. Export writes only to stdout."
         }
-        $items = @(Read-CandidateInbox -Path $InboxDir)
+        $physicalInbox = Get-PhysicalPath -Path $InboxDir
+        $items = @(Read-CandidateInbox -Path $physicalInbox)
         if ($PSBoundParameters.ContainsKey("Status")) {
             $items = @($items | Where-Object { [string]$_.status -eq $Status })
         }
@@ -838,7 +1034,8 @@ switch ($Mode) {
         if ([string]::IsNullOrWhiteSpace($ReviewedBy)) {
             throw "ReviewedBy is required for an explicit human triage decision."
         }
-        $items = @(Read-CandidateInbox -Path $InboxDir | ForEach-Object { Copy-CandidateObject -Candidate $_ })
+        $physicalInbox = Get-PhysicalPath -Path $InboxDir
+        $items = @(Read-CandidateInbox -Path $physicalInbox | ForEach-Object { Copy-CandidateObject -Candidate $_ })
         $byId = @{}
         foreach ($item in $items) {
             $byId[[string]$item.candidate_id] = $item
@@ -847,6 +1044,18 @@ switch ($Mode) {
             throw "CandidateId not found: $CandidateId"
         }
         $target = $byId[$CandidateId]
+        $mergeOwner = ""
+        foreach ($possibleOwner in $items) {
+            if (@($possibleOwner.merged_from | ForEach-Object { [string]$_ }) -contains $CandidateId) {
+                if (-not [string]::IsNullOrWhiteSpace($mergeOwner) -and $mergeOwner -cne [string]$possibleOwner.candidate_id) {
+                    throw "Candidate is referenced by multiple merge targets."
+                }
+                $mergeOwner = [string]$possibleOwner.candidate_id
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($mergeOwner) -and ($Status -cne "superseded" -or $SupersededBy -cne $mergeOwner)) {
+            throw "A merged source cannot be retriaged until its existing merge relationship is explicitly removed."
+        }
         if ($Status -eq "superseded") {
             if ([string]::IsNullOrWhiteSpace($SupersededBy) -or -not $byId.ContainsKey($SupersededBy) -or $SupersededBy -eq $CandidateId) {
                 throw "A superseded triage decision requires an existing, different SupersededBy candidate ID."
@@ -862,12 +1071,23 @@ switch ($Mode) {
         $target.status = $Status
         Add-ReviewRecord -Candidate $target -Date $ObservedOn -Reviewer $ReviewedBy -Action ("status:$Status") -Note $ReviewNote
 
-        foreach ($sourceId in @($MergeCandidateId | Sort-Object -Unique)) {
-            if ([string]::IsNullOrWhiteSpace($sourceId)) {
-                continue
-            }
+        $requestedMergeIds = @($MergeCandidateId | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if (@($requestedMergeIds | Sort-Object -Unique).Count -ne $requestedMergeIds.Count) {
+            throw "MergeCandidateId must not contain duplicates."
+        }
+        foreach ($sourceId in @($requestedMergeIds | Sort-Object)) {
             if ($sourceId -eq $CandidateId -or -not $byId.ContainsKey($sourceId)) {
                 throw "MergeCandidateId must reference an existing candidate other than the target: $sourceId"
+            }
+            $sourceOwner = ""
+            foreach ($possibleOwner in $items) {
+                if (@($possibleOwner.merged_from | ForEach-Object { [string]$_ }) -contains $sourceId) {
+                    $sourceOwner = [string]$possibleOwner.candidate_id
+                    break
+                }
+            }
+            if (-not [string]::IsNullOrWhiteSpace($sourceOwner) -and $sourceOwner -cne $CandidateId) {
+                throw "Merge source is already owned by another merged_from target."
             }
             $source = $byId[$sourceId]
             $source.status = "superseded"
@@ -876,7 +1096,7 @@ switch ($Mode) {
             $target.merged_from = @(@($target.merged_from) + $sourceId | Sort-Object -Unique)
         }
         Assert-InboxConsistency -Candidates $items
-        Write-InboxTransaction -Path $InboxDir -Candidates $items
+        Write-InboxTransaction -Path $physicalInbox -Candidates $items
         Write-Output ("Candidate triage: candidate_id={0} status={1} merged={2}" -f $CandidateId, $Status, @($MergeCandidateId).Count)
     }
 }

@@ -153,12 +153,27 @@ merged into the selected target. Intake and triage fully preflight the inbox,
 stage the complete result, validate it, and then replace the inbox as one
 transaction.
 
+A merge relation is bidirectional: if target `A` lists source `B` in
+`merged_from`, `B` must be `superseded` and its `superseded_by` value must be
+exactly `A`. One source cannot belong to multiple merge targets. Retriaging a
+merged source or moving it to another merge target fails until a future
+explicit unmerge operation removes the old relation; this workflow does not
+silently rewrite merge ownership.
+
 ## Public And Private Boundary
 
 Discovery reads only explicitly supplied project roots. The helper does not
 scan a home directory, private overlay, unlisted repository, or live agent
 runtime. Its only durable write target is the explicitly supplied candidate
 inbox; staging and rollback directories are temporary siblings of that inbox.
+
+Project roots, the inbox, its parent, and transaction paths are compared by
+their canonical physical locations. Junction and symbolic-link ancestors are
+resolved segment by segment, including relative Unix-like link targets and
+multi-link chains. Broken links, cycles, unreadable targets, excessive link
+hops, or physical overlap between a project root and the writable inbox fail
+before staging. A safe alias outside every project root remains supported, and
+the transaction writes only through the validated physical target.
 
 Public export is a summary list, not candidate Markdown. Human and JSON export
 omit:
@@ -168,9 +183,18 @@ omit:
 - raw logs, transcripts, and complete candidate bodies;
 - access material.
 
+`title`, `summary`, and every `keywords` value are checked when discovery
+creates a candidate, whenever an existing inbox entry is read, and again before
+human or JSON export. The fail-closed rules cover common absolute paths,
+credential and authorization forms, major provider token/key shapes, private
+key markers, raw evidence forms, and private repository/access mappings.
+Failures identify only the field and rule category, never the rejected value.
+
 Malformed existing candidates, unsupported schema or status values, duplicate
 candidate IDs, duplicate entries for one dedupe key, conflicting normalized
 metadata, missing relationships, and superseded cycles fail before writes.
+`merged_from` self-references, duplicates, missing IDs, conflicting owners, and
+one-sided merge metadata fail at the same preflight boundary.
 
 ## Review Decision Checklist
 
