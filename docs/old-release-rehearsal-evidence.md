@@ -12,6 +12,10 @@ against the current `main` branch to validate the upgrade path.
 **Install mode**: copy (`-Copy -Force`)
 **Profile**: `recommended`
 
+This section is historical evidence. At rehearsal time, `-Force` still meant a
+full replacement. Current `main` treats `-Force` as a deprecated alias for
+`-ReplaceManaged` and uses protected incremental copy installs by default.
+
 ### Scenario 1: Runtime Install Upgrade
 
 Steps:
@@ -82,9 +86,9 @@ memory contract.
 
 - This rehearsal tested only the `recommended` profile in copy mode. The
   `minimal`, `full`, and `dev` profiles install a subset or identical content.
-- Link/junction mode was not explicitly rehearsed because it uses the same
-  underlying skill and template content; the install manifest records the
-  mode difference.
+- The then-default link/junction mode was not explicitly rehearsed. Current
+  releases make links an explicit `-DevLink` contributor mode and validate it
+  separately from the default copy contract.
 - Only `en` project language was rehearsed. The `zh-CN` language path uses
   the same template structure with different content.
 - The rehearsal used the live knowledge hub at `~/.agents/knowledge-hub`,

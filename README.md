@@ -58,8 +58,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profi
 评估时建议先安装到临时 runtime：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
+
+普通安装默认创建独立副本，并可安全增量重跑。只有开发者需要让 runtime
+直接跟随当前 source checkout 时，才显式添加 `-DevLink`。兼容参数 `-Copy`
+仍可使用；`-ReplaceManaged` 用于覆盖受管项且始终保留未知文件。
 
 初始化一个项目：
 
@@ -89,8 +93,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-con
 
 ## 采用后会出现什么
 
-在 runtime 侧，安装器会生成 skills、knowledge hub 和 `install-manifest.json`。
-manifest 可能包含本机绝对路径，不应提交到项目仓库。
+在 runtime 侧，安装器会生成 skills、knowledge hub、`install-manifest.json`
+和 `install-report.json`。manifest 记录 runtime-relative 的受管文件与内容哈希；
+report 记录本次 updated、unchanged、unknown、local-modified 和 conflict 结果。
+这些都是 runtime metadata，不应提交到项目仓库。
 
 在项目侧，bootstrap 通常会创建或维护：
 

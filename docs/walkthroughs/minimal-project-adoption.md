@@ -28,16 +28,17 @@ launcher with:
 pwsh -NoProfile -File <script> <arguments>
 ```
 
-Keep generated runtime directories and manifests out of your project repository.
-They can include local absolute paths.
+Keep generated runtime directories, manifests, and reports out of your project
+repository. They are runtime metadata even though their recorded file paths are
+runtime-relative.
 
 ## 1. Install A Temporary Runtime
 
-Start with a copy-mode runtime so evaluation does not alter your normal agent
-home:
+Start with the default copy runtime so evaluation does not alter your normal
+agent home or point back to the source checkout:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
 ```
 
 The `recommended` profile installs the public Workflow Kernel skills and public
@@ -51,6 +52,7 @@ Expected result:
 - `<runtime>\skills\memory-governance`
 - `<runtime>\knowledge-hub`
 - `<runtime>\install-manifest.json`
+- `<runtime>\install-report.json`
 
 ## 2. Bootstrap The Empty Project
 
@@ -218,9 +220,11 @@ manifest-based uninstaller:
 powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
-The uninstaller removes only paths recorded in `install-manifest.json` and
-preserves unknown files. If the manifest is missing, it prints manual cleanup
-guidance instead of deleting files blindly.
+For schema-2 copy installs, nested unknown or locally modified files inside a
+managed destination block the entire uninstall before deletion. Clean copy
+items and dev links use the basic manifest removal path, while paths outside
+manifest destinations remain untouched. If the manifest is missing, the script
+prints manual cleanup guidance instead of deleting files blindly.
 
 Before committing the adopted project, review:
 

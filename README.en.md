@@ -61,8 +61,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profi
 For evaluation, install into a temporary runtime first:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
+
+Normal installs create independent copies by default and can be rerun
+incrementally. Use `-DevLink` only when a contributor explicitly wants the
+runtime to follow the current source checkout. Existing `-Copy` invocations
+remain supported; `-ReplaceManaged` overwrites managed content while always
+preserving unknown files.
 
 Bootstrap a project:
 
@@ -95,9 +101,12 @@ current shell policy.
 
 ## What Adoption Creates
 
-In the runtime layer, the installer writes skills, the knowledge hub, and an
-`install-manifest.json`. The manifest can contain local absolute paths and
-should not be committed to a project repository.
+In the runtime layer, the installer writes skills, the knowledge hub,
+`install-manifest.json`, and `install-report.json`. The manifest records
+runtime-relative managed files and content hashes. The report records the
+current run's updated, unchanged, unknown, locally modified, and conflicting
+files. These runtime metadata files should not be committed to a project
+repository.
 
 In a project, bootstrap usually creates or maintains:
 

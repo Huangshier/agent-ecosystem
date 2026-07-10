@@ -95,42 +95,36 @@ try {
     $targetDir = Join-PathParts $scratchRootFull "install-behavior-runtime"
     Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
 
-    & $installer -Profile minimal -TargetDir $targetDir -Copy -Force | Out-Host
+    & $installer -Profile minimal -TargetDir $targetDir | Out-Host
     $firstManifestPath = Join-PathParts $targetDir "install-manifest.json"
     if (-not (Test-Path -LiteralPath $firstManifestPath)) {
         throw "Initial install manifest missing."
     }
 
-    $conflictFailedAsExpected = $false
-    try {
-        & $installer -Profile minimal -TargetDir $targetDir -Copy | Out-Null
-    }
-    catch {
-        if ($_.Exception.Message -match 'Destination already exists') {
-            $conflictFailedAsExpected = $true
-        }
-        else {
-            throw
-        }
-    }
-    if (-not $conflictFailedAsExpected) {
-        throw "Installer allowed overwriting an existing target without -Force."
+    & $installer -Profile minimal -TargetDir $targetDir -Copy | Out-Null
+    $rerunReport = Get-Content -LiteralPath (Join-PathParts $targetDir "install-report.json") -Raw | ConvertFrom-Json
+    if ([int]$rerunReport.counts.updated -ne 0 -or [int]$rerunReport.counts.conflicts -ne 0) {
+        throw "Unchanged installer rerun did not remain incremental."
     }
 
-    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    $forceOutput = @(& $installer -Profile recommended -TargetDir $targetDir -Force)
     $secondManifest = Get-Content -LiteralPath $firstManifestPath -Raw | ConvertFrom-Json
     if ([string]$secondManifest.profile -ne "recommended") {
         throw "Forced reinstall did not update manifest profile to recommended."
     }
     if (-not (Test-ExactArray -Actual @($secondManifest.skills) -Expected $script:profileExpectations.recommended)) {
-        throw "Forced reinstall manifest did not include recommended skills."
+        throw "Managed replacement manifest did not include recommended skills."
+    }
+    $forceWarning = "WARNING: -Force is deprecated for full reinstall semantics; treating it as -ReplaceManaged. Use -ReplaceManaged explicitly in new scripts."
+    if (@($forceOutput | Where-Object { [string]$_ -eq $forceWarning }).Count -ne 1) {
+        throw "Compatibility -Force warning was not emitted exactly once."
     }
 
-    Add-Check "installer behavior" "PASS" "No-Force conflict and forced reinstall behavior are validated." ([ordered]@{
-        target_dir = $targetDir
-        no_force_conflict = "failed_as_expected"
-        force_reinstall_profile = [string]$secondManifest.profile
-        force_reinstall_skills = @($secondManifest.skills)
+    Add-Check "installer behavior" "PASS" "Unchanged rerun and compatibility Force-to-ReplaceManaged behavior are validated." ([ordered]@{
+        unchanged_rerun = [int]$rerunReport.counts.unchanged
+        force_maps_to_replace_managed = $true
+        replacement_profile = [string]$secondManifest.profile
+        replacement_skills = @($secondManifest.skills)
     })
 }
 catch {
@@ -143,13 +137,21 @@ try {
     $targetDir = Join-PathParts $scratchRootFull "uninstall-behavior-runtime"
     Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
 
-    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    & $installer -Profile recommended -TargetDir $targetDir | Out-Host
     $manifestPath = Join-PathParts $targetDir "install-manifest.json"
     if (-not (Test-Path -LiteralPath $manifestPath)) {
         throw "Install manifest missing before uninstall validation."
     }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $manifestDestinations = @($manifest.items | ForEach-Object { [string]$_.destination })
+    $manifestDestinations = @($manifest.items | ForEach-Object {
+            $destination = [string]$_.destination
+            if ([System.IO.Path]::IsPathRooted($destination)) {
+                $destination
+            }
+            else {
+                Join-PathParts $targetDir $destination
+            }
+        })
 
     $extraFile = Join-PathParts $targetDir "user-extra.txt"
     $extraNested = Join-PathParts $targetDir "skills" "user-skill" "README.md"
@@ -170,6 +172,9 @@ try {
     if (Test-Path -LiteralPath $manifestPath) {
         throw "Install manifest still exists after uninstall."
     }
+    if (Test-Path -LiteralPath (Join-PathParts $targetDir "install-report.json")) {
+        throw "Install report still exists after uninstall."
+    }
     if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $extraNested)) {
         throw "Unknown runtime files were not preserved by uninstall."
     }
@@ -186,11 +191,68 @@ try {
         throw "Missing-manifest uninstall removed unknown content."
     }
 
-    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall removes installed items while preserving unknown runtime files." ([ordered]@{
+    $nestedUnknownTarget = Join-PathParts $scratchRootFull "uninstall-nested-unknown-runtime"
+    & $installer -Profile minimal -TargetDir $nestedUnknownTarget | Out-Null
+    $nestedUnknownPath = Join-PathParts $nestedUnknownTarget "knowledge-hub" "user-note.txt"
+    Set-Content -LiteralPath $nestedUnknownPath -Value "preserve nested unknown" -Encoding UTF8
+    $nestedUnknownResultRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $nestedUnknownTarget, "-Json")
+    $nestedUnknownResult = (($nestedUnknownResultRaw.output -join "`n") | ConvertFrom-Json)
+    if ($nestedUnknownResultRaw.exit_code -eq 0 -or [string]$nestedUnknownResult.status -ne "blocked") {
+        throw "Schema-2 nested unknown uninstall did not fail fast."
+    }
+    if (@($nestedUnknownResult.nested_unknown | Where-Object { [string]$_ -eq "knowledge-hub/user-note.txt" }).Count -ne 1) {
+        throw "Schema-2 nested unknown uninstall did not report the protected path."
+    }
+    if (-not (Test-Path -LiteralPath $nestedUnknownPath) -or -not (Test-Path -LiteralPath (Join-PathParts $nestedUnknownTarget "install-manifest.json")) -or -not (Test-Path -LiteralPath (Join-PathParts $nestedUnknownTarget "install-report.json"))) {
+        throw "Schema-2 nested unknown fail-fast removed runtime content or metadata."
+    }
+    $nestedUnknownHumanRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $nestedUnknownTarget)
+    $nestedUnknownHumanText = $nestedUnknownHumanRaw.output -join "`n"
+    foreach ($expectedLine in @("Uninstall blocked. No files were removed.", "Nested unknown files: 1", "The install manifest and install report were preserved.")) {
+        if ($nestedUnknownHumanText -notlike "*$expectedLine*") {
+            throw "Schema-2 blocked uninstall human output is missing: $expectedLine"
+        }
+    }
+
+    $localModifiedTarget = Join-PathParts $scratchRootFull "uninstall-locally-modified-runtime"
+    & $installer -Profile minimal -TargetDir $localModifiedTarget | Out-Null
+    $localModifiedPath = Join-PathParts $localModifiedTarget "knowledge-hub" "knowledge-catalog.md"
+    Set-Content -LiteralPath $localModifiedPath -Value "locally modified managed content" -Encoding UTF8
+    $localModifiedResultRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $localModifiedTarget, "-Json")
+    $localModifiedResult = (($localModifiedResultRaw.output -join "`n") | ConvertFrom-Json)
+    if ($localModifiedResultRaw.exit_code -eq 0 -or [string]$localModifiedResult.status -ne "blocked") {
+        throw "Schema-2 locally modified uninstall did not fail fast."
+    }
+    if (@($localModifiedResult.locally_modified | Where-Object { [string]$_ -eq "knowledge-hub/knowledge-catalog.md" }).Count -ne 1) {
+        throw "Schema-2 locally modified uninstall did not report the protected path."
+    }
+    if (-not (Test-Path -LiteralPath $localModifiedPath) -or -not (Test-Path -LiteralPath (Join-PathParts $localModifiedTarget "install-manifest.json"))) {
+        throw "Schema-2 locally modified fail-fast removed managed content or manifest."
+    }
+
+    $devLinkUninstallStatus = "skipped"
+    if (-not $SkipLinkMode.IsPresent) {
+        $devLinkTargetDir = Join-PathParts $scratchRootFull "uninstall-dev-link-runtime"
+        & $installer -Profile minimal -TargetDir $devLinkTargetDir -DevLink | Out-Host
+        $devLinkUninstallResult = (& $uninstaller -TargetDir $devLinkTargetDir -Json) | ConvertFrom-Json
+        if ([string]$devLinkUninstallResult.status -ne "uninstalled") {
+            throw "Dev-link uninstaller did not report uninstalled status."
+        }
+        if (Test-Path -LiteralPath (Join-PathParts $devLinkTargetDir "knowledge-hub")) {
+            throw "Dev-link knowledge-hub still exists after uninstall."
+        }
+        $devLinkUninstallStatus = [string]$devLinkUninstallResult.status
+    }
+
+    Add-Check "uninstall behavior" "PASS" "Schema-2 copy uninstall fails fast before deletion on nested unknown or locally modified files; clean copy and dev-link basic paths remain supported." ([ordered]@{
         target_dir = $targetDir
         removed = @($uninstallResult.removed)
         missing_manifest_status = [string]$missingManifestResult.status
         preserved_unknown = [bool]$uninstallResult.preserved_unknown
+        dev_link_status = $devLinkUninstallStatus
+        nested_unknown_status = [string]$nestedUnknownResult.status
+        locally_modified_status = [string]$localModifiedResult.status
+        protection_scope = [string]$uninstallResult.protection_scope
     })
 }
 catch {

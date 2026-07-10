@@ -19,8 +19,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profi
 For evaluation, use a temporary runtime first:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
+
+The default is a standalone copy. Rerunning the same command restores missing
+managed files and updates only source-changed files whose installed copies were
+not modified locally. Use `-DevLink` only for an explicit source-linked
+development runtime. Existing `-Copy` invocations remain compatible.
+
+Every run writes `install-report.json`. Unknown files are preserved and produce
+a warning status with exit code 0. A file changed both locally and in the source
+produces a conflict and a non-zero exit by default. Use `-AllowPartial` to
+accept skipped conflicts, or `-ReplaceManaged` to overwrite managed files while
+still preserving unknown files. `-Force` remains a deprecated compatibility
+alias for `-ReplaceManaged`.
 
 On non-Windows systems, or when PowerShell 7+ is already available, replace
 `powershell -NoProfile -ExecutionPolicy Bypass -File` with
@@ -32,8 +44,13 @@ To remove a generated runtime later, use the manifest-based uninstaller:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
-It removes only paths recorded in `install-manifest.json` and preserves unknown
-files. If the manifest is missing, no cleanup is performed automatically.
+For schema-2 copy items, the uninstaller first checks every managed destination
+for nested unknown files and locally modified managed files. Any finding blocks
+the entire uninstall before deletion and preserves the manifest/report for
+review. Clean copy items and dev links retain the basic manifest-based uninstall
+path; paths outside manifest destinations are untouched. Schema-1 manifests do
+not provide this file-level protection. If the manifest is missing, no cleanup
+is performed automatically.
 
 ## 2. Bootstrap A Project
 

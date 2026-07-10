@@ -130,8 +130,9 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   scripts keep local helpers or depend only on same-package helpers.
 - The initial public experience entry is documented as a public-safe reindexed
   backfill with local source paths intentionally omitted from `index.json`.
-- Installer fallback metadata behavior is documented: the runtime
-  `install-manifest.json` records the install mode used for each item.
+- Installer metadata behavior is documented: schema-2 `install-manifest.json`
+  records copy or explicit development-link strategy and per-file content state,
+  while schema-1 `install-report.json` records each run's result.
 - Latest local high-risk public audit found no matches, and public PowerShell
   scripts parsed successfully.
 - CI release validation workflow is present at
@@ -162,8 +163,10 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - Public adoption surface includes `docs/how-to-adapt.md` and
   `examples/minimal-project/`.
 - Public release notes are present at `docs/releases/v0.2.0.md`.
-- Manifest-based uninstall preserves unknown runtime files and provides manual
-  cleanup guidance when no manifest exists.
+- Schema-2 copy uninstall fails fast before deletion when a manifest destination
+  contains nested unknown or locally modified managed files. Missing manifests
+  still produce manual cleanup guidance without removal; schema-1 manifests
+  retain legacy item-boundary behavior.
 - Shared PowerShell helper extraction keeps path guard logic consistent across
   installer, uninstaller, validator, and benchmark scripts.
 - Release validation helper extraction keeps common test utilities in
@@ -355,7 +358,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profi
 Safe validation form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
 Full release validation form:
@@ -375,19 +378,25 @@ when PowerShell 7+ is already available.
 
 ## Installer Metadata
 
-By default, the installer prefers link-based installs: `Junction` on Windows
-and `SymbolicLink` on other platforms. If link creation fails, it falls back to
-copy mode for that item.
+By default, the installer creates an independent copy and never links ordinary
+installs to the source checkout. `-DevLink` is the explicit contributor mode;
+it creates `Junction` items on Windows and `SymbolicLink` items elsewhere.
+Existing `-Copy` invocations remain compatible.
 
-The generated `install-manifest.json` is runtime metadata. It records the
-selected profile, skill names, whether link mode was preferred, and each
-installed item's final mode (`junction`, `symboliclink`, `copy`, or
-`copy-fallback`).
+Schema-2 `install-manifest.json` records the profile, actual strategy,
+runtime-relative managed items, and per-file source/installed hashes.
+Schema-1 `install-report.json` records `success`, `warning`, or `conflict`, with
+counts and complete runtime-relative file lists. Unknown files are preserved
+with exit code 0. Simultaneous source and local changes return non-zero unless
+`-AllowPartial` is explicit. `-ReplaceManaged` and deprecated `-Force` replace
+managed content without deleting unknown files.
 
 `scripts/uninstall.ps1` uses that manifest as the only automatic cleanup
-authority. It removes manifest-listed install destinations and the manifest,
-preserves unknown runtime files, and prints manual cleanup guidance without
-removing anything when the manifest is missing.
+authority. Schema-2 copy items receive a whole-run preflight: nested unknown or
+locally modified managed files block all deletion and preserve installer
+metadata. Clean copy items and dev links retain basic removal compatibility;
+schema-1 manifests retain legacy item-boundary behavior. A missing manifest
+prints manual cleanup guidance without removing anything.
 
 ## Suggested Public Audit
 
@@ -402,10 +411,13 @@ machine-readable result in the scratch directory.
 
 The release validator now covers:
 
-- profile matrix installs in copy and link modes
-- recommended runtime smoke for copy and link installs
-- no-`-Force` conflict behavior and forced reinstall behavior
-- manifest-based uninstall behavior with unknown runtime files preserved
+- profile matrix installs in default copy and explicit development-link modes
+- recommended runtime smoke for copy and explicit development-link installs
+- incremental rerun, missing file repair, source update, unknown preservation,
+  local modification, conflict, partial success, managed replacement, conservative
+  schema-1 copy migration, profile reduction ownership, and stable root-conflict fixtures
+- schema-2 copy uninstall fail-fast for nested unknown/local modifications,
+  clean copy removal, missing-manifest safety, and dev-link compatibility
 - context gate JSON performance with 500 generated context files
 - cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub

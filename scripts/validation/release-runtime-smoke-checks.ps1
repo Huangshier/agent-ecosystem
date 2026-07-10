@@ -12,10 +12,9 @@
     $installParams = @{
         Profile = $Profile
         TargetDir = $targetDir
-        Force = $true
     }
-    if ($Mode -eq "copy") {
-        $installParams.Copy = $true
+    if ($Mode -eq "dev-link") {
+        $installParams.DevLink = $true
     }
 
     & $installer @installParams | Out-Host
@@ -52,11 +51,17 @@ function Test-Manifest {
     if (-not (Test-ExactArray -Actual @($manifest.skills) -Expected $ExpectedSkills)) {
         $errors.Add("skills field mismatch")
     }
-    if ($mode -eq "copy" -and [bool]$manifest.link_preferred) {
-        $errors.Add("copy mode should not prefer links")
+    if ([int]$manifest.schema_version -ne 2) {
+        $errors.Add("manifest schema_version should be 2")
     }
-    if ($mode -eq "link" -and -not [bool]$manifest.link_preferred) {
-        $errors.Add("link mode should prefer links")
+    if ([string]$manifest.target_dir -ne ".") {
+        $errors.Add("manifest target_dir should be runtime-relative")
+    }
+    if ($mode -eq "copy" -and [string]$manifest.install_strategy -ne "copy") {
+        $errors.Add("copy mode did not record copy strategy")
+    }
+    if ($mode -eq "dev-link" -and [string]$manifest.install_strategy -ne "dev-link") {
+        $errors.Add("dev-link mode did not record dev-link strategy")
     }
 
     $items = @($manifest.items)
@@ -65,25 +70,24 @@ function Test-Manifest {
     }
 
     foreach ($item in $items) {
-        foreach ($field in @("name", "source", "destination", "mode")) {
+        foreach ($field in @("name", "source", "destination", "mode", "source_hash", "installed_hash")) {
             if ([string]::IsNullOrWhiteSpace([string]$item.$field)) {
                 $errors.Add("manifest item missing field: $field")
             }
         }
-        if (-not [string]::IsNullOrWhiteSpace([string]$item.destination)) {
-            try {
-                Assert-PathInsideRoot -Path ([string]$item.destination) -Root $targetDir
-                Assert-NotLiveRuntime -Path ([string]$item.destination)
-            }
-            catch {
-                $errors.Add($_.Exception.Message)
-            }
+        if ([System.IO.Path]::IsPathRooted([string]$item.source) -or [System.IO.Path]::IsPathRooted([string]$item.destination)) {
+            $errors.Add("manifest item paths should be relative")
         }
         if ($mode -eq "copy" -and [string]$item.mode -ne "copy") {
             $errors.Add(("copy install item used mode {0}" -f $item.mode))
         }
-        if ($mode -eq "link" -and [string]$item.mode -notin @("junction", "symboliclink", "copy-fallback")) {
-            $errors.Add(("link install item used unexpected mode {0}" -f $item.mode))
+        if ($mode -eq "dev-link" -and [string]$item.mode -notin @("junction", "symboliclink")) {
+            $errors.Add(("dev-link install item used unexpected mode {0}" -f $item.mode))
+        }
+        foreach ($file in @($item.files)) {
+            if ([string]::IsNullOrWhiteSpace([string]$file.path) -or [string]::IsNullOrWhiteSpace([string]$file.installed_sha256)) {
+                $errors.Add("manifest managed file record is incomplete")
+            }
         }
     }
 
@@ -102,7 +106,7 @@ $script:profileExpectations = [ordered]@{
 
 $script:installModes = @("copy")
 if (-not $SkipLinkMode.IsPresent) {
-    $script:installModes += "link"
+    $script:installModes += "dev-link"
 }
 
 $installFailures = New-Object 'System.Collections.Generic.List[string]'
@@ -129,7 +133,7 @@ foreach ($profile in $script:profileExpectations.Keys) {
             if ($profile -eq "recommended" -and $mode -eq "copy") {
                 $script:recommendedCopyRuntime = $result.target_dir
             }
-            if ($profile -eq "recommended" -and $mode -eq "link") {
+            if ($profile -eq "recommended" -and $mode -eq "dev-link") {
                 $script:recommendedLinkRuntime = $result.target_dir
             }
         }
@@ -137,6 +141,17 @@ foreach ($profile in $script:profileExpectations.Keys) {
             $installFailures.Add(("{0}/{1}: {2}" -f $profile, $mode, $_.Exception.Message))
         }
     }
+}
+
+try {
+    $script:evidence.installer_contract = Invoke-InstallerContractFixtureChecks `
+        -RepositoryRoot $repoRoot `
+        -ScratchRoot $scratchRootFull `
+        -SkipDevLink:$SkipLinkMode.IsPresent
+    Add-Check "installer contract fixtures" "PASS" "Copy-first, incremental rerun, conflict, replacement, report, legacy manifest, and explicit development-link scenarios passed." $evidence.installer_contract
+}
+catch {
+    Add-Check "installer contract fixtures" "FAIL" $_.Exception.Message
 }
 if ($installFailures.Count -eq 0) {
     Add-Check "installer profile matrix" "PASS" "All requested profiles and install modes produced valid manifests." $evidence.profile_matrix
@@ -271,7 +286,7 @@ try {
         if ([string]::IsNullOrWhiteSpace($script:recommendedLinkRuntime)) {
             throw "Recommended link runtime was not created."
         }
-        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedLinkRuntime -Name "link"))
+        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedLinkRuntime -Name "dev-link"))
     }
 
     $script:evidence.runtime_smoke = @($runtimeSmokeResults.ToArray())
