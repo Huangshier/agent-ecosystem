@@ -191,6 +191,45 @@ try {
         throw "Missing-manifest uninstall removed unknown content."
     }
 
+    $nestedUnknownTarget = Join-PathParts $scratchRootFull "uninstall-nested-unknown-runtime"
+    & $installer -Profile minimal -TargetDir $nestedUnknownTarget | Out-Null
+    $nestedUnknownPath = Join-PathParts $nestedUnknownTarget "knowledge-hub" "user-note.txt"
+    Set-Content -LiteralPath $nestedUnknownPath -Value "preserve nested unknown" -Encoding UTF8
+    $nestedUnknownResultRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $nestedUnknownTarget, "-Json")
+    $nestedUnknownResult = (($nestedUnknownResultRaw.output -join "`n") | ConvertFrom-Json)
+    if ($nestedUnknownResultRaw.exit_code -eq 0 -or [string]$nestedUnknownResult.status -ne "blocked") {
+        throw "Schema-2 nested unknown uninstall did not fail fast."
+    }
+    if (@($nestedUnknownResult.nested_unknown | Where-Object { [string]$_ -eq "knowledge-hub/user-note.txt" }).Count -ne 1) {
+        throw "Schema-2 nested unknown uninstall did not report the protected path."
+    }
+    if (-not (Test-Path -LiteralPath $nestedUnknownPath) -or -not (Test-Path -LiteralPath (Join-PathParts $nestedUnknownTarget "install-manifest.json")) -or -not (Test-Path -LiteralPath (Join-PathParts $nestedUnknownTarget "install-report.json"))) {
+        throw "Schema-2 nested unknown fail-fast removed runtime content or metadata."
+    }
+    $nestedUnknownHumanRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $nestedUnknownTarget)
+    $nestedUnknownHumanText = $nestedUnknownHumanRaw.output -join "`n"
+    foreach ($expectedLine in @("Uninstall blocked. No files were removed.", "Nested unknown files: 1", "The install manifest and install report were preserved.")) {
+        if ($nestedUnknownHumanText -notlike "*$expectedLine*") {
+            throw "Schema-2 blocked uninstall human output is missing: $expectedLine"
+        }
+    }
+
+    $localModifiedTarget = Join-PathParts $scratchRootFull "uninstall-locally-modified-runtime"
+    & $installer -Profile minimal -TargetDir $localModifiedTarget | Out-Null
+    $localModifiedPath = Join-PathParts $localModifiedTarget "knowledge-hub" "knowledge-catalog.md"
+    Set-Content -LiteralPath $localModifiedPath -Value "locally modified managed content" -Encoding UTF8
+    $localModifiedResultRaw = Invoke-IsolatedPowerShellScript -ScriptPath $uninstaller -Arguments @("-TargetDir", $localModifiedTarget, "-Json")
+    $localModifiedResult = (($localModifiedResultRaw.output -join "`n") | ConvertFrom-Json)
+    if ($localModifiedResultRaw.exit_code -eq 0 -or [string]$localModifiedResult.status -ne "blocked") {
+        throw "Schema-2 locally modified uninstall did not fail fast."
+    }
+    if (@($localModifiedResult.locally_modified | Where-Object { [string]$_ -eq "knowledge-hub/knowledge-catalog.md" }).Count -ne 1) {
+        throw "Schema-2 locally modified uninstall did not report the protected path."
+    }
+    if (-not (Test-Path -LiteralPath $localModifiedPath) -or -not (Test-Path -LiteralPath (Join-PathParts $localModifiedTarget "install-manifest.json"))) {
+        throw "Schema-2 locally modified fail-fast removed managed content or manifest."
+    }
+
     $devLinkUninstallStatus = "skipped"
     if (-not $SkipLinkMode.IsPresent) {
         $devLinkTargetDir = Join-PathParts $scratchRootFull "uninstall-dev-link-runtime"
@@ -205,12 +244,15 @@ try {
         $devLinkUninstallStatus = [string]$devLinkUninstallResult.status
     }
 
-    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall accepts schema-2 copy and dev-link items while preserving unknown runtime files on the basic path." ([ordered]@{
+    Add-Check "uninstall behavior" "PASS" "Schema-2 copy uninstall fails fast before deletion on nested unknown or locally modified files; clean copy and dev-link basic paths remain supported." ([ordered]@{
         target_dir = $targetDir
         removed = @($uninstallResult.removed)
         missing_manifest_status = [string]$missingManifestResult.status
         preserved_unknown = [bool]$uninstallResult.preserved_unknown
         dev_link_status = $devLinkUninstallStatus
+        nested_unknown_status = [string]$nestedUnknownResult.status
+        locally_modified_status = [string]$localModifiedResult.status
+        protection_scope = [string]$uninstallResult.protection_scope
     })
 }
 catch {

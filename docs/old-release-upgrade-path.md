@@ -14,7 +14,7 @@ previous public release.
 
 | Source version | Category | Expected upgrade path |
 | --- | --- | --- |
-| `v0.4.6` | **Supported direct** | Rerun `install.ps1` for a protected incremental runtime refresh. Existing project memory is compatible without migration. |
+| `v0.4.6` | **Supported direct** | Existing project memory is compatible without migration. A schema-1 copy runtime whose content differs from the new source requires reviewed `install.ps1 -ReplaceManaged` migration; a default run reports conflict and keeps schema 1. |
 | `v0.4.5` | **Supported direct** | Same as `v0.4.6`. Template structure is identical. |
 | `v0.4.4` | **Supported direct** | Same as `v0.4.5`. Template structure is identical. |
 | `v0.4.3` | **Supported direct** | Same as `v0.4.4`. Template structure is identical. |
@@ -26,10 +26,11 @@ previous public release.
 
 ### Terminology
 
-- **Supported direct**: rerunning `install.ps1` incrementally refreshes the
-  runtime while protecting local modifications. Existing project memory is
-  forward-compatible without migration. Hub lock drift check reports `in_sync`
-  or a predictable hash change.
+- **Supported direct**: existing project memory is forward-compatible without
+  migration. Schema-2 runtimes refresh incrementally. Schema-1 copy manifests
+  do not contain a reliable per-file baseline, so any target/source difference
+  is a conflict until the user reviews the runtime and explicitly supplies
+  `-ReplaceManaged`.
 - **Best-effort**: rerun `install.ps1`, review `install-report.json`, and resolve
   any runtime conflicts before continuing. Existing project memory may contain
   stale template references or missing fields. Run memory upgrade analyze after
@@ -53,12 +54,18 @@ git checkout v0.5.0  # or the target tag
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile recommended
 ```
 
-The installer restores missing managed files, updates files whose source changed
-while the installed copy remained unchanged, and does not rewrite unchanged
-files. Unknown files and locally modified managed files are preserved. A file
-changed both locally and in the source is reported as a conflict and returns
-non-zero unless `-AllowPartial` is supplied. Use `-ReplaceManaged` only when the
-managed files should be overwritten; unknown files are still preserved.
+For schema-2 manifests, the installer restores missing managed files, updates
+files whose source changed while the installed copy remained unchanged, and
+does not rewrite unchanged files. Unknown files and locally modified managed
+files are preserved. A file changed both locally and in the source is reported
+as a conflict and returns non-zero unless `-AllowPartial` is supplied.
+
+Schema-1 copy manifests have no trustworthy installed-content baseline. If a
+managed target differs from the new source, the default run returns conflict,
+does not overwrite the target, and leaves the schema-1 manifest in place.
+`-AllowPartial` still leaves that migration incomplete. After reviewing or
+backing up local runtime changes, rerun with `-ReplaceManaged` to overwrite only
+managed content, preserve unknown files, and complete schema-2 migration.
 
 ### Copy Mode Install
 
@@ -85,8 +92,9 @@ does not silently fall back to copy mode.
 
 ### Manifest After Upgrade
 
-After upgrading, schema-2 `install-manifest.json` records the profile, actual
-strategy, runtime-relative managed items, and content hashes. Schema-1
+After a successful migration, schema-2 `install-manifest.json` records the
+profile, actual strategy, runtime-relative managed items, and content hashes
+that match the installed files. Schema-1
 `install-report.json` records the current run's status and file lists. Verify
 both artifacts:
 

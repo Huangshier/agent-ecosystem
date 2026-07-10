@@ -44,8 +44,13 @@ To remove a generated runtime later, use the manifest-based uninstaller:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
-It removes only paths recorded in `install-manifest.json` and preserves unknown
-files. If the manifest is missing, no cleanup is performed automatically.
+For schema-2 copy items, the uninstaller first checks every managed destination
+for nested unknown files and locally modified managed files. Any finding blocks
+the entire uninstall before deletion and preserves the manifest/report for
+review. Clean copy items and dev links retain the basic manifest-based uninstall
+path; paths outside manifest destinations are untouched. Schema-1 manifests do
+not provide this file-level protection. If the manifest is missing, no cleanup
+is performed automatically.
 
 ## 2. Bootstrap A Project
 

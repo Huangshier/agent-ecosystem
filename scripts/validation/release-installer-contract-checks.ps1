@@ -32,13 +32,31 @@ function Invoke-InstallerContractFixtureChecks {
         param(
             [Parameter(Mandatory = $true)][string]$Installer,
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [string]$Profile = "minimal",
             [string[]]$AdditionalArguments = @()
         )
-        $arguments = @("-Profile", "minimal", "-TargetDir", $RuntimeRoot) + @($AdditionalArguments)
+        $arguments = @("-Profile", $Profile, "-TargetDir", $RuntimeRoot) + @($AdditionalArguments)
         $previousErrorActionPreference = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         try {
             return Invoke-IsolatedPowerShellScript -ScriptPath $Installer -Arguments $arguments
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+    }
+
+    function Invoke-FixtureUninstall {
+        param(
+            [Parameter(Mandatory = $true)][string]$Uninstaller,
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [string[]]$AdditionalArguments = @()
+        )
+        $arguments = @("-TargetDir", $RuntimeRoot) + @($AdditionalArguments)
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            return Invoke-IsolatedPowerShellScript -ScriptPath $Uninstaller -Arguments $arguments
         }
         finally {
             $ErrorActionPreference = $previousErrorActionPreference
@@ -67,7 +85,7 @@ function Invoke-InstallerContractFixtureChecks {
 
     function Test-ReportPath {
         param(
-            [Parameter(Mandatory = $true)][object[]]$Values,
+            [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Values,
             [Parameter(Mandatory = $true)][string]$Path
         )
         return @($Values | Where-Object { [string]$_ -eq $Path }).Count -gt 0
@@ -82,17 +100,35 @@ function Invoke-InstallerContractFixtureChecks {
         return (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
     }
 
+    function Assert-ManifestFileHashes {
+        param(
+            [Parameter(Mandatory = $true)][object]$Manifest,
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot
+        )
+        foreach ($item in @($Manifest.items | Where-Object { [string]$_.mode -eq "copy" })) {
+            foreach ($file in @($item.files)) {
+                $installedPath = Join-PathParts $RuntimeRoot ([string]$item.destination) ([string]$file.path)
+                Assert-InstallerCondition -Condition (Test-Path -LiteralPath $installedPath -PathType Leaf) -Message "Manifest managed file is missing."
+                $actualHash = (Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                Assert-InstallerCondition -Condition ($actualHash -eq [string]$file.installed_sha256) -Message "Manifest installed hash does not match runtime content."
+            }
+        }
+    }
+
     $fixtureSource = Join-PathParts $ScratchRoot "installer-contract-source"
     $runtimeRoot = Join-PathParts $ScratchRoot "installer-contract-runtime"
+    $profileShrinkRuntime = Join-PathParts $ScratchRoot "installer-contract-profile-shrink-runtime"
+    $rootConflictRuntime = Join-PathParts $ScratchRoot "installer-contract-root-conflict-runtime"
     $devLinkRuntime = Join-PathParts $ScratchRoot "installer-contract-dev-link-runtime"
     $legacyLinkRuntime = Join-PathParts $ScratchRoot "installer-contract-legacy-link-runtime"
     $legacyRuntime = Join-PathParts $ScratchRoot "installer-contract-legacy-runtime"
-    foreach ($path in @($fixtureSource, $runtimeRoot, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime)) {
+    foreach ($path in @($fixtureSource, $runtimeRoot, $profileShrinkRuntime, $rootConflictRuntime, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime)) {
         Assert-PathInsideRoot -Path $path -Root $ScratchRoot
     }
 
     New-Item -ItemType Directory -Force -Path (Join-PathParts $fixtureSource "scripts" "lib") | Out-Null
     Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "install.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "install.ps1") -Force
+    Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "uninstall.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "uninstall.ps1") -Force
     Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "lib" "path-guard.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "lib" "path-guard.ps1") -Force
 
     $hubManagedSource = Join-PathParts $fixtureSource "knowledge-hub" "managed.txt"
@@ -101,8 +137,12 @@ function Invoke-InstallerContractFixtureChecks {
     Write-FixtureText -Path $hubManagedSource -Text "source-a"
     Write-FixtureText -Path $hubStableSource -Text "stable"
     Write-FixtureText -Path $skillManagedSource -Text "skill-a"
+    foreach ($skillName in @("project-context-gate", "workflow-spec-lite", "memory-governance")) {
+        Write-FixtureText -Path (Join-PathParts $fixtureSource "skills" $skillName "managed.txt") -Text ("{0}-a" -f $skillName)
+    }
 
     $installer = Join-PathParts $fixtureSource "scripts" "install.ps1"
+    $uninstaller = Join-PathParts $fixtureSource "scripts" "uninstall.ps1"
     $scenarioEvidence = New-Object 'System.Collections.Generic.List[object]'
 
     $fresh = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $runtimeRoot
@@ -208,14 +248,7 @@ function Invoke-InstallerContractFixtureChecks {
     Assert-InstallerCondition -Condition (Test-ReportPath -Values @($report.warnings) -Path $forceWarning) -Message "Compatibility warning missing from install report."
     Assert-ReportCountConsistency -Report $report
     $manifest = Read-InstallArtifact -RuntimeRoot $runtimeRoot -Name "install-manifest.json"
-    foreach ($item in @($manifest.items)) {
-        foreach ($file in @($item.files)) {
-            $installedPath = Join-PathParts $runtimeRoot ([string]$item.destination) ([string]$file.path)
-            Assert-InstallerCondition -Condition (Test-Path -LiteralPath $installedPath -PathType Leaf) -Message "Manifest managed file is missing after compatibility Force run."
-            $actualHash = (Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            Assert-InstallerCondition -Condition ($actualHash -eq [string]$file.installed_sha256) -Message "Manifest installed hash does not match the runtime file."
-        }
-    }
+    Assert-ManifestFileHashes -Manifest $manifest -RuntimeRoot $runtimeRoot
     $scenarioEvidence.Add([ordered]@{ scenario = "force-compatibility"; exit_code = $forceRun.exit_code; status = [string]$report.status; warning_count = @($report.warnings).Count })
 
     $collidingUnknownSource = Join-PathParts $fixtureSource "knowledge-hub" "user-note.txt"
@@ -228,6 +261,48 @@ function Invoke-InstallerContractFixtureChecks {
     Assert-InstallerCondition -Condition ((Test-ReportPath -Values @($report.preserved_unknown) -Path "knowledge-hub/user-note.txt") -and (Test-ReportPath -Values @($report.conflicts) -Path "knowledge-hub/user-note.txt")) -Message "Source-colliding unknown file was not preserved and reported as a conflict."
     Remove-Item -LiteralPath $collidingUnknownSource -Force
     $scenarioEvidence.Add([ordered]@{ scenario = "replace-managed-preserves-source-colliding-unknown"; exit_code = $unknownCollisionRun.exit_code; status = [string]$report.status })
+
+    $recommendedInstall = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $profileShrinkRuntime -Profile "recommended"
+    Assert-InstallerCondition -Condition ($recommendedInstall.exit_code -eq 0) -Message "Recommended profile setup for shrink fixture failed."
+    $profileShrinkRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $profileShrinkRuntime -Profile "minimal"
+    $profileShrinkManifest = Read-InstallArtifact -RuntimeRoot $profileShrinkRuntime -Name "install-manifest.json"
+    $profileShrinkReport = Read-InstallArtifact -RuntimeRoot $profileShrinkRuntime -Name "install-report.json"
+    Assert-InstallerCondition -Condition ($profileShrinkRun.exit_code -eq 0 -and [string]$profileShrinkReport.status -eq "success") -Message "Clean recommended-to-minimal profile shrink failed."
+    Assert-InstallerCondition -Condition (Test-ExactArray -Actual @($profileShrinkManifest.items | ForEach-Object { [string]$_.name }) -Expected @("knowledge-hub", "skills/project-bootstrap")) -Message "Profile shrink manifest retained or lost the wrong managed items."
+    foreach ($skillName in @("project-context-gate", "workflow-spec-lite", "memory-governance")) {
+        Assert-InstallerCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $profileShrinkRuntime "skills" $skillName))) -Message "Profile shrink left an excluded managed skill on disk."
+        Assert-InstallerCondition -Condition (Test-ReportPath -Values @($profileShrinkReport.updated) -Path ("skills/{0}/managed.txt" -f $skillName)) -Message "Profile shrink did not report an excluded managed file as updated."
+    }
+    Assert-ManifestFileHashes -Manifest $profileShrinkManifest -RuntimeRoot $profileShrinkRuntime
+    $profileShrinkUninstall = Invoke-FixtureUninstall -Uninstaller $uninstaller -RuntimeRoot $profileShrinkRuntime -AdditionalArguments @("-Json")
+    $profileShrinkUninstallResult = (($profileShrinkUninstall.output -join "`n") | ConvertFrom-Json)
+    Assert-InstallerCondition -Condition ($profileShrinkUninstall.exit_code -eq 0 -and [string]$profileShrinkUninstallResult.status -eq "uninstalled") -Message "Post-shrink uninstall failed."
+    Assert-InstallerCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $profileShrinkRuntime "knowledge-hub")) -and -not (Test-Path -LiteralPath (Join-PathParts $profileShrinkRuntime "skills" "project-bootstrap"))) -Message "Post-shrink uninstall ownership did not match the manifest."
+    $scenarioEvidence.Add([ordered]@{ scenario = "recommended-to-minimal-ownership"; exit_code = $profileShrinkRun.exit_code; status = [string]$profileShrinkReport.status; uninstall_status = [string]$profileShrinkUninstallResult.status })
+
+    $rootConflictSetup = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $rootConflictRuntime -Profile "recommended"
+    Assert-InstallerCondition -Condition ($rootConflictSetup.exit_code -eq 0) -Message "Root-conflict fixture setup failed."
+    $rootConflictManifestBefore = Read-InstallArtifact -RuntimeRoot $rootConflictRuntime -Name "install-manifest.json"
+    $ownedItemBefore = @($rootConflictManifestBefore.items | Where-Object { [string]$_.name -eq "skills/workflow-spec-lite" })[0]
+    $ownedRoot = Join-PathParts $rootConflictRuntime "skills" "workflow-spec-lite"
+    Remove-Item -LiteralPath $ownedRoot -Recurse -Force
+    Write-FixtureText -Path $ownedRoot -Text "locally-replaced-item-root"
+    $rootConflictRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $rootConflictRuntime -Profile "minimal"
+    $rootConflictManifest = Read-InstallArtifact -RuntimeRoot $rootConflictRuntime -Name "install-manifest.json"
+    $rootConflictReport = Read-InstallArtifact -RuntimeRoot $rootConflictRuntime -Name "install-report.json"
+    $ownedItemAfter = @($rootConflictManifest.items | Where-Object { [string]$_.name -eq "skills/workflow-spec-lite" })
+    Assert-InstallerCondition -Condition ($rootConflictRun.exit_code -ne 0 -and [string]$rootConflictReport.status -eq "conflict") -Message "Obsolete managed item root conflict did not fail by default."
+    Assert-InstallerCondition -Condition ($ownedItemAfter.Count -eq 1 -and [string]$ownedItemAfter[0].installed_hash -eq [string]$ownedItemBefore.installed_hash) -Message "Root conflict forgot previous managed ownership or baseline."
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath $ownedRoot -Raw) -eq "locally-replaced-item-root") -Message "Root conflict overwrote the abnormal item root."
+    Assert-InstallerCondition -Condition ((Test-ReportPath -Values @($rootConflictReport.conflicts) -Path "skills/workflow-spec-lite") -and -not (Test-ReportPath -Values @($rootConflictReport.preserved_unknown) -Path "skills/workflow-spec-lite")) -Message "Root conflict was degraded to unknown ownership."
+    $rootConflictPartial = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $rootConflictRuntime -Profile "minimal" -AdditionalArguments @("-AllowPartial")
+    $rootConflictManifestPartial = Read-InstallArtifact -RuntimeRoot $rootConflictRuntime -Name "install-manifest.json"
+    $rootConflictReportPartial = Read-InstallArtifact -RuntimeRoot $rootConflictRuntime -Name "install-report.json"
+    $ownedItemPartial = @($rootConflictManifestPartial.items | Where-Object { [string]$_.name -eq "skills/workflow-spec-lite" })
+    Assert-InstallerCondition -Condition ($rootConflictPartial.exit_code -eq 0 -and [string]$rootConflictReportPartial.status -eq "conflict") -Message "Root conflict -AllowPartial rerun did not preserve conflict semantics."
+    Assert-InstallerCondition -Condition ($ownedItemPartial.Count -eq 1 -and [string]$ownedItemPartial[0].installed_hash -eq [string]$ownedItemBefore.installed_hash) -Message "Root conflict -AllowPartial rerun forgot ownership."
+    Assert-InstallerCondition -Condition (-not (Test-ReportPath -Values @($rootConflictReportPartial.preserved_unknown) -Path "skills/workflow-spec-lite")) -Message "Root conflict rerun degraded the managed item root to unknown."
+    $scenarioEvidence.Add([ordered]@{ scenario = "managed-item-root-conflict-rerun"; default_exit = $rootConflictRun.exit_code; partial_exit = $rootConflictPartial.exit_code; status = [string]$rootConflictReportPartial.status })
 
     if (-not $SkipDevLink.IsPresent) {
         $devLinkRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $devLinkRuntime -AdditionalArguments @("-DevLink")
@@ -279,6 +354,7 @@ function Invoke-InstallerContractFixtureChecks {
     New-Item -ItemType Directory -Force -Path (Join-PathParts $legacyRuntime "skills" "project-bootstrap") | Out-Null
     Copy-Item -Path (Join-PathParts $fixtureSource "knowledge-hub" "*") -Destination (Join-PathParts $legacyRuntime "knowledge-hub") -Force
     Copy-Item -Path (Join-PathParts $fixtureSource "skills" "project-bootstrap" "*") -Destination (Join-PathParts $legacyRuntime "skills" "project-bootstrap") -Force
+    Write-FixtureText -Path (Join-PathParts $legacyRuntime "knowledge-hub" "managed.txt") -Text "legacy-copy-local-content"
     $legacyManifest = [ordered]@{
         schema_version = 1
         profile = "minimal"
@@ -291,11 +367,22 @@ function Invoke-InstallerContractFixtureChecks {
     }
     Write-FixtureText -Path (Join-PathParts $legacyRuntime "install-manifest.json") -Text ($legacyManifest | ConvertTo-Json -Depth 8)
     $legacyRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $legacyRuntime
+    $legacyConflictManifest = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-manifest.json"
+    $legacyConflictReport = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-report.json"
+    Assert-InstallerCondition -Condition ($legacyRun.exit_code -ne 0 -and [string]$legacyConflictReport.status -eq "conflict") -Message "Differing schema-1 copy target did not fail conservatively."
+    Assert-InstallerCondition -Condition ([int]$legacyConflictManifest.schema_version -eq 1 -and -not [bool]$legacyConflictReport.manifest_updated) -Message "Conflicted schema-1 copy migration wrote a misleading schema-2 baseline."
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "knowledge-hub" "managed.txt") -Raw) -eq "legacy-copy-local-content") -Message "Default legacy copy conflict overwrote target content."
+    $scenarioEvidence.Add([ordered]@{ scenario = "legacy-copy-difference-conflict"; exit_code = $legacyRun.exit_code; status = [string]$legacyConflictReport.status; manifest_schema_version = [int]$legacyConflictManifest.schema_version })
+
+    $legacyReplaceRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $legacyRuntime -AdditionalArguments @("-ReplaceManaged")
     $legacyUpgradedManifest = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-manifest.json"
-    Assert-InstallerCondition -Condition ($legacyRun.exit_code -eq 0) -Message "Legacy manifest compatibility rerun failed."
-    Assert-InstallerCondition -Condition ([int]$legacyUpgradedManifest.schema_version -eq 2) -Message "Legacy manifest was not upgraded to schema 2."
+    $legacyReplaceReport = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-report.json"
+    Assert-InstallerCondition -Condition ($legacyReplaceRun.exit_code -eq 0 -and [int]$legacyUpgradedManifest.schema_version -eq 2) -Message "-ReplaceManaged did not complete schema-1 copy migration."
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "knowledge-hub" "managed.txt") -Raw) -eq (Get-Content -LiteralPath $hubManagedSource -Raw)) -Message "Legacy copy replacement did not converge to source content."
+    Assert-ManifestFileHashes -Manifest $legacyUpgradedManifest -RuntimeRoot $legacyRuntime
+    Assert-InstallerCondition -Condition ([bool]$legacyReplaceReport.manifest_updated -and [int]$legacyReplaceReport.manifest_schema_version -eq 2) -Message "Legacy replacement report did not record completed schema-2 migration."
     Assert-InstallerCondition -Condition (-not ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "install-manifest.json") -Raw).Contains([System.IO.Path]::GetFullPath($fixtureSource)))) -Message "Upgraded legacy manifest retained an absolute source path."
-    $scenarioEvidence.Add([ordered]@{ scenario = "legacy-manifest-upgrade"; exit_code = $legacyRun.exit_code; schema_version = [int]$legacyUpgradedManifest.schema_version })
+    $scenarioEvidence.Add([ordered]@{ scenario = "legacy-copy-replace-managed-migration"; exit_code = $legacyReplaceRun.exit_code; schema_version = [int]$legacyUpgradedManifest.schema_version })
 
     return @($scenarioEvidence.ToArray())
 }

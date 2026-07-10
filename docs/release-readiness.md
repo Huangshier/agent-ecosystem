@@ -163,8 +163,10 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 - Public adoption surface includes `docs/how-to-adapt.md` and
   `examples/minimal-project/`.
 - Public release notes are present at `docs/releases/v0.2.0.md`.
-- Manifest-based uninstall preserves unknown runtime files and provides manual
-  cleanup guidance when no manifest exists.
+- Schema-2 copy uninstall fails fast before deletion when a manifest destination
+  contains nested unknown or locally modified managed files. Missing manifests
+  still produce manual cleanup guidance without removal; schema-1 manifests
+  retain legacy item-boundary behavior.
 - Shared PowerShell helper extraction keeps path guard logic consistent across
   installer, uninstaller, validator, and benchmark scripts.
 - Release validation helper extraction keeps common test utilities in
@@ -390,9 +392,11 @@ with exit code 0. Simultaneous source and local changes return non-zero unless
 managed content without deleting unknown files.
 
 `scripts/uninstall.ps1` uses that manifest as the only automatic cleanup
-authority. It removes manifest-listed install destinations and the manifest,
-preserves unknown runtime files, and prints manual cleanup guidance without
-removing anything when the manifest is missing.
+authority. Schema-2 copy items receive a whole-run preflight: nested unknown or
+locally modified managed files block all deletion and preserve installer
+metadata. Clean copy items and dev links retain basic removal compatibility;
+schema-1 manifests retain legacy item-boundary behavior. A missing manifest
+prints manual cleanup guidance without removing anything.
 
 ## Suggested Public Audit
 
@@ -410,8 +414,10 @@ The release validator now covers:
 - profile matrix installs in default copy and explicit development-link modes
 - recommended runtime smoke for copy and explicit development-link installs
 - incremental rerun, missing file repair, source update, unknown preservation,
-  local modification, conflict, partial success, and managed replacement fixtures
-- manifest-based uninstall behavior with unknown runtime files preserved
+  local modification, conflict, partial success, managed replacement, conservative
+  schema-1 copy migration, profile reduction ownership, and stable root-conflict fixtures
+- schema-2 copy uninstall fail-fast for nested unknown/local modifications,
+  clean copy removal, missing-manifest safety, and dev-link compatibility
 - context gate JSON performance with 500 generated context files
 - cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub

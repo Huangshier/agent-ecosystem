@@ -327,8 +327,10 @@ function Install-CopyItem {
             $previousWasLink = $true
         }
         if ($null -eq $previousItem -or (-not $previousWasLink -and -not $replaceManagedRequested)) {
-            $conflicts.Add((ConvertTo-NormalizedRelativePath -Path $DestinationRelative))
-            return $null
+            $rootConflictPath = ConvertTo-NormalizedRelativePath -Path $DestinationRelative
+            $skippedLocallyModified.Add($rootConflictPath)
+            $conflicts.Add($rootConflictPath)
+            return $previousItem
         }
         if ($PSCmdlet.ShouldProcess($destination, "Replace managed development link with copy install")) {
             Remove-ManagedLink -Path $destination
@@ -336,8 +338,10 @@ function Install-CopyItem {
     }
     elseif ((Test-Path -LiteralPath $destination) -and -not (Test-Path -LiteralPath $destination -PathType Container)) {
         if ($null -eq $previousItem -or -not $replaceManagedRequested) {
-            $conflicts.Add((ConvertTo-NormalizedRelativePath -Path $DestinationRelative))
-            return $null
+            $rootConflictPath = ConvertTo-NormalizedRelativePath -Path $DestinationRelative
+            $skippedLocallyModified.Add($rootConflictPath)
+            $conflicts.Add($rootConflictPath)
+            return $previousItem
         }
         if ($PSCmdlet.ShouldProcess($destination, "Replace managed item with directory")) {
             Remove-Item -LiteralPath $destination -Force
@@ -376,8 +380,13 @@ function Install-CopyItem {
             }
             else {
                 $skippedLocallyModified.Add($runtimePath)
+                $conflicts.Add($runtimePath)
             }
-            $newFiles.Add((New-ManagedFileRecord -Path $relativePath -SourceHash $sourceHash -InstalledHash $sourceHash))
+            $recordedInstalledHash = $sourceHash
+            if ($sourceHash -ne $targetHash -and -not $replaceManagedRequested) {
+                $recordedInstalledHash = $targetHash
+            }
+            $newFiles.Add((New-ManagedFileRecord -Path $relativePath -SourceHash $sourceHash -InstalledHash $recordedInstalledHash))
             continue
         }
 
@@ -472,6 +481,88 @@ function Install-CopyItem {
     }
 }
 
+function Remove-ObsoleteManagedItem {
+    param([Parameter(Mandatory = $true)][object]$PreviousItem)
+
+    $name = [string]$PreviousItem.name
+    $destinationRelative = ConvertTo-NormalizedRelativePath -Path ([string]$PreviousItem.destination)
+    if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($destinationRelative)) {
+        throw "Previous manifest contains an invalid managed item."
+    }
+
+    $conflictRoot = $destinationRelative
+    if ($previousSchemaVersion -ne 2 -or [System.IO.Path]::IsPathRooted([string]$PreviousItem.destination)) {
+        $skippedLocallyModified.Add($conflictRoot)
+        $conflicts.Add($conflictRoot)
+        return $PreviousItem
+    }
+
+    $destination = Join-PathParts $targetRoot $destinationRelative
+    Assert-PathInsideRoot -Path $destination -Root $targetRoot -Message "Refusing to remove obsolete managed item outside target root"
+    if (-not (Test-Path -LiteralPath $destination)) {
+        return $null
+    }
+
+    $mode = [string]$PreviousItem.mode
+    if ($mode -in @("junction", "symboliclink")) {
+        if (-not (Test-ReparsePoint -Path $destination)) {
+            $skippedLocallyModified.Add($conflictRoot)
+            $conflicts.Add($conflictRoot)
+            return $PreviousItem
+        }
+        $sourceRelative = ConvertTo-NormalizedRelativePath -Path ([string]$PreviousItem.source)
+        $expectedTarget = [System.IO.Path]::GetFullPath((Join-PathParts $repoRoot $sourceRelative)).TrimEnd('\', '/')
+        $actualTarget = Get-LinkTargetPath -Path $destination
+        if ([string]::IsNullOrWhiteSpace($actualTarget) -or -not $actualTarget.Equals($expectedTarget, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $skippedLocallyModified.Add($conflictRoot)
+            $conflicts.Add($conflictRoot)
+            return $PreviousItem
+        }
+        if ($PSCmdlet.ShouldProcess($destination, "Remove managed development link excluded by selected profile")) {
+            Remove-ManagedLink -Path $destination
+        }
+        $updated.Add($conflictRoot)
+        return $null
+    }
+
+    if ($mode -ne "copy" -or (Test-ReparsePoint -Path $destination) -or -not (Test-Path -LiteralPath $destination -PathType Container)) {
+        $skippedLocallyModified.Add($conflictRoot)
+        $conflicts.Add($conflictRoot)
+        return $PreviousItem
+    }
+
+    $previousFiles = Get-PreviousFileMap -Item $PreviousItem
+    $targetFiles = Get-DirectoryFileMap -Root $destination
+    $unsafePaths = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in @($targetFiles.Keys | Sort-Object)) {
+        $runtimePath = Join-RuntimeRelativePath -Base $destinationRelative -Child $relativePath
+        if (-not $previousFiles.ContainsKey($relativePath)) {
+            $unsafePaths.Add($runtimePath)
+            continue
+        }
+        $installedHash = [string]$previousFiles[$relativePath].installed_sha256
+        if ([string]::IsNullOrWhiteSpace($installedHash) -or [string]$targetFiles[$relativePath].sha256 -ne $installedHash) {
+            $unsafePaths.Add($runtimePath)
+        }
+    }
+
+    if ($unsafePaths.Count -gt 0) {
+        foreach ($runtimePath in @($unsafePaths.ToArray())) {
+            $skippedLocallyModified.Add($runtimePath)
+            $conflicts.Add($runtimePath)
+        }
+        return $PreviousItem
+    }
+
+    foreach ($relativePath in @($targetFiles.Keys | Sort-Object)) {
+        $updated.Add((Join-RuntimeRelativePath -Base $destinationRelative -Child $relativePath))
+    }
+    if ($PSCmdlet.ShouldProcess($destination, "Remove unchanged managed item excluded by selected profile")) {
+        Remove-Item -LiteralPath $destination -Recurse -Force
+    }
+    return $null
+}
+
 function Install-DevLinkItem {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -552,13 +643,16 @@ function Install-DevLinkItem {
 
 $skillNames = @(Get-PublicSkillNames -SelectedProfile $Profile)
 $itemSpecs = New-Object 'System.Collections.Generic.List[object]'
+$desiredItemNames = @{}
 $itemSpecs.Add([ordered]@{ name = "knowledge-hub"; source = "knowledge-hub"; destination = "knowledge-hub" })
+$desiredItemNames["knowledge-hub"] = $true
 foreach ($skillName in $skillNames) {
     $itemSpecs.Add([ordered]@{
             name = "skills/$skillName"
             source = "skills/$skillName"
             destination = "skills/$skillName"
         })
+    $desiredItemNames["skills/$skillName"] = $true
 }
 
 New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
@@ -575,8 +669,20 @@ foreach ($spec in $itemSpecs) {
     }
 }
 
+foreach ($previousName in @($previousItems.Keys | Sort-Object)) {
+    if ($desiredItemNames.ContainsKey($previousName)) {
+        continue
+    }
+    $retainedItem = Remove-ObsoleteManagedItem -PreviousItem $previousItems[$previousName]
+    if ($null -ne $retainedItem) {
+        $manifestItems.Add($retainedItem)
+    }
+}
+
 $managedRuntimeFiles = @{}
+$managedRuntimeRoots = @{}
 foreach ($item in @($manifestItems.ToArray())) {
+    $managedRuntimeRoots[(ConvertTo-NormalizedRelativePath -Path ([string]$item.destination))] = $true
     foreach ($file in @($item.files)) {
         $managedRuntimeFiles[(Join-RuntimeRelativePath -Base ([string]$item.destination) -Child ([string]$file.path))] = $true
     }
@@ -588,7 +694,7 @@ foreach ($file in @(Get-ChildItem -LiteralPath $targetRoot -Recurse -File -Force
     if ($relativePath -in @("install-manifest.json", "install-report.json")) {
         continue
     }
-    if (-not $managedRuntimeFiles.ContainsKey($relativePath)) {
+    if (-not $managedRuntimeFiles.ContainsKey($relativePath) -and -not $managedRuntimeRoots.ContainsKey($relativePath)) {
         $preservedUnknown.Add($relativePath)
     }
 }
@@ -599,6 +705,11 @@ $unknownValues = @($preservedUnknown.ToArray() | Sort-Object -Unique)
 $skippedValues = @($skippedLocallyModified.ToArray() | Sort-Object -Unique)
 $conflictValues = @($conflicts.ToArray() | Sort-Object -Unique)
 $warningValues = @($warnings.ToArray())
+$manifestUpdated = -not ($previousSchemaVersion -eq 1 -and $conflictValues.Count -gt 0)
+$resultingManifestSchemaVersion = 2
+if (-not $manifestUpdated) {
+    $resultingManifestSchemaVersion = $previousSchemaVersion
+}
 
 $status = "success"
 if ($conflictValues.Count -gt 0) {
@@ -626,6 +737,8 @@ $report = [ordered]@{
     install_strategy = $installStrategy
     allow_partial = [bool]$AllowPartial.IsPresent
     replace_managed = [bool]$replaceManagedRequested
+    manifest_updated = [bool]$manifestUpdated
+    manifest_schema_version = [int]$resultingManifestSchemaVersion
     counts = [ordered]@{
         updated = $updatedValues.Count
         unchanged = $unchangedValues.Count
@@ -641,7 +754,7 @@ $report = [ordered]@{
     warnings = $warningValues
 }
 
-if ($PSCmdlet.ShouldProcess($manifestPath, "Write install manifest")) {
+if ($manifestUpdated -and $PSCmdlet.ShouldProcess($manifestPath, "Write install manifest")) {
     Write-JsonFile -Path $manifestPath -Value $manifest
 }
 if ($PSCmdlet.ShouldProcess($reportPath, "Write install report")) {

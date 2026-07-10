@@ -220,9 +220,11 @@ manifest-based uninstaller:
 powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
-The uninstaller removes only paths recorded in `install-manifest.json` and
-preserves unknown files. If the manifest is missing, it prints manual cleanup
-guidance instead of deleting files blindly.
+For schema-2 copy installs, nested unknown or locally modified files inside a
+managed destination block the entire uninstall before deletion. Clean copy
+items and dev links use the basic manifest removal path, while paths outside
+manifest destinations remain untouched. If the manifest is missing, the script
+prints manual cleanup guidance instead of deleting files blindly.
 
 Before committing the adopted project, review:
 

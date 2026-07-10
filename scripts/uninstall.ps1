@@ -26,6 +26,49 @@ function ConvertTo-RelativeRuntimePath {
     return $fullPath.Substring($fullRoot.Length).TrimStart([char[]]"\/") -replace "\\", "/"
 }
 
+function ConvertTo-RelativeChildPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $prefix = $fullRoot + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $fullPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path is outside the managed item root: $Path"
+    }
+    return $fullPath.Substring($prefix.Length).TrimStart([char[]]"\/") -replace "\\", "/"
+}
+
+function Get-DirectoryFileMap {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $result = @{}
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        return $result
+    }
+    foreach ($file in @(Get-ChildItem -LiteralPath $Root -Recurse -File -Force)) {
+        $relativePath = ConvertTo-RelativeChildPath -Path $file.FullName -Root $Root
+        $result[$relativePath] = [ordered]@{
+            path = $file.FullName
+            sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
+    return $result
+}
+
+function Resolve-ManifestDestination {
+    param([Parameter(Mandatory = $true)][string]$Destination)
+
+    $resolved = $Destination
+    if (-not [System.IO.Path]::IsPathRooted($resolved)) {
+        $resolved = Join-PathParts $targetRoot $resolved
+    }
+    Assert-PathInsideRoot -Path $resolved -Root $targetRoot
+    return [System.IO.Path]::GetFullPath($resolved).TrimEnd('\', '/')
+}
+
 function Remove-DirectoryIfEmpty {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -101,6 +144,9 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
         removed = @()
         missing = @()
         preserved_unknown = $true
+        protection_scope = "no_manifest_no_removal"
+        nested_unknown = @()
+        locally_modified = @()
         manual_cleanup_candidates = @($manualPaths)
     }
     if ($Json.IsPresent) {
@@ -116,6 +162,76 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $manifestItems = @($manifest.items)
+$manifestSchemaVersion = [int]$manifest.schema_version
+$nestedUnknown = New-Object 'System.Collections.Generic.List[string]'
+$locallyModified = New-Object 'System.Collections.Generic.List[string]'
+
+if ($manifestSchemaVersion -eq 2) {
+    foreach ($item in $manifestItems) {
+        if ([string]$item.mode -ne "copy") {
+            continue
+        }
+        $destinationRelative = ([string]$item.destination -replace "\\", "/").TrimStart('/')
+        $destination = Resolve-ManifestDestination -Destination ([string]$item.destination)
+        if (-not (Test-Path -LiteralPath $destination)) {
+            continue
+        }
+        $destinationItem = Get-Item -LiteralPath $destination -Force
+        if (($destinationItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or -not $destinationItem.PSIsContainer) {
+            $locallyModified.Add($destinationRelative)
+            continue
+        }
+
+        $managedFiles = @{}
+        foreach ($file in @($item.files)) {
+            $relativePath = ([string]$file.path -replace "\\", "/").TrimStart('/')
+            if (-not [string]::IsNullOrWhiteSpace($relativePath)) {
+                $managedFiles[$relativePath] = $file
+            }
+        }
+        $targetFiles = Get-DirectoryFileMap -Root $destination
+        foreach ($relativePath in @($targetFiles.Keys | Sort-Object)) {
+            $runtimePath = ($destinationRelative.TrimEnd('/') + "/" + $relativePath).TrimStart('/')
+            if (-not $managedFiles.ContainsKey($relativePath)) {
+                $nestedUnknown.Add($runtimePath)
+                continue
+            }
+            $installedHash = [string]$managedFiles[$relativePath].installed_sha256
+            if ([string]::IsNullOrWhiteSpace($installedHash) -or [string]$targetFiles[$relativePath].sha256 -ne $installedHash) {
+                $locallyModified.Add($runtimePath)
+            }
+        }
+    }
+}
+
+$nestedUnknownValues = @($nestedUnknown.ToArray() | Sort-Object -Unique)
+$locallyModifiedValues = @($locallyModified.ToArray() | Sort-Object -Unique)
+if ($nestedUnknownValues.Count -gt 0 -or $locallyModifiedValues.Count -gt 0) {
+    $blockedResult = [ordered]@{
+        schema_version = 1
+        target_dir = $targetRoot
+        manifest_path = $manifestPath
+        status = "blocked"
+        reason = "schema2_copy_item_safety_check"
+        removed = @()
+        missing = @()
+        preserved_unknown = $true
+        protection_scope = "schema2_copy_preflight"
+        nested_unknown = $nestedUnknownValues
+        locally_modified = $locallyModifiedValues
+    }
+    if ($Json.IsPresent) {
+        $blockedResult | ConvertTo-Json -Depth 8
+    }
+    else {
+        Write-Output "Uninstall blocked. No files were removed."
+        Write-Output "Nested unknown files: $($nestedUnknownValues.Count)"
+        Write-Output "Locally modified managed files: $($locallyModifiedValues.Count)"
+        Write-Output "The install manifest and install report were preserved."
+    }
+    exit 2
+}
+
 $destinations = New-Object 'System.Collections.Generic.List[string]'
 foreach ($item in $manifestItems) {
     $destination = [string]$item.destination
@@ -123,12 +239,7 @@ foreach ($item in $manifestItems) {
         continue
     }
 
-    if (-not [System.IO.Path]::IsPathRooted($destination)) {
-        $destination = Join-PathParts $targetRoot $destination
-    }
-
-    Assert-PathInsideRoot -Path $destination -Root $targetRoot
-    $fullDestination = [System.IO.Path]::GetFullPath($destination).TrimEnd('\', '/')
+    $fullDestination = Resolve-ManifestDestination -Destination $destination
     if ($fullDestination.Equals([System.IO.Path]::GetFullPath($targetRoot).TrimEnd('\', '/'), [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Refusing to remove manifest item that points at the runtime root: $fullDestination"
     }
@@ -180,7 +291,10 @@ $result = [ordered]@{
     status = "uninstalled"
     removed = @($removed.ToArray())
     missing = @($missing.ToArray())
-    preserved_unknown = $true
+    preserved_unknown = if ($manifestSchemaVersion -eq 2) { $true } else { $null }
+    protection_scope = if ($manifestSchemaVersion -eq 2) { "schema2_copy_preflight" } else { "legacy_manifest_item_boundaries" }
+    nested_unknown = @()
+    locally_modified = @()
 }
 
 if ($Json.IsPresent) {
@@ -192,5 +306,11 @@ else {
     if ($missing.Count -gt 0) {
         Write-Output "Already missing: $($missing.Count)"
     }
-    Write-Output "Unknown files were preserved."
+    if ($manifestSchemaVersion -eq 2) {
+        Write-Output "Schema-2 copy items passed nested unknown and local-modification preflight."
+        Write-Output "Paths outside manifest destinations were preserved."
+    }
+    else {
+        Write-Output "Legacy manifest destinations were removed without file-level unknown-content verification."
+    }
 }

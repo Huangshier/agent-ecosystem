@@ -43,6 +43,12 @@ Install modes and reruns:
   items on other platforms for contributor workflows.
 - Reruns restore missing managed files, update source-changed files whose
   installed content is unchanged, and avoid rewriting unchanged files.
+- Schema-1 copy manifests have no trusted per-file baseline. A differing target
+  conflicts and keeps schema 1 until `-ReplaceManaged` explicitly completes the
+  migration.
+- Profile reduction removes an excluded managed item only when its recorded
+  files are unchanged and no nested unknown files exist. Otherwise the item and
+  baseline remain in the manifest as a conflict, including with `-AllowPartial`.
 - Unknown files are preserved. Locally modified managed files are skipped;
   simultaneous source and local changes are conflicts.
 - `-AllowPartial` accepts skipped conflicts without changing the report's
@@ -58,10 +64,13 @@ unknown, skipped locally modified, and conflicting files. Do not commit
 generated runtime directories or their metadata to project repositories.
 
 The current uninstaller reads schema-1 absolute or schema-2 runtime-relative
-item destinations, removes those destinations and installer metadata, and
-prints manual cleanup guidance instead of deleting anything when the manifest
-is missing. Its fuller copy-first local-modification and nested unknown-file
-contract is intentionally deferred to a separate follow-up.
+item destinations. Before deleting anything, schema-2 copy items are checked
+for nested unknown files and locally modified managed files; either finding
+blocks the whole uninstall and preserves runtime content plus installer
+metadata. Clean schema-2 copy items and dev links keep the basic uninstall path.
+Schema-1 manifests retain legacy item-boundary behavior without file-level
+unknown protection. A fuller uninstall report and selective cleanup contract is
+still deferred to a separate follow-up.
 
 Helper layout:
 
