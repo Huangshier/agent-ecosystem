@@ -152,12 +152,14 @@ function Resolve-PhysicalPathForWrite {
         $cursor = Get-NormalizedFullPath -Path ([System.IO.Path]::GetDirectoryName($cursor))
     }
 
-    if ($remainingSegments.Count -gt 0 -and -not $existingItem.PSIsContainer) {
-        throw "Nearest existing path ancestor is not a directory: $cursor"
-    }
-
     $visitedLinks = New-Object 'System.Collections.Generic.List[string]'
     $physicalPath = Resolve-ExistingPhysicalPath -Path $cursor -VisitedLinks $visitedLinks
+    if ($remainingSegments.Count -gt 0) {
+        $physicalItem = Get-PhysicalPathItem -Path $physicalPath
+        if (-not $physicalItem.PSIsContainer) {
+            throw "Nearest existing physical path ancestor is not a directory: $physicalPath"
+        }
+    }
     foreach ($segment in @($remainingSegments.ToArray())) {
         $physicalPath = Join-Path $physicalPath $segment
     }
