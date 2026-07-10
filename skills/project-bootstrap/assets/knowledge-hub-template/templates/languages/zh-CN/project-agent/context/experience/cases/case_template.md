@@ -2,10 +2,17 @@
 
 项目记忆语言：简体中文。
 
-## Summary（摘要）
+Maturity: draft
+Scope: Project-specific
+Source: project-local experience
+Last reviewed: YYYY-MM-DD
+Decay policy: Review when the relevant toolchain or workflow changes.
+Global candidate: No
+
+## Summary
 [一到两句话说明这条可复用经验及适用场景]
 
-## Keywords（关键词）
+## Keywords
 [keyword1], [keyword2], [keyword3]
 
 ## Symptoms（症状）
@@ -21,10 +28,30 @@
 ## Verification（验证）
 [列出验证命令或确认方法]
 
-## Prevention Rule（预防规则）
+## Prevention Rule
 [可执行的预防规则]
 
 ## Scope（适用范围）
-- **Scope（适用范围）**: Project-specific
-- **Global candidate（全局候选）**: No
-- **Date（日期）**: YYYY-MM-DD
+
+默认 `Scope: Project-specific` 与 `Global candidate: No` 表示项目本地经验；`Date` 可按项目
+需要在正文或复核记录中维护。
+
+## 全局晋升指引
+
+默认将经验保留为项目本地条目。只有根因和预防规则已经确认可跨项目复用、且不包含
+私有路径、原始日志或其他敏感信息时，才标记为全局候选。
+
+如需由 `promote_experience.ps1` 晋升，保留以下英文结构锚点，不要替换为中文 metadata
+aliases：
+
+- `## Summary` 和 `## Keywords`；其中标题、正文、摘要和关键词值可以使用中文。
+- `Global candidate: Yes` 或 `Scope: Cross-project reusable`。
+- `Maturity`、`Scope`、`Source`、`Last reviewed`、`Decay policy` 生命周期字段；它们的值
+  必须公开安全。
+
+仅使用 `摘要`、`关键词`、`全局候选` 或 `范围` 等中文 aliases 的候选会被默认跳过。本模板
+不要求中文 metadata aliases、schema v3 或语言自动检测。
+
+晋升前，将 metadata block 中的 `Scope` 改为 `Scope: Cross-project reusable` 和/或将
+`Global candidate` 改为 `Global candidate: Yes`，并将 `Source`、`Last reviewed`、`Decay policy`
+更新为公开安全的实际值。
