@@ -120,7 +120,7 @@ function Get-ExperienceKeywords {
 
     $lines = Get-Content -LiteralPath $Path -TotalCount 50
     $inKeywords = $false
-    $keywordsText = ""
+    $keywordsLines = @()
 
     foreach ($line in $lines) {
         if ($line -match '^\s*##\s+Keywords\s*$') {
@@ -133,12 +133,12 @@ function Get-ExperienceKeywords {
             }
             $trimmed = $line.Trim()
             if ($trimmed.Length -gt 0) {
-                $keywordsText = $trimmed
-                break
+                $keywordsLines += $trimmed
             }
         }
     }
 
+    $keywordsText = ($keywordsLines -join ' ')
     if ($keywordsText.Length -gt 0) {
         return @($keywordsText -split '\s*,\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 })
     }

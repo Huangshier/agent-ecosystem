@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated_at_utc": "2026-07-09T15:33:39.0329091Z",
+  "updated_at_utc": "2026-07-10T19:29:13.3195374Z",
   "entries": [
     {
       "id": "reindexed-stacked-pr-merge-incident-recovery-0c680f83",
@@ -15,7 +15,9 @@
         "merge-incident",
         "replacement-pr",
         "pull-request-checks",
-        "agents-memory"
+        "agents-memory",
+        "issue-closeout",
+        "force-with-lease"
       ],
       "maturity": "verified",
       "scope": "cross-project",
