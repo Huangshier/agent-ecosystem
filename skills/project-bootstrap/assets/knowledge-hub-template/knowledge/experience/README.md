@@ -13,6 +13,28 @@ Index metadata is stored in `index.json`.
 - If the issue is likely repository-specific, keep it in project-local `.agents/context/experience/` first and promote only after recurrence or cross-project confirmation.
 - Project-local source files should explicitly say `Global candidate: Yes` or `Scope: Cross-project reusable` before the default promotion command will pick them up.
 
+## Language And Metadata Contract
+
+The knowledge hub is English-first and localized-aware. English-first applies to
+the stable Markdown anchors consumed by promotion, rebuild, validation, and
+search; it does not require English titles, prose, summaries, keywords, or
+metadata values. A project-local experience may therefore be written in
+Simplified Chinese (or another supported project language) and still be
+promoted when it preserves these English anchors:
+
+- `## Summary`
+- `## Keywords`
+- `Global candidate: Yes` or `Scope: Cross-project reusable`
+- Lifecycle fields: `Maturity`, `Scope`, `Source`, `Last reviewed`, and
+  `Decay policy`
+
+Do not replace these anchors with localized aliases in a promotion candidate.
+The current helpers intentionally do not detect language or parse aliases such
+as `摘要`, `关键词`, `全局候选`, or `范围`; an aliases-only candidate is skipped by
+default. This contract does not introduce schema v3 or localized metadata
+aliases. Keep lifecycle values public-safe even when the project-local prose is
+localized.
+
 ## Maintenance Rule
 - `index.json` is the lightweight discovery registry for this directory, not the primary editing target.
 - Maintain this registry through installed `knowledge-hub/scripts`: `promote_experience.ps1` for reviewed project-to-hub promotion and `rebuild_experience_index.ps1` for backfill or repair when hub files already exist.

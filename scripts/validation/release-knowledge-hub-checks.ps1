@@ -1,4 +1,4 @@
-# release-knowledge-hub-checks.ps1
+﻿# release-knowledge-hub-checks.ps1
 # Extracted from scripts/validate-release.ps1 Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks (Phase 3).
 # Runs knowledge hub catalog, experience search, experience promotion, and duplicate helper hash checks.
 # Depends on: release-test-helper.ps1 (Add-Check, Get-FileText, Get-MissingRequiredText), path-guard.ps1 (Join-PathParts).
@@ -249,19 +249,20 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-PathParts $tempProject ".agents" "context" "experience") | Out-Null
 
     $candidatePath = Join-PathParts $tempProject ".agents" "context" "experience" "validation-promote-closure.md"
+    $aliasesOnlyCandidatePath = Join-PathParts $tempProject ".agents" "context" "experience" "validation-localized-alias-only.md"
     $candidateText = @"
-# Validation Promote Closure
+# 验证晋升闭环
 
 ## Summary
-Temporary cross-project validation lesson used only by release validation.
+仅用于 release validation 的临时跨项目经验；正文和 metadata 值保留中文。
 
 ## Keywords
-validation promote closure, release gate, temporary hub
+验证, 晋升, release gate, temporary hub
 
 Scope: Cross-project reusable
 Global candidate: Yes
 Maturity: draft
-Source: release validation temporary fixture
+Source: public-safe release validation fixture
 Last reviewed: 2026-07-07
 Decay policy: Temporary fixture only; regenerate during release validation and do not promote to public source.
 
@@ -269,6 +270,24 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
 Validate experience promotion with a temporary hub so the public source tree is not mutated during release checks.
 "@
     Set-Content -LiteralPath $candidatePath -Value $candidateText -Encoding UTF8
+
+    $aliasesOnlyCandidateText = @"
+# 仅中文别名候选
+
+## 摘要
+这条临时经验只使用中文 metadata aliases，不应被默认晋升。
+
+## 关键词
+验证, 别名, 临时
+
+范围: 跨项目可复用
+全局候选: 是
+Maturity: draft
+Source: public-safe release validation fixture
+Last reviewed: 2026-07-07
+Decay policy: Temporary fixture only; regenerate during release validation and do not promote to public source.
+"@
+    Set-Content -LiteralPath $aliasesOnlyCandidatePath -Value $aliasesOnlyCandidateText -Encoding UTF8
 
     $promoteScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "promote_experience.ps1"
     $rebuildScript = Join-PathParts $repoRoot "knowledge-hub" "scripts" "rebuild_experience_index.ps1"
@@ -287,9 +306,20 @@ Validate experience promotion with a temporary hub so the public source tree is 
         throw ("Experience promotion wrote unsafe public metadata: {0}" -f ($promotionMetadataErrors -join "; "))
     }
 
-    $promotedEntry = @($promotedRegistry.entries | Where-Object { [string]$_.title -eq "Validation Promote Closure" } | Select-Object -First 1)
+    $promotedEntry = @($promotedRegistry.entries | Where-Object { [string]$_.title -eq "验证晋升闭环" } | Select-Object -First 1)
     if ($promotedEntry.Count -lt 1) {
-        throw "Promoted validation entry was not found in the temporary registry."
+        throw "Localized validation entry with English anchors was not found in the temporary registry."
+    }
+    $promotedPath = Join-PathParts $tempHub "knowledge" "experience" ([string]$promotedEntry[0].hub_file)
+    $promotedText = Get-Content -LiteralPath $promotedPath -Raw
+    foreach ($anchor in @("## Summary", "## Keywords", "Scope: Cross-project reusable", "Global candidate: Yes", "Maturity:", "Source:", "Last reviewed:", "Decay policy:")) {
+        if ($promotedText -notmatch [regex]::Escape($anchor)) {
+            throw ("Promoted localized validation entry is missing English anchor: {0}" -f $anchor)
+        }
+    }
+    $aliasesOnlyHubPath = Join-PathParts $tempHub "knowledge" "experience" "validation-localized-alias-only.md"
+    if (Test-Path -LiteralPath $aliasesOnlyHubPath) {
+        throw "Aliases-only localized validation candidate was promoted unexpectedly."
     }
     $promotedEntry[0] | Add-Member -NotePropertyName "source_project" -NotePropertyValue $tempProject -Force
     $promotedEntry[0] | Add-Member -NotePropertyName "source_file" -NotePropertyValue $candidatePath -Force
@@ -310,7 +340,7 @@ Validate experience promotion with a temporary hub so the public source tree is 
         throw "No-op experience index rebuild changed the registry file."
     }
 
-    $searchText = & $searchScript -HubDir $tempHub -Query "validation promote closure" -Json
+    $searchText = & $searchScript -HubDir $tempHub -Query "验证 晋升" -Json
     $search = $searchText | ConvertFrom-Json
     $resultCount = @($search.results).Count
     if ($resultCount -lt 1) {
@@ -318,11 +348,11 @@ Validate experience promotion with a temporary hub so the public source tree is 
     }
 
     $topResult = $search.results[0]
-    if ([string]$topResult.title -ne "Validation Promote Closure") {
+    if ([string]$topResult.title -ne "验证晋升闭环") {
         throw ("Unexpected promoted experience search result: {0}" -f [string]$topResult.title)
     }
 
-    Add-Check "experience promote closure" "PASS" "Temporary experience promotion, index rebuild, and search passed without mutating public source." ([ordered]@{
+    Add-Check "experience promote closure" "PASS" "Localized experience with English anchors promoted, rebuilt, and searched; aliases-only candidate was skipped without mutating public source." ([ordered]@{
         temp_hub = $tempHub
         temp_project = $tempProject
         promote_output = @($promoteOutput)
@@ -330,6 +360,8 @@ Validate experience promotion with a temporary hub so the public source tree is 
         promotion_public_safe_metadata = $true
         rebuild_dropped_legacy_source_paths = $true
         noop_rebuild_preserved_hash = $true
+        localized_body_with_english_anchors_promoted = $true
+        aliases_only_candidate_skipped = $true
         search_results = $resultCount
         top_result = [string]$topResult.title
     })
