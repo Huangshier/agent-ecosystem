@@ -156,6 +156,7 @@ try {
         $missing = New-Object 'System.Collections.Generic.List[string]'
         $mismatched = New-Object 'System.Collections.Generic.List[string]'
         $testingGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
+        $learningDepositGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
         foreach ($language in @("en", "zh-CN")) {
             foreach ($relativePath in $requiredRelativePaths) {
                 $authorityPath = Join-PathParts $authorityRoot $language $relativePath
@@ -171,6 +172,90 @@ try {
                     $snapshotHash = (Get-FileHash -LiteralPath $snapshotPath -Algorithm SHA256).Hash
                     if ($authorityHash -ne $snapshotHash) {
                         $mismatched.Add("$language/$relativePath")
+                    }
+                }
+            }
+        }
+
+        $learningDepositExpectations = [ordered]@{
+            "en" = [ordered]@{
+                delivery_heading = "## Delivery Protocol & Working Loop"
+                gate_heading = "## PR-Ready And Phase-Close Memory Sync Gate"
+                next_heading = "## Tooling Constraints"
+                delivery_tokens = @(
+                    "Session Learning Extraction",
+                    "user correction",
+                    "rework after a validation failure",
+                    "scope drift",
+                    "skipped acceptance",
+                    "tool workaround",
+                    "up to 3 deposit suggestions",
+                    "user confirmation",
+                    "project-local lessons",
+                    "candidate intake / triage",
+                    "Do not auto-promote",
+                    "If no trigger occurred"
+                )
+                gate_tokens = @(
+                    "learning-deposit check",
+                    "new trigger events",
+                    "Session Learning Extraction",
+                    "no-auto-promotion"
+                )
+            }
+            "zh-CN" = [ordered]@{
+                delivery_heading = "## 交付流程"
+                gate_heading = "## PR 就绪与阶段收尾记忆同步门禁"
+                next_heading = "## 工具约束"
+                delivery_tokens = @(
+                    "Session Learning Extraction",
+                    "用户纠正",
+                    "验证失败后重做",
+                    "范围漂移",
+                    "跳过验收",
+                    "工具绕行",
+                    "最多 3 条沉淀建议",
+                    "用户确认",
+                    "项目本地经验",
+                    "candidate intake / triage",
+                    "禁止自动 promotion",
+                    "没有触发事件"
+                )
+                gate_tokens = @(
+                    "经验沉淀判断",
+                    "新触发事件",
+                    "Session Learning Extraction",
+                    "禁止自动 promotion"
+                )
+            }
+        }
+        foreach ($language in @("en", "zh-CN")) {
+            $expectation = $learningDepositExpectations[$language]
+            foreach ($templateKind in @("authority", "snapshot")) {
+                $templateRoot = if ($templateKind -eq "authority") { $authorityRoot } else { $snapshotRoot }
+                $agentGuidePath = Join-PathParts $templateRoot $language "project-agent" "AGENTS.md"
+                if (-not (Test-Path -LiteralPath $agentGuidePath)) {
+                    $learningDepositGuidanceErrors.Add("missing $templateKind/$language/project-agent/AGENTS.md")
+                    continue
+                }
+                $agentGuideText = [System.IO.File]::ReadAllText($agentGuidePath, [System.Text.Encoding]::UTF8)
+                $deliveryStart = $agentGuideText.IndexOf([string]$expectation.delivery_heading, [System.StringComparison]::Ordinal)
+                $gateStart = $agentGuideText.IndexOf([string]$expectation.gate_heading, [System.StringComparison]::Ordinal)
+                $nextStart = $agentGuideText.IndexOf([string]$expectation.next_heading, [System.StringComparison]::Ordinal)
+                if ($deliveryStart -lt 0 -or $gateStart -le $deliveryStart -or $nextStart -le $gateStart) {
+                    $learningDepositGuidanceErrors.Add("$templateKind/$language project-agent learning-deposit section boundaries are missing or out of order")
+                    continue
+                }
+                $deliveryText = $agentGuideText.Substring($deliveryStart, $gateStart - $deliveryStart)
+                $gateText = $agentGuideText.Substring($gateStart, $nextStart - $gateStart)
+                foreach ($token in $expectation.delivery_tokens) {
+                    if (-not $deliveryText.Contains([string]$token)) {
+                        $learningDepositGuidanceErrors.Add("$templateKind/$language Delivery Protocol missing learning-deposit token: $token")
+                    }
+                }
+                foreach ($token in $expectation.gate_tokens) {
+                    if (-not $gateText.Contains([string]$token)) {
+                        $learningDepositGuidanceErrors.Add("$templateKind/$language PR-ready gate missing learning-deposit token: $token")
                     }
                 }
             }
@@ -215,8 +300,8 @@ try {
             }
         }
 
-        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0 -or $testingGuidanceErrors.Count -gt 0) {
-            throw ("Project language file templates are missing, mismatched, missing testing guidance, or legacy paths remain. Missing: {0}; mismatched: {1}; testing guidance: {2}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "), ($testingGuidanceErrors.ToArray() -join "; "))
+        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0 -or $testingGuidanceErrors.Count -gt 0 -or $learningDepositGuidanceErrors.Count -gt 0) {
+            throw ("Project language file templates are missing, mismatched, missing testing or learning-deposit guidance, or legacy paths remain. Missing: {0}; mismatched: {1}; testing guidance: {2}; learning-deposit guidance: {3}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "), ($testingGuidanceErrors.ToArray() -join "; "), ($learningDepositGuidanceErrors.ToArray() -join "; "))
         }
 
         return [ordered]@{
@@ -228,6 +313,13 @@ try {
             testing_evidence_guidance = [ordered]@{
                 workflow_spec_reference = $workflowSpecReference
                 checked_tokens = @($testingGuidanceTokens)
+            }
+            learning_deposit_guidance = [ordered]@{
+                checked_languages = @("en", "zh-CN")
+                checked_template_kinds = @("authority", "snapshot")
+                delivery_protocol_triggers = @("user correction", "validation failure rework", "scope drift", "skipped acceptance", "tool workaround")
+                write_requires_user_confirmation = $true
+                auto_promotion_forbidden = $true
             }
         }
     }

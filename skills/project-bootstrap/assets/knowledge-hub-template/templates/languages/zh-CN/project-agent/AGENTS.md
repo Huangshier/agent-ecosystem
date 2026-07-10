@@ -99,9 +99,10 @@ Recurring automation 通常应指向一张命令卡，而不是把项目规则�
 
 1. **读取与计划**：读取相关代码和上下文记录。使用 `workflow-spec-lite` routing criteria 作为是否需要项目 spec 的决策规则。对 standard/deep 工作或有长期设计价值的任务，优先在 `docs/specs/<slug>/` 下建立项目 spec；目标窄、验收标准清楚、验证路径明确的 quick path 任务可以不创建 spec。`.agents/plan.md` 只作为会话级指针，不复制完整项目计划。
 2. **实现与验证**：确认工作满足完成标准，并通过项目命名的 verifier。以小步可验证方式实现，优先使用确定性、可脚本化的验证命令。阻塞写入 `.agents/process.txt`。
-3. **原子提交**：只有当用户要求提交，或项目流程明确要求提交时才 commit。提交前检查 `git log`，遵循仓库既有 commit message 风格，除非用户或项目规则另有要求。
-4. **推送**：只有当用户明确要求，或项目流程明确要求且远端可访问时才 push。
-5. **报告**：完成验证以及必要的 commit / push 后再汇报。若任务只是 review 或被环境/规则阻塞，清楚报告阻塞或发现，不能假装完成。
+3. **经验沉淀判断**：完成修复与验证、准备最终报告前，对自上次判断以来的学习触发事件检查一次：用户纠正、验证失败后重做、范围漂移、跳过验收或工具绕行。没有触发事件时直接继续，不创建经验文件；存在触发事件时，复用 `memory-governance` 的现有 `Session Learning Extraction` 流程，生成最多 3 条沉淀建议，并在写入前等待用户确认。项目本地经验默认留在项目内；只有全局候选进入 candidate intake / triage。禁止自动 promotion。
+4. **原子提交**：只有当用户要求提交，或项目流程明确要求提交时才 commit。提交前检查 `git log`，遵循仓库既有 commit message 风格，除非用户或项目规则另有要求。
+5. **推送**：只有当用户明确要求，或项目流程明确要求且远端可访问时才 push。
+6. **报告**：完成验证以及必要的 commit / push 后再汇报。若任务只是 review 或被环境/规则阻塞，清楚报告阻塞或发现，不能假装完成。
 
 ## PR 就绪与阶段收尾记忆同步门禁
 Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭实现阶段前，必须执行轻量工程记忆同步门禁。
@@ -120,9 +121,10 @@ Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭
    `<runtime-or-repo>` 指安装后的 runtime 或包含该脚本的仓库检出，不是正在诊断的项目。诊断从 `-ProjectRoot` 开始，检查 `.agents/process.txt`、`.agents/plan.md`、`.agents/notes.md`、热记忆引用的 active `docs/specs/<slug>/(spec|tasks).md`，并递归检查非模板 `.agents/context/**/*.md` 的 `Summary` / `Keywords` 发现元数据。它不扫描 `.agents/commands/**`；命令发现仍由 `.agents/commands/README.md` 和匹配的命令卡承载。
    查找该 helper 时依次尝试：已安装 runtime 的 skills 路径、已配置或全局 agent skills/runtime 路径、相邻的 `agent-ecosystem` checkout。若所有候选路径都不存在，记录 `memory_diagnose.ps1 unavailable; skipped` 并继续；不要把缺失 helper 视为阶段收尾 blocker，也不要记录本机绝对路径或 private path。
    阶段收尾前先处理 warnings；若有意延期，记录原因。将 finding count 与摘要记录到 active spec/tasks、PR body 或阶段收尾证据中。
-7. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
-8. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。
-9. 确认门禁没有引入无关重构、pre-commit hooks、仓库 ruleset 变更，或超出已接受 issue 范围的变更。
+7. 创建 PR、交接工作或阶段收尾前，对自上次判断以来的新触发事件执行同一项经验沉淀判断。复用 `Session Learning Extraction` 及其用户确认、项目本地路由、candidate intake / triage 与禁止自动 promotion 边界；没有新触发事件时不要重复生成建议。
+8. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
+9. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。
+10. 确认门禁没有引入无关重构、pre-commit hooks、仓库 ruleset 变更，或超出已接受 issue 范围的变更。
 
 ## 工具约束
 - **非交互优先**：不要为了常规可逆编辑等待仪式性确认。commit 和 push 仍遵守交付流程。
