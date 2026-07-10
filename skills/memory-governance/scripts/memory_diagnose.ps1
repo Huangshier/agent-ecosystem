@@ -3,7 +3,10 @@ param(
     [switch]$Json,
     [int]$LargeFileLineThreshold = 160,
     [int]$ProcessSoftLineLimit = 30,
-    [int]$PlanSoftLineLimit = 20
+    [int]$PlanSoftLineLimit = 20,
+    [string[]]$DirectoryIndexRoots = @(),
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$DirectoryIndexFileThreshold = 8
 )
 
 $ErrorActionPreference = "Stop"
@@ -107,6 +110,132 @@ function Get-CompletedSectionEntryCount {
     return $entryCount
 }
 
+function Test-ReparsePoint {
+    param([System.IO.FileSystemInfo]$Item)
+
+    return (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+function Test-PathWithinRoot {
+    param(
+        [string]$Root,
+        [string]$Candidate
+    )
+
+    $comparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        [System.StringComparison]::OrdinalIgnoreCase
+    }
+    else {
+        [System.StringComparison]::Ordinal
+    }
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    $rootWithSeparator = $Root.TrimEnd('\', '/') + $separator
+    return $Candidate.Equals($Root, $comparison) -or $Candidate.StartsWith($rootWithSeparator, $comparison)
+}
+
+function Test-PathHasReparsePoint {
+    param(
+        [string]$Root,
+        [string]$Candidate
+    )
+
+    if ($Candidate.Equals($Root, $(if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }))) {
+        return $false
+    }
+
+    $relativePath = $Candidate.Substring($Root.TrimEnd('\', '/').Length).TrimStart('\', '/')
+    $segments = @($relativePath -split '[\\/]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $current = $Root
+    foreach ($segment in $segments) {
+        $current = Join-Path $current $segment
+        if (-not (Test-Path -LiteralPath $current)) {
+            return $false
+        }
+        $item = Get-Item -LiteralPath $current -Force
+        if (Test-ReparsePoint -Item $item) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Resolve-DirectoryIndexRoots {
+    param(
+        [string]$Root,
+        [string[]]$RelativePaths
+    )
+
+    $resolvedRoots = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relativePath in @($RelativePaths)) {
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            throw "DirectoryIndexRoots entries must be non-empty relative directory paths."
+        }
+        if ([System.IO.Path]::IsPathRooted($relativePath)) {
+            throw "DirectoryIndexRoots entries must be relative to ProjectRoot: $relativePath"
+        }
+
+        $candidate = [System.IO.Path]::GetFullPath((Join-Path $Root $relativePath))
+        if (-not (Test-PathWithinRoot -Root $Root -Candidate $candidate)) {
+            throw "DirectoryIndexRoots entry resolves outside ProjectRoot: $relativePath"
+        }
+        if (Test-PathHasReparsePoint -Root $Root -Candidate $candidate) {
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Container)) {
+            throw "DirectoryIndexRoots directory does not exist: $relativePath"
+        }
+        $resolvedRoots.Add($candidate)
+    }
+    return @($resolvedRoots | Sort-Object -Unique)
+}
+
+function Get-DirectoryIndexHealthFindings {
+    param(
+        [string[]]$Roots,
+        [int]$FileThreshold,
+        [System.Collections.Generic.List[object]]$Findings
+    )
+
+    $comparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+        [System.StringComparer]::OrdinalIgnoreCase
+    }
+    else {
+        [System.StringComparer]::Ordinal
+    }
+    $visited = New-Object 'System.Collections.Generic.HashSet[string]' ($comparison)
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    foreach ($scanRoot in @($Roots)) {
+        $pending.Push($scanRoot)
+    }
+
+    while ($pending.Count -gt 0) {
+        $directoryPath = $pending.Pop()
+        if (-not $visited.Add($directoryPath)) {
+            continue
+        }
+
+        $directory = Get-Item -LiteralPath $directoryPath -Force
+        if (Test-ReparsePoint -Item $directory) {
+            continue
+        }
+
+        $children = @(Get-ChildItem -LiteralPath $directoryPath -Force)
+        $directFiles = @(
+            $children | Where-Object {
+                -not $_.PSIsContainer -and -not (Test-ReparsePoint -Item $_)
+            }
+        )
+        $hasIndex = @($directFiles | Where-Object { $_.Name -in @("README.md", "INDEX.md") }).Count -gt 0
+        if ($directFiles.Count -gt $FileThreshold -and -not $hasIndex) {
+            Add-Finding $Findings "warning" "directory_missing_index" $directory.FullName ("Directory has {0} direct files but no README.md or INDEX.md." -f $directFiles.Count) "Add a README.md or INDEX.md to describe and navigate this directory."
+        }
+
+        foreach ($childDirectory in @($children | Where-Object { $_.PSIsContainer -and -not (Test-ReparsePoint -Item $_) })) {
+            $pending.Push($childDirectory.FullName)
+        }
+    }
+}
+
 $completedListGrowthThreshold = 5
 $localizedSummaryHeading = -join @([char]0x6458, [char]0x8981)
 $localizedKeywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
@@ -118,6 +247,7 @@ $discoveryHeadingAliases = [ordered]@{
 $root = Resolve-Root $ProjectRoot
 $agentDir = Join-Path $root ".agents"
 $findings = New-Object 'System.Collections.Generic.List[object]'
+$directoryScanRoots = Resolve-DirectoryIndexRoots -Root $root -RelativePaths $DirectoryIndexRoots
 
 if (-not (Test-Path -LiteralPath $agentDir)) {
     Add-Finding $findings "warning" "missing_agents_dir" $agentDir "Project has no .agents directory." "Run project-bootstrap before memory governance."
@@ -208,6 +338,10 @@ if (Test-Path -LiteralPath $contextDir) {
             Add-Finding $findings "info" "context_missing_discovery_metadata" $file.FullName "Context file lacks recognized discovery metadata near the top." "Add concise Summary/Keywords discovery metadata so agents can load context progressively."
         }
     }
+}
+
+if ($directoryScanRoots.Count -gt 0) {
+    Get-DirectoryIndexHealthFindings -Roots $directoryScanRoots -FileThreshold $DirectoryIndexFileThreshold -Findings $findings
 }
 
 $findingList = @($findings.ToArray())

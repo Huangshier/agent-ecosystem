@@ -1,0 +1,53 @@
+{
+  "family": "directory-index-health",
+  "default_threshold": 8,
+  "finding": {
+    "code": "directory_missing_index",
+    "severity": "warning",
+    "recommendation_tokens": [
+      "README.md",
+      "INDEX.md"
+    ]
+  },
+  "cases": [
+    {
+      "name": "missing-index",
+      "direct_files": 9,
+      "index_file": null,
+      "expected_findings": 1
+    },
+    {
+      "name": "at-threshold",
+      "direct_files": 8,
+      "index_file": null,
+      "expected_findings": 0
+    },
+    {
+      "name": "with-readme",
+      "direct_files": 9,
+      "index_file": "README.md",
+      "expected_findings": 0
+    },
+    {
+      "name": "with-index",
+      "direct_files": 9,
+      "index_file": "INDEX.md",
+      "expected_findings": 0
+    },
+    {
+      "name": "nested-files-not-accumulated",
+      "direct_files": 8,
+      "index_file": null,
+      "child_direct_files": 9,
+      "child_index_file": "README.md",
+      "expected_findings": 0
+    },
+    {
+      "name": "reparse-directory-not-followed",
+      "direct_files": 0,
+      "index_file": "README.md",
+      "linked_target_direct_files": 9,
+      "expected_findings": 0
+    }
+  ]
+}
