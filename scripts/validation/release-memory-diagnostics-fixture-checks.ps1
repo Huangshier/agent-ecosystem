@@ -1,13 +1,13 @@
 # release-memory-diagnostics-fixture-checks.ps1
 # Contains validation checks for memory structural diagnostics fixtures
-# (completed-list-growth and hot-memory-soft-length).
+# (completed-list-growth, hot-memory-soft-length, and directory-index-health).
 # Part of the release validator thin-entrypoint refactor.
 # Authoritative check names: "structural memory diagnostics fixtures", "hot memory soft-length fixtures".
 
 <#
 .SYNOPSIS
     Invoke-ReleaseMemoryDiagnosticsFixtureChecks
-    Validates completed-list-growth and hot-memory-soft-length memory diagnostics fixture suites.
+    Validates completed-list-growth, hot-memory-soft-length, and directory-index-health memory diagnostics fixture suites.
 .PARAMETER RepositoryRoot
     Absolute path to the repository root.
 #>
@@ -297,5 +297,226 @@ function Invoke-ReleaseMemoryDiagnosticsFixtureChecks {
     }
     catch {
         Add-Check "hot memory soft-length fixtures" "FAIL" $_.Exception.Message
+    }
+
+    # Directory index health fixture checks
+    $directoryFixtureScratch = $null
+    try {
+        $directoryFixtureRoot = Join-PathParts $RepositoryRoot "scripts" "validation" "memory-diagnose-structural-fixtures" "directory-index-health"
+        $directoryFixtureReadme = Get-FileText -RelativePath "scripts/validation/memory-diagnose-structural-fixtures/directory-index-health/README.md"
+        foreach ($token in @("Directory Index Health", "directory_missing_index", "symbolic-link or junction", "unchanged fixture-tree")) {
+            if (-not $directoryFixtureReadme.Contains($token)) {
+                throw "Directory index health fixture README is missing token: $token"
+            }
+        }
+
+        $directoryExpectedPath = Join-PathParts $directoryFixtureRoot "expected.json"
+        $directoryExpected = Get-Content -LiteralPath $directoryExpectedPath -Raw | ConvertFrom-Json
+        if ([string]$directoryExpected.family -ne "directory-index-health") {
+            throw "Directory index health fixture family mismatch."
+        }
+        if ([int]$directoryExpected.default_threshold -ne 8) {
+            throw "Directory index health fixture must document the default threshold of 8."
+        }
+        if ([string]$directoryExpected.finding.code -ne "directory_missing_index" -or [string]$directoryExpected.finding.severity -ne "warning") {
+            throw "Directory index health fixture finding contract is invalid."
+        }
+
+        function Write-DirectoryFixtureFile {
+            param(
+                [string]$Path,
+                [string]$Content = "fixture`n"
+            )
+
+            $parent = Split-Path -Parent $Path
+            if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+                $null = New-Item -ItemType Directory -Path $parent -Force
+            }
+            [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding($false)))
+        }
+
+        function Add-DirectoryFixtureFiles {
+            param(
+                [string]$Directory,
+                [int]$Count
+            )
+
+            $null = New-Item -ItemType Directory -Path $Directory -Force
+            for ($index = 1; $index -le $Count; $index++) {
+                Write-DirectoryFixtureFile -Path (Join-Path $Directory ("file-{0:D2}.txt" -f $index))
+            }
+        }
+
+        function Get-DirectoryFixtureSnapshot {
+            param([string]$Root)
+
+            $entries = New-Object 'System.Collections.Generic.List[string]'
+            $pending = New-Object 'System.Collections.Generic.Stack[string]'
+            $pending.Push($Root)
+            while ($pending.Count -gt 0) {
+                $directoryPath = $pending.Pop()
+                foreach ($item in @(Get-ChildItem -LiteralPath $directoryPath -Force)) {
+                    $relativePath = $item.FullName.Substring($Root.Length).TrimStart('\', '/').Replace('\', '/')
+                    $isReparsePoint = (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+                    if ($item.PSIsContainer) {
+                        $kind = if ($isReparsePoint) { "L" } else { "D" }
+                        $entries.Add(("{0}|{1}|{2}" -f $kind, $relativePath, [int]$item.Attributes))
+                        if (-not $isReparsePoint) {
+                            $pending.Push($item.FullName)
+                        }
+                    }
+                    else {
+                        $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+                        $entries.Add(("F|{0}|{1}|{2}|{3}" -f $relativePath, $item.Length, $hash, [int]$item.Attributes))
+                    }
+                }
+            }
+            return @($entries | Sort-Object)
+        }
+
+        $scratchParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        $directoryFixtureScratch = Join-Path $scratchParent ("agent-ecosystem-directory-index-health-{0}" -f [guid]::NewGuid().ToString("N"))
+        $null = New-Item -ItemType Directory -Path $directoryFixtureScratch
+        Write-DirectoryFixtureFile -Path (Join-PathParts $directoryFixtureScratch ".agents" "process.txt") -Content "Current state`n- Fixture active.`n"
+        Write-DirectoryFixtureFile -Path (Join-PathParts $directoryFixtureScratch ".agents" "plan.md") -Content "# Plan`n`n- Fixture active.`n"
+        Write-DirectoryFixtureFile -Path (Join-PathParts $directoryFixtureScratch ".agents" "notes.md") -Content "# Notes`n`n- Stable fixture fact.`n"
+
+        foreach ($fixtureCase in @($directoryExpected.cases)) {
+            $caseRoot = Join-PathParts $directoryFixtureScratch "cases" ([string]$fixtureCase.name)
+            Add-DirectoryFixtureFiles -Directory $caseRoot -Count ([int]$fixtureCase.direct_files)
+            if ($null -ne $fixtureCase.index_file -and -not [string]::IsNullOrWhiteSpace([string]$fixtureCase.index_file)) {
+                Write-DirectoryFixtureFile -Path (Join-Path $caseRoot ([string]$fixtureCase.index_file)) -Content "# Fixture index`n"
+            }
+            if ($fixtureCase.PSObject.Properties.Name -contains "child_direct_files") {
+                $childRoot = Join-Path $caseRoot "child"
+                Add-DirectoryFixtureFiles -Directory $childRoot -Count ([int]$fixtureCase.child_direct_files)
+                Write-DirectoryFixtureFile -Path (Join-Path $childRoot ([string]$fixtureCase.child_index_file)) -Content "# Child fixture index`n"
+            }
+        }
+
+        $reparseCase = @($directoryExpected.cases | Where-Object { [string]$_.name -eq "reparse-directory-not-followed" })[0]
+        $reparseCaseRoot = Join-PathParts $directoryFixtureScratch "cases" "reparse-directory-not-followed"
+        $reparseTarget = Join-PathParts $directoryFixtureScratch "linked-targets" "unindexed"
+        Add-DirectoryFixtureFiles -Directory $reparseTarget -Count ([int]$reparseCase.linked_target_direct_files)
+        $reparseLink = Join-Path $reparseCaseRoot "linked-unindexed-directory"
+        if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
+            $null = New-Item -ItemType Junction -Path $reparseLink -Target $reparseTarget
+        }
+        else {
+            $null = New-Item -ItemType SymbolicLink -Path $reparseLink -Target $reparseTarget
+        }
+        $linkItem = Get-Item -LiteralPath $reparseLink -Force
+        if (($linkItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+            throw "Directory index health fixture did not create a reparse-point directory."
+        }
+
+        $memoryDiagnoseScript = Join-PathParts $RepositoryRoot "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
+        $snapshotBefore = @(Get-DirectoryFixtureSnapshot -Root $directoryFixtureScratch)
+        $baseline = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -Json | ConvertFrom-Json
+        $baselineCodes = @($baseline.findings | ForEach-Object { [string]$_.code })
+        if ($baselineCodes.Count -ne 0) {
+            throw "Directory index fixture baseline changed without opt-in roots. Actual: $($baselineCodes -join ', ')"
+        }
+
+        $caseEvidence = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($fixtureCase in @($directoryExpected.cases)) {
+            $fixtureName = [string]$fixtureCase.name
+            $relativeRoot = "cases/$fixtureName"
+            $diagnose = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots $relativeRoot -Json | ConvertFrom-Json
+            $indexFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "directory_missing_index" })
+            $expectedCount = [int]$fixtureCase.expected_findings
+            if ($indexFindings.Count -ne $expectedCount) {
+                throw "Directory index fixture $fixtureName expected $expectedCount findings but got $($indexFindings.Count)."
+            }
+            if ($fixtureName -eq "missing-index") {
+                $finding = $indexFindings[0]
+                if ([string]$finding.severity -ne "warning") {
+                    throw "directory_missing_index severity should be warning."
+                }
+                $findingPath = ([string]$finding.path).Replace('\', '/')
+                if (-not $findingPath.EndsWith("cases/missing-index")) {
+                    throw "directory_missing_index path should point to the diagnosed directory."
+                }
+                if ([string]$finding.message -notmatch '(^|\D)9(\D|$)') {
+                    throw "directory_missing_index message should include the direct file count."
+                }
+                foreach ($token in @($directoryExpected.finding.recommendation_tokens | ForEach-Object { [string]$_ })) {
+                    if ([string]$finding.recommendation -notmatch [regex]::Escape($token)) {
+                        throw "directory_missing_index recommendation is missing token: $token"
+                    }
+                }
+            }
+            $caseEvidence.Add([ordered]@{
+                fixture = $fixtureName
+                expected_findings = $expectedCount
+                actual_findings = $indexFindings.Count
+            })
+        }
+
+        $configuredThreshold = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots "cases/missing-index" -DirectoryIndexFileThreshold 9 -Json | ConvertFrom-Json
+        if (@($configuredThreshold.findings | Where-Object { [string]$_.code -eq "directory_missing_index" }).Count -ne 0) {
+            throw "DirectoryIndexFileThreshold did not override the default threshold."
+        }
+        $linkedRootDiagnosis = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots "cases/reparse-directory-not-followed/linked-unindexed-directory" -Json | ConvertFrom-Json
+        if (@($linkedRootDiagnosis.findings | Where-Object { [string]$_.code -eq "directory_missing_index" }).Count -ne 0) {
+            throw "A reparse-point scan root should not be followed."
+        }
+
+        $absoluteRejected = $false
+        try {
+            $null = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots $reparseCaseRoot -Json
+        }
+        catch {
+            $absoluteRejected = $_.Exception.Message -match "relative to ProjectRoot"
+        }
+        if (-not $absoluteRejected) {
+            throw "DirectoryIndexRoots should reject absolute paths."
+        }
+        $outsideRejected = $false
+        try {
+            $null = & $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots "../outside" -Json
+        }
+        catch {
+            $outsideRejected = $_.Exception.Message -match "outside ProjectRoot"
+        }
+        if (-not $outsideRejected) {
+            throw "DirectoryIndexRoots should reject paths outside ProjectRoot."
+        }
+
+        $humanOutput = @(& $memoryDiagnoseScript -ProjectRoot $directoryFixtureScratch -DirectoryIndexRoots "cases/missing-index") -join "`n"
+        if ($humanOutput -notmatch '\[warning\]\s+directory_missing_index:' -or $humanOutput -notmatch '9 direct files') {
+            throw "Human directory index diagnosis output does not preserve the finding contract."
+        }
+
+        $snapshotAfter = @(Get-DirectoryFixtureSnapshot -Root $directoryFixtureScratch)
+        if (-not (Test-ExactArray -Actual $snapshotAfter -Expected $snapshotBefore)) {
+            throw "Directory index diagnosis changed the fixture tree."
+        }
+
+        $script:evidence.directory_index_health_fixtures = [ordered]@{
+            family = "directory-index-health"
+            default_threshold = [int]$directoryExpected.default_threshold
+            opt_in_parameter = "DirectoryIndexRoots"
+            threshold_parameter = "DirectoryIndexFileThreshold"
+            baseline_finding_codes = @($baselineCodes)
+            fixture_tree_unchanged = $true
+            reparse_kind = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { "junction" } else { "symbolic-link" }
+            host = $PSVersionTable.PSEdition
+            fixtures = @($caseEvidence.ToArray())
+        }
+        Add-Check "directory index health fixtures" "PASS" "Opt-in directory index diagnostics cover thresholds, indexes, direct-file counting, reparse exclusion, read-only behavior, and unchanged default findings." $evidence.directory_index_health_fixtures
+    }
+    catch {
+        Add-Check "directory index health fixtures" "FAIL" $_.Exception.Message
+    }
+    finally {
+        if (-not [string]::IsNullOrWhiteSpace($directoryFixtureScratch) -and (Test-Path -LiteralPath $directoryFixtureScratch)) {
+            $resolvedScratch = [System.IO.Path]::GetFullPath($directoryFixtureScratch)
+            $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+            if (-not $resolvedScratch.StartsWith($resolvedTemp, [System.StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path -Leaf $resolvedScratch).StartsWith("agent-ecosystem-directory-index-health-")) {
+                throw "Refusing to remove unexpected directory index fixture scratch path: $resolvedScratch"
+            }
+            Remove-Item -LiteralPath $resolvedScratch -Recurse -Force
+        }
     }
 }
