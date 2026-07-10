@@ -66,7 +66,7 @@ function Invoke-ReleaseMemoryDiagnosticsFixtureChecks {
 
         $fixtureFamiliesRoot = Join-PathParts $RepositoryRoot "scripts" "validation" "memory-diagnose-structural-fixtures"
         $fixturePilot = Get-FileText -RelativePath "scripts/validation/memory-diagnose-structural-fixtures/README.md"
-        foreach ($token in @("Entry", "Summary", "Status", "Refs", "Last reviewed", "repository-relative links", "issue #217 remains open")) {
+        foreach ($token in @("Entry", "Summary", "Status", "Refs", "Last reviewed", "repository-relative links", "phase 1 was introduced by PR #234", "issue #217")) {
             if (-not $fixturePilot.Contains($token)) {
                 throw "Structural fixture pilot index is missing token: $token"
             }
