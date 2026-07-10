@@ -14,11 +14,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Get-FullNormalizedPath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    return [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
-}
+$scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "lib/path-guard.ps1")
 
 function Test-ReparsePoint {
     param([Parameter(Mandatory = $true)][System.IO.FileSystemInfo]$Item)
@@ -50,7 +47,7 @@ function Get-LinkTargetPath {
     if (-not [System.IO.Path]::IsPathRooted($targetPath)) {
         $targetPath = Join-Path (Split-Path -Parent $LinkPath) $targetPath
     }
-    return Get-FullNormalizedPath -Path $targetPath
+    return Get-NormalizedFullPath -Path $targetPath
 }
 
 function Get-LinkMode {
@@ -91,8 +88,8 @@ function Write-Utf8NoBomFile {
     [System.IO.File]::WriteAllText($Path, $Text, $utf8NoBom)
 }
 
-$runtimeRoot = Get-FullNormalizedPath -Path $RuntimeDir
-$agentSkillsRoot = Get-FullNormalizedPath -Path $AgentSkillsDir
+$runtimeRoot = Get-NormalizedFullPath -Path $RuntimeDir
+$agentSkillsRoot = Get-NormalizedFullPath -Path $AgentSkillsDir
 $installManifestPath = Join-Path $runtimeRoot "install-manifest.json"
 $bridgeManifestPath = Join-Path $runtimeRoot "agent-skill-bridge-manifest.json"
 $runtimeSkillsRoot = Join-Path $runtimeRoot "skills"
@@ -143,23 +140,30 @@ elseif (Test-ReparsePoint -Item $runtimeSkillsRootItem) {
 }
 
 $requestedSkills = New-Object 'System.Collections.Generic.List[string]'
-$seenSkills = @{}
 foreach ($skillNameValue in @($Skill)) {
     $skillName = [string]$skillNameValue
     if ([string]::IsNullOrWhiteSpace($skillName) -or $skillName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $skillName -in @('.', '..')) {
         $preflightErrors.Add("Invalid skill name: '$skillName'. Skill names cannot contain path separators.")
         continue
     }
-    $skillKey = $skillName.ToLowerInvariant()
-    if ($seenSkills.ContainsKey($skillKey)) {
+    $duplicateRequest = @($requestedSkills.ToArray() | Where-Object {
+            [string]::Equals([string]$_, $skillName, [System.StringComparison]::OrdinalIgnoreCase)
+        }).Count -gt 0
+    if ($duplicateRequest) {
         $preflightErrors.Add("Duplicate skill name: $skillName")
         continue
     }
-    $seenSkills[$skillKey] = $true
     $requestedSkills.Add($skillName)
 }
 if ($requestedSkills.Count -eq 0) {
     $preflightErrors.Add("At least one valid -Skill value is required.")
+}
+
+if (Test-IsFileSystemRoot -Path $agentSkillsRoot) {
+    $preflightErrors.Add("AgentSkillsDir cannot be a filesystem root: $agentSkillsRoot")
+}
+if (Test-PathIsEqualOrChild -Path $agentSkillsRoot -Root $runtimeRoot) {
+    $preflightErrors.Add("AgentSkillsDir must be outside RuntimeDir: $agentSkillsRoot")
 }
 
 $agentSkillsRootItem = Get-ExistingItem -Path $agentSkillsRoot
@@ -174,32 +178,38 @@ if ($null -ne $agentSkillsRootItem) {
 
 $manifestSkillNames = @($installManifest.skills | ForEach-Object { [string]$_ })
 foreach ($skillName in @($requestedSkills.ToArray())) {
-    $managedName = "skills/$skillName"
-    $source = Get-FullNormalizedPath -Path (Join-Path (Join-Path $runtimeRoot "skills") $skillName)
-    $target = Get-FullNormalizedPath -Path (Join-Path $agentSkillsRoot $skillName)
-    $candidateValid = $true
-
-    if ($skillName -notin $manifestSkillNames) {
-        $preflightErrors.Add("Skill is not listed in the runtime install manifest: $skillName")
-        $candidateValid = $false
+    $canonicalMatches = @($manifestSkillNames | Where-Object {
+            [string]::Equals([string]$_, $skillName, [System.StringComparison]::Ordinal)
+        })
+    if ($canonicalMatches.Count -ne 1) {
+        $preflightErrors.Add("Skill must exactly match one canonical runtime manifest skill: $skillName")
+        continue
     }
 
-    $managedItems = @($installManifest.items | Where-Object { [string]$_.name -eq $managedName })
+    $canonicalSkill = [string]$canonicalMatches[0]
+    $managedName = "skills/$canonicalSkill"
+    $managedItems = @($installManifest.items | Where-Object {
+            [string]::Equals([string]$_.name, $managedName, [System.StringComparison]::Ordinal)
+        })
     if ($managedItems.Count -ne 1) {
         $preflightErrors.Add("Skill must have exactly one managed install manifest item: $managedName")
-        $candidateValid = $false
+        continue
     }
-    else {
-        $managedItem = $managedItems[0]
-        if ([string]$managedItem.destination -ne $managedName) {
-            $preflightErrors.Add("Managed skill destination must be $managedName, got '$([string]$managedItem.destination)'.")
-            $candidateValid = $false
-        }
-        if ([string]$managedItem.mode -ne "copy" -or -not [bool]$managedItem.managed) {
-            $preflightErrors.Add("Managed skill item must record mode=copy and managed=true: $managedName")
-            $candidateValid = $false
-        }
+
+    $managedItem = $managedItems[0]
+    $canonicalDestination = [string]$managedItem.destination
+    if (-not [string]::Equals($canonicalDestination, $managedName, [System.StringComparison]::Ordinal)) {
+        $preflightErrors.Add("Managed skill destination must exactly match $managedName, got '$canonicalDestination'.")
+        continue
     }
+    if (-not [string]::Equals([string]$managedItem.mode, "copy", [System.StringComparison]::Ordinal) -or -not [bool]$managedItem.managed) {
+        $preflightErrors.Add("Managed skill item must record mode=copy and managed=true: $managedName")
+        continue
+    }
+
+    $source = Get-NormalizedFullPath -Path (Join-PathParts $runtimeRoot $canonicalDestination)
+    $target = Get-NormalizedFullPath -Path (Join-Path $agentSkillsRoot $canonicalSkill)
+    $candidateValid = $true
 
     $sourceItem = Get-ExistingItem -Path $source
     if ($null -eq $sourceItem -or -not $sourceItem.PSIsContainer) {
@@ -208,6 +218,15 @@ foreach ($skillName in @($requestedSkills.ToArray())) {
     }
     elseif (Test-ReparsePoint -Item $sourceItem) {
         $preflightErrors.Add("Managed runtime skill source must be a copy directory, not a link: $source")
+        $candidateValid = $false
+    }
+
+    if (Test-PathIsEqualOrChild -Path $agentSkillsRoot -Root $source) {
+        $preflightErrors.Add("AgentSkillsDir must be outside selected skill source: $agentSkillsRoot")
+        $candidateValid = $false
+    }
+    if (Test-PathIsEqualOrChild -Path $target -Root $source) {
+        $preflightErrors.Add("Final skill target must not equal or be inside selected skill source: $target")
         $candidateValid = $false
     }
 
@@ -220,7 +239,7 @@ foreach ($skillName in @($requestedSkills.ToArray())) {
         }
         else {
             $actualTarget = Get-LinkTargetPath -Item $targetItem -LinkPath $target
-            if ([string]::IsNullOrWhiteSpace($actualTarget) -or -not $actualTarget.Equals($source, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ([string]::IsNullOrWhiteSpace($actualTarget) -or -not (Test-PlatformPathEqual -Left $actualTarget -Right $source)) {
                 $preflightErrors.Add("Target link points somewhere unexpected: $target -> $actualTarget")
                 $targetState = "conflict"
             }
@@ -232,7 +251,7 @@ foreach ($skillName in @($requestedSkills.ToArray())) {
 
     if ($candidateValid) {
         $candidates.Add([ordered]@{
-                skill = $skillName
+                skill = $canonicalSkill
                 source = $source
                 target = $target
                 preflight = $targetState
@@ -291,7 +310,7 @@ try {
             throw "Bridge link was not created as a link: $([string]$candidate.target)"
         }
         $actualTarget = Get-LinkTargetPath -Item $linkedItem -LinkPath ([string]$candidate.target)
-        if (-not $actualTarget.Equals([string]$candidate.source, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-PlatformPathEqual -Left $actualTarget -Right ([string]$candidate.source))) {
             throw "Bridge link verification failed: $([string]$candidate.target) -> $actualTarget"
         }
 
@@ -304,17 +323,19 @@ try {
             })
     }
 
-    $currentKeys = @{}
-    foreach ($record in @($currentResults.ToArray())) {
-        $currentKeys[((([string]$record.target).ToLowerInvariant()) + "`0" + (([string]$record.skill).ToLowerInvariant()))] = $true
-    }
-
     $allRecords = New-Object 'System.Collections.Generic.List[object]'
     if ($null -ne $existingBridgeManifest) {
-        foreach ($record in @($existingBridgeManifest.bridges)) {
-            $key = ((([string]$record.target).ToLowerInvariant()) + "`0" + (([string]$record.skill).ToLowerInvariant()))
-            if (-not $currentKeys.ContainsKey($key)) {
-                $allRecords.Add($record)
+        foreach ($existingRecord in @($existingBridgeManifest.bridges)) {
+            $replacedByCurrentResult = $false
+            foreach ($currentRecord in @($currentResults.ToArray())) {
+                if ([string]::Equals([string]$existingRecord.skill, [string]$currentRecord.skill, [System.StringComparison]::OrdinalIgnoreCase) -and
+                    (Test-PlatformPathEqual -Left ([string]$existingRecord.target) -Right ([string]$currentRecord.target))) {
+                    $replacedByCurrentResult = $true
+                    break
+                }
+            }
+            if (-not $replacedByCurrentResult) {
+                $allRecords.Add($existingRecord)
             }
         }
     }
@@ -329,7 +350,7 @@ try {
         commit_policy = "do-not-commit"
         runtime = $runtimeRoot
         updated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
-        bridges = @($allRecords.ToArray() | Sort-Object { ([string]$_.target).ToLowerInvariant() }, { ([string]$_.skill).ToLowerInvariant() })
+        bridges = @($allRecords.ToArray() | Sort-Object { [string]$_.target }, { [string]$_.skill })
     }
     $bridgeManifestJson = $bridgeManifest | ConvertTo-Json -Depth 8
     Write-Utf8NoBomFile -Path $manifestTempPath -Text ($bridgeManifestJson + [System.Environment]::NewLine)

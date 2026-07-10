@@ -13,6 +13,12 @@ selected runtime has a schema-2 `install-manifest.json`, uses
 unlisted skills, linked runtime skill sources, and manifest items whose managed
 destination is not exactly `skills/<skill>`.
 
+Skill ownership is canonical and case-exact across the manifest's `skills`,
+`items[].name`, and `items[].destination` fields. A differently cased request
+cannot borrow another skill's ownership. Link targets follow platform path
+semantics: comparisons are case-insensitive on Windows and case-sensitive on
+Linux and macOS.
+
 Both locations are mandatory. The helper has no default for a maintainer or
 client-specific user directory:
 
@@ -67,6 +73,12 @@ creates any link:
 Any preflight conflict exits non-zero without creating links or bridge
 metadata. If link creation or manifest writing fails after preflight, links
 created by that run are rolled back.
+
+`AgentSkillsDir` must be a non-root directory outside the installed runtime and
+outside every selected skill source. The final per-skill target must also be
+outside its source, preventing recursive links or writes into managed runtime
+content. These checks use path-segment boundaries, so a sibling such as
+`<root>/runtime-client-skills` is not treated as a child of `<root>/runtime`.
 
 Successful runs write `<runtime>/agent-skill-bridge-manifest.json`. This file is
 independent of the installer schema-2 manifest and records the actual skill,
