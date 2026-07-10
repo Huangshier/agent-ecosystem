@@ -92,6 +92,21 @@ function New-AgentSkillBridgeAliasCycle {
     return "relative-symbolic-link-cycle"
 }
 
+function Remove-AgentSkillBridgeFixtureAlias {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) {
+        return
+    }
+    if ($item.PSIsContainer -or [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        [System.IO.Directory]::Delete($item.FullName)
+    }
+    else {
+        [System.IO.File]::Delete($item.FullName)
+    }
+}
+
 function New-AgentSkillBridgeFixtureRuntime {
     param(
         [Parameter(Mandatory = $true)][string]$Installer,
@@ -374,6 +389,9 @@ function Invoke-AgentSkillBridgeFixtureChecks {
     Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $ancestorRuntime "agent-skill-bridge-manifest.json"))) -Message "Multi-level ancestor alias failure wrote bridge metadata."
     Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $ancestorInstallManifestPath -Algorithm SHA256).Hash -eq $ancestorInstallManifestHash) -Message "Multi-level ancestor alias failure modified the installer manifest."
     $evidence.Add([ordered]@{ scenario = "physical-runtime-and-source-ancestor-containment"; platform_alias = $runtimeAliasMode; source_alias = $sourceAliasMode; runtime_exit_code = $runtimeAliasRun.exit_code; source_exit_code = $sourceAliasRun.exit_code; multi_level_exit_code = $multiAliasRun.exit_code; zero_write = $true })
+    foreach ($fixtureAlias in @($aliasA, $aliasB, $sourceAlias, $runtimeAlias)) {
+        Remove-AgentSkillBridgeFixtureAlias -Path $fixtureAlias
+    }
 
     # A safe alias is canonicalized to its external physical destination and is
     # allowed to create the bridge there.
@@ -394,6 +412,7 @@ function Invoke-AgentSkillBridgeFixtureChecks {
     Assert-AgentSkillBridgeCondition -Condition (Test-AgentSkillBridgeReparsePoint -Path $safePhysicalTarget) -Message "Safe ancestor alias did not create the bridge at its physical destination."
     Assert-AgentSkillBridgeCondition -Condition (Test-Path -LiteralPath (Join-PathParts $safeRuntime "agent-skill-bridge-manifest.json") -PathType Leaf) -Message "Safe ancestor alias did not write bridge metadata after successful preflight."
     $evidence.Add([ordered]@{ scenario = "safe-ancestor-alias"; platform_alias = $safeAliasMode; result = "created"; physical_target = $safePhysicalTarget })
+    Remove-AgentSkillBridgeFixtureAlias -Path $safeAlias
 
     # Broken and cyclic ancestor links are rejected before creating a target,
     # bridge link, temporary manifest, or bridge manifest.
@@ -419,6 +438,9 @@ function Invoke-AgentSkillBridgeFixtureChecks {
     Assert-AgentSkillBridgeCondition -Condition (@(Get-ChildItem -LiteralPath $invalidAliasRuntime -Filter ".agent-skill-bridge-manifest.*.tmp" -Force).Count -eq 0) -Message "Invalid ancestor link failure left a temporary bridge manifest."
     Assert-AgentSkillBridgeCondition -Condition ((Get-FileHash -LiteralPath $invalidInstallManifestPath -Algorithm SHA256).Hash -eq $invalidInstallManifestHash) -Message "Ancestor link cycle failure modified the installer manifest."
     $evidence.Add([ordered]@{ scenario = "broken-and-cyclic-ancestor-aliases"; broken_alias = $brokenMode; cycle_alias = $cycleMode; broken_exit_code = $brokenRun.exit_code; cycle_exit_code = $cycleRun.exit_code; zero_write = $true })
+    foreach ($fixtureAlias in @($cycleAliasA, $cycleAliasB, $brokenAlias)) {
+        Remove-AgentSkillBridgeFixtureAlias -Path $fixtureAlias
+    }
 
     # Existing non-link targets fail before metadata or links are written.
     $nonLinkRuntime = Join-PathParts $fixtureRoot "non-link-runtime"
