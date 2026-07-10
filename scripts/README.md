@@ -14,6 +14,17 @@ Useful validation form:
 .\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
+Explicitly bridge installed-copy skills into an agent client's verified skill
+directory:
+
+```powershell
+.\link-agent-skills.ps1 -RuntimeDir <runtime> -AgentSkillsDir <agent-skills-dir> -Skill project-bootstrap
+```
+
+This helper is separate from ordinary installation. See
+[`docs/agent-skill-bridge.md`](../docs/agent-skill-bridge.md) for its full
+preflight and local metadata contract.
+
 Manifest-based uninstall:
 
 ```powershell
@@ -75,6 +86,8 @@ still deferred to a separate follow-up.
 Helper layout:
 
 - `lib/path-guard.ps1`: shared path joining and safety guards.
+- `link-agent-skills.ps1`: explicit installed-copy to agent-specific skill
+  directory bridge.
 - `validation/release-test-helper.ps1`: common helper functions used by the
   release validator.
 

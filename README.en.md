@@ -70,6 +70,12 @@ runtime to follow the current source checkout. Existing `-Copy` invocations
 remain supported; `-ReplaceManaged` overwrites managed content while always
 preserving unknown files.
 
+Normal installs never write an agent-specific skill directory. To let an agent
+client discover public skills from an installed runtime, run the separate
+opt-in bridge with an explicit runtime and explicit target directory. See
+[Agent-specific skill link bridge](docs/agent-skill-bridge.md) for usage and
+safety boundaries.
+
 Bootstrap a project:
 
 ```powershell
