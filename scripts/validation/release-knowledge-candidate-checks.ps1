@@ -691,6 +691,15 @@ Global candidate: No
             throw "Candidate workflow mutated the formal experience hub."
         }
 
+        foreach ($fixtureLink in @($cycleAliasA, $cycleAliasB, $brokenAlias, $multiAliasA, $multiAliasB, $projectAlias, $safeAlias)) {
+            if ($env:OS -eq "Windows_NT") {
+                [System.IO.Directory]::Delete($fixtureLink, $false)
+            }
+            else {
+                Remove-Item -LiteralPath $fixtureLink -Force -ErrorAction Stop
+            }
+        }
+
         $script:evidence.knowledge_candidate_intake = [ordered]@{
             discovered_candidates = [int]$discover.count
             inbox_files = $files.Count
