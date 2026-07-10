@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.p
 
 Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
-`install-manifest.json` for each temporary install and a final
+`install-manifest.json` plus `install-report.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
 Windows PowerShell 5.1 is supported. On non-Windows systems, or when PowerShell
 7+ is already available, use `pwsh -NoProfile -File` with the same script
@@ -49,10 +49,11 @@ The validator checks:
   by historical evidence, stop-rule, or retrospective allowlists
 - Workflow Kernel skill metadata
 - installer profile matrix for `minimal`, `recommended`, `full`, and `dev`
-- copy mode and default link/junction mode installs
+- default copy installs and explicit development link/junction installs
 - runtime smoke coverage for bootstrap, context gate, workflow spec creation,
   and memory diagnosis in both recommended copy and link installs
-- installer no-`-Force` conflict behavior and forced reinstall behavior
+- incremental installer reruns, unknown/local-modified protection, conflict exit
+  behavior, `-AllowPartial`, and managed replacement compatibility
 - hub initialization Git mode, including default no-Git behavior and explicit
   Git initialization
 - `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project

@@ -28,16 +28,17 @@ launcher with:
 pwsh -NoProfile -File <script> <arguments>
 ```
 
-Keep generated runtime directories and manifests out of your project repository.
-They can include local absolute paths.
+Keep generated runtime directories, manifests, and reports out of your project
+repository. They are runtime metadata even though their recorded file paths are
+runtime-relative.
 
 ## 1. Install A Temporary Runtime
 
-Start with a copy-mode runtime so evaluation does not alter your normal agent
-home:
+Start with the default copy runtime so evaluation does not alter your normal
+agent home or point back to the source checkout:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime> -Copy -Force
+powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
 ```
 
 The `recommended` profile installs the public Workflow Kernel skills and public
@@ -51,6 +52,7 @@ Expected result:
 - `<runtime>\skills\memory-governance`
 - `<runtime>\knowledge-hub`
 - `<runtime>\install-manifest.json`
+- `<runtime>\install-report.json`
 
 ## 2. Bootstrap The Empty Project
 

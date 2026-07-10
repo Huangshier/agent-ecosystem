@@ -95,42 +95,36 @@ try {
     $targetDir = Join-PathParts $scratchRootFull "install-behavior-runtime"
     Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
 
-    & $installer -Profile minimal -TargetDir $targetDir -Copy -Force | Out-Host
+    & $installer -Profile minimal -TargetDir $targetDir | Out-Host
     $firstManifestPath = Join-PathParts $targetDir "install-manifest.json"
     if (-not (Test-Path -LiteralPath $firstManifestPath)) {
         throw "Initial install manifest missing."
     }
 
-    $conflictFailedAsExpected = $false
-    try {
-        & $installer -Profile minimal -TargetDir $targetDir -Copy | Out-Null
-    }
-    catch {
-        if ($_.Exception.Message -match 'Destination already exists') {
-            $conflictFailedAsExpected = $true
-        }
-        else {
-            throw
-        }
-    }
-    if (-not $conflictFailedAsExpected) {
-        throw "Installer allowed overwriting an existing target without -Force."
+    & $installer -Profile minimal -TargetDir $targetDir -Copy | Out-Null
+    $rerunReport = Get-Content -LiteralPath (Join-PathParts $targetDir "install-report.json") -Raw | ConvertFrom-Json
+    if ([int]$rerunReport.counts.updated -ne 0 -or [int]$rerunReport.counts.conflicts -ne 0) {
+        throw "Unchanged installer rerun did not remain incremental."
     }
 
-    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    $forceOutput = @(& $installer -Profile recommended -TargetDir $targetDir -Force)
     $secondManifest = Get-Content -LiteralPath $firstManifestPath -Raw | ConvertFrom-Json
     if ([string]$secondManifest.profile -ne "recommended") {
         throw "Forced reinstall did not update manifest profile to recommended."
     }
     if (-not (Test-ExactArray -Actual @($secondManifest.skills) -Expected $script:profileExpectations.recommended)) {
-        throw "Forced reinstall manifest did not include recommended skills."
+        throw "Managed replacement manifest did not include recommended skills."
+    }
+    $forceWarning = "WARNING: -Force is deprecated for full reinstall semantics; treating it as -ReplaceManaged. Use -ReplaceManaged explicitly in new scripts."
+    if (@($forceOutput | Where-Object { [string]$_ -eq $forceWarning }).Count -ne 1) {
+        throw "Compatibility -Force warning was not emitted exactly once."
     }
 
-    Add-Check "installer behavior" "PASS" "No-Force conflict and forced reinstall behavior are validated." ([ordered]@{
-        target_dir = $targetDir
-        no_force_conflict = "failed_as_expected"
-        force_reinstall_profile = [string]$secondManifest.profile
-        force_reinstall_skills = @($secondManifest.skills)
+    Add-Check "installer behavior" "PASS" "Unchanged rerun and compatibility Force-to-ReplaceManaged behavior are validated." ([ordered]@{
+        unchanged_rerun = [int]$rerunReport.counts.unchanged
+        force_maps_to_replace_managed = $true
+        replacement_profile = [string]$secondManifest.profile
+        replacement_skills = @($secondManifest.skills)
     })
 }
 catch {
@@ -143,13 +137,21 @@ try {
     $targetDir = Join-PathParts $scratchRootFull "uninstall-behavior-runtime"
     Assert-PathInsideRoot -Path $targetDir -Root $scratchRootFull
 
-    & $installer -Profile recommended -TargetDir $targetDir -Copy -Force | Out-Host
+    & $installer -Profile recommended -TargetDir $targetDir | Out-Host
     $manifestPath = Join-PathParts $targetDir "install-manifest.json"
     if (-not (Test-Path -LiteralPath $manifestPath)) {
         throw "Install manifest missing before uninstall validation."
     }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $manifestDestinations = @($manifest.items | ForEach-Object { [string]$_.destination })
+    $manifestDestinations = @($manifest.items | ForEach-Object {
+            $destination = [string]$_.destination
+            if ([System.IO.Path]::IsPathRooted($destination)) {
+                $destination
+            }
+            else {
+                Join-PathParts $targetDir $destination
+            }
+        })
 
     $extraFile = Join-PathParts $targetDir "user-extra.txt"
     $extraNested = Join-PathParts $targetDir "skills" "user-skill" "README.md"
@@ -170,6 +172,9 @@ try {
     if (Test-Path -LiteralPath $manifestPath) {
         throw "Install manifest still exists after uninstall."
     }
+    if (Test-Path -LiteralPath (Join-PathParts $targetDir "install-report.json")) {
+        throw "Install report still exists after uninstall."
+    }
     if (-not (Test-Path -LiteralPath $extraFile) -or -not (Test-Path -LiteralPath $extraNested)) {
         throw "Unknown runtime files were not preserved by uninstall."
     }
@@ -186,11 +191,26 @@ try {
         throw "Missing-manifest uninstall removed unknown content."
     }
 
-    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall removes installed items while preserving unknown runtime files." ([ordered]@{
+    $devLinkUninstallStatus = "skipped"
+    if (-not $SkipLinkMode.IsPresent) {
+        $devLinkTargetDir = Join-PathParts $scratchRootFull "uninstall-dev-link-runtime"
+        & $installer -Profile minimal -TargetDir $devLinkTargetDir -DevLink | Out-Host
+        $devLinkUninstallResult = (& $uninstaller -TargetDir $devLinkTargetDir -Json) | ConvertFrom-Json
+        if ([string]$devLinkUninstallResult.status -ne "uninstalled") {
+            throw "Dev-link uninstaller did not report uninstalled status."
+        }
+        if (Test-Path -LiteralPath (Join-PathParts $devLinkTargetDir "knowledge-hub")) {
+            throw "Dev-link knowledge-hub still exists after uninstall."
+        }
+        $devLinkUninstallStatus = [string]$devLinkUninstallResult.status
+    }
+
+    Add-Check "uninstall behavior" "PASS" "Manifest-based uninstall accepts schema-2 copy and dev-link items while preserving unknown runtime files on the basic path." ([ordered]@{
         target_dir = $targetDir
         removed = @($uninstallResult.removed)
         missing_manifest_status = [string]$missingManifestResult.status
         preserved_unknown = [bool]$uninstallResult.preserved_unknown
+        dev_link_status = $devLinkUninstallStatus
     })
 }
 catch {

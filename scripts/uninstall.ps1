@@ -61,7 +61,12 @@ function Remove-InstallPath {
     $item = Get-Item -LiteralPath $Path -Force
     if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         if ($PSCmdlet.ShouldProcess($Path, "Remove installed link")) {
-            Remove-Item -LiteralPath $Path -Force
+            if ($item.PSIsContainer) {
+                [System.IO.Directory]::Delete($item.FullName)
+            }
+            else {
+                [System.IO.File]::Delete($item.FullName)
+            }
         }
         return "removed"
     }
@@ -118,6 +123,10 @@ foreach ($item in $manifestItems) {
         continue
     }
 
+    if (-not [System.IO.Path]::IsPathRooted($destination)) {
+        $destination = Join-PathParts $targetRoot $destination
+    }
+
     Assert-PathInsideRoot -Path $destination -Root $targetRoot
     $fullDestination = [System.IO.Path]::GetFullPath($destination).TrimEnd('\', '/')
     if ($fullDestination.Equals([System.IO.Path]::GetFullPath($targetRoot).TrimEnd('\', '/'), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -150,6 +159,14 @@ if (Test-Path -LiteralPath $manifestPath) {
         Remove-Item -LiteralPath $manifestPath -Force
     }
     $removed.Add("install-manifest.json")
+}
+
+$installReportPath = Join-PathParts $targetRoot "install-report.json"
+if (Test-Path -LiteralPath $installReportPath) {
+    if ($PSCmdlet.ShouldProcess($installReportPath, "Remove install report")) {
+        Remove-Item -LiteralPath $installReportPath -Force
+    }
+    $removed.Add("install-report.json")
 }
 
 if (Test-Path -LiteralPath $targetRoot) {
