@@ -4,9 +4,13 @@
 # Depends on: release-test-helper.ps1 (Add-Check, Get-FileText, Get-MissingRequiredText), path-guard.ps1 (Join-PathParts).
 # Scope: script-level $repoRoot, $scratchRootFull, $script:evidence, $checks.
 
+. (Join-Path $PSScriptRoot "release-knowledge-candidate-checks.ps1")
+
 # Invoke-ReleaseKnowledgeHubChecks: No parameters; runs knowledge hub catalog, experience search,
 # experience promotion closure, and duplicate helper hash checks in the original order.
 function Invoke-ReleaseKnowledgeHubChecks {
+
+Invoke-ReleaseKnowledgeCandidateChecks
 
 function Get-ExperiencePublicSafeMetadataErrors {
     param([object]$Registry)
@@ -410,7 +414,8 @@ catch {
 try {
     $helperPairs = @(
         @("knowledge-hub/scripts/rebuild_experience_index.ps1", "skills/project-bootstrap/scripts/rebuild_experience_index.ps1"),
-        @("knowledge-hub/scripts/promote_experience.ps1", "skills/project-bootstrap/scripts/promote_experience.ps1")
+        @("knowledge-hub/scripts/promote_experience.ps1", "skills/project-bootstrap/scripts/promote_experience.ps1"),
+        @("knowledge-hub/scripts/manage_candidates.ps1", "skills/project-bootstrap/scripts/manage_candidates.ps1")
     )
     $helperErrors = New-Object 'System.Collections.Generic.List[string]'
     foreach ($pair in $helperPairs) {

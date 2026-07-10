@@ -28,3 +28,12 @@ automation are intentionally excluded from this public hub.
 Start from `knowledge-catalog.md`, then open only the entries that match the
 current task. Use `knowledge/experience/index.json` and
 `scripts/search_experience.ps1` for scriptable experience lookup.
+
+## Candidate Intake
+
+Use `scripts/manage_candidates.ps1` to maintain an explicitly selected local
+runtime inbox at `<runtime>/state/knowledge-candidates/`. Candidate intake is
+read-only toward explicitly supplied project roots and never writes formal
+experience entries. See
+[`docs/global-candidate-workflow.md`](../docs/global-candidate-workflow.md) for
+the schema, commands, triage lifecycle, and public/private boundary.

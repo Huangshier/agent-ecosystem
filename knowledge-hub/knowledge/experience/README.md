@@ -17,6 +17,7 @@ public source of truth.
 - Promote a lesson here when the root cause is primarily toolchain/host/workflow driven, the fix does not depend on current repository business code, and the lesson can be stated as a stable prevention rule.
 - If the issue is likely repository-specific, keep it in project-local `.agents/context/experience/` first and promote only after recurrence or cross-project confirmation.
 - Project-local source files should explicitly say `Global candidate: Yes` or `Scope: Cross-project reusable` before the default promotion command will pick them up.
+- Marked local experience can enter `<runtime>/state/knowledge-candidates/` for deduplication and human triage before promotion. An inbox candidate is not a promoted experience entry; only an explicit human promotion decision may invoke the separate promotion path.
 
 ## Language And Metadata Contract
 
@@ -43,6 +44,7 @@ localized.
 ## Maintenance Rule
 - `index.json` is the lightweight discovery registry for this directory, not the primary editing target.
 - Maintain this registry through installed `knowledge-hub/scripts`: `promote_experience.ps1` for reviewed project-to-hub promotion and `rebuild_experience_index.ps1` for backfill or repair when hub files already exist.
+- Maintain the separate local candidate inbox through `manage_candidates.ps1`; it does not mutate this directory or `index.json`.
 - Experience files should include public lifecycle metadata near the top so
   the catalog and generated index can distinguish draft, verified, proven, and
   deprecated entries without relying on local runtime usage telemetry.

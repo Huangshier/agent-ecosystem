@@ -41,10 +41,14 @@ The current allowed local definitions are:
   first-session language scaffold helper.
 - `skills/project-bootstrap/scripts/promote_experience.ps1`: compatibility copy
   for bootstrap-time hub setup.
+- `skills/project-bootstrap/scripts/manage_candidates.ps1`: compatibility copy
+  for standalone runtime candidate intake and triage.
 - `skills/project-bootstrap/scripts/rebuild_experience_index.ps1`: compatibility
   copy for bootstrap-time hub setup.
 - `knowledge-hub/scripts/promote_experience.ps1`: preferred installed hub
   experience promotion entrypoint.
+- `knowledge-hub/scripts/manage_candidates.ps1`: preferred installed hub
+  candidate intake and triage entrypoint.
 - `knowledge-hub/scripts/rebuild_experience_index.ps1`: preferred installed hub
   index rebuild entrypoint.
 - `knowledge-hub/scripts/search_experience.ps1`: preferred installed hub search
@@ -56,14 +60,15 @@ The current allowed local definitions are:
 
 ## Compatibility Copies
 
-The `project-bootstrap` copies of `promote_experience.ps1` and
-`rebuild_experience_index.ps1` are compatibility copies. They are kept so
+The `project-bootstrap` copies of `manage_candidates.ps1`,
+`promote_experience.ps1`, and `rebuild_experience_index.ps1` are compatibility copies. They are kept so
 `init_hub.ps1` can initialize or refresh the installed `knowledge-hub/scripts`
 surface without depending on a maintainer source checkout.
 
 The preferred long-term runtime entrypoints remain:
 
 - `knowledge-hub/scripts/promote_experience.ps1`
+- `knowledge-hub/scripts/manage_candidates.ps1`
 - `knowledge-hub/scripts/rebuild_experience_index.ps1`
 - `knowledge-hub/scripts/search_experience.ps1`
 
@@ -81,7 +86,8 @@ Do not make installed runtime scripts depend on repository-only paths such as
 `scripts/lib/path-guard.ps1`.
 
 Do not remove the project-bootstrap compatibility copies of
-`promote_experience.ps1` or `rebuild_experience_index.ps1` without a documented
+`manage_candidates.ps1`, `promote_experience.ps1`, or
+`rebuild_experience_index.ps1` without a documented
 compatibility or deprecation plan.
 
 Do not combine this helper ownership work with #96 release-validator or

@@ -41,7 +41,7 @@ Optional flags:
 
 Notes:
 - `init_hub.ps1` rebuilds `knowledge/experience/index.json` after syncing templates so an overwrite refresh does not leave the installed hub with a stale or empty registry.
-- `init_hub.ps1` also syncs the minimal hub runtime scripts for experience promotion and index rebuild from the bootstrap compatibility copies.
+- `init_hub.ps1` also syncs the minimal hub runtime scripts for candidate intake, experience promotion, and index rebuild from the bootstrap compatibility copies.
 - `init_hub.ps1` does not create `.git` by default. Use `-InitializeGit` or `-CommitInitial` only when the target hub should be an independent Git repository.
 
 ## Step 2: Bootstrap a Project
@@ -284,6 +284,7 @@ Behavior:
 - Use `check_hub_lock.ps1` when you need to verify whether a project's pin has drifted from the installed hub.
 - Promote stable cross-project practices into the hub template, not per-project runtime files.
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
+- Keep candidate intake separate from formal promotion. Use the installed hub's `scripts/manage_candidates.ps1` only with explicit project roots, explicit languages, and an explicit runtime inbox; it never promotes into `knowledge/experience/**`.
 - Do not use bootstrap as a routine session-end promotion step. Cross-project experience promotion is a `knowledge-hub/scripts` maintenance action; bootstrap only installs the project guidance that points agents toward that hub workflow.
 - Treat `-OverwriteTemplates` as deprecated compatibility wording. Prefer `-RefreshUnmodifiedTemplates` for safe refreshes and `-ForceResetScaffold` only for explicit reset scenarios.
 - Legacy memory upgrades and language migrations should be proposal-first and backup-first. Do not hand-edit `.agents/**` in bulk or overwrite old project memory without an explicit apply step.

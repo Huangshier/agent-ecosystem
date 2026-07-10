@@ -125,6 +125,7 @@ try {
         "SECURITY.md",
         "docs/agent-governance.md",
         "docs/claude-code-hooks-guardrails.md",
+        "docs/global-candidate-workflow.md",
         "docs/release-readiness.md",
         "docs/release-process.md",
         "docs/roadmap/evolution-plan.md",
@@ -139,6 +140,7 @@ try {
         "scripts/validation/release-parser-safety-checks.ps1",
         "scripts/validation/release-documentation-checks.ps1",
         "scripts/validation/release-knowledge-hub-checks.ps1",
+        "scripts/validation/release-knowledge-candidate-checks.ps1",
         "scripts/validation/release-runtime-smoke-checks.ps1",
         "scripts/validation/release-bootstrap-checks.ps1",
         "scripts/validation/release-claude-hooks-guardrails-checks.ps1",
@@ -154,6 +156,8 @@ try {
         "scripts/validation/eval-iteration-fixtures/workflow-spec-lite/baseline.json",
         "scripts/validation/eval-iteration-fixtures/README.md",
         "knowledge-hub/knowledge/patterns/eval-driven-skill-iteration.md",
+        "knowledge-hub/scripts/manage_candidates.ps1",
+        "skills/project-bootstrap/scripts/manage_candidates.ps1",
         "scripts/validate-release.ps1"
     )
     $keywordMatches = New-Object 'System.Collections.Generic.List[object]'
