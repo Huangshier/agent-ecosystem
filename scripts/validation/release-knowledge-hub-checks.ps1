@@ -231,14 +231,30 @@ try {
     if ($resultCount -lt 1) {
         throw "Experience search returned no matching entries."
     }
-    $script:evidence.knowledge_hub = [ordered]@{
-        index_path = $indexPath
-        index_entries = @($index.entries).Count
-        search_query = "PowerShell command chaining"
-        search_results = $resultCount
-        top_result = [string]$search.results[0].title
-    }
-    Add-Check "knowledge hub experience search" "PASS" "Experience index parsed and search returned public workflow experience." $evidence.knowledge_hub
+	    $script:evidence.knowledge_hub = [ordered]@{
+	        index_path = $indexPath
+	        index_entries = @($index.entries).Count
+	        search_query = "PowerShell command chaining"
+	        search_results = $resultCount
+	        top_result = [string]$search.results[0].title
+	    }
+	    Add-Check "knowledge hub experience search" "PASS" "Experience index parsed and search returned public workflow experience." $evidence.knowledge_hub
+
+	    $searchIssueCloseout = (& $searchScript -HubDir (Join-PathParts $repoRoot "knowledge-hub") -Query "issue-closeout" -Json | ConvertFrom-Json)
+	    if (@($searchIssueCloseout.results).Count -lt 1) {
+	        throw "Experience search for 'issue-closeout' returned no matching entries."
+	    }
+	    if ([string]$searchIssueCloseout.results[0].title -ne "Stacked PR Merge Incident Recovery") {
+	        throw ("Unexpected search result for 'issue-closeout': {0}" -f [string]$searchIssueCloseout.results[0].title)
+	    }
+
+	    $searchForceWithLease = (& $searchScript -HubDir (Join-PathParts $repoRoot "knowledge-hub") -Query "force-with-lease" -Json | ConvertFrom-Json)
+	    if (@($searchForceWithLease.results).Count -lt 1) {
+	        throw "Experience search for 'force-with-lease' returned no matching entries."
+	    }
+	    if ([string]$searchForceWithLease.results[0].title -ne "Stacked PR Merge Incident Recovery") {
+	        throw ("Unexpected search result for 'force-with-lease': {0}" -f [string]$searchForceWithLease.results[0].title)
+	    }
 }
 catch {
     Add-Check "knowledge hub experience search" "FAIL" $_.Exception.Message
@@ -254,14 +270,8 @@ try {
 
     $candidatePath = Join-PathParts $tempProject ".agents" "context" "experience" "validation-promote-closure.md"
     $aliasesOnlyCandidatePath = Join-PathParts $tempProject ".agents" "context" "experience" "validation-localized-alias-only.md"
-    $candidateText = @"
+	    $candidateText = @"
 # 验证晋升闭环
-
-## Summary
-仅用于 release validation 的临时跨项目经验；正文和 metadata 值保留中文。
-
-## Keywords
-验证, 晋升, release gate, temporary hub
 
 Scope: Cross-project reusable
 Global candidate: Yes
@@ -270,8 +280,17 @@ Source: public-safe release validation fixture
 Last reviewed: 2026-07-07
 Decay policy: Temporary fixture only; regenerate during release validation and do not promote to public source.
 
+## Summary
+仅用于 release validation 的临时跨项目经验；正文和 metadata 值保留中文。
+
+## Keywords
+验证, 晋升,
+
+release gate, temporary hub
+
 ## Prevention Rule
 Validate experience promotion with a temporary hub so the public source tree is not mutated during release checks.
+Boundary sentinel: KW_BOUNDARY_S2E8K1
 "@
     Set-Content -LiteralPath $candidatePath -Value $candidateText -Encoding UTF8
 
@@ -316,11 +335,19 @@ Decay policy: Temporary fixture only; regenerate during release validation and d
         throw "Localized validation entry with English anchors was not found in the temporary registry."
     }
     $indexedKeywords = @($promotedEntry[0].keywords | ForEach-Object { [string]$_ })
-    foreach ($keyword in @("验证", "晋升")) {
-        if ($indexedKeywords -notcontains $keyword) {
-            throw ("Promoted localized validation entry is missing indexed Chinese keyword: {0}" -f $keyword)
-        }
-    }
+	    foreach ($keyword in @("验证", "晋升")) {
+	        if ($indexedKeywords -notcontains $keyword) {
+	            throw ("Promoted localized validation entry is missing indexed Chinese keyword: {0}" -f $keyword)
+	        }
+	    }
+	    foreach ($keyword in @("release gate", "temporary hub")) {
+	        if ($indexedKeywords -notcontains $keyword) {
+	            throw ("Promoted localized validation entry is missing indexed keyword from multiline block: {0}" -f $keyword)
+	        }
+	    }
+	    if ($indexedKeywords -contains "KW_BOUNDARY_S2E8K1") {
+	        throw "Boundary sentinel token KW_BOUNDARY_S2E8K1 leaked into keywords from Prevention Rule section."
+	    }
     $promotedPath = Join-PathParts $tempHub "knowledge" "experience" ([string]$promotedEntry[0].hub_file)
     $promotedText = Get-Content -LiteralPath $promotedPath -Raw
     foreach ($anchor in @("## Summary", "## Keywords", "Scope: Cross-project reusable", "Global candidate: Yes", "Maturity:", "Source:", "Last reviewed:", "Decay policy:")) {
