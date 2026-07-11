@@ -63,6 +63,61 @@ function Get-PublicSkillNames {
     throw "Unsupported profile: $SelectedProfile"
 }
 
+function Get-InstallerSourceProvenance {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string[]]$ManagedSourcePaths
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $unknown = [ordered]@{
+            release_version = $null
+            source_commit = $null
+        }
+
+        $worktreeRoot = @(& git -C $SourceRoot rev-parse --show-toplevel 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $worktreeRoot.Count -ne 1) {
+            return $unknown
+        }
+
+        $resolvedSourceRoot = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\', '/')
+        $resolvedWorktreeRoot = [System.IO.Path]::GetFullPath([string]$worktreeRoot[0]).TrimEnd('\', '/')
+        if (-not $resolvedSourceRoot.Equals($resolvedWorktreeRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $unknown
+        }
+
+        $head = @(& git -C $SourceRoot rev-parse --verify HEAD 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $head.Count -ne 1 -or [string]$head[0] -notmatch '^[0-9a-fA-F]{40}$') {
+            return $unknown
+        }
+
+        & git -C $SourceRoot diff --quiet HEAD -- @ManagedSourcePaths 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $unknown
+        }
+
+        $untracked = @(& git -C $SourceRoot ls-files --others --exclude-standard -- @ManagedSourcePaths 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $untracked.Count -gt 0) {
+            return $unknown
+        }
+
+        $versionTags = @(& git -C $SourceRoot tag --points-at HEAD 2>$null | Where-Object { [string]$_ -match '^v\d+\.\d+\.\d+$' })
+        if ($LASTEXITCODE -ne 0 -or $versionTags.Count -gt 1) {
+            return $unknown
+        }
+
+        return [ordered]@{
+            release_version = $(if ($versionTags.Count -eq 1) { [string]$versionTags[0] } else { $null })
+            source_commit = ([string]$head[0]).ToLowerInvariant()
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function ConvertTo-NormalizedRelativePath {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -642,6 +697,8 @@ function Install-DevLinkItem {
 }
 
 $skillNames = @(Get-PublicSkillNames -SelectedProfile $Profile)
+$managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
+$sourceProvenance = Get-InstallerSourceProvenance -SourceRoot $repoRoot -ManagedSourcePaths $managedSourcePaths
 $itemSpecs = New-Object 'System.Collections.Generic.List[object]'
 $desiredItemNames = @{}
 $itemSpecs.Add([ordered]@{ name = "knowledge-hub"; source = "knowledge-hub"; destination = "knowledge-hub" })
@@ -722,6 +779,8 @@ elseif ($unknownValues.Count -gt 0 -or $skippedValues.Count -gt 0 -or $warningVa
 $manifest = [ordered]@{
     schema_version = 2
     source_identity = "agent-ecosystem"
+    release_version = $sourceProvenance.release_version
+    source_commit = $sourceProvenance.source_commit
     install_strategy = $installStrategy
     profile = $Profile
     installed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
