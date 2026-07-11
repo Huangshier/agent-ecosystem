@@ -136,7 +136,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Tier 3 targeted routing regressions
-        if: github.event_name != 'pull_request' || needs.classify.outputs.tier == '3'
+        if: (github.event_name != 'pull_request' || needs.classify.outputs.tier == '3') && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"

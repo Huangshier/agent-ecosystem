@@ -74,7 +74,9 @@ foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/"
 }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression")).Count -ne 2) { throw "Tier 3/full validation jobs must run targeted regressions under both PowerShell hosts." }
-if (@([regex]::Matches($workflow, "if: github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 2) { throw "Targeted regressions must be restricted to Tier 3, main, or manual full-validation jobs." }
+if (@([regex]::Matches($workflow, "if: \(github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'\) && matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must be restricted to the Windows Tier 3/main/manual job." }
+if (@([regex]::Matches($workflow, "if: github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 1) { throw "Windows PowerShell targeted regressions must be restricted to Tier 3, main, or manual jobs." }
+if (@([regex]::Matches($workflow, "matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must run once on the Windows full-validation job." }
 
 $unsupported = (& $validator -ChangedPath "skills/project-context-gate/scripts/runtime.ps1" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unsupported.detected_tier -ne 3) { throw "Runtime skill without a reliable targeted suite did not escalate to Tier 3." }
