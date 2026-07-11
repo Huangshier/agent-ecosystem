@@ -304,6 +304,11 @@ try {
         if (@($maxOneSearch.results).Count -ne 1 -or [string]$maxOneSearch.results[0].title -ne "Windows PowerShell Command Chaining") {
             throw "MaxResults=1 must keep the highest-scored experience result."
         }
+
+        $mergedPrReopenSearch = (& $searchScript -HubDir (Join-PathParts $repoRoot "knowledge-hub") -Query "merged feature branch cannot be reopened" -Json | ConvertFrom-Json)
+        if (@($mergedPrReopenSearch.results).Count -lt 1 -or [string]$mergedPrReopenSearch.results[0].title -ne "Stacked PR Merge Incident Recovery") {
+            throw "Merged PR reopen symptom search must return the stacked PR recovery experience."
+        }
 }
 catch {
     Add-Check "knowledge hub experience search" "FAIL" $_.Exception.Message
