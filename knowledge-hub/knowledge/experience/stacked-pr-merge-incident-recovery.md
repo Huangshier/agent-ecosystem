@@ -14,7 +14,7 @@ runtime memory state commits.
 
 ## Keywords
 stacked-pr, merge-incident, replacement-pr, pull-request-checks, agents-memory,
-issue-closeout, force-with-lease
+issue-closeout, force-with-lease, merged-pr-cannot-be-reopened
 
 ## Problem Pattern
 - A stacked PR can be marked merged by GitHub even when its base was another
