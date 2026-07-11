@@ -59,6 +59,24 @@ if ([int]$invalid.detected_tier -ne 3 -or [string]$invalid.escalation_reason -no
 # even though every test passed, breaking push-only classification runs.
 $global:LASTEXITCODE = 0
 
+# Regression: simulate the push-only classify scenario where the test script
+# is immediately followed by a -ChangedPath classifier call.  On PRs the
+# classifier runs with -BaseRef (which calls successful git commands that
+# overwrite $LASTEXITCODE), but on main push only -ChangedPath is used.
+# This ensures the stale-code cleanup above prevents a leaked non-zero exit.
+$pushLikeRaw = @(
+    & $validator `
+        -ChangedPath ".github/workflows/release-validation.yml" `
+        -Json
+) -join "`n"
+$pushLike = $pushLikeRaw | ConvertFrom-Json
+if ([int]$pushLike.detected_tier -ne 3) {
+    throw "Push-like classifier scenario did not produce Tier 3."
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Push-like classifier scenario leaked LASTEXITCODE=$LASTEXITCODE."
+}
+
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/release-validation.yml") -Raw
 $workflowMarkers = @(
     "needs.classify.outputs.tier == '0'",
@@ -111,5 +129,5 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 6 + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; push_like_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 6 } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
