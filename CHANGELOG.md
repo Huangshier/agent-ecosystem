@@ -15,7 +15,8 @@ All notable public changes are summarized here.
 - Added an explicit opt-in agent-specific skill bridge from installed runtime
   copies, with canonical ownership, containment checks, transactional rollback,
   and independent local metadata. (Issue #220; PR #231)
-- Added a public-safe local candidate inbox and read-only intake/triage workflow;
+- Added a public-safe local candidate inbox with read-only discovery, explicit
+  intake, and human triage;
   candidates remain separate from formal global experience and are never
   promoted automatically. (Issue #222; PR #232)
 - Added a lightweight session-learning trigger to project-agent templates while
