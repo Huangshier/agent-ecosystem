@@ -42,6 +42,25 @@ Manifest-based uninstall:
 .\uninstall.ps1 -TargetDir <runtime>
 ```
 
+Read-only runtime manifest status:
+
+```powershell
+.\status.ps1
+.\status.ps1 -RuntimeDir <runtime>
+.\status.ps1 -RuntimeDir <runtime> -Json
+```
+
+The status command reads `install-manifest.json` once and emits a schema-1
+payload or a text view derived from that payload. It does not install, repair,
+refresh, scan managed files, access the network, or write runtime content.
+`manifest_status = current` means only that the schema-2 manifest contract is
+valid; it does not mean the runtime matches the latest Release or has no live
+conflicts. Missing Git provenance, including installs from GitHub Release source
+archives, is reported as `not-recorded` rather than guessed. Bridge health,
+project drift, managed conflicts, and recommended actions are not included yet;
+future sections must extend the same payload model instead of reparsing the
+manifest.
+
 Context gate benchmark:
 
 ```powershell

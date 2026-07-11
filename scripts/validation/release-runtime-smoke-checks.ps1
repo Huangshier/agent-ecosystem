@@ -154,6 +154,15 @@ catch {
     Add-Check "installer contract fixtures" "FAIL" $_.Exception.Message
 }
 try {
+    $script:evidence.runtime_status = Invoke-RuntimeStatusFixtureChecks `
+        -RepositoryRoot $repoRoot `
+        -ScratchRoot $scratchRootFull
+    Add-Check "runtime status fixtures" "PASS" "Read-only runtime manifest status payload fixtures passed." $evidence.runtime_status
+}
+catch {
+    Add-Check "runtime status fixtures" "FAIL" $_.Exception.Message
+}
+try {
     $script:evidence.agent_skill_bridge = Invoke-AgentSkillBridgeFixtureChecks `
         -RepositoryRoot $repoRoot `
         -ScratchRoot $scratchRootFull
