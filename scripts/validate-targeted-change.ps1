@@ -74,6 +74,7 @@ if ([int]$classification.detected_tier -ge 1) {
 if ([int]$classification.detected_tier -ge 1) {
     $modules = @($classification.affected_modules)
     $requiredSuites = @($classification.required_suites)
+    $baseCheckModules = @($classification.base_check_modules)
     $executedSuites = New-Object 'System.Collections.Generic.List[string]'
     if ($requiredSuites.Count -eq 0) { throw "Tier 1/2 classification has no reliable targeted suite; classification must escalate to Tier 3." }
     if ($requiredSuites -contains "knowledge-contracts") {
@@ -177,8 +178,16 @@ if ([int]$classification.detected_tier -ge 1) {
     foreach ($module in $modules) {
         $mapped = @($classification.module_suite_map.$module)
         $actual = @($mapped | Where-Object { $executedSuites.Contains([string]$_) })
-        if ($actual.Count -eq 0) { throw "Affected module '$module' executed zero actual module checks." }
-        $moduleCoverage.Add([ordered]@{ module = $module; mapped_suites = $mapped; executed_suites = $actual; executed_check_count = $actual.Count })
+        if ($actual.Count -gt 0) {
+            $moduleCoverage.Add([ordered]@{ module = $module; coverage = "targeted-suite"; mapped_suites = $mapped; executed_suites = $actual; executed_checks = @($actual); executed_check_count = $actual.Count })
+            continue
+        }
+        if ($baseCheckModules -contains $module) {
+            $baseChecks = @("diff-check", "changed-file-parse")
+            $moduleCoverage.Add([ordered]@{ module = $module; coverage = "base-checks"; mapped_suites = @(); executed_suites = @(); executed_checks = $baseChecks; executed_check_count = $baseChecks.Count })
+            continue
+        }
+        throw "Affected runtime module '$module' executed zero actual module checks."
     }
 }
 

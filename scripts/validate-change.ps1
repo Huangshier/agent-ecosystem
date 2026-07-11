@@ -36,6 +36,7 @@ function New-ChangeResult {
         detected_tier = $Tier
         changed_paths = @($Paths | Sort-Object -Unique)
         affected_modules = @($Modules | Sort-Object -Unique)
+        base_check_modules = @($Modules | Where-Object { @($config.base_check_modules) -contains [string]$_ } | Sort-Object -Unique)
         required_suites = @($requiredSuites.ToArray() | Sort-Object -Unique)
         module_suite_map = $moduleSuiteMap
         required_checks = @($tierContract.required_checks)

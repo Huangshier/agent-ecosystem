@@ -2,6 +2,7 @@
   "schema_version": 1,
   "unknown_tier": 3,
   "empty_tier": 3,
+  "base_check_modules": ["documentation"],
   "module_suites": {
     "knowledge": ["knowledge-contracts"],
     "bootstrap": ["bootstrap-safety"],
@@ -49,7 +50,8 @@
     { "id": "templates-bootstrap", "tier": 2, "pattern": "^(knowledge-hub/templates/|scripts/validation/project-bootstrap-|templates?/)", "modules": ["templates", "bootstrap"] },
     { "id": "knowledge", "tier": 1, "pattern": "^knowledge-hub/knowledge/", "modules": ["knowledge"] },
     { "id": "unmapped-local-fixtures", "tier": 3, "pattern": "^scripts/validation/.+fixtures/", "modules": ["unsupported-fixture"] },
-    { "id": "non-runtime-tests", "tier": 1, "pattern": "^(scripts/test-|\\.github/scripts/)", "modules": ["repository"] },
+    { "id": "repository-guard-tests", "tier": 1, "pattern": "^(scripts/test-(pr-identity-guard|issue-triage-decision-command)\\.ps1|\\.github/scripts/(pr-identity-guard|issue-triage-decision-command)\\.js)$", "modules": ["repository"] },
+    { "id": "unmapped-tests", "tier": 3, "pattern": "^(scripts/test-|\\.github/scripts/)", "modules": ["unsupported-test"] },
     { "id": "metadata-and-docs", "tier": 0, "pattern": "^(README(\\.[^/]+)?\\.md$|scripts/README\\.md$|LICENSE|NOTICE|CONTRIBUTING\\.md$|docs/|\\.github/(ISSUE_TEMPLATE/|pull_request_template\\.md$)|\\.(editorconfig|gitattributes|gitignore)$)", "modules": ["documentation"] }
   ]
 }

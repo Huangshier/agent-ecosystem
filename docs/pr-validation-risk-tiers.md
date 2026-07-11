@@ -22,6 +22,8 @@ Text and JSON report the detected tier, required checks, skipped checks, escalat
 
 The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
 
+The classifier job runs only deterministic path-classification and routing-contract tests. Executable knowledge, bootstrap, bridge, installer, and mixed-path targeted regressions run only with the explicit `-RunTargetedRegression` switch from Tier 3/full validation jobs, including `main` and manual dispatch. Documentation modules in mixed Tier 1/2 changes are covered by diff, parse, and public-safe base checks; every affected runtime module must still execute a mapped targeted suite. Only the two existing repository guard test surfaces map to `repository-guards`; future or unmapped `scripts/test-*` paths escalate to Tier 3.
+
 ## Expected hosted cost
 
 The baseline before risk routing was four complete validator calls for every PR (PowerShell 7 on Windows, Ubuntu, and macOS, plus Windows PowerShell 5.1), in addition to base and identity guards.

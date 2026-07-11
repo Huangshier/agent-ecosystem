@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([switch]$Json)
+param(
+    [switch]$Json,
+    [switch]$RunTargetedRegression
+)
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -10,16 +13,20 @@ $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
 
 function Invoke-TargetedRegression {
-    param([string]$Name, [string]$Path, [string]$ExpectedModule, [string]$ExpectedSuite, [string]$Mode)
+    param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
     $caseScratch = Join-Path $targetedScratch $Name
     $raw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -ScratchRoot $caseScratch -Json) -join "`n"
     $value = $raw | ConvertFrom-Json
     if ([int]$value.executed_suite_count -lt 1) { throw "Targeted case '$Name' executed no actual module suite." }
-    if (@($value.executed_suites) -notcontains $ExpectedSuite) { throw "Targeted case '$Name' did not execute '$ExpectedSuite'." }
-    $coverage = @($value.module_coverage | Where-Object module -eq $ExpectedModule)
-    if ($coverage.Count -ne 1 -or [int]$coverage[0].executed_check_count -lt 1) { throw "Targeted case '$Name' has no actual check coverage for '$ExpectedModule'." }
+    foreach ($suite in $ExpectedSuite) { if (@($value.executed_suites) -notcontains $suite) { throw "Targeted case '$Name' did not execute '$suite'." } }
+    foreach ($module in $ExpectedModule) {
+        $coverage = @($value.module_coverage | Where-Object module -eq $module)
+        if ($coverage.Count -ne 1 -or [int]$coverage[0].executed_check_count -lt 1) { throw "Targeted case '$Name' has no actual check coverage for '$module'." }
+        $expectedCoverage = if ($module -eq "documentation") { "base-checks" } else { "targeted-suite" }
+        if ([string]$coverage[0].coverage -ne $expectedCoverage) { throw "Targeted case '$Name' used '$($coverage[0].coverage)' coverage for '$module', expected '$expectedCoverage'." }
+    }
     if (@($value.checks.name) -contains "skill-metadata" -or @($value.checks.name) -contains "targeted-module-matrix") { throw "Targeted case '$Name' emitted a forbidden empty/generic PASS." }
-    return [ordered]@{ name = $Name; module = $ExpectedModule; suite = $ExpectedSuite; check_count = [int]$value.summary.pass; status = "PASS" }
+    return [ordered]@{ name = $Name; modules = $ExpectedModule; suites = $ExpectedSuite; check_count = [int]$value.summary.pass; status = "PASS" }
 }
 
 foreach ($case in @($cases)) {
@@ -65,23 +72,34 @@ if ($fullCallSites -ne 2) { throw "Expected two full-validator workflow call sit
 foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/", "scripts/install.ps1")) {
     if ($workflow.Contains($duplicatedRuleToken)) { throw "Workflow duplicates a path-routing rule: $duplicatedRuleToken" }
 }
+if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
+if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression")).Count -ne 2) { throw "Tier 3/full validation jobs must run targeted regressions under both PowerShell hosts." }
+if (@([regex]::Matches($workflow, "if: github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 2) { throw "Targeted regressions must be restricted to Tier 3, main, or manual full-validation jobs." }
 
-$tierZeroRaw = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero") -Json) -join "`n"
-$tierZero = $tierZeroRaw | ConvertFrom-Json
-if ([int]$tierZero.executed_suite_count -ne 0 -or @($tierZero.checks.name) -contains "quick-repository-checks") { throw "Tier 0 incorrectly executed heavy or module checks." }
-$targetedResults = @(
-    Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
-    Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
-    Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
-)
 $unsupported = (& $validator -ChangedPath "skills/project-context-gate/scripts/runtime.ps1" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unsupported.detected_tier -ne 3) { throw "Runtime skill without a reliable targeted suite did not escalate to Tier 3." }
-$tierZeroText = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero-text")) -join "`n"
-if ($tierZeroText -notmatch "0 actual module suites") { throw "Targeted text output disagrees with Tier 0 JSON evidence." }
+$unmappedTest = (& $validator -ChangedPath "scripts/test-future-runtime.ps1" -Json | Out-String) | ConvertFrom-Json
+if ([int]$unmappedTest.detected_tier -ne 3) { throw "Unmapped future test path did not conservatively escalate to Tier 3." }
+
+$targetedResults = @()
+if ($RunTargetedRegression.IsPresent) {
+    $tierZeroRaw = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero") -Json) -join "`n"
+    $tierZero = $tierZeroRaw | ConvertFrom-Json
+    if ([int]$tierZero.executed_suite_count -ne 0 -or @($tierZero.checks.name) -contains "quick-repository-checks") { throw "Tier 0 incorrectly executed heavy or module checks." }
+    $targetedResults = @(
+        Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
+        Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
+        Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
+        Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
+        Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
+    )
+    $tierZeroText = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero-text")) -join "`n"
+    if ($tierZeroText -notmatch "0 actual module suites") { throw "Targeted text output disagrees with Tier 0 JSON evidence." }
+}
 
 $orderA = (& $validator -ChangedPath @("README.md", "scripts/install.ps1") -Json | Out-String) | ConvertFrom-Json
 $orderB = (& $validator -ChangedPath @("scripts/install.ps1", "README.md") -Json | Out-String) | ConvertFrom-Json
 if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json -Depth 8 -Compress)) { throw "Classification depends on input order." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8; fail = 0; cases = @($results.ToArray()); targeted_execution = $targetedResults; tier_zero_no_heavy_checks = "PASS"; unsupported_runtime_skill_escalation = "PASS"; text_json_evidence = "PASS"; invalid_base_ref = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 6 + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS" }
 if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 6 } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
