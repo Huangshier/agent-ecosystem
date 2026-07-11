@@ -14,6 +14,17 @@ Useful validation form:
 .\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
+Classify a pull request or explicit path set before choosing validation cost:
+
+```powershell
+.\validate-change.ps1 -BaseRef origin/main -HeadRef HEAD
+.\validate-change.ps1 -ChangedPath README.md,scripts/install.ps1 -Json
+```
+
+The centralized Tier 0–3 contract and hosted-cost examples are documented in
+[`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
+`validate-release.ps1` remains the complete Tier 3 and release-boundary entrypoint.
+
 Explicitly bridge installed-copy skills into an agent client's verified skill
 directory:
 

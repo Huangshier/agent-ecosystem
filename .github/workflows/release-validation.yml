@@ -16,8 +16,112 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  classify:
+    name: classify PR change risk
+    runs-on: ubuntu-latest
+    outputs:
+      tier: ${{ steps.risk.outputs.tier }}
+      modules: ${{ steps.risk.outputs.modules }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify change risk and test routing contract
+        id: risk
+        shell: pwsh
+        run: |
+          ./scripts/test-validate-change.ps1 -Json |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/change-routing-tests.json"
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $result = ./scripts/validate-change.ps1 `
+              -BaseRef "origin/${{ github.base_ref }}" `
+              -HeadRef HEAD `
+              -Json | ConvertFrom-Json
+          }
+          else {
+            $result = ./scripts/validate-change.ps1 `
+              -ChangedPath ".github/workflows/release-validation.yml" `
+              -Json | ConvertFrom-Json
+          }
+          $result | ConvertTo-Json -Depth 8 |
+            Tee-Object -FilePath "$env:RUNNER_TEMP/change-classification.json"
+          "tier=$($result.detected_tier)" >> $env:GITHUB_OUTPUT
+          "modules=$(@($result.affected_modules) -join ',')" >> $env:GITHUB_OUTPUT
+
+      - name: Upload classification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: change-risk-classification
+          path: ${{ runner.temp }}/change-*.json
+          if-no-files-found: error
+
+  quick-validation:
+    name: quick PR validation
+    needs: classify
+    if: github.event_name == 'pull_request' && (needs.classify.outputs.tier == '0' || needs.classify.outputs.tier == '1')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Run quick checks
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-quick-validation"
+          ./scripts/validate-targeted-change.ps1 `
+            -BaseRef "origin/${{ github.base_ref }}" `
+            -HeadRef HEAD `
+            -Mode quick `
+            -ScratchRoot $scratch `
+            -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
+      - name: Upload quick validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quick-validation
+          path: ${{ runner.temp }}/agent-ecosystem-quick-validation
+          if-no-files-found: error
+
+  targeted-validation:
+    name: targeted Tier 2 (${{ matrix.os }})
+    needs: classify
+    if: github.event_name == 'pull_request' && needs.classify.outputs.tier == '2'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Run affected-module checks
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-targeted-validation"
+          ./scripts/validate-targeted-change.ps1 `
+            -BaseRef "origin/${{ github.base_ref }}" `
+            -HeadRef HEAD `
+            -Mode targeted `
+            -ScratchRoot $scratch `
+            -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
+      - name: Upload targeted validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: targeted-validation-${{ matrix.os }}
+          path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
+          if-no-files-found: error
+
   validate:
     name: validate pwsh (${{ matrix.os }})
+    needs: classify
+    if: always() && (github.event_name != 'pull_request' || needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -48,6 +152,8 @@ jobs:
 
   validate-windows-powershell:
     name: validate Windows PowerShell 5.1
+    needs: classify
+    if: always() && (github.event_name != 'pull_request' || needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
     runs-on: windows-latest
 
     steps:
