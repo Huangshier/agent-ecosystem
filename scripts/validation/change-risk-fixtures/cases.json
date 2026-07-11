@@ -1,0 +1,19 @@
+[
+  { "name": "metadata", "paths": ["README.md"], "tier": 0, "full_validator_calls": 0 },
+  { "name": "knowledge", "paths": ["knowledge-hub/knowledge/catalog.md"], "tier": 1, "full_validator_calls": 0 },
+  { "name": "unmapped-local-fixture", "paths": ["scripts/validation/example-fixtures/case.json"], "tier": 3 },
+  { "name": "skill", "paths": ["skills/project-bootstrap/SKILL.md"], "tier": 2 },
+  { "name": "bundled-template", "paths": ["skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md"], "tier": 2 },
+  { "name": "installer", "paths": ["scripts/install.ps1"], "tier": 2, "full_validator_calls": 0 },
+  { "name": "hooks", "paths": ["knowledge-hub/templates/languages/en/project-root/.claude/hooks/guardrail.ps1"], "tier": 2 },
+  { "name": "release", "paths": ["docs/releases/v0.6.0.md"], "tier": 3, "full_validator_calls": 4 },
+  { "name": "workflow", "paths": [".github/workflows/release-validation.yml"], "tier": 3 },
+  { "name": "routing", "paths": ["scripts/validate-change.ps1"], "tier": 3 },
+  { "name": "targeted-routing", "paths": ["scripts/validate-targeted-change.ps1"], "tier": 3 },
+  { "name": "mixed-zero-two", "paths": ["README.md", "scripts/install.ps1"], "tier": 2 },
+  { "name": "mixed-one-three", "paths": ["knowledge-hub/knowledge/catalog.md", "profiles/default.json"], "tier": 3 },
+  { "name": "unknown", "paths": ["future-surface/value.bin"], "tier": 3 },
+  { "name": "unsupported-runtime-skill", "paths": ["skills/removed-skill/SKILL.md"], "tier": 3 },
+  { "name": "renamed-paths", "paths": ["docs/old-name.md", "skills/new-name/SKILL.md"], "tier": 3 },
+  { "name": "empty", "paths": [], "tier": 3 }
+]

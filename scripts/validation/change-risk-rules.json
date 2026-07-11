@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "unknown_tier": 3,
+  "empty_tier": 3,
+  "base_check_modules": ["documentation"],
+  "module_suites": {
+    "knowledge": ["knowledge-contracts"],
+    "bootstrap": ["bootstrap-safety"],
+    "bridge": ["agent-skill-bridge"],
+    "hooks": ["hooks-runtime"],
+    "installer": ["installer-contract", "runtime-smoke"],
+    "runtime": ["installer-contract", "runtime-smoke"],
+    "templates": ["bootstrap-safety", "template-consistency"],
+    "repository": ["repository-guards"]
+  },
+  "tiers": {
+    "0": {
+      "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard"],
+      "skipped_checks": ["quick-repository-checks", "targeted-module-checks", "full-release-matrix"],
+      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "targeted_os_jobs": 0 }
+    },
+    "1": {
+      "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "quick-repository-checks", "targeted-module-checks", "base-guard", "identity-guard"],
+      "skipped_checks": ["full-release-matrix"],
+      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "targeted_os_jobs": 0 }
+    },
+    "2": {
+      "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "quick-repository-checks", "targeted-module-checks", "base-guard", "identity-guard"],
+      "skipped_checks": ["full-release-matrix"],
+      "hosted_plan": { "validation_jobs": ["classify", "targeted-validation"], "full_validator_calls": 0, "targeted_os_jobs": 3 }
+    },
+    "3": {
+      "required_checks": ["change-classification", "base-guard", "identity-guard", "full-release-matrix"],
+      "skipped_checks": [],
+      "hosted_plan": { "validation_jobs": ["classify", "validate", "validate-windows-powershell"], "full_validator_calls": 4, "targeted_os_jobs": 0 }
+    }
+  },
+  "rules": [
+    { "id": "validation-routing", "tier": 3, "pattern": "^(scripts/validate-(change|targeted-change)\\.ps1|scripts/test-validate-change\\.ps1|scripts/validation/change-risk-rules\\.json|scripts/validation/change-risk-fixtures/|\\.github/workflows/release-validation\\.yml$)", "modules": ["validation-routing"] },
+    { "id": "release-and-cross-module-contract", "tier": 3, "pattern": "^(CHANGELOG\\.md$|VERSION$|docs/releases/|docs/release-(process|readiness)\\.md$|profiles/|schemas?/|scripts/validate-release\\.ps1$|scripts/validation/release-|\\.github/workflows/)", "modules": ["release"] },
+    { "id": "agent-skill-bridge", "tier": 2, "pattern": "^scripts/link-agent-skills\\.ps1$", "modules": ["bridge"] },
+    { "id": "installer-runtime", "tier": 2, "pattern": "^scripts/(install|uninstall)\\.ps1$", "modules": ["installer", "runtime"] },
+    { "id": "hooks", "tier": 2, "pattern": "(^|/)\\.claude/|hooks?", "modules": ["hooks"] },
+    { "id": "bundled-bootstrap-template", "tier": 2, "pattern": "^skills/project-bootstrap/assets/knowledge-hub-template/templates/", "modules": ["bootstrap", "templates"] },
+    { "id": "bootstrap-knowledge-helper", "tier": 2, "pattern": "^skills/project-bootstrap/scripts/(manage_candidates|promote_experience|rebuild_experience_index|search_experience)\\.ps1$", "modules": ["bootstrap", "knowledge"] },
+    { "id": "project-bootstrap", "tier": 2, "pattern": "^skills/project-bootstrap/", "modules": ["bootstrap"] },
+    { "id": "unsupported-runtime-skill", "tier": 3, "pattern": "^skills/", "modules": ["unsupported-runtime-skill"] },
+    { "id": "knowledge-runtime-helper", "tier": 2, "pattern": "^knowledge-hub/scripts/(manage_candidates|promote_experience|rebuild_experience_index|search_experience)\\.ps1$", "modules": ["bootstrap", "knowledge"] },
+    { "id": "unmapped-knowledge-runtime", "tier": 3, "pattern": "^knowledge-hub/scripts/", "modules": ["unsupported-knowledge-runtime"] },
+    { "id": "templates-bootstrap", "tier": 2, "pattern": "^(knowledge-hub/templates/|scripts/validation/project-bootstrap-|templates?/)", "modules": ["templates", "bootstrap"] },
+    { "id": "knowledge", "tier": 1, "pattern": "^knowledge-hub/knowledge/", "modules": ["knowledge"] },
+    { "id": "unmapped-local-fixtures", "tier": 3, "pattern": "^scripts/validation/.+fixtures/", "modules": ["unsupported-fixture"] },
+    { "id": "repository-guard-tests", "tier": 1, "pattern": "^(scripts/test-(pr-identity-guard|issue-triage-decision-command)\\.ps1|\\.github/scripts/(pr-identity-guard|issue-triage-decision-command)\\.js)$", "modules": ["repository"] },
+    { "id": "unmapped-tests", "tier": 3, "pattern": "^(scripts/test-|\\.github/scripts/)", "modules": ["unsupported-test"] },
+    { "id": "metadata-and-docs", "tier": 0, "pattern": "^(README(\\.[^/]+)?\\.md$|scripts/README\\.md$|LICENSE|NOTICE|CONTRIBUTING\\.md$|docs/|\\.github/(ISSUE_TEMPLATE/|pull_request_template\\.md$)|\\.(editorconfig|gitattributes|gitignore)$)", "modules": ["documentation"] }
+  ]
+}
