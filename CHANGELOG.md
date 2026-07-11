@@ -4,7 +4,34 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.5.2` release.
+- No unreleased public changes after the `v0.6.0` release.
+
+## v0.6.0 - 2026-07-11
+
+- Changed ordinary runtime installation to copy-first with schema-2 per-file
+  ownership and content hashes, incremental refresh, explicit conflict reports,
+  protected unknown/local content, and reviewed schema-1 migration through
+  `-ReplaceManaged`. (Issue #219; PR #230)
+- Added an explicit opt-in agent-specific skill bridge from installed runtime
+  copies, with canonical ownership, containment checks, transactional rollback,
+  and independent local metadata. (Issue #220; PR #231)
+- Added a public-safe local candidate inbox with read-only discovery, explicit
+  intake, and human triage;
+  candidates remain separate from formal global experience and are never
+  promoted automatically. (Issue #222; PR #232)
+- Added a lightweight session-learning trigger to project-agent templates while
+  preserving user confirmation and the no-automatic-promotion boundary.
+  (Issue #225; PR #233)
+- Added opt-in directory index health diagnostics, a reusable index governance
+  reference, one public fixture pilot, and deterministic validation. (Issue
+  #217; PRs #234, #235)
+- Hardened public-safe experience metadata and multilingual anchor behavior,
+  then fixed multiline keywords and cross-PowerShell score ordering with
+  deterministic symptom coverage. (Issues #221, #223, #236, #238; PRs #228,
+  #229, #237, #239)
+- Grew full release validation from the `v0.5.2` 81-PASS baseline to
+  `PASS=86 FAIL=0 WARN=0 DEFERRED=0` on both PowerShell 7 and Windows
+  PowerShell 5.1.
 
 ## v0.5.2 - 2026-07-07
 

@@ -48,7 +48,7 @@ Incrementally refresh an existing runtime install on the same machine:
 
 ```powershell
 # Clone or pull the latest release
-git checkout v0.5.0  # or the target tag
+git checkout v0.6.0  # or the target tag
 
 # Refresh managed files and preserve unknown or locally modified content
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Profile recommended
