@@ -107,3 +107,51 @@ Additional rehearsals should be added here when:
 
 Each rehearsal should record: source tag, target commit, install mode,
 profile, step-by-step results, and any limitations.
+
+## Rehearsal: v0.5.2 → v0.6.0 candidate
+
+**Date**: 2026-07-11
+
+**Source tag**: `v0.5.2` (commit `e2716833c8c5d06fd21ec6215cf86aa86a579009`)
+
+**Target**: `v0.6.0` publish-finalization branch based on public `main`
+`334ff0010ab84aa5c2b68e1ae65f24d2b85706b8`
+
+**Install mode**: copy
+
+**Profile**: `recommended`
+
+### Runtime migration
+
+1. Installed `v0.5.2` into an isolated temporary runtime, producing a schema-1
+   copy manifest.
+2. Ran the current installer without replacement flags. It reported 22 managed
+   differences as conflicts, preserved the runtime content, and retained schema
+   1 instead of silently migrating.
+3. Re-ran after review with `-ReplaceManaged`. The installer updated 22 managed
+   files with 0 conflicts and produced a schema-2 `copy` manifest for the
+   `recommended` profile.
+
+Result: **PASS**. The default path is conservative; migration requires an
+explicit reviewed replacement decision.
+
+### Existing project memory
+
+A project bootstrapped from the isolated v0.5.2 runtime and bundled knowledge
+hub completed memory upgrade analysis with 0 findings. The installed-copy hub
+is intentionally not a Git checkout, so hub lock inspection reports
+`hub_not_git`; this is a runtime source-state result, not a project memory
+content finding. Context gate discovered all expected hot and cold surfaces,
+and memory diagnosis reported 0 findings.
+
+Result: **PASS**. Existing v0.5.2 project memory does not require forced
+scaffold migration for v0.6.0.
+
+### Limitations
+
+- The rehearsal used the `recommended` profile on Windows; full release
+  validation separately covers every profile and both copy / explicit
+  development-link strategies.
+- Agent-specific skill bridge targets remain an explicit post-install opt-in
+  and were validated by the dedicated release fixture matrix rather than a live
+  client directory.

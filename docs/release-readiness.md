@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.5.2` published public release.
+Status: `v0.6.0` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -26,7 +26,34 @@ clarification, testing capability foundations, and release validator
 thin-entrypoint closeout. `v0.5.2` packages Claude Code lifecycle hooks,
 skill metadata and discovery compatibility, eval-driven iteration and testing
 guidance, public-safe knowledge lifecycle metadata, context index guidance, and
-release validation growth to 81 passing checks.
+release validation growth to 81 passing checks. `v0.6.0` packages copy-first
+runtime installation with schema-2 migration, the explicit agent skill bridge,
+candidate intake, session-learning triggers, opt-in directory index diagnostics,
+and experience search correctness fixes.
+
+## v0.6.0 Published State
+
+Current `main` includes the post-`v0.5.2` runtime lifecycle and knowledge
+workflow changes summarized in `docs/releases/v0.6.0.md`. `v0.6.0` is aligned
+for tag and GitHub Release publication from the merge commit of the `v0.6.0`
+publish-finalization PR.
+
+GitHub Release `v0.6.0` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.6.0
+
+Tag target: merge commit for the `v0.6.0` publish-finalization PR.
+
+Local release validation for this alignment passed on PowerShell 7 and Windows
+PowerShell 5.1 with `PASS=86 FAIL=0 WARN=0 DEFERRED=0`.
+
+The `v0.5.2` schema-1 copy runtime upgrade rehearsal passed: the default refresh
+reported conflicts without replacing managed differences or migrating the
+manifest; reviewed `-ReplaceManaged` completed schema-2 copy migration while
+preserving the explicit user decision boundary. A v0.5.2-bootstrapped project
+reported 0 memory-upgrade and memory-diagnosis findings.
+
+Release body source: `docs/releases/v0.6.0.md`, between `RELEASE_BODY_START`
+and `RELEASE_BODY_END`.
 
 ## v0.5.2 Published State
 
@@ -285,6 +312,10 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   published release notes.
 - `v0.5.2` final local release validation passed with
   `PASS=81 FAIL=0 WARN=0 DEFERRED=0`.
+- Public release notes are present at `docs/releases/v0.6.0.md` with first-screen
+  runtime, project refresh, bridge, compatibility, and command guidance.
+- `v0.6.0` final local release validation passed on PowerShell 7 and Windows
+  PowerShell 5.1 with `PASS=86 FAIL=0 WARN=0 DEFERRED=0`.
 - Release validator thin-entrypoint closeout: `scripts/validate-release.ps1`
   refactored from 2,496 lines to 566 lines with 10 extracted validation helper
   modules; 62 checks preserved with identical output contract.
