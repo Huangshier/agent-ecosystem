@@ -92,7 +92,13 @@ $results = foreach ($entry in $entries) {
     }
 }
 
-$ranked = @($results | Sort-Object score -Descending | Select-Object -First $MaxResults)
+$ranked = @(
+    $results |
+        Sort-Object `
+            @{ Expression = { [int]$_["score"] }; Descending = $true },
+            @{ Expression = { [string]$_["title"] }; Descending = $false } |
+        Select-Object -First $MaxResults
+)
 
 if ($Json.IsPresent) {
     [ordered]@{
