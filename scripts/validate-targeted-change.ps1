@@ -15,6 +15,7 @@ $repoRoot = Split-Path -Parent $scriptDir
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
     $ScratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-change-validation-{0}" -f ([Guid]::NewGuid().ToString("N")))
 }
+$ScratchRoot = [System.IO.Path]::GetFullPath($ScratchRoot)
 New-Item -ItemType Directory -Force -Path $ScratchRoot | Out-Null
 
 $classification = if (@($ChangedPath).Count -gt 0) {
@@ -70,44 +71,115 @@ if ([int]$classification.detected_tier -ge 1) {
     Add-Result "quick-repository-checks" "PASS" "Repository PowerShell and knowledge JSON parse checks passed."
 }
 
-if ($Mode -eq "targeted") {
+if ([int]$classification.detected_tier -ge 1) {
     $modules = @($classification.affected_modules)
-    if ($modules -contains "hooks") {
+    $requiredSuites = @($classification.required_suites)
+    $executedSuites = New-Object 'System.Collections.Generic.List[string]'
+    if ($requiredSuites.Count -eq 0) { throw "Tier 1/2 classification has no reliable targeted suite; classification must escalate to Tier 3." }
+    if ($requiredSuites -contains "knowledge-contracts") {
+        . (Join-Path $scriptDir "lib/path-guard.ps1")
+        . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+        $script:checks = $checks
+        $script:evidence = [ordered]@{
+            knowledge_hub = [ordered]@{}
+            duplicate_helpers = @()
+        }
+        $script:repoRoot = $repoRoot
+        $script:scratchRootFull = Join-Path $ScratchRoot "knowledge"
+        New-Item -ItemType Directory -Force -Path $script:scratchRootFull | Out-Null
+        . (Join-Path $scriptDir "validation/release-knowledge-hub-checks.ps1")
+        $before = $checks.Count
+        Invoke-ReleaseKnowledgeHubChecks
+        $added = @($checks.ToArray())[$before..($checks.Count - 1)]
+        $knowledgeFailures = @($added | Where-Object status -eq "FAIL")
+        if ($knowledgeFailures.Count) { throw ("Knowledge contract checks failed: {0}" -f (($knowledgeFailures | ForEach-Object { "{0}: {1}" -f $_.name, $_.detail }) -join "; ")) }
+        Add-Result "knowledge-contracts" "PASS" ("Executed {0} catalog, metadata, public-safe, search, regeneration, and knowledge contract checks." -f $added.Count)
+        $executedSuites.Add("knowledge-contracts")
+    }
+    if ($requiredSuites -contains "hooks-runtime") {
         & (Join-Path $scriptDir "validation/test-claude-hooks-runtime.ps1") -RepositoryRoot $repoRoot -ScratchRoot (Join-Path $ScratchRoot "hooks") -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Hooks runtime fixtures failed." }
         Add-Result "hooks-runtime" "PASS" "Executable hooks runtime fixtures passed."
+        $executedSuites.Add("hooks-runtime")
     }
-    if ($modules -contains "repository") {
+    if ($requiredSuites -contains "repository-guards") {
         & (Join-Path $scriptDir "test-pr-identity-guard.ps1") -RepoRoot $repoRoot -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "PR identity guard fixtures failed." }
         & (Join-Path $scriptDir "test-issue-triage-decision-command.ps1") -RepoRoot $repoRoot -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Issue decision fixtures failed." }
         Add-Result "repository-guards" "PASS" "Repository guard fixtures passed."
+        $executedSuites.Add("repository-guards")
     }
-    if ($modules -contains "installer" -or $modules -contains "runtime") {
+    if ($requiredSuites -contains "installer-contract") {
+        . (Join-Path $scriptDir "lib/path-guard.ps1")
+        . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+        . (Join-Path $scriptDir "validation/release-installer-contract-checks.ps1")
+        $contractEvidence = Invoke-InstallerContractFixtureChecks -RepositoryRoot $repoRoot -ScratchRoot (Join-Path $ScratchRoot "installer-contract")
+        Add-Result "installer-contract" "PASS" ("Executed {0} installer contract fixture result(s)." -f @($contractEvidence).Count)
+        $executedSuites.Add("installer-contract")
+    }
+    if ($requiredSuites -contains "runtime-smoke") {
         $runtimeRoot = Join-Path $ScratchRoot "runtime"
         & (Join-Path $scriptDir "install.ps1") -Profile minimal -TargetDir $runtimeRoot | Out-Null
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json"))) { throw "Minimal copy-first install smoke failed." }
         & (Join-Path $scriptDir "uninstall.ps1") -TargetDir $runtimeRoot -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Manifest uninstall smoke failed." }
         Add-Result "installer-runtime-smoke" "PASS" "Minimal copy-first install and manifest uninstall completed in scratch space."
+        $executedSuites.Add("runtime-smoke")
     }
-    if ($modules -contains "skills") {
-        foreach ($path in @($classification.changed_paths | Where-Object { $_ -match '^skills/[^/]+/SKILL\.md$' })) {
-            $text = Get-Content -LiteralPath (Join-Path $repoRoot $path) -Raw
-            if ($text -notmatch '(?s)^---\s+.*?name:\s*\S+.*?description:\s*.+?\s+---') { throw "Skill metadata frontmatter is incomplete: $path" }
-        }
-        Add-Result "skill-metadata" "PASS" "Changed skill entrypoints contain required metadata."
+    if ($requiredSuites -contains "agent-skill-bridge") {
+        . (Join-Path $scriptDir "lib/path-guard.ps1")
+        . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+        . (Join-Path $scriptDir "validation/release-agent-skill-bridge-checks.ps1")
+        $bridgeEvidence = Invoke-AgentSkillBridgeFixtureChecks -RepositoryRoot $repoRoot -ScratchRoot (Join-Path $ScratchRoot "bridge")
+        Add-Result "agent-skill-bridge" "PASS" ("Executed {0} bridge fixture result(s)." -f @($bridgeEvidence).Count)
+        $executedSuites.Add("agent-skill-bridge")
     }
-    if ($modules -contains "bootstrap" -or $modules -contains "templates") {
+    if ($requiredSuites -contains "bootstrap-safety") {
         & (Join-Path $scriptDir "validation/project-bootstrap-safety-fixture.ps1") `
             -RepositoryRoot $repoRoot `
             -ScratchRoot (Join-Path $ScratchRoot "bootstrap") `
             -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Project bootstrap safety fixtures failed." }
         Add-Result "bootstrap-safety" "PASS" "Project bootstrap proposal, backup, and write-boundary fixtures passed."
+        $executedSuites.Add("bootstrap-safety")
     }
-    Add-Result "targeted-module-matrix" "PASS" ("Targeted checks completed for modules: {0}" -f ($modules -join ", "))
+    if ($requiredSuites -contains "template-consistency") {
+        . (Join-Path $scriptDir "lib/path-guard.ps1")
+        . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+        . (Join-Path $scriptDir "validation/release-project-template-checks.ps1")
+        $script:checks = $checks
+        $script:repoRoot = $repoRoot
+        $script:scratchRootFull = Join-Path $ScratchRoot "template-consistency"
+        New-Item -ItemType Directory -Force -Path $script:scratchRootFull | Out-Null
+        $script:evidence = [ordered]@{ runtime_smoke = @() }
+        $script:recommendedCopyRuntime = Join-Path $script:scratchRootFull "recommended-runtime"
+        & (Join-Path $scriptDir "install.ps1") -Profile recommended -TargetDir $script:recommendedCopyRuntime | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Recommended runtime install for template consistency failed." }
+        $templateSmokeProject = Join-Path $script:scratchRootFull "runtime-smoke-project"
+        New-Item -ItemType Directory -Force -Path $templateSmokeProject | Out-Null
+        & (Join-Path $script:recommendedCopyRuntime "skills/project-bootstrap/scripts/bootstrap_project.ps1") `
+            -ProjectDir $templateSmokeProject `
+            -HubDir (Join-Path $script:recommendedCopyRuntime "knowledge-hub") `
+            -SkipMemoryUpgradeAnalysis | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Template runtime bootstrap smoke failed." }
+        $script:evidence.runtime_smoke = @([ordered]@{ name = "template-targeted"; project = $templateSmokeProject })
+        $before = $checks.Count
+        Invoke-ReleaseValidationLanguageTemplateChecks
+        $added = if ($checks.Count -gt $before) { @($checks.ToArray())[$before..($checks.Count - 1)] } else { @() }
+        $templateFailures = @($added | Where-Object status -eq "FAIL")
+        if ($templateFailures.Count) { throw ("Template consistency checks failed: {0}" -f (($templateFailures | ForEach-Object { "{0}: {1}" -f $_.name, $_.detail }) -join "; ")) }
+        if ($added.Count -eq 0) { throw "Template consistency suite executed zero checks." }
+        Add-Result "template-consistency" "PASS" ("Executed {0} template/bootstrap consistency checks." -f $added.Count)
+        $executedSuites.Add("template-consistency")
+    }
+    $moduleCoverage = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($module in $modules) {
+        $mapped = @($classification.module_suite_map.$module)
+        $actual = @($mapped | Where-Object { $executedSuites.Contains([string]$_) })
+        if ($actual.Count -eq 0) { throw "Affected module '$module' executed zero actual module checks." }
+        $moduleCoverage.Add([ordered]@{ module = $module; mapped_suites = $mapped; executed_suites = $actual; executed_check_count = $actual.Count })
+    }
 }
 
 $result = [ordered]@{
@@ -115,8 +187,11 @@ $result = [ordered]@{
     mode = $Mode
     classification = $classification
     checks = @($checks.ToArray())
+    executed_suites = $(if ($null -eq $executedSuites) { @() } else { @($executedSuites.ToArray()) })
+    module_coverage = $(if ($null -eq $moduleCoverage) { @() } else { @($moduleCoverage.ToArray()) })
+    executed_suite_count = $(if ($null -eq $executedSuites) { 0 } else { $executedSuites.Count })
     summary = [ordered]@{ pass = @($checks | Where-Object status -eq "PASS").Count; fail = 0 }
 }
 $resultPath = Join-Path $ScratchRoot "targeted-validation-result.json"
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
-if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 10 } else { Write-Output ("Targeted validation PASS ({0} checks)." -f $result.summary.pass) }
+if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 10 } else { Write-Output ("Targeted validation PASS ({0} checks; {1} actual module suites: {2})." -f $result.summary.pass, $result.executed_suite_count, (@($result.executed_suites) -join ", ")) }

@@ -23,11 +23,21 @@ function New-ConservativeResult {
 function New-ChangeResult {
     param([int]$Tier, [string[]]$Paths, [string[]]$Reasons, [string[]]$Modules)
     $tierContract = $config.tiers.PSObject.Properties[[string]$Tier].Value
+    $moduleSuiteMap = [ordered]@{}
+    $requiredSuites = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($module in @($Modules | Sort-Object -Unique)) {
+        $property = $config.module_suites.PSObject.Properties[[string]$module]
+        $suites = if ($null -eq $property) { @() } else { @($property.Value) }
+        $moduleSuiteMap[[string]$module] = @($suites)
+        foreach ($suite in $suites) { $requiredSuites.Add([string]$suite) }
+    }
     return [ordered]@{
         schema_version = 1
         detected_tier = $Tier
         changed_paths = @($Paths | Sort-Object -Unique)
         affected_modules = @($Modules | Sort-Object -Unique)
+        required_suites = @($requiredSuites.ToArray() | Sort-Object -Unique)
+        module_suite_map = $moduleSuiteMap
         required_checks = @($tierContract.required_checks)
         skipped_checks = @($tierContract.skipped_checks)
         hosted_plan = $tierContract.hosted_plan
