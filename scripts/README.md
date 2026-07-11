@@ -79,8 +79,12 @@ Install modes and reruns:
   compatibility warning.
 
 The generated schema-2 `install-manifest.json` records the selected profile,
-actual install strategy, runtime-relative managed items, and source/installed
-content hashes. The independent schema-1 `install-report.json` records status,
+actual install strategy, runtime-relative managed items, source/installed
+content hashes, and nullable source provenance. `source_commit` is recorded only
+for a clean Git worktree whose selected runtime content matches `HEAD`;
+`release_version` additionally requires exactly one matching `vX.Y.Z` tag at
+that commit. Non-Git and dirty sources leave both fields `null`. The independent
+schema-1 `install-report.json` records status,
 counts, and complete runtime-relative lists for updated, unchanged, preserved
 unknown, skipped locally modified, and conflicting files. Do not commit
 generated runtime directories or their metadata to project repositories.

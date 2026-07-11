@@ -115,6 +115,28 @@ function Invoke-InstallerContractFixtureChecks {
         }
     }
 
+    function New-GitProvenanceFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$TemplateRoot,
+            [Parameter(Mandatory = $true)][string]$SourceRoot,
+            [AllowNull()][string]$VersionTag
+        )
+
+        Copy-Item -LiteralPath $TemplateRoot -Destination $SourceRoot -Recurse
+        & git -C $SourceRoot init --quiet
+        if ($LASTEXITCODE -ne 0) { throw "Unable to initialize provenance Git fixture." }
+        & git -C $SourceRoot config user.name "Installer Fixture"
+        & git -C $SourceRoot config user.email "installer-fixture@example.invalid"
+        & git -C $SourceRoot add --all
+        & git -C $SourceRoot commit --quiet -m "fixture"
+        if ($LASTEXITCODE -ne 0) { throw "Unable to commit provenance Git fixture." }
+        if (-not [string]::IsNullOrWhiteSpace($VersionTag)) {
+            & git -C $SourceRoot tag $VersionTag
+            if ($LASTEXITCODE -ne 0) { throw "Unable to tag provenance Git fixture." }
+        }
+        return @(& git -C $SourceRoot rev-parse HEAD)[0]
+    }
+
     $fixtureSource = Join-PathParts $ScratchRoot "installer-contract-source"
     $runtimeRoot = Join-PathParts $ScratchRoot "installer-contract-runtime"
     $profileShrinkRuntime = Join-PathParts $ScratchRoot "installer-contract-profile-shrink-runtime"
@@ -122,7 +144,14 @@ function Invoke-InstallerContractFixtureChecks {
     $devLinkRuntime = Join-PathParts $ScratchRoot "installer-contract-dev-link-runtime"
     $legacyLinkRuntime = Join-PathParts $ScratchRoot "installer-contract-legacy-link-runtime"
     $legacyRuntime = Join-PathParts $ScratchRoot "installer-contract-legacy-runtime"
-    foreach ($path in @($fixtureSource, $runtimeRoot, $profileShrinkRuntime, $rootConflictRuntime, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime)) {
+    $taggedSource = Join-PathParts $ScratchRoot "installer-provenance-tagged-source"
+    $taggedRuntime = Join-PathParts $ScratchRoot "installer-provenance-tagged-runtime"
+    $ambiguousTagRuntime = Join-PathParts $ScratchRoot "installer-provenance-ambiguous-tag-runtime"
+    $untaggedSource = Join-PathParts $ScratchRoot "installer-provenance-untagged-source"
+    $untaggedRuntime = Join-PathParts $ScratchRoot "installer-provenance-untagged-runtime"
+    $dirtySource = Join-PathParts $ScratchRoot "installer-provenance-dirty-source"
+    $dirtyRuntime = Join-PathParts $ScratchRoot "installer-provenance-dirty-runtime"
+    foreach ($path in @($fixtureSource, $runtimeRoot, $profileShrinkRuntime, $rootConflictRuntime, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime, $taggedSource, $taggedRuntime, $ambiguousTagRuntime, $untaggedSource, $untaggedRuntime, $dirtySource, $dirtyRuntime)) {
         Assert-PathInsideRoot -Path $path -Root $ScratchRoot
     }
 
@@ -163,8 +192,48 @@ function Invoke-InstallerContractFixtureChecks {
     Assert-InstallerCondition -Condition (-not $manifestText.Contains($runtimeFull)) -Message "Manifest leaked the runtime path."
     Assert-InstallerCondition -Condition (-not $reportText.Contains([System.IO.Path]::GetFullPath($fixtureSource))) -Message "Install report leaked the source fixture path."
     Assert-InstallerCondition -Condition (-not $reportText.Contains($runtimeFull)) -Message "Install report leaked the runtime path."
+    Assert-InstallerCondition -Condition ($null -eq $manifest.release_version -and $null -eq $manifest.source_commit) -Message "Non-Git source provenance was guessed."
     Assert-ReportCountConsistency -Report $report
     $scenarioEvidence.Add([ordered]@{ scenario = "fresh-default-copy"; exit_code = $fresh.exit_code; status = [string]$report.status; updated = [int]$report.counts.updated })
+
+    $manifest.PSObject.Properties.Remove("release_version")
+    $manifest.PSObject.Properties.Remove("source_commit")
+    Write-FixtureText -Path (Join-PathParts $runtimeRoot "install-manifest.json") -Text ($manifest | ConvertTo-Json -Depth 12)
+    $schemaTwoCompatibility = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $runtimeRoot
+    $manifest = Read-InstallArtifact -RuntimeRoot $runtimeRoot -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($schemaTwoCompatibility.exit_code -eq 0) -Message "Schema-2 manifest without provenance fields was rejected."
+    Assert-InstallerCondition -Condition ($null -ne $manifest.PSObject.Properties["release_version"] -and $null -ne $manifest.PSObject.Properties["source_commit"]) -Message "Schema-2 rerun did not add provenance fields."
+    Assert-InstallerCondition -Condition ($null -eq $manifest.release_version -and $null -eq $manifest.source_commit) -Message "Schema-2 compatibility rerun guessed provenance."
+    $scenarioEvidence.Add([ordered]@{ scenario = "schema-2-missing-provenance-compatible"; exit_code = $schemaTwoCompatibility.exit_code; schema_version = [int]$manifest.schema_version })
+
+    $taggedCommit = New-GitProvenanceFixture -TemplateRoot $fixtureSource -SourceRoot $taggedSource -VersionTag "v9.8.7"
+    $taggedRun = Invoke-FixtureInstall -Installer (Join-PathParts $taggedSource "scripts" "install.ps1") -RuntimeRoot $taggedRuntime
+    $taggedManifestText = Get-Content -LiteralPath (Join-PathParts $taggedRuntime "install-manifest.json") -Raw
+    $taggedManifest = $taggedManifestText | ConvertFrom-Json
+    Assert-InstallerCondition -Condition ($taggedRun.exit_code -eq 0 -and [string]$taggedManifest.release_version -eq "v9.8.7") -Message "Exact version tag provenance was not recorded."
+    Assert-InstallerCondition -Condition ([string]$taggedManifest.source_commit -eq [string]$taggedCommit -and [string]$taggedManifest.source_commit -match '^[0-9a-f]{40}$') -Message "Tagged source commit provenance was not recorded as a full SHA."
+    Assert-InstallerCondition -Condition (-not $taggedManifestText.Contains([System.IO.Path]::GetFullPath($taggedSource)) -and -not $taggedManifestText.Contains([System.IO.Path]::GetFullPath($taggedRuntime))) -Message "Tagged provenance manifest leaked an absolute path."
+    $scenarioEvidence.Add([ordered]@{ scenario = "clean-git-exact-version-tag"; exit_code = $taggedRun.exit_code; release_version = [string]$taggedManifest.release_version; source_commit = [string]$taggedManifest.source_commit })
+
+    & git -C $taggedSource tag "v9.8.8"
+    if ($LASTEXITCODE -ne 0) { throw "Unable to create ambiguous provenance tag fixture." }
+    $ambiguousTagRun = Invoke-FixtureInstall -Installer (Join-PathParts $taggedSource "scripts" "install.ps1") -RuntimeRoot $ambiguousTagRuntime
+    $ambiguousTagManifest = Read-InstallArtifact -RuntimeRoot $ambiguousTagRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($ambiguousTagRun.exit_code -eq 0 -and $null -eq $ambiguousTagManifest.release_version -and $null -eq $ambiguousTagManifest.source_commit) -Message "Ambiguous exact version tags produced guessed provenance."
+    $scenarioEvidence.Add([ordered]@{ scenario = "clean-git-ambiguous-version-tags"; exit_code = $ambiguousTagRun.exit_code })
+
+    $untaggedCommit = New-GitProvenanceFixture -TemplateRoot $fixtureSource -SourceRoot $untaggedSource -VersionTag $null
+    $untaggedRun = Invoke-FixtureInstall -Installer (Join-PathParts $untaggedSource "scripts" "install.ps1") -RuntimeRoot $untaggedRuntime
+    $untaggedManifest = Read-InstallArtifact -RuntimeRoot $untaggedRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($untaggedRun.exit_code -eq 0 -and $null -eq $untaggedManifest.release_version -and [string]$untaggedManifest.source_commit -eq [string]$untaggedCommit) -Message "Clean untagged Git provenance was incorrect."
+    $scenarioEvidence.Add([ordered]@{ scenario = "clean-git-untagged"; exit_code = $untaggedRun.exit_code; source_commit = [string]$untaggedManifest.source_commit })
+
+    $null = New-GitProvenanceFixture -TemplateRoot $fixtureSource -SourceRoot $dirtySource -VersionTag "v9.8.6"
+    Write-FixtureText -Path (Join-PathParts $dirtySource "knowledge-hub" "managed.txt") -Text "dirty-source"
+    $dirtyRun = Invoke-FixtureInstall -Installer (Join-PathParts $dirtySource "scripts" "install.ps1") -RuntimeRoot $dirtyRuntime
+    $dirtyManifest = Read-InstallArtifact -RuntimeRoot $dirtyRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($dirtyRun.exit_code -eq 0 -and $null -eq $dirtyManifest.release_version -and $null -eq $dirtyManifest.source_commit) -Message "Dirty Git source provenance was guessed."
+    $scenarioEvidence.Add([ordered]@{ scenario = "dirty-git-source"; exit_code = $dirtyRun.exit_code })
 
     $copyCompatibility = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $runtimeRoot -AdditionalArguments @("-Copy")
     Assert-InstallerCondition -Condition ($copyCompatibility.exit_code -eq 0) -Message "Existing -Copy invocation failed."
@@ -366,11 +435,13 @@ function Invoke-InstallerContractFixtureChecks {
         )
     }
     Write-FixtureText -Path (Join-PathParts $legacyRuntime "install-manifest.json") -Text ($legacyManifest | ConvertTo-Json -Depth 8)
+    $legacyManifestBeforeConflict = Get-Content -LiteralPath (Join-PathParts $legacyRuntime "install-manifest.json") -Raw
     $legacyRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $legacyRuntime
     $legacyConflictManifest = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-manifest.json"
     $legacyConflictReport = Read-InstallArtifact -RuntimeRoot $legacyRuntime -Name "install-report.json"
     Assert-InstallerCondition -Condition ($legacyRun.exit_code -ne 0 -and [string]$legacyConflictReport.status -eq "conflict") -Message "Differing schema-1 copy target did not fail conservatively."
     Assert-InstallerCondition -Condition ([int]$legacyConflictManifest.schema_version -eq 1 -and -not [bool]$legacyConflictReport.manifest_updated) -Message "Conflicted schema-1 copy migration wrote a misleading schema-2 baseline."
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "install-manifest.json") -Raw) -eq $legacyManifestBeforeConflict) -Message "Provenance bypassed schema-1 conflict manifest preservation."
     Assert-InstallerCondition -Condition ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "knowledge-hub" "managed.txt") -Raw) -eq "legacy-copy-local-content") -Message "Default legacy copy conflict overwrote target content."
     $scenarioEvidence.Add([ordered]@{ scenario = "legacy-copy-difference-conflict"; exit_code = $legacyRun.exit_code; status = [string]$legacyConflictReport.status; manifest_schema_version = [int]$legacyConflictManifest.schema_version })
 
