@@ -37,7 +37,7 @@ function Invoke-RuntimeStatusFixtureChecks {
 
         if (-not (Test-Path -LiteralPath $RuntimeRoot)) { return @() }
         return @(
-            Get-ChildItem -LiteralPath $RuntimeRoot -Recurse -File -Force |
+            Get-ChildItem -LiteralPath $RuntimeRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
                 Sort-Object FullName |
                 ForEach-Object {
                     "{0}|{1}" -f (ConvertTo-DisplayPath -Path $_.FullName -Root $RuntimeRoot), (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
@@ -60,6 +60,40 @@ function Invoke-RuntimeStatusFixtureChecks {
             link_target = if ($null -eq $targetItem) { $null } else { @($targetItem.Target) -join "|" }
             client_tree = @(Get-StatusTreeState -RuntimeRoot $TargetRoot)
             runtime_tree = @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot)
+        }
+    }
+
+    function Get-ManagedAliasState {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [Parameter(Mandatory = $true)][string]$AliasPath,
+            [Parameter(Mandatory = $true)][string]$TargetPath,
+            [switch]$Broken
+        )
+        if (-not $isWindowsPlatform) {
+            $aliasTarget = @(& readlink $AliasPath) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect the managed alias fixture." }
+            $aliasType = "SymbolicLink"
+        }
+        elseif ($PSVersionTable.PSVersion.Major -ge 7) {
+            $alias = [System.IO.DirectoryInfo]::new($AliasPath)
+            $aliasTarget = [string]$alias.LinkTarget
+            $aliasType = if ([string]::IsNullOrWhiteSpace($aliasTarget)) { $null } elseif ($isWindowsPlatform) { "Junction" } else { "SymbolicLink" }
+        }
+        else {
+            $aliasName = [System.IO.Path]::GetFileName($AliasPath)
+            $alias = Get-ChildItem -LiteralPath (Split-Path -Parent $AliasPath) -Force |
+                Where-Object { [string]::Equals([string]$_.Name, $aliasName, [System.StringComparison]::Ordinal) } |
+                Select-Object -First 1
+            $aliasTarget = if ($null -eq $alias) { $null } else { @($alias.Target) -join "|" }
+            $aliasType = if ($null -eq $alias) { $null } else { [string]$alias.LinkType }
+        }
+        return [ordered]@{
+            manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "install-manifest.json") -Algorithm SHA256).Hash
+            alias_type = $aliasType
+            alias_target = $aliasTarget
+            target_hash = if (Test-Path -LiteralPath $TargetPath -PathType Leaf) { (Get-FileHash -LiteralPath $TargetPath -Algorithm SHA256).Hash } else { $null }
+            runtime_tree = if ($Broken.IsPresent) { @() } else { @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot) }
         }
     }
 
@@ -92,6 +126,33 @@ function Invoke-RuntimeStatusFixtureChecks {
         }
     }
 
+    function New-ManagedStatusFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [string]$Content = "managed content",
+            [switch]$Missing,
+            [AllowEmptyString()][string]$SourceHash,
+            [AllowEmptyString()][string]$InstalledHash
+        )
+        $runtime = Join-PathParts $fixtureRoot $Name
+        $relativePath = "SKILL.md"
+        $livePath = Join-PathParts $runtime "skills" "project-bootstrap" $relativePath
+        if (-not $Missing.IsPresent) { Write-StatusText -Path $livePath -Text $Content }
+        $contentHash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Content))).Replace("-", "").ToLowerInvariant()
+        if (-not $PSBoundParameters.ContainsKey("InstalledHash")) { $InstalledHash = $contentHash }
+        if (-not $PSBoundParameters.ContainsKey("SourceHash")) { $SourceHash = $InstalledHash }
+        $manifest = New-CurrentManifest
+        $manifest.items = @([ordered]@{
+                name = "skills/project-bootstrap"
+                destination = "skills/project-bootstrap"
+                mode = "copy"
+                managed = $true
+                files = @([ordered]@{ path = $relativePath; source_sha256 = $SourceHash; installed_sha256 = $InstalledHash })
+            })
+        Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
+        return [ordered]@{ runtime = $runtime; manifest = $manifest; live_path = $livePath; content_hash = $contentHash }
+    }
+
     function Write-BridgeStatusManifest {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
@@ -120,7 +181,7 @@ function Invoke-RuntimeStatusFixtureChecks {
         $manifest = New-CurrentManifest
         $manifest.skills = @($Skills)
         $manifest.items = @($Skills | ForEach-Object {
-                [ordered]@{ name = "skills/$_"; destination = "skills/$_"; mode = "copy"; managed = $true }
+                [ordered]@{ name = "skills/$_"; destination = "skills/$_"; mode = "copy"; managed = $true; files = @() }
             })
         Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
         New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
@@ -169,6 +230,213 @@ function Invoke-RuntimeStatusFixtureChecks {
     Assert-StatusCondition -Condition (@($validPayload.findings).Count -eq 0) -Message "Valid schema-2 manifest produced findings."
     Assert-StatusCondition -Condition ((@($beforeState) -join "`n") -ceq (@($afterState) -join "`n")) -Message "Runtime status changed the runtime tree."
     $evidence.Add([ordered]@{ scenario = "schema-2-valid-provenance"; status = [string]$validPayload.runtime.manifest_status; findings = @($validPayload.findings).Count })
+
+    $managedCurrent = New-ManagedStatusFixture -Name "managed-current"
+    Write-StatusText -Path (Join-PathParts $managedCurrent.runtime "skills" "project-bootstrap" "unrecorded.txt") -Text "ignored"
+    $managedBefore = @(Get-StatusTreeState -RuntimeRoot $managedCurrent.runtime)
+    $managedCurrentPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCurrent.runtime)
+    $managedAfter = @(Get-StatusTreeState -RuntimeRoot $managedCurrent.runtime)
+    Assert-StatusCondition -Condition ([string]$managedCurrentPayload.runtime.managed_files.status -eq "current" -and [string]$managedCurrentPayload.runtime.managed_files.reason -eq "scanned") -Message "Matching managed file did not report current."
+    Assert-StatusCondition -Condition ([int]$managedCurrentPayload.runtime.managed_files.tracked_item_count -eq 1 -and [int]$managedCurrentPayload.runtime.managed_files.tracked_file_count -eq 1 -and [int]$managedCurrentPayload.runtime.managed_files.counts.current -eq 1) -Message "Managed file counts are incorrect."
+    Assert-StatusCondition -Condition (@($managedCurrentPayload.runtime.managed_files.problems).Count -eq 0 -and (@($managedBefore) -join "`n") -ceq (@($managedAfter) -join "`n")) -Message "Managed status scanned unknown files or modified the runtime."
+    $evidence.Add([ordered]@{ scenario = "managed-current-unrecorded-ignored"; status = [string]$managedCurrentPayload.runtime.managed_files.status })
+
+    $managedModified = New-ManagedStatusFixture -Name "managed-modified" -Content "original"
+    Write-StatusText -Path $managedModified.live_path -Text "changed"
+    $modifiedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedModified.runtime)
+    Assert-StatusCondition -Condition ([string]$modifiedPayload.runtime.managed_files.status -eq "modified" -and [string]$modifiedPayload.runtime.managed_files.problems[0].path -eq "skills/project-bootstrap/SKILL.md" -and @($modifiedPayload.findings | Where-Object code -eq "runtime.managed.modified").Count -eq 1) -Message "Locally modified managed file was not reported."
+    $evidence.Add([ordered]@{ scenario = "managed-modified"; status = [string]$modifiedPayload.runtime.managed_files.status })
+
+    $managedMissing = New-ManagedStatusFixture -Name "managed-missing" -Missing
+    $missingManagedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedMissing.runtime)
+    Assert-StatusCondition -Condition ([string]$missingManagedPayload.runtime.managed_files.status -eq "missing" -and @($missingManagedPayload.findings | Where-Object code -eq "runtime.managed.missing").Count -eq 1) -Message "Missing managed file was not reported."
+    $evidence.Add([ordered]@{ scenario = "managed-missing"; status = [string]$missingManagedPayload.runtime.managed_files.status })
+
+    $installedBytes = [System.Text.Encoding]::UTF8.GetBytes("installed")
+    $sourceBytes = [System.Text.Encoding]::UTF8.GetBytes("source")
+    $installedBaseline = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($installedBytes)).Replace("-", "").ToLowerInvariant()
+    $sourceBaseline = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($sourceBytes)).Replace("-", "").ToLowerInvariant()
+    foreach ($conflictCase in @(
+            [ordered]@{ name = "live-installed"; content = "installed"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "live-source"; content = "source"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "live-third"; content = "third"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "missing"; content = "installed"; source = $sourceBaseline; installed = $installedBaseline; missing = $true },
+            [ordered]@{ name = "source-removed"; content = "installed"; source = ""; installed = $installedBaseline; missing = $false }
+        )) {
+        $fixture = New-ManagedStatusFixture -Name ("managed-conflict-{0}" -f $conflictCase.name) -Content ([string]$conflictCase.content) -SourceHash ([string]$conflictCase.source) -InstalledHash ([string]$conflictCase.installed) -Missing:([bool]$conflictCase.missing)
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $fixture.runtime)
+        Assert-StatusCondition -Condition ([string]$payload.runtime.managed_files.status -eq "conflict" -and [int]$payload.runtime.managed_files.counts.conflict -eq 1) -Message "Recorded source divergence did not remain conflict."
+        $evidence.Add([ordered]@{ scenario = "managed-conflict-$($conflictCase.name)"; status = [string]$payload.runtime.managed_files.status })
+    }
+
+    $devLink = New-CurrentManifest
+    $devLink.install_strategy = "dev-link"
+    $devLinkRuntime = Join-PathParts $fixtureRoot "managed-dev-link"
+    Write-StatusManifest -RuntimeRoot $devLinkRuntime -Value $devLink
+    $devLinkPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $devLinkRuntime)
+    Assert-StatusCondition -Condition ([string]$devLinkPayload.runtime.managed_files.status -eq "unknown" -and [string]$devLinkPayload.runtime.managed_files.reason -eq "dev-link-source-not-recorded" -and @($devLinkPayload.findings | Where-Object code -eq "runtime.managed.dev_link_unverifiable").Count -eq 1) -Message "Development-link runtime did not fail soft."
+    $evidence.Add([ordered]@{ scenario = "managed-dev-link"; status = [string]$devLinkPayload.runtime.managed_files.status })
+
+    $rootConflict = New-ManagedStatusFixture -Name "managed-item-root-file"
+    [System.IO.Directory]::Delete((Join-PathParts $rootConflict.runtime "skills" "project-bootstrap"), $true)
+    Write-StatusText -Path (Join-PathParts $rootConflict.runtime "skills" "project-bootstrap") -Text "occupied"
+    $rootConflictPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $rootConflict.runtime)
+    Assert-StatusCondition -Condition ([string]$rootConflictPayload.runtime.managed_files.status -eq "conflict") -Message "Managed item root occupied by a file did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-item-root-file"; status = [string]$rootConflictPayload.runtime.managed_files.status })
+
+    $leafDirectory = New-ManagedStatusFixture -Name "managed-leaf-directory"
+    [System.IO.File]::Delete($leafDirectory.live_path)
+    New-Item -ItemType Directory -Path $leafDirectory.live_path | Out-Null
+    $leafDirectoryPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $leafDirectory.runtime)
+    Assert-StatusCondition -Condition ([string]$leafDirectoryPayload.runtime.managed_files.status -eq "conflict") -Message "Managed leaf occupied by a directory did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-leaf-directory"; status = [string]$leafDirectoryPayload.runtime.managed_files.status })
+
+    $aliasedRoot = New-ManagedStatusFixture -Name "managed-item-root-alias"
+    $aliasedRootPath = Join-PathParts $aliasedRoot.runtime "skills" "project-bootstrap"
+    $externalRoot = Join-PathParts $fixtureRoot "managed-item-root-alias-external"
+    [System.IO.Directory]::Delete($aliasedRootPath, $true)
+    New-Item -ItemType Directory -Force -Path $externalRoot | Out-Null
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $aliasedRootPath -Target $externalRoot | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path $aliasedRootPath -Target $externalRoot | Out-Null }
+    $aliasedRootPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $aliasedRoot.runtime)
+    Assert-StatusCondition -Condition ([string]$aliasedRootPayload.runtime.managed_files.status -eq "conflict") -Message "Managed item root alias did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-item-root-alias"; status = [string]$aliasedRootPayload.runtime.managed_files.status })
+
+    foreach ($aliasCase in @(
+            [ordered]@{ name = "inside"; outside = $false; broken = $false },
+            [ordered]@{ name = "outside"; outside = $true; broken = $false },
+            [ordered]@{ name = "broken"; outside = $true; broken = $true }
+        )) {
+        $aliasFixture = New-ManagedStatusFixture -Name ("managed-nested-alias-{0}" -f $aliasCase.name)
+        $aliasFixture.manifest.items[0].files = @([ordered]@{ path = "nested/SKILL.md"; source_sha256 = $aliasFixture.content_hash; installed_sha256 = $aliasFixture.content_hash })
+        [System.IO.File]::Delete($aliasFixture.live_path)
+        $aliasPath = Join-PathParts $aliasFixture.runtime "skills" "project-bootstrap" "nested"
+        $targetRoot = if ($aliasCase.outside) { Join-PathParts $fixtureRoot ("managed-alias-target-{0}" -f $aliasCase.name) } else { Join-PathParts $aliasFixture.runtime "other" ("target-{0}" -f $aliasCase.name) }
+        $targetFile = Join-PathParts $targetRoot "SKILL.md"
+        Write-StatusText -Path $targetFile -Text "managed content"
+        if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $aliasPath -Target $targetRoot | Out-Null }
+        else { New-Item -ItemType SymbolicLink -Path $aliasPath -Target $targetRoot | Out-Null }
+        if ($aliasCase.broken) { [System.IO.Directory]::Delete($targetRoot, $true) }
+        Write-StatusManifest -RuntimeRoot $aliasFixture.runtime -Value $aliasFixture.manifest
+        $aliasBefore = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile -Broken:([bool]$aliasCase.broken)
+        $aliasRun = Invoke-Status -RuntimeRoot $aliasFixture.runtime
+        $aliasPayload = Read-StatusPayload -Run $aliasRun
+        $aliasAfter = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile -Broken:([bool]$aliasCase.broken)
+        if ($aliasCase.broken) {
+            Assert-StatusCondition -Condition ([string]$aliasPayload.runtime.managed_files.status -eq "unknown" -and [string]$aliasPayload.runtime.managed_files.reason -eq "path-unresolvable") -Message "Broken nested managed alias did not fail soft."
+        }
+        else {
+            Assert-StatusCondition -Condition ([string]$aliasPayload.runtime.managed_files.status -eq "conflict" -and [int]$aliasPayload.runtime.managed_files.counts.conflict -eq 1) -Message "Nested managed alias was followed instead of reporting conflict."
+        }
+        Assert-StatusCondition -Condition (($aliasBefore | ConvertTo-Json -Depth 6 -Compress) -ceq ($aliasAfter | ConvertTo-Json -Depth 6 -Compress)) -Message "Managed alias inspection changed the alias, target, manifest, or runtime tree."
+        $aliasJson = @($aliasRun.output) -join "`n"
+        foreach ($privateValue in @([System.IO.Path]::GetFullPath($targetRoot), $aliasFixture.content_hash, $env:USERNAME)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$privateValue)) {
+                Assert-StatusCondition -Condition (-not $aliasJson.Contains([string]$privateValue)) -Message "Managed alias status exposed a private path, hash, user name, or raw resolution detail."
+            }
+        }
+        $evidence.Add([ordered]@{ scenario = "managed-nested-alias-$($aliasCase.name)"; status = [string]$aliasPayload.runtime.managed_files.status })
+    }
+
+    $partial = New-ManagedStatusFixture -Name "managed-partial-then-unresolvable"
+    $partial.manifest.items[0].files = @(
+        [ordered]@{ path = "a-current.txt"; source_sha256 = $partial.content_hash; installed_sha256 = $partial.content_hash },
+        [ordered]@{ path = "broken/SKILL.md"; source_sha256 = $partial.content_hash; installed_sha256 = $partial.content_hash }
+    )
+    Write-StatusText -Path (Join-PathParts $partial.runtime "skills" "project-bootstrap" "a-current.txt") -Text "managed content"
+    [System.IO.File]::Delete($partial.live_path)
+    $partialBrokenTarget = Join-PathParts $fixtureRoot "managed-partial-broken-target"
+    New-Item -ItemType Directory -Force -Path $partialBrokenTarget | Out-Null
+    $partialBrokenAlias = Join-PathParts $partial.runtime "skills" "project-bootstrap" "broken"
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $partialBrokenAlias -Target $partialBrokenTarget | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path $partialBrokenAlias -Target $partialBrokenTarget | Out-Null }
+    [System.IO.Directory]::Delete($partialBrokenTarget, $true)
+    Write-StatusManifest -RuntimeRoot $partial.runtime -Value $partial.manifest
+    $partialPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $partial.runtime)
+    Assert-StatusCondition -Condition ([string]$partialPayload.runtime.managed_files.status -eq "unknown" -and [string]$partialPayload.runtime.managed_files.reason -eq "path-unresolvable" -and [int]$partialPayload.runtime.managed_files.counts.current -eq 0 -and [int]$partialPayload.runtime.managed_files.counts.unknown -eq 2 -and @($partialPayload.runtime.managed_files.problems).Count -eq 0) -Message "Section-wide unknown retained partial managed file results."
+    $evidence.Add([ordered]@{ scenario = "managed-partial-then-unresolvable"; status = [string]$partialPayload.runtime.managed_files.status })
+
+    foreach ($emptyCase in @("directory", "missing", "file", "alias", "unresolvable")) {
+        $empty = New-ManagedStatusFixture -Name ("managed-empty-item-{0}" -f $emptyCase)
+        [System.IO.File]::Delete($empty.live_path)
+        $empty.manifest.items[0].files = @()
+        $emptyRoot = Join-PathParts $empty.runtime "skills" "project-bootstrap"
+        if ($emptyCase -eq "missing") { [System.IO.Directory]::Delete($emptyRoot, $true) }
+        elseif ($emptyCase -eq "file") { [System.IO.Directory]::Delete($emptyRoot, $true); Write-StatusText -Path $emptyRoot -Text "occupied" }
+        elseif ($emptyCase -eq "alias") {
+            [System.IO.Directory]::Delete($emptyRoot, $true)
+            $emptyTarget = Join-PathParts $fixtureRoot "managed-empty-item-alias-target"
+            New-Item -ItemType Directory -Force -Path $emptyTarget | Out-Null
+            if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $emptyRoot -Target $emptyTarget | Out-Null }
+            else { New-Item -ItemType SymbolicLink -Path $emptyRoot -Target $emptyTarget | Out-Null }
+        }
+        elseif ($emptyCase -eq "unresolvable") {
+            [System.IO.Directory]::Delete((Join-PathParts $empty.runtime "skills"), $true)
+            $emptyBrokenTarget = Join-PathParts $fixtureRoot "managed-empty-item-broken-target"
+            New-Item -ItemType Directory -Force -Path $emptyBrokenTarget | Out-Null
+            if ($isWindowsPlatform) { New-Item -ItemType Junction -Path (Join-PathParts $empty.runtime "skills") -Target $emptyBrokenTarget | Out-Null }
+            else { New-Item -ItemType SymbolicLink -Path (Join-PathParts $empty.runtime "skills") -Target $emptyBrokenTarget | Out-Null }
+            [System.IO.Directory]::Delete($emptyBrokenTarget, $true)
+        }
+        Write-StatusManifest -RuntimeRoot $empty.runtime -Value $empty.manifest
+        $emptyPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $empty.runtime)
+        $expectedEmptyStatus = if ($emptyCase -eq "directory") { "current" } elseif ($emptyCase -eq "missing") { "missing" } elseif ($emptyCase -eq "unresolvable") { "unknown" } else { "conflict" }
+        Assert-StatusCondition -Condition ([string]$emptyPayload.runtime.managed_files.status -eq $expectedEmptyStatus -and [int]$emptyPayload.runtime.managed_files.tracked_file_count -eq 0) -Message "Empty managed item root status is incorrect."
+        if ($emptyCase -notin @("directory", "unresolvable")) {
+            Assert-StatusCondition -Condition (@($emptyPayload.runtime.managed_files.problems).Count -eq 1 -and [string]$emptyPayload.runtime.managed_files.problems[0].scope -eq "item" -and [string]$emptyPayload.runtime.managed_files.problems[0].path -eq "skills/project-bootstrap") -Message "Empty managed item root problem is missing."
+        }
+        if ($emptyCase -eq "file") {
+            $emptyText = @((Invoke-Status -RuntimeRoot $empty.runtime -Text).output) -join "`n"
+            Assert-StatusCondition -Condition ($emptyText.Contains("Managed files: conflict") -and $emptyText.Contains("- skills/project-bootstrap: conflict")) -Message "Managed text output omitted an empty item root problem."
+        }
+        $evidence.Add([ordered]@{ scenario = "managed-empty-item-$emptyCase"; status = [string]$emptyPayload.runtime.managed_files.status })
+    }
+
+    $mixed = New-ManagedStatusFixture -Name "managed-mixed-priority" -Content "current"
+    $currentHash = [string]$mixed.content_hash
+    $mixed.manifest.items[0].files = @(
+        [ordered]@{ path = "a-current.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "b-modified.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "c-missing.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "d-conflict.txt"; source_sha256 = ("a" * 64); installed_sha256 = $currentHash }
+    )
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "a-current.txt") -Text "current"
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "b-modified.txt") -Text "changed"
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "d-conflict.txt") -Text "current"
+    [System.IO.File]::Delete($mixed.live_path)
+    Write-StatusManifest -RuntimeRoot $mixed.runtime -Value $mixed.manifest
+    $mixedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $mixed.runtime)
+    Assert-StatusCondition -Condition ([string]$mixedPayload.runtime.managed_files.status -eq "conflict" -and [int]$mixedPayload.runtime.managed_files.counts.current -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.modified -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.missing -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.conflict -eq 1) -Message "Managed mixed-state priority is unstable."
+    Assert-StatusCondition -Condition ((@($mixedPayload.runtime.managed_files.problems | ForEach-Object path) -join ",") -eq "skills/project-bootstrap/b-modified.txt,skills/project-bootstrap/c-missing.txt,skills/project-bootstrap/d-conflict.txt") -Message "Managed problems are not canonically sorted."
+    $evidence.Add([ordered]@{ scenario = "managed-mixed-priority"; status = [string]$mixedPayload.runtime.managed_files.status })
+
+    foreach ($invalidContract in @(
+            [ordered]@{ name = "absolute-path"; mutate = { param($m) $m.items[0].files[0].path = if ($isWindowsPlatform) { "C:/outside.txt" } else { "/outside.txt" } } },
+            [ordered]@{ name = "traversal"; mutate = { param($m) $m.items[0].files[0].path = "../outside.txt" } },
+            [ordered]@{ name = "duplicate-item"; mutate = { param($m) $m.items = @($m.items[0], $m.items[0]) } },
+            [ordered]@{ name = "duplicate-file"; mutate = { param($m) $m.items[0].files = @($m.items[0].files[0], $m.items[0].files[0]) } },
+            [ordered]@{ name = "case-conflict"; mutate = { param($m) $other = [ordered]@{ path = "skill.md"; source_sha256 = $m.items[0].files[0].source_sha256; installed_sha256 = $m.items[0].files[0].installed_sha256 }; $m.items[0].files = @($m.items[0].files[0], $other) } },
+            [ordered]@{ name = "uppercase-hash"; mutate = { param($m) $m.items[0].files[0].installed_sha256 = ([string]$m.items[0].files[0].installed_sha256).ToUpperInvariant() } },
+            [ordered]@{ name = "scalar-file"; mutate = { param($m) $m.items[0].files = @("invalid") } },
+            [ordered]@{ name = "null-file"; mutate = { param($m) $m.items[0].files = @($null) } }
+        )) {
+        $invalidFixture = New-ManagedStatusFixture -Name ("managed-invalid-{0}" -f $invalidContract.name)
+        & $invalidContract.mutate $invalidFixture.manifest
+        Write-StatusManifest -RuntimeRoot $invalidFixture.runtime -Value $invalidFixture.manifest
+        $invalidPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidFixture.runtime)
+        Assert-StatusCondition -Condition ([string]$invalidPayload.runtime.managed_files.status -eq "unknown" -and [string]$invalidPayload.runtime.managed_files.reason -eq "contract-invalid" -and @($invalidPayload.findings | Where-Object code -eq "runtime.managed.contract_invalid").Count -eq 1) -Message "Invalid managed contract did not fail soft."
+        $evidence.Add([ordered]@{ scenario = "managed-invalid-$($invalidContract.name)"; status = [string]$invalidPayload.runtime.managed_files.status })
+    }
+
+    $safeJson = @((Invoke-Status -RuntimeRoot $managedModified.runtime).output) -join "`n"
+    $safeText = @((Invoke-Status -RuntimeRoot $managedModified.runtime -Text).output) -join "`n"
+    foreach ($privateValue in @([System.IO.Path]::GetFullPath($managedModified.runtime), $managedModified.content_hash, $env:USERNAME)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$privateValue)) {
+            Assert-StatusCondition -Condition (-not $safeJson.Contains([string]$privateValue) -and -not $safeText.Contains([string]$privateValue)) -Message "Managed status exposed private path or hash data."
+        }
+    }
+    Assert-StatusCondition -Condition ($safeText.Contains("Managed files: modified") -and $safeText.Contains("- skills/project-bootstrap/SKILL.md: modified")) -Message "Managed text output was not rendered from the payload."
+    $evidence.Add([ordered]@{ scenario = "managed-public-safe-text-json"; status = "current" })
 
     $nullRuntime = Join-PathParts $fixtureRoot "null-provenance"
     $nullManifest = New-CurrentManifest

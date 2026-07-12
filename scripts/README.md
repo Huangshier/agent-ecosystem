@@ -71,6 +71,22 @@ compatibility. Project drift, managed conflicts, and recommended actions are
 not included yet; future sections must extend the same payload model instead of
 reparsing the manifest.
 
+For schema-2 copy runtimes, `runtime.managed_files` checks only files explicitly
+recorded under managed copy items in `install-manifest.json`. It does not scan
+unrecorded files or recursively inventory managed directories. `modified` means
+the live file differs from an unchanged recorded installed/source baseline;
+`conflict` means the manifest already records source/installed divergence or a
+managed path is occupied by non-regular content. Managed file parents must
+resolve exactly to their lexical location inside the owning item root; aliases
+are never followed to hash a target file. Empty managed items still validate
+their item root, so missing, non-directory, linked, or unresolvable roots affect
+the section status even when `tracked_file_count` is zero. Development-link
+runtimes are `unknown` because the source root is not recorded, and status does
+not guess it.
+This inspection is read-only: it does not repair or reinstall the runtime,
+access a source repository, or use the network. `install-report.json` is an
+installation result, not durable current-state authority.
+
 Context gate benchmark:
 
 ```powershell
