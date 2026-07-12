@@ -26,6 +26,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "project_language.ps1")
 $projectLanguageWasProvided = $PSBoundParameters.ContainsKey("ProjectLanguage")
 
 if ($PSBoundParameters.ContainsKey("ProjectRoot")) {
@@ -116,31 +117,11 @@ function Join-CodePoints {
 
 function Resolve-BootstrapProjectLanguage {
     param([string]$Language)
-
-    $zhAliases = @(
-        "zh",
-        "zh-cn",
-        "zh-hans",
-        "chinese",
-        "simplified-chinese",
-        "simplified chinese",
-        (Join-CodePoints @(0x4E2D, 0x6587)),
-        (Join-CodePoints @(0x7B80, 0x4F53, 0x4E2D, 0x6587))
-    )
-
     if ([string]::IsNullOrWhiteSpace($Language)) {
         return "en"
     }
-
-    $normalized = $Language.Trim().ToLowerInvariant()
-    if ($normalized -in @("en", "en-us", "english")) {
-        return "en"
-    }
-    if ($normalized -in $zhAliases) {
-        return "zh-CN"
-    }
-
-    throw "Unsupported project language: $Language. Supported values: en, en-US, English, zh-CN, zh-Hans, Chinese, Chinese aliases for Simplified Chinese."
+    try { return Resolve-ProjectLanguageCode -Language $Language -AllowAliases }
+    catch { throw "Unsupported project language: $Language. Supported values: en, en-US, English, zh-CN, zh-Hans, Chinese, Chinese aliases for Simplified Chinese." }
 }
 
 # Read-BootstrapLockLanguage: 读取既有 lock 的项目语言；参数 LockPath 为 hub.lock.json 路径。
@@ -172,25 +153,8 @@ function Read-BootstrapLockLanguage {
 # Read-ProjectGuideLanguage: 读取 .agents/AGENTS.md 的语言声明；参数 ProjectPath 为已解析的项目目录。
 function Read-ProjectGuideLanguage {
     param([string]$ProjectPath)
-
-    $guidePath = Join-PathParts $ProjectPath ".agents" "AGENTS.md"
-    if (-not (Test-Path -LiteralPath $guidePath -PathType Leaf)) {
-        return ""
-    }
-
-    $guideText = Get-Content -LiteralPath $guidePath -Raw
-    $hasEnglishMarker = $guideText -match '(?im)^\s*Project memory language:\s*English\.\s*$'
-    $hasChineseMarker = $guideText -match '(?im)^\s*项目记忆语言：\s*简体中文。\s*$'
-    if ($hasEnglishMarker -and $hasChineseMarker) {
-        throw "Conflicting project memory language declarations in $guidePath. No bootstrap files were written."
-    }
-    if ($hasChineseMarker) {
-        return "zh-CN"
-    }
-    if ($hasEnglishMarker) {
-        return "en"
-    }
-    return ""
+    try { return Read-ProjectGuideLanguageCode -ProjectPath $ProjectPath }
+    catch { throw "Conflicting project memory language declarations in the project guide. No bootstrap files were written." }
 }
 
 function Test-ProtectedMemoryPath {

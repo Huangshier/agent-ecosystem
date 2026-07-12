@@ -4,6 +4,13 @@ Bootstrap and maintain project-level `.agents` structure from a shared knowledge
 
 ## Main Files
 - `SKILL.md`: workflow and usage entry
+- `scripts/check_hub_lock.ps1 -Json`: fail-soft read-only lock status contract.
+  It emits schema-1 `in-sync`, `drift`, or `unknown` results with stable reason
+  codes and resolved `en` / `zh-CN` language, without paths, remote identity,
+  branch, commit, template hash, or raw Git errors. Text mode retains its
+  historical nonzero drift semantics.
+- `scripts/project_language.ps1`: shared bootstrap and lock-checker language
+  normalization and project-guide declaration reader.
 - `scripts/init_hub.ps1`: initialize global knowledge-hub template repo and minimal runtime scripts
 - `scripts/bootstrap_project.ps1`: install/update project `.agents` scaffold; auto-initializes a missing hub template set from bundled assets
 - `scripts/set_project_language.ps1`: write first-session project memory language scaffolds when an agent/workflow supplies the language

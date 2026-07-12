@@ -1,7 +1,11 @@
 [CmdletBinding()]
 param(
     [string]$RuntimeDir = (Join-Path $HOME ".agents"),
-    [switch]$Json
+    [string]$ProjectDir = "",
+    [switch]$Json,
+    [Parameter(DontShow = $true)][string]$LockHelperPath = "",
+    [Parameter(DontShow = $true)][string]$UpgradeHelperPath = "",
+    [Parameter(DontShow = $true)][string]$DiagnoseHelperPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,7 +59,183 @@ function New-RuntimePayload {
             }
             skills = @()
         }
+        project = [ordered]@{
+            status = "unknown"
+            reason = "not-requested"
+            project_language = $null
+            baseline = [ordered]@{ status = "unknown"; reason = "not-requested" }
+            memory = [ordered]@{
+                status = "unknown"
+                migration_finding_count = 0
+                refresh_finding_count = 0
+                diagnostic_warning_count = 0
+                finding_codes = @()
+            }
+        }
         findings = @()
+    }
+}
+
+function Invoke-ProjectJsonHelper {
+    param([string]$ScriptPath, [hashtable]$Parameters)
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) { return $null }
+    try {
+        $global:LASTEXITCODE = 0
+        $output = @(& $ScriptPath @Parameters 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) { return $null }
+        return ($output -join [Environment]::NewLine) | ConvertFrom-Json
+    } catch { return $null }
+}
+
+function Test-ProjectHelperObject {
+    param([AllowNull()][object]$Value)
+    return $null -ne $Value -and $Value -isnot [System.Array] -and $Value -isnot [string] -and $Value -isnot [ValueType]
+}
+
+function Test-ProjectHelperInteger {
+    param([AllowNull()][object]$Value)
+    return $Value -is [sbyte] -or $Value -is [byte] -or $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64]
+}
+
+function Reset-ProjectUnavailable {
+    param([object]$Payload)
+    $Payload.project.status = "unknown"
+    $Payload.project.reason = "baseline-helper-unavailable"
+    $Payload.project.project_language = $null
+    $Payload.project.baseline.status = "unknown"
+    $Payload.project.baseline.reason = "helper-unavailable"
+    $Payload.project.memory.status = "unknown"
+    $Payload.project.memory.migration_finding_count = 0
+    $Payload.project.memory.refresh_finding_count = 0
+    $Payload.project.memory.diagnostic_warning_count = 0
+    $Payload.project.memory.finding_codes = @()
+}
+
+function Reset-ProjectMemoryUnavailable {
+    param([object]$Payload)
+    $Payload.project.status = "unknown"
+    $Payload.project.reason = "memory-helper-unavailable"
+    $Payload.project.memory.status = "unknown"
+    $Payload.project.memory.migration_finding_count = 0
+    $Payload.project.memory.refresh_finding_count = 0
+    $Payload.project.memory.diagnostic_warning_count = 0
+    $Payload.project.memory.finding_codes = @()
+}
+
+function Get-ValidatedMemoryFindingCodes {
+    param([AllowNull()][object]$HelperPayload, [string[]]$AllowedCodes)
+    if (-not (Test-ProjectHelperObject -Value $HelperPayload)) { return $null }
+    $findingsProperty = $HelperPayload.PSObject.Properties["findings"]
+    if ($null -eq $findingsProperty -or $findingsProperty.Value -isnot [System.Array]) { return $null }
+    $codes = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($finding in $findingsProperty.Value) {
+        if (-not (Test-ProjectHelperObject -Value $finding)) { return $null }
+        $codeProperty = $finding.PSObject.Properties["code"]
+        $code = if ($null -eq $codeProperty) { $null } else { $codeProperty.Value }
+        if ($code -isnot [string] -or [string]::IsNullOrWhiteSpace($code)) { return $null }
+        if ($code -in $AllowedCodes) { $codes.Add($code) }
+    }
+    return [ordered]@{ codes = @($codes.ToArray()) }
+}
+
+function Set-ProjectStatus {
+    param([object]$Payload, [string]$Root)
+    if ([string]::IsNullOrWhiteSpace($Root)) { return }
+
+    $repoRoot = Split-Path -Parent $scriptDir
+    $lockScript = if ([string]::IsNullOrWhiteSpace($LockHelperPath)) { Join-Path $repoRoot "skills/project-bootstrap/scripts/check_hub_lock.ps1" } else { $LockHelperPath }
+    $upgradeScript = if ([string]::IsNullOrWhiteSpace($UpgradeHelperPath)) { Join-Path $repoRoot "skills/project-bootstrap/scripts/memory_upgrade.ps1" } else { $UpgradeHelperPath }
+    $diagnoseScript = if ([string]::IsNullOrWhiteSpace($DiagnoseHelperPath)) { Join-Path $repoRoot "skills/memory-governance/scripts/memory_diagnose.ps1" } else { $DiagnoseHelperPath }
+    $lockPayload = Invoke-ProjectJsonHelper -ScriptPath $lockScript -Parameters @{ ProjectDir = @($Root); Json = $true }
+    $lockSchemaProperty = if (Test-ProjectHelperObject -Value $lockPayload) { $lockPayload.PSObject.Properties["schema_version"] } else { $null }
+    $lockResultsProperty = if (Test-ProjectHelperObject -Value $lockPayload) { $lockPayload.PSObject.Properties["results"] } else { $null }
+    if (-not (Test-ProjectHelperObject -Value $lockPayload) -or $null -eq $lockSchemaProperty -or $null -eq $lockResultsProperty -or
+        -not (Test-ProjectHelperInteger -Value $lockSchemaProperty.Value) -or [int64]$lockSchemaProperty.Value -ne 1 -or
+        $lockResultsProperty.Value -isnot [System.Array] -or $lockResultsProperty.Value.Count -ne 1 -or
+        -not (Test-ProjectHelperObject -Value $lockResultsProperty.Value[0])) {
+        Reset-ProjectUnavailable -Payload $Payload
+        return
+    }
+
+    $lockResult = $lockResultsProperty.Value[0]
+    $lockStatusProperty = $lockResult.PSObject.Properties["status"]
+    $lockReasonProperty = $lockResult.PSObject.Properties["reason"]
+    $lockStatus = if ($null -eq $lockStatusProperty) { $null } else { $lockStatusProperty.Value }
+    $lockReason = if ($null -eq $lockReasonProperty) { $null } else { $lockReasonProperty.Value }
+    $lockLanguageProperty = $lockResult.PSObject.Properties["project_language"]
+    $allowedReasonsByStatus = @{
+        "in-sync" = @("hub-lock-in-sync")
+        "drift" = @("hub-commit-drift", "template-tree-drift", "template-hash-missing")
+        "unknown" = @(
+            "missing-lock", "invalid-lock", "project-not-found", "invalid-hub-dir", "hub-not-git", "git-unavailable",
+            "hub-remote-drift", "hub-branch-drift", "locked-hub-dirty", "current-hub-dirty", "metadata-unresolved",
+            "project-language-unresolved", "project-language-conflict", "internal-error"
+        )
+    }
+    $lockLanguage = if ($null -eq $lockLanguageProperty) { $null } else { $lockLanguageProperty.Value }
+    $hasValidStatusReason = $lockStatus -is [string] -and $allowedReasonsByStatus.ContainsKey($lockStatus) -and
+        $lockReason -is [string] -and $lockReason -in $allowedReasonsByStatus[$lockStatus]
+    $hasValidLanguage = $null -ne $lockLanguageProperty -and
+        ($null -eq $lockLanguage -or ($lockLanguage -is [string] -and $lockLanguage -in @("en", "zh-CN")))
+    $hasRequiredLanguage = $lockStatus -eq "unknown" -or $null -ne $lockLanguage
+    if (-not $hasValidStatusReason -or -not $hasValidLanguage -or -not $hasRequiredLanguage) {
+        Reset-ProjectUnavailable -Payload $Payload
+        return
+    }
+    if ($null -ne $lockLanguage) { $Payload.project.project_language = [string]$lockLanguage }
+    if ($lockStatus -eq "in-sync") {
+        $Payload.project.baseline.status = "current"
+        $Payload.project.baseline.reason = "hub-lock-in-sync"
+    } elseif ($lockStatus -eq "drift") {
+        $Payload.project.baseline.status = "optional-refresh"
+        $Payload.project.baseline.reason = "template-baseline-drift"
+    } else {
+        $Payload.project.reason = [string]$lockReason
+        $Payload.project.baseline.reason = $Payload.project.reason
+        return
+    }
+
+    $upgrade = Invoke-ProjectJsonHelper -ScriptPath $upgradeScript -Parameters @{ ProjectDir = $Root; Mode = "Analyze"; Json = $true }
+    $diagnose = Invoke-ProjectJsonHelper -ScriptPath $diagnoseScript -Parameters @{ ProjectRoot = $Root; Json = $true }
+    $migrationCodes = @(
+        "oversized_memory", "timeline_accumulation", "durable_tasks_in_plan", "notes_contains_session_state",
+        "large_memory_file", "process_contains_history", "plan_may_duplicate_tasks", "notes_may_contain_session_log"
+    )
+    $refreshCodes = @("missing_scaffold", "missing_claude_shim", "incomplete_claude_shim", "missing_memory_file", "missing_agents_dir")
+    $diagnosticCodes = @(
+        "hot_memory_process_long", "hot_memory_plan_long", "process_completed_list_growth", "context_metadata_missing",
+        "context_missing_discovery_metadata", "directory_missing_index", "missing_active_spec_ref", "spec_pointer_mismatch"
+    )
+    $allowedFindingCodes = @($migrationCodes + $refreshCodes + $diagnosticCodes)
+    $upgradeCodes = Get-ValidatedMemoryFindingCodes -HelperPayload $upgrade -AllowedCodes $allowedFindingCodes
+    $diagnoseCodes = Get-ValidatedMemoryFindingCodes -HelperPayload $diagnose -AllowedCodes $allowedFindingCodes
+    if ($null -eq $upgradeCodes -or $null -eq $diagnoseCodes) {
+        Reset-ProjectMemoryUnavailable -Payload $Payload
+        return
+    }
+    $allCodes = @($upgradeCodes.codes) + @($diagnoseCodes.codes)
+    $Payload.project.memory.migration_finding_count = @($allCodes | Where-Object { $_ -in $migrationCodes }).Count
+    $Payload.project.memory.refresh_finding_count = @($allCodes | Where-Object { $_ -in $refreshCodes }).Count
+    $Payload.project.memory.diagnostic_warning_count = @($allCodes | Where-Object { $_ -in $diagnosticCodes }).Count
+    $Payload.project.memory.finding_codes = @($allCodes | Sort-Object -Unique)
+
+    if ($Payload.project.memory.migration_finding_count -gt 0) {
+        $Payload.project.memory.status = "migration-required"
+        $Payload.project.status = "migration-required"
+        $Payload.project.reason = "structural-memory-findings"
+    } elseif ($Payload.project.memory.refresh_finding_count -gt 0) {
+        $Payload.project.memory.status = "optional-refresh"
+        $Payload.project.status = "optional-refresh"
+        $Payload.project.reason = "memory-scaffold-refresh"
+    } else {
+        $Payload.project.memory.status = "current"
+        $Payload.project.status = [string]$Payload.project.baseline.status
+        $Payload.project.reason = if ($Payload.project.status -eq "current") { "in-sync" } else { "template-baseline-drift" }
+    }
+    if ($Payload.project.baseline.status -eq "optional-refresh" -and $Payload.project.status -eq "current") {
+        $Payload.project.status = "optional-refresh"
+        $Payload.project.reason = "template-baseline-drift"
     }
 }
 
@@ -790,6 +970,14 @@ function Write-RuntimeStatusText {
         $mode = if ($null -eq $skill.link_mode) { "unknown" } else { [string]$skill.link_mode }
         Write-Output ("- {0}: {1} ({2})" -f [string]$skill.skill, [string]$skill.status, $mode)
     }
+    Write-Output "Project: $([string]$Payload.project.status)"
+    Write-Output "Project reason: $([string]$Payload.project.reason)"
+    Write-Output "Project language: $(if ($null -eq $Payload.project.project_language) { 'unknown' } else { [string]$Payload.project.project_language })"
+    Write-Output "Project baseline: $([string]$Payload.project.baseline.status)"
+    Write-Output "Project memory: $([string]$Payload.project.memory.status)"
+    Write-Output "Migration findings: $([int]$Payload.project.memory.migration_finding_count)"
+    Write-Output "Refresh findings: $([int]$Payload.project.memory.refresh_finding_count)"
+    Write-Output "Diagnostic warnings: $([int]$Payload.project.memory.diagnostic_warning_count)"
     Write-Output "Bridge findings: $(@($Payload.findings | Where-Object { [string]$_.code -like 'bridge.*' }).Count)"
     Write-Output "Findings: $(@($Payload.findings).Count)"
     foreach ($finding in @($Payload.findings)) {
@@ -799,6 +987,8 @@ function Write-RuntimeStatusText {
 
 $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeDir)
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
+try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir }
+catch { Reset-ProjectUnavailable -Payload $statusPayload }
 if ($Json.IsPresent) {
     $statusPayload | ConvertTo-Json -Depth 8
 }

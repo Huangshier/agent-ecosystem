@@ -47,6 +47,7 @@ Read-only runtime and Agent skill bridge status:
 ```powershell
 .\status.ps1
 .\status.ps1 -RuntimeDir <runtime>
+.\status.ps1 -RuntimeDir <runtime> -ProjectDir <project-root>
 .\status.ps1 -RuntimeDir <runtime> -Json
 ```
 
@@ -67,9 +68,14 @@ manifest; it does not claim that manually created links do not exist. Bridge
 records report `current`, `stale`, `broken`, `conflict`, or `unknown` without
 exposing runtime, source, target, manifest, or home-directory paths. Bridge
 health proves only the recorded filesystem discovery chain, not complete client
-compatibility. Project drift, managed conflicts, and recommended actions are
-not included yet; future sections must extend the same payload model instead of
-reparsing the manifest.
+compatibility. Project status is opt-in through `-ProjectDir`; without it,
+`project.status` is `unknown` with reason `not-requested`, and the command never
+discovers or scans a project from the current directory. The project section
+combines the read-only hub-lock machine contract, memory upgrade Analyze mode,
+and memory diagnostics. It reports only stable status, reason, language,
+counts, and finding codes; project paths, hub Git identity, hashes, and raw
+helper output are never copied into the payload. Recommended actions are not
+included yet.
 
 For schema-2 copy runtimes, `runtime.managed_files` checks only files explicitly
 recorded under managed copy items in `install-manifest.json`. It does not scan

@@ -4,6 +4,8 @@ function Invoke-RuntimeStatusFixtureChecks {
         [Parameter(Mandatory = $true)][string]$ScratchRoot
     )
 
+    $isWindowsPlatform = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
+
     function Assert-StatusCondition {
         param(
             [Parameter(Mandatory = $true)][bool]$Condition,
@@ -100,11 +102,87 @@ function Invoke-RuntimeStatusFixtureChecks {
     function Invoke-Status {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
-            [switch]$Text
+            [string]$ProjectRoot = "",
+            [switch]$Text,
+            [string]$LockHelper = "",
+            [string]$UpgradeHelper = "",
+            [string]$DiagnoseHelper = ""
         )
         $arguments = @("-RuntimeDir", $RuntimeRoot)
+        if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) { $arguments += @("-ProjectDir", $ProjectRoot) }
+        if ($LockHelper) { $arguments += @("-LockHelperPath", $LockHelper) }
+        if ($UpgradeHelper) { $arguments += @("-UpgradeHelperPath", $UpgradeHelper) }
+        if ($DiagnoseHelper) { $arguments += @("-DiagnoseHelperPath", $DiagnoseHelper) }
         if (-not $Text.IsPresent) { $arguments += "-Json" }
         return Invoke-IsolatedPowerShellScript -ScriptPath $statusScript -Arguments $arguments
+    }
+
+    function New-StatusHelperFixture {
+        param([string]$Name, [string]$Kind, [string]$Json)
+        $path = Join-PathParts $fixtureRoot "helpers" ("{0}.ps1" -f $Name)
+        $parameters = switch ($Kind) {
+            "lock" { 'param([string[]]$ProjectDir, [switch]$Json)' }
+            "upgrade" { 'param([string]$ProjectDir, [string]$Mode, [switch]$Json)' }
+            default { 'param([string]$ProjectRoot, [switch]$Json)' }
+        }
+        Write-StatusText -Path $path -Text ($parameters + "`nWrite-Output @'`n" + $Json + "`n'@")
+        return $path
+    }
+
+    function Get-ProjectFixtureTreeState {
+        param([string]$Root)
+        return @(
+            Get-ChildItem -LiteralPath $Root -Recurse -File -Force |
+                Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+                Sort-Object FullName | ForEach-Object {
+                    "{0}|{1}" -f (ConvertTo-DisplayPath -Path $_.FullName -Root $Root), (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+                }
+        )
+    }
+
+    function Get-ProjectTemplateHash {
+        param([string]$HubRoot, [string]$Language)
+        $records = @()
+        foreach ($entry in @("project-root", "project-agent")) {
+            $root = Join-PathParts $HubRoot "templates" "languages" $Language $entry
+            if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+            Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName | ForEach-Object {
+                $relative = $_.FullName.Substring($root.Length).TrimStart([char[]]"\/") -replace "\\", "/"
+                $records += ("{0}/{1}:{2}" -f $entry, $relative, (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())
+            }
+        }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($records -join "`n")))).Replace("-", "").ToLowerInvariant() }
+        finally { $sha.Dispose() }
+    }
+
+    function New-ProjectStatusFixture {
+        param([string]$Name, [string]$Language = "en")
+        $root = Join-PathParts $fixtureRoot "project-$Name"
+        $hub = Join-PathParts $fixtureRoot "hub-$Name"
+        Write-StatusText -Path (Join-PathParts $hub "templates" "languages" $Language "project-root" "AGENTS.md") -Text "template"
+        & git init -q -b main $hub
+        & git -C $hub config user.name fixture
+        & git -C $hub config user.email fixture@example.invalid
+        & git -C $hub remote add origin https://example.invalid/hub.git
+        & git -C $hub add .
+        & git -C $hub commit -q -m fixture
+        $commit = @(& git -C $hub rev-parse HEAD) -join ""
+
+        foreach ($file in @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md", ".agents/notes.md", ".agents/context/README.md", ".agents/commands/README.md")) {
+            $content = if ($file -eq ".agents/AGENTS.md") {
+                if ($Language -eq "zh-CN") { -join (@(0x9879,0x76EE,0x8BB0,0x5FC6,0x8BED,0x8A00,0xFF1A,0x7B80,0x4F53,0x4E2D,0x6587,0x3002) | ForEach-Object { [char]$_ }) } else { "Project memory language: English." }
+            } else { "fixture" }
+            Write-StatusText -Path (Join-PathParts $root $file) -Text $content
+        }
+        Write-StatusText -Path (Join-Path $root "CLAUDE.md") -Text "@AGENTS.md`n@.agents/AGENTS.md`n@.agents/process.txt`n@.agents/plan.md`n@.agents/context/README.md`n@.agents/commands/README.md"
+        New-Item -ItemType Directory -Force -Path (Join-PathParts $root "docs" "specs" "_templates") | Out-Null
+        $lock = [ordered]@{
+            schema_version = 1; hub_dir = $hub; hub_remote = "https://example.invalid/hub.git"; hub_branch = "main"; hub_commit = $commit
+            hub_dirty = $false; project_language = $Language; template_tree_hash_sha256 = Get-ProjectTemplateHash $hub $Language
+        }
+        Write-StatusText -Path (Join-PathParts $root ".agents" "hub.lock.json") -Text ($lock | ConvertTo-Json)
+        return [ordered]@{ root = $root; hub = $hub; lock = $lock }
     }
 
     function Read-StatusPayload {
@@ -731,6 +809,192 @@ function Invoke-RuntimeStatusFixtureChecks {
     $priorityJson = @((Invoke-Status -RuntimeRoot $priorityBridge.runtime).output) -join "`n"
     Assert-StatusCondition -Condition (-not $priorityJson.Contains([System.IO.Path]::GetFullPath($priorityBridge.target_root))) -Message "Bridge JSON output leaked a target path."
     $evidence.Add([ordered]@{ scenario = "bridge-priority-public-safe"; status = [string]$priorityPayload.bridge.status })
+
+    $notRequested = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime)
+    Assert-StatusCondition -Condition ([string]$notRequested.project.status -eq "unknown" -and [string]$notRequested.project.reason -eq "not-requested") -Message "Omitted ProjectDir did not remain not-requested."
+    $evidence.Add([ordered]@{ scenario = "project-not-requested"; status = [string]$notRequested.project.status })
+
+    $currentProject = New-ProjectStatusFixture -Name "current"
+    $projectBefore = @(Get-ProjectFixtureTreeState $currentProject.root)
+    $hubBefore = @(Get-ProjectFixtureTreeState $currentProject.hub)
+    $currentProjectText = @((Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root).output) -join "`n"
+    $currentProjectPayload = $currentProjectText | ConvertFrom-Json
+    Assert-StatusCondition -Condition ([string]$currentProjectPayload.project.status -eq "current" -and [string]$currentProjectPayload.project.project_language -eq "en") -Message "Clean project baseline and memory did not report current."
+    Assert-StatusCondition -Condition ((@($projectBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $currentProject.root) -join "`n") -and (@($hubBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $currentProject.hub) -join "`n")) -Message "Project status modified project or hub files."
+    foreach ($privateValue in @($currentProject.root, $currentProject.hub, "https://example.invalid/hub.git", [Environment]::UserName, [string]$currentProject.lock.hub_commit, [string]$currentProject.lock.template_tree_hash_sha256)) {
+        Assert-StatusCondition -Condition (-not $currentProjectText.Contains($privateValue)) -Message "Project JSON leaked private helper data."
+    }
+    $evidence.Add([ordered]@{ scenario = "project-current-read-only-public-safe"; status = [string]$currentProjectPayload.project.status })
+
+    $legacyProject = New-ProjectStatusFixture -Name "legacy"
+    $legacyProject.lock.Remove("template_tree_hash_sha256")
+    Write-StatusText -Path (Join-PathParts $legacyProject.root ".agents" "hub.lock.json") -Text ($legacyProject.lock | ConvertTo-Json)
+    $legacyPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $legacyProject.root)
+    Assert-StatusCondition -Condition ([string]$legacyPayload.project.status -eq "optional-refresh" -and [string]$legacyPayload.project.baseline.status -eq "optional-refresh") -Message "Legacy lock without template hash did not report optional-refresh."
+    $evidence.Add([ordered]@{ scenario = "project-legacy-lock-refresh"; status = [string]$legacyPayload.project.status })
+
+    $migrationProject = New-ProjectStatusFixture -Name "migration"
+    Write-StatusText -Path (Join-PathParts $migrationProject.root ".agents" "notes.md") -Text "todo next step"
+    $migrationPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $migrationProject.root)
+    Assert-StatusCondition -Condition ([string]$migrationPayload.project.status -eq "migration-required" -and [int]$migrationPayload.project.memory.migration_finding_count -gt 0 -and @($migrationPayload.project.memory.finding_codes) -contains "notes_contains_session_state") -Message "Structural memory finding did not report migration-required."
+    $evidence.Add([ordered]@{ scenario = "project-memory-migration"; status = [string]$migrationPayload.project.status })
+
+    $missingScaffoldProject = New-ProjectStatusFixture -Name "missing-scaffold"
+    Remove-Item -LiteralPath (Join-PathParts $missingScaffoldProject.root ".agents" "notes.md")
+    $refreshPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $missingScaffoldProject.root)
+    Assert-StatusCondition -Condition ([string]$refreshPayload.project.status -eq "optional-refresh" -and [int]$refreshPayload.project.memory.refresh_finding_count -gt 0) -Message "Missing scaffold did not report optional-refresh."
+    $evidence.Add([ordered]@{ scenario = "project-missing-scaffold-refresh"; status = [string]$refreshPayload.project.status })
+
+    $missingLockProject = New-ProjectStatusFixture -Name "missing-lock"
+    Remove-Item -LiteralPath (Join-PathParts $missingLockProject.root ".agents" "hub.lock.json")
+    Write-StatusText -Path (Join-PathParts $missingLockProject.root ".agents" "notes.md") -Text "todo next step"
+    $missingLockPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $missingLockProject.root)
+    Assert-StatusCondition -Condition ([string]$missingLockPayload.project.status -eq "unknown" -and [string]$missingLockPayload.project.reason -eq "missing-lock") -Message "Missing lock was not dominant unknown."
+    $evidence.Add([ordered]@{ scenario = "project-missing-lock-unknown"; status = [string]$missingLockPayload.project.status })
+
+    $languageProject = New-ProjectStatusFixture -Name "zh" -Language "zh-CN"
+    $languagePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $languageProject.root)
+    Assert-StatusCondition -Condition ([string]$languagePayload.project.project_language -eq "zh-CN") -Message "zh-CN template baseline was not selected."
+    $languageProject.lock.Remove("project_language")
+    Write-StatusText -Path (Join-PathParts $languageProject.root ".agents" "hub.lock.json") -Text ($languageProject.lock | ConvertTo-Json)
+    $guideLanguagePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $languageProject.root)
+    Assert-StatusCondition -Condition ([string]$guideLanguagePayload.project.project_language -eq "zh-CN") -Message "Project guide language fallback was not used."
+    $languageProject.lock.project_language = "en"
+    Write-StatusText -Path (Join-PathParts $languageProject.root ".agents" "hub.lock.json") -Text ($languageProject.lock | ConvertTo-Json)
+    $conflictLanguagePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $languageProject.root)
+    Assert-StatusCondition -Condition ([string]$conflictLanguagePayload.project.status -eq "unknown" -and $null -eq $conflictLanguagePayload.project.project_language) -Message "Conflicting project language did not report unknown/null."
+    $evidence.Add([ordered]@{ scenario = "project-language-resolution"; status = [string]$conflictLanguagePayload.project.status })
+
+    $templateDriftProject = New-ProjectStatusFixture -Name "template-drift"
+    $templateDriftProject.lock.template_tree_hash_sha256 = "0" * 64
+    Write-StatusText -Path (Join-PathParts $templateDriftProject.root ".agents" "hub.lock.json") -Text ($templateDriftProject.lock | ConvertTo-Json)
+    $templateDriftPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $templateDriftProject.root)
+    Assert-StatusCondition -Condition ([string]$templateDriftPayload.project.status -eq "optional-refresh") -Message "Template hash drift did not report optional-refresh."
+    Write-StatusText -Path (Join-PathParts $templateDriftProject.root ".agents" "notes.md") -Text "todo next step"
+    $driftMigrationPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $templateDriftProject.root)
+    Assert-StatusCondition -Condition ([string]$driftMigrationPayload.project.status -eq "migration-required") -Message "Migration finding did not dominate baseline drift."
+    $evidence.Add([ordered]@{ scenario = "project-baseline-drift-migration-priority"; status = [string]$driftMigrationPayload.project.status })
+
+    $diagnosticProject = New-ProjectStatusFixture -Name "diagnostic"
+    Write-StatusText -Path (Join-PathParts $diagnosticProject.root ".agents" "context" "detail.md") -Text "fixture"
+    $diagnosticPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $diagnosticProject.root)
+    Assert-StatusCondition -Condition ([string]$diagnosticPayload.project.status -eq "current" -and [int]$diagnosticPayload.project.memory.migration_finding_count -eq 0 -and [int]$diagnosticPayload.project.memory.diagnostic_warning_count -gt 0) -Message "Diagnostic-only finding changed project drift status."
+    $evidence.Add([ordered]@{ scenario = "project-diagnostic-only"; status = [string]$diagnosticPayload.project.status })
+
+    $validLockHelper = New-StatusHelperFixture -Name "lock-valid" -Kind "lock" -Json '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}'
+    $validUpgradeHelper = New-StatusHelperFixture -Name "upgrade-valid" -Kind "upgrade" -Json '{"findings":[]}'
+    $validDiagnoseHelper = New-StatusHelperFixture -Name "diagnose-valid" -Kind "diagnose" -Json '{"findings":[]}'
+    $separator = [string][char]92
+    $maliciousValue = "C:{0}Users{0}private-{1}{0}data" -f $separator, "user"
+    $lockContractCases = @(
+        @{ name = "schema-string"; json = '{"schema_version":"bad","results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}' },
+        @{ name = "results-null"; json = '{"schema_version":1,"results":null}' },
+        @{ name = "results-empty"; json = '{"schema_version":1,"results":[]}' },
+        @{ name = "results-multiple"; json = '{"schema_version":1,"results":[{},{}]}' },
+        @{ name = "result-scalar"; json = '{"schema_version":1,"results":[7]}' },
+        @{ name = "result-array"; json = '{"schema_version":1,"results":[[]]}' },
+        @{ name = "unknown-status"; json = '{"schema_version":1,"results":[{"status":"unsafe","reason":"hub-lock-in-sync","project_language":"en"}]}' },
+        @{ name = "unknown-reason"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"__VALUE__","project_language":null}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) },
+        @{ name = "invalid-language"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"private"}]}' },
+        @{ name = "in-sync-missing-lock-null"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"missing-lock","project_language":null}]}' },
+        @{ name = "in-sync-language-null"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":null}]}' },
+        @{ name = "drift-invalid-lock-en"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"invalid-lock","project_language":"en"}]}' },
+        @{ name = "unknown-in-sync-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"hub-lock-in-sync","project_language":null}]}' },
+        @{ name = "unknown-template-drift-en"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"template-tree-drift","project_language":"en"}]}' }
+    )
+    foreach ($case in $lockContractCases) {
+        $helper = New-StatusHelperFixture -Name ("lock-{0}" -f $case.name) -Kind "lock" -Json $case.json
+        foreach ($textMode in @($false, $true)) {
+            $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -Text:$textMode -LockHelper $helper -UpgradeHelper $validUpgradeHelper -DiagnoseHelper $validDiagnoseHelper
+            Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0) -Message "Malformed lock helper $($case.name) did not fail soft."
+            $output = @($run.output) -join "`n"
+            Assert-StatusCondition -Condition (-not $output.Contains($maliciousValue) -and -not $output.Contains("ParameterBinding") -and -not $output.Contains("Cannot bind argument")) -Message "Malformed lock helper $($case.name) leaked untrusted content."
+            if (-not $textMode) {
+                $payload = $output | ConvertFrom-Json
+                Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "baseline-helper-unavailable" -and $null -eq $payload.project.project_language -and [string]$payload.project.baseline.status -eq "unknown" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and [string]$payload.project.memory.status -eq "unknown" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and [int]$payload.project.memory.refresh_finding_count -eq 0 -and [int]$payload.project.memory.diagnostic_warning_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Malformed lock helper $($case.name) returned the wrong fallback."
+            }
+        }
+        $evidence.Add([ordered]@{ scenario = "project-lock-contract-$($case.name)"; status = "unknown" })
+    }
+
+    $validLockCombinations = @(
+        @{ name = "in-sync-en"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}'; expected = "current"; language = "en" },
+        @{ name = "in-sync-zh"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"zh-CN"}]}'; expected = "current"; language = "zh-CN" },
+        @{ name = "commit-drift-en"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"hub-commit-drift","project_language":"en"}]}'; expected = "optional-refresh"; language = "en" },
+        @{ name = "tree-drift-zh"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"template-tree-drift","project_language":"zh-CN"}]}'; expected = "optional-refresh"; language = "zh-CN" },
+        @{ name = "missing-lock-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"missing-lock","project_language":null}]}'; expected = "unknown"; language = $null },
+        @{ name = "language-conflict-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"project-language-conflict","project_language":null}]}'; expected = "unknown"; language = $null }
+    )
+    foreach ($case in $validLockCombinations) {
+        $helper = New-StatusHelperFixture -Name ("lock-valid-{0}" -f $case.name) -Kind "lock" -Json $case.json
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -LockHelper $helper -UpgradeHelper $validUpgradeHelper -DiagnoseHelper $validDiagnoseHelper)
+        Assert-StatusCondition -Condition ([string]$payload.project.status -eq $case.expected -and $payload.project.project_language -eq $case.language) -Message "Valid lock helper combination $($case.name) changed mapping."
+        $evidence.Add([ordered]@{ scenario = "project-lock-combination-$($case.name)"; status = [string]$payload.project.status })
+    }
+
+    $catchUpgradeHelper = Join-PathParts $fixtureRoot "helpers" "memory-final-catch.ps1"
+    Write-StatusText -Path $catchUpgradeHelper -Text @'
+param([string]$ProjectDir, [string]$Mode, [switch]$Json)
+function global:Sort-Object { throw "private final aggregation failure" }
+Write-Output '{"findings":[{"code":"notes_contains_session_state"},{"code":"missing_scaffold"},{"code":"hot_memory_plan_long"}]}'
+'@
+    foreach ($textMode in @($false, $true)) {
+        $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -Text:$textMode -LockHelper $validLockHelper -UpgradeHelper $catchUpgradeHelper -DiagnoseHelper $validDiagnoseHelper
+        Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0) -Message "Final project aggregation catch did not fail soft."
+        $output = @($run.output) -join "`n"
+        Assert-StatusCondition -Condition (-not $output.Contains("private final aggregation failure") -and -not $output.Contains("ParameterBinding") -and -not $output.Contains("Cannot bind argument")) -Message "Final project aggregation catch leaked exception content."
+        if (-not $textMode) {
+            $payload = $output | ConvertFrom-Json
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "baseline-helper-unavailable" -and $null -eq $payload.project.project_language -and [string]$payload.project.baseline.status -eq "unknown" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and [string]$payload.project.memory.status -eq "unknown" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and [int]$payload.project.memory.refresh_finding_count -eq 0 -and [int]$payload.project.memory.diagnostic_warning_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Final project aggregation catch retained partial project state."
+        }
+    }
+    $evidence.Add([ordered]@{ scenario = "project-final-catch-full-reset"; status = "unknown" })
+
+    $memoryContractCases = @(
+        @{ name = "top-null"; json = 'null' }, @{ name = "top-scalar"; json = '7' }, @{ name = "top-array"; json = '[]' },
+        @{ name = "findings-missing"; json = '{}' }, @{ name = "findings-null"; json = '{"findings":null}' },
+        @{ name = "finding-scalar"; json = '{"findings":[7]}' },
+        @{ name = "unknown-code"; json = '{"findings":[{"code":"__VALUE__"}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) },
+        @{ name = "mixed-codes"; json = '{"findings":[{"code":"notes_contains_session_state"},{"code":"__VALUE__"}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) }
+    )
+    foreach ($case in $memoryContractCases) {
+        $helper = New-StatusHelperFixture -Name ("memory-{0}" -f $case.name) -Kind "upgrade" -Json $case.json
+        $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -LockHelper $validLockHelper -UpgradeHelper $helper -DiagnoseHelper $validDiagnoseHelper
+        $payloadText = @($run.output) -join "`n"
+        Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0 -and -not $payloadText.Contains($maliciousValue)) -Message "Memory helper $($case.name) did not remain public-safe and fail-soft."
+        $payload = $payloadText | ConvertFrom-Json
+        if ($case.name -eq "unknown-code") {
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "current" -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Unknown memory finding code changed status or entered output."
+        } elseif ($case.name -eq "mixed-codes") {
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "migration-required" -and (@($payload.project.memory.finding_codes) -join ',') -eq "notes_contains_session_state") -Message "Mixed memory findings did not retain only the known code."
+        } else {
+            Assert-StatusCondition -Condition ([string]$payload.project.reason -eq "memory-helper-unavailable" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Malformed memory helper $($case.name) returned the wrong fallback."
+        }
+        $evidence.Add([ordered]@{ scenario = "project-memory-contract-$($case.name)"; status = [string]$payload.project.status })
+    }
+
+    foreach ($unknownCase in @("malformed-lock", "invalid-hub", "hub-not-git", "locked-dirty", "current-dirty", "remote-mismatch", "branch-mismatch")) {
+        $unknownFixture = New-ProjectStatusFixture -Name $unknownCase
+        switch ($unknownCase) {
+            "malformed-lock" { Write-StatusText -Path (Join-PathParts $unknownFixture.root ".agents" "hub.lock.json") -Text '{"schema_version":' }
+            "invalid-hub" { $unknownFixture.lock.hub_dir = (Join-Path $unknownFixture.root "absent-hub") }
+            "hub-not-git" {
+                $plainHub = Join-Path $unknownFixture.root "plain-hub"
+                New-Item -ItemType Directory -Path $plainHub | Out-Null
+                $unknownFixture.lock.hub_dir = $plainHub
+            }
+            "locked-dirty" { $unknownFixture.lock.hub_dirty = $true }
+            "current-dirty" { Write-StatusText -Path (Join-Path $unknownFixture.hub "dirty.txt") -Text "dirty" }
+            "remote-mismatch" { $unknownFixture.lock.hub_remote = "https://example.invalid/other.git" }
+            "branch-mismatch" { $unknownFixture.lock.hub_branch = "other" }
+        }
+        if ($unknownCase -ne "malformed-lock") {
+            Write-StatusText -Path (Join-PathParts $unknownFixture.root ".agents" "hub.lock.json") -Text ($unknownFixture.lock | ConvertTo-Json)
+        }
+        $unknownPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $unknownFixture.root)
+        Assert-StatusCondition -Condition ([string]$unknownPayload.project.status -eq "unknown") -Message "Project baseline case $unknownCase did not report unknown."
+        $evidence.Add([ordered]@{ scenario = "project-$unknownCase-unknown"; status = [string]$unknownPayload.project.status })
+    }
 
     $allowedStatuses = @("current", "legacy", "missing", "invalid", "unsupported")
     $allowedReasons = @("recorded", "not-recorded", "legacy-manifest", "manifest-missing", "manifest-invalid", "unsupported-schema", "invalid-value")
