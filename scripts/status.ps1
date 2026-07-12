@@ -99,7 +99,7 @@ function Get-ProvenanceValue {
         Add-RuntimeFinding -List $Findings -Code $MissingCode -Severity "info" -Message $MissingMessage
         return New-ProvenanceValue -Value $null -Reason "not-recorded"
     }
-    if ($RawValue -isnot [string] -or [string]$RawValue -notmatch $Pattern) {
+    if ($RawValue -isnot [string] -or [string]$RawValue -cnotmatch $Pattern) {
         Add-RuntimeFinding -List $Findings -Code $InvalidCode -Severity "warning" -Message $InvalidMessage
         return New-ProvenanceValue -Value $null -Reason "invalid-value"
     }

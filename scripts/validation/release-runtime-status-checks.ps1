@@ -150,12 +150,12 @@ function Invoke-RuntimeStatusFixtureChecks {
 
     $invalidVersionRuntime = Join-PathParts $fixtureRoot "invalid-version"
     $invalidVersionManifest = New-CurrentManifest
-    $invalidVersionManifest.release_version = "C:" + "\Users\private-user\v9"
+    $invalidVersionManifest.release_version = "V0.6.0"
     Write-StatusManifest -RuntimeRoot $invalidVersionRuntime -Value $invalidVersionManifest
     $invalidVersionText = @((Invoke-Status -RuntimeRoot $invalidVersionRuntime).output) -join "`n"
     $invalidVersionPayload = $invalidVersionText | ConvertFrom-Json
     Assert-StatusCondition -Condition ([string]$invalidVersionPayload.runtime.manifest_status -eq "invalid" -and [string]$invalidVersionPayload.runtime.release_version.reason -eq "invalid-value" -and $null -eq $invalidVersionPayload.runtime.release_version.value) -Message "Invalid release version was trusted."
-    Assert-StatusCondition -Condition (-not $invalidVersionText.Contains("private-user")) -Message "Invalid release version was echoed."
+    Assert-StatusCondition -Condition (-not $invalidVersionText.Contains("V0.6.0")) -Message "Non-canonical release version was echoed."
     $evidence.Add([ordered]@{ scenario = "invalid-release-version"; status = [string]$invalidVersionPayload.runtime.manifest_status })
 
     $invalidCommitRuntime = Join-PathParts $fixtureRoot "invalid-commit"
@@ -168,16 +168,25 @@ function Invoke-RuntimeStatusFixtureChecks {
     Assert-StatusCondition -Condition (-not $invalidCommitText.Contains("private-user")) -Message "Invalid commit SHA was echoed."
     $evidence.Add([ordered]@{ scenario = "invalid-source-commit"; status = [string]$invalidCommitPayload.runtime.manifest_status })
 
-    $invalidFieldsRuntime = Join-PathParts $fixtureRoot "invalid-fields"
-    $invalidFieldsManifest = New-CurrentManifest
-    $invalidFieldsManifest.install_strategy = "C:" + "\Users\private-user\link"
-    $invalidFieldsManifest.profile = @("recommended")
-    Write-StatusManifest -RuntimeRoot $invalidFieldsRuntime -Value $invalidFieldsManifest
-    $invalidFieldsText = @((Invoke-Status -RuntimeRoot $invalidFieldsRuntime).output) -join "`n"
-    $invalidFieldsPayload = $invalidFieldsText | ConvertFrom-Json
-    Assert-StatusCondition -Condition ([string]$invalidFieldsPayload.runtime.manifest_status -eq "invalid" -and $null -eq $invalidFieldsPayload.runtime.install_strategy -and $null -eq $invalidFieldsPayload.runtime.profile) -Message "Invalid strategy or profile was trusted."
-    Assert-StatusCondition -Condition (-not $invalidFieldsText.Contains("private-user")) -Message "Invalid runtime field was echoed."
-    $evidence.Add([ordered]@{ scenario = "invalid-strategy-profile"; status = [string]$invalidFieldsPayload.runtime.manifest_status })
+    $invalidStrategyRuntime = Join-PathParts $fixtureRoot "invalid-strategy"
+    $invalidStrategyManifest = New-CurrentManifest
+    $invalidStrategyManifest.install_strategy = "COPY"
+    Write-StatusManifest -RuntimeRoot $invalidStrategyRuntime -Value $invalidStrategyManifest
+    $invalidStrategyText = @((Invoke-Status -RuntimeRoot $invalidStrategyRuntime).output) -join "`n"
+    $invalidStrategyPayload = $invalidStrategyText | ConvertFrom-Json
+    Assert-StatusCondition -Condition ([string]$invalidStrategyPayload.runtime.manifest_status -eq "invalid" -and $null -eq $invalidStrategyPayload.runtime.install_strategy -and [string]$invalidStrategyPayload.findings[0].code -eq "runtime.manifest.install_strategy_invalid") -Message "Non-canonical install strategy was trusted."
+    Assert-StatusCondition -Condition (-not $invalidStrategyText.Contains("COPY")) -Message "Non-canonical install strategy was echoed."
+    $evidence.Add([ordered]@{ scenario = "non-canonical-install-strategy"; status = [string]$invalidStrategyPayload.runtime.manifest_status })
+
+    $invalidProfileRuntime = Join-PathParts $fixtureRoot "invalid-profile"
+    $invalidProfileManifest = New-CurrentManifest
+    $invalidProfileManifest.profile = "RECOMMENDED"
+    Write-StatusManifest -RuntimeRoot $invalidProfileRuntime -Value $invalidProfileManifest
+    $invalidProfileText = @((Invoke-Status -RuntimeRoot $invalidProfileRuntime).output) -join "`n"
+    $invalidProfilePayload = $invalidProfileText | ConvertFrom-Json
+    Assert-StatusCondition -Condition ([string]$invalidProfilePayload.runtime.manifest_status -eq "invalid" -and $null -eq $invalidProfilePayload.runtime.profile -and [string]$invalidProfilePayload.findings[0].code -eq "runtime.manifest.profile_invalid") -Message "Non-canonical profile was trusted."
+    Assert-StatusCondition -Condition (-not $invalidProfileText.Contains("RECOMMENDED")) -Message "Non-canonical profile was echoed."
+    $evidence.Add([ordered]@{ scenario = "non-canonical-profile"; status = [string]$invalidProfilePayload.runtime.manifest_status })
 
     $invalidTimestampRuntime = Join-PathParts $fixtureRoot "invalid-timestamp"
     $invalidTimestampManifest = New-CurrentManifest
