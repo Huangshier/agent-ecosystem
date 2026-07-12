@@ -29,6 +29,7 @@ try {
     & git -C $hubFixture config user.name "Release Validation" | Out-Null
     & git -C $hubFixture config core.autocrlf false | Out-Null
     & git -C $hubFixture config core.safecrlf false | Out-Null
+    & git -C $hubFixture remote add origin "https://example.invalid/release-validation-hub.git" | Out-Null
     & git -C $hubFixture add . | Out-Null
     & git -C $hubFixture commit -m "Initialize validation hub fixture" | Out-Null
     if ($LASTEXITCODE -ne 0) {
