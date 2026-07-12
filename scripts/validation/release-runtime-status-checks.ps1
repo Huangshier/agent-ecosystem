@@ -69,7 +69,12 @@ function Invoke-RuntimeStatusFixtureChecks {
             [Parameter(Mandatory = $true)][string]$AliasPath,
             [Parameter(Mandatory = $true)][string]$TargetPath
         )
-        if ($PSVersionTable.PSVersion.Major -ge 7) {
+        if (-not $isWindowsPlatform) {
+            $aliasTarget = @(& readlink $AliasPath) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect the managed alias fixture." }
+            $aliasType = "SymbolicLink"
+        }
+        elseif ($PSVersionTable.PSVersion.Major -ge 7) {
             $alias = [System.IO.DirectoryInfo]::new($AliasPath)
             $aliasTarget = [string]$alias.LinkTarget
             $aliasType = if ([string]::IsNullOrWhiteSpace($aliasTarget)) { $null } elseif ($isWindowsPlatform) { "Junction" } else { "SymbolicLink" }
