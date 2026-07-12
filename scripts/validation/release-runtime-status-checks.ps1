@@ -37,7 +37,7 @@ function Invoke-RuntimeStatusFixtureChecks {
 
         if (-not (Test-Path -LiteralPath $RuntimeRoot)) { return @() }
         return @(
-            Get-ChildItem -LiteralPath $RuntimeRoot -Recurse -File -Force |
+            Get-ChildItem -LiteralPath $RuntimeRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
                 Sort-Object FullName |
                 ForEach-Object {
                     "{0}|{1}" -f (ConvertTo-DisplayPath -Path $_.FullName -Root $RuntimeRoot), (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
@@ -69,14 +69,23 @@ function Invoke-RuntimeStatusFixtureChecks {
             [Parameter(Mandatory = $true)][string]$AliasPath,
             [Parameter(Mandatory = $true)][string]$TargetPath
         )
-        $aliasName = [System.IO.Path]::GetFileName($AliasPath)
-        $alias = Get-ChildItem -LiteralPath (Split-Path -Parent $AliasPath) -Force |
-            Where-Object { [string]::Equals([string]$_.Name, $aliasName, [System.StringComparison]::Ordinal) } |
-            Select-Object -First 1
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            $alias = [System.IO.DirectoryInfo]::new($AliasPath)
+            $aliasTarget = [string]$alias.LinkTarget
+            $aliasType = if ([string]::IsNullOrWhiteSpace($aliasTarget)) { $null } elseif ($isWindowsPlatform) { "Junction" } else { "SymbolicLink" }
+        }
+        else {
+            $aliasName = [System.IO.Path]::GetFileName($AliasPath)
+            $alias = Get-ChildItem -LiteralPath (Split-Path -Parent $AliasPath) -Force |
+                Where-Object { [string]::Equals([string]$_.Name, $aliasName, [System.StringComparison]::Ordinal) } |
+                Select-Object -First 1
+            $aliasTarget = if ($null -eq $alias) { $null } else { @($alias.Target) -join "|" }
+            $aliasType = if ($null -eq $alias) { $null } else { [string]$alias.LinkType }
+        }
         return [ordered]@{
             manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "install-manifest.json") -Algorithm SHA256).Hash
-            alias_type = if ($null -eq $alias) { $null } else { [string]$alias.LinkType }
-            alias_target = if ($null -eq $alias) { $null } else { @($alias.Target) -join "|" }
+            alias_type = $aliasType
+            alias_target = $aliasTarget
             target_hash = if (Test-Path -LiteralPath $TargetPath -PathType Leaf) { (Get-FileHash -LiteralPath $TargetPath -Algorithm SHA256).Hash } else { $null }
             runtime_tree = @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot)
         }
