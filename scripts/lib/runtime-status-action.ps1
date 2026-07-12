@@ -18,31 +18,31 @@ function Get-RecommendedNextAction {
         }
 
         $runtime = Get-ActionProperty -InputObject $Payload -Name "runtime"
-        switch (Get-ActionStatus -InputObject $runtime -Name "manifest_status") {
-            { $_ -in @("missing", "legacy", "unsupported", "invalid") } { return "reinstall-runtime" }
+        switch -CaseSensitive (Get-ActionStatus -InputObject $runtime -Name "manifest_status") {
+            { $_ -cin @("missing", "legacy", "unsupported", "invalid") } { return "reinstall-runtime" }
             "current" { }
             default { return "inspect-manually" }
         }
 
         $managedFiles = Get-ActionProperty -InputObject $runtime -Name "managed_files"
-        switch (Get-ActionStatus -InputObject $managedFiles -Name "status") {
+        switch -CaseSensitive (Get-ActionStatus -InputObject $managedFiles -Name "status") {
             "conflict" { return "review-managed-conflicts" }
             "missing" { return "reinstall-runtime" }
-            { $_ -in @("modified", "unknown") } { return "inspect-manually" }
+            { $_ -cin @("modified", "unknown") } { return "inspect-manually" }
             "current" { }
             default { return "inspect-manually" }
         }
 
         $bridge = Get-ActionProperty -InputObject $Payload -Name "bridge"
-        switch (Get-ActionStatus -InputObject $bridge -Name "status") {
-            { $_ -in @("conflict", "broken", "stale") } { return "repair-bridge" }
+        switch -CaseSensitive (Get-ActionStatus -InputObject $bridge -Name "status") {
+            { $_ -cin @("conflict", "broken", "stale") } { return "repair-bridge" }
             "unknown" { return "inspect-manually" }
-            { $_ -in @("current", "not-configured") } { }
+            { $_ -cin @("current", "not-configured") } { }
             default { return "inspect-manually" }
         }
 
         $project = Get-ActionProperty -InputObject $Payload -Name "project"
-        switch (Get-ActionStatus -InputObject $project -Name "status") {
+        switch -CaseSensitive (Get-ActionStatus -InputObject $project -Name "status") {
             "migration-required" { return "run-memory-migration-analysis" }
             "optional-refresh" { return "refresh-project-templates" }
             "unknown" {

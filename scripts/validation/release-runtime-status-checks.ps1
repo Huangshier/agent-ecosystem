@@ -317,6 +317,7 @@ function Invoke-RuntimeStatusFixtureChecks {
             project = [pscustomobject]@{ status = $Project; reason = $ProjectReason }
         }
     }
+    $allowedActions = @("none", "inspect-manually", "reinstall-runtime", "review-managed-conflicts", "repair-bridge", "refresh-project-templates", "run-memory-migration-analysis")
     $actionCases = @(
         @{ name = "healthy"; expected = "none" },
         @{ name = "not-configured-not-requested"; bridge = "not-configured"; project = "unknown"; reason = "not-requested"; expected = "none" },
@@ -339,6 +340,11 @@ function Invoke-RuntimeStatusFixtureChecks {
         @{ name = "managed-unrecognized"; managed = "future"; expected = "inspect-manually" },
         @{ name = "bridge-unrecognized"; bridge = "future"; expected = "inspect-manually" },
         @{ name = "project-unrecognized"; project = "future"; expected = "inspect-manually" },
+        @{ name = "manifest-case-variant"; manifest = "CURRENT"; expected = "inspect-manually" },
+        @{ name = "managed-case-variant"; managed = "Conflict"; expected = "inspect-manually" },
+        @{ name = "bridge-case-variant"; bridge = "Broken"; expected = "inspect-manually" },
+        @{ name = "project-case-variant"; project = "OPTIONAL-REFRESH"; expected = "inspect-manually" },
+        @{ name = "project-reason-case-variant"; project = "unknown"; reason = "NOT-REQUESTED"; expected = "inspect-manually" },
         @{ name = "manifest-wrong-type"; manifest = 7; expected = "inspect-manually" },
         @{ name = "managed-wrong-type"; managed = @("current", "extra"); expected = "inspect-manually" },
         @{ name = "bridge-wrong-type"; bridge = $true; expected = "inspect-manually" },
@@ -352,6 +358,7 @@ function Invoke-RuntimeStatusFixtureChecks {
         }
         $actual = Get-RecommendedNextAction -Payload (New-ActionPayload @parameters)
         Assert-StatusCondition -Condition ($actual -ceq $case.expected) -Message "Recommended action case $($case.name) returned $actual."
+        Assert-StatusCondition -Condition ($actual -cin $allowedActions) -Message "Recommended action case $($case.name) returned an action outside the public contract."
         $evidence.Add([ordered]@{ scenario = "recommended-action-$($case.name)"; status = $actual })
     }
     foreach ($missingPayload in @(
@@ -365,7 +372,6 @@ function Invoke-RuntimeStatusFixtureChecks {
     $throwingPayload.runtime.PSObject.Properties.Remove("manifest_status")
     $throwingPayload.runtime | Add-Member -MemberType ScriptProperty -Name manifest_status -Value { throw "private synthetic action failure" }
     Assert-StatusCondition -Condition ((Get-RecommendedNextAction -Payload $throwingPayload) -ceq "inspect-manually") -Message "Throwing recommended action property did not fail soft."
-    $allowedActions = @("none", "inspect-manually", "reinstall-runtime", "review-managed-conflicts", "repair-bridge", "refresh-project-templates", "run-memory-migration-analysis")
     Assert-StatusCondition -Condition (@($actionCases | ForEach-Object { $_.expected } | Sort-Object -Unique).Count -eq $allowedActions.Count) -Message "Recommended action fixtures do not cover every allowed action."
 
     $validRuntime = Join-PathParts $fixtureRoot "valid"
