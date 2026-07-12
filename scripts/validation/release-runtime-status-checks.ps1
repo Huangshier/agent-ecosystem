@@ -74,6 +74,64 @@ function Invoke-RuntimeStatusFixtureChecks {
         }
     }
 
+    function Write-BridgeStatusManifest {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [Parameter(Mandatory = $true)][object[]]$Records,
+            [string]$RecordedRuntime = $RuntimeRoot
+        )
+        $value = [ordered]@{
+            schema_version = 1
+            metadata_kind = "agent-specific-skill-link-bridge"
+            local_runtime_metadata = $true
+            commit_policy = "do-not-commit"
+            runtime = [System.IO.Path]::GetFullPath($RecordedRuntime)
+            updated_at_utc = "2026-07-12T00:00:00.0000000Z"
+            bridges = @($Records)
+        }
+        Write-StatusText -Path (Join-PathParts $RuntimeRoot "agent-skill-bridge-manifest.json") -Text ($value | ConvertTo-Json -Depth 8)
+    }
+
+    function New-BridgeStatusFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [string[]]$Skills = @("project-bootstrap")
+        )
+        $runtime = Join-PathParts $fixtureRoot $Name "runtime"
+        $targetRoot = Join-PathParts $fixtureRoot $Name "agent-skills"
+        $manifest = New-CurrentManifest
+        $manifest.skills = @($Skills)
+        $manifest.items = @($Skills | ForEach-Object {
+                [ordered]@{ name = "skills/$_"; destination = "skills/$_"; mode = "copy"; managed = $true }
+            })
+        Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
+        New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
+        $records = @()
+        foreach ($skill in $Skills) {
+            $source = Join-PathParts $runtime "skills" $skill
+            $target = Join-PathParts $targetRoot $skill
+            New-Item -ItemType Directory -Force -Path $source | Out-Null
+            if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+                New-Item -ItemType Junction -Path $target -Target $source | Out-Null
+            }
+            else {
+                $relative = [System.IO.Path]::GetRelativePath((Split-Path -Parent $target), $source)
+                New-Item -ItemType SymbolicLink -Path $target -Target $relative | Out-Null
+            }
+            $records += [ordered]@{ skill = $skill; source = [System.IO.Path]::GetFullPath($source); target = [System.IO.Path]::GetFullPath($target); result = "created"; link_mode = if ($isWindowsPlatform) { "junction" } else { "symboliclink" } }
+        }
+        Write-BridgeStatusManifest -RuntimeRoot $runtime -Records $records
+        return [ordered]@{ runtime = $runtime; target_root = $targetRoot; records = $records }
+    }
+
+    function Remove-BridgeStatusFixtureItem {
+        param([Parameter(Mandatory = $true)][string]$Path)
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) { return }
+        if ($item.PSIsContainer -or $isWindowsPlatform) { [System.IO.Directory]::Delete($item.FullName, $false) }
+        else { [System.IO.File]::Delete($item.FullName) }
+    }
+
     $statusScript = Join-PathParts $RepositoryRoot "scripts" "status.ps1"
     $fixtureRoot = Join-PathParts $ScratchRoot "runtime-status-fixtures"
     Assert-PathInsideRoot -Path $fixtureRoot -Root $ScratchRoot
@@ -215,6 +273,91 @@ function Invoke-RuntimeStatusFixtureChecks {
     }
     Assert-StatusCondition -Condition (-not $textOutput.Contains([System.IO.Path]::GetFullPath($nullRuntime)) -and -not $textOutput.Contains([System.Environment]::UserName)) -Message "Text status leaked an absolute path or username."
     $evidence.Add([ordered]@{ scenario = "text-json-semantic-parity"; status = "current" })
+
+    $bridgeCurrent = New-BridgeStatusFixture -Name "bridge-current"
+    $bridgeManifestHash = (Get-FileHash -LiteralPath (Join-PathParts $bridgeCurrent.runtime "agent-skill-bridge-manifest.json") -Algorithm SHA256).Hash
+    $currentPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $bridgeCurrent.runtime)
+    Assert-StatusCondition -Condition ([string]$currentPayload.bridge.status -eq "current" -and [string]$currentPayload.bridge.manifest_status -eq "current" -and [int]$currentPayload.bridge.configured_count -eq 1 -and [int]$currentPayload.bridge.counts.current -eq 1) -Message "Live bridge did not report current."
+    Assert-StatusCondition -Condition ([string]$currentPayload.bridge.skills[0].skill -eq "project-bootstrap" -and [string]$currentPayload.bridge.skills[0].link_mode -in @("junction", "symboliclink")) -Message "Live bridge skill shape is incorrect."
+    Assert-StatusCondition -Condition ((Get-FileHash -LiteralPath (Join-PathParts $bridgeCurrent.runtime "agent-skill-bridge-manifest.json") -Algorithm SHA256).Hash -eq $bridgeManifestHash) -Message "Status modified the bridge manifest."
+    $evidence.Add([ordered]@{ scenario = "bridge-current-live-link"; status = [string]$currentPayload.bridge.status })
+
+    $missingTarget = New-BridgeStatusFixture -Name "bridge-target-missing"
+    Remove-BridgeStatusFixtureItem -Path ([string]$missingTarget.records[0].target)
+    $missingTargetPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $missingTarget.runtime)
+    Assert-StatusCondition -Condition ([string]$missingTargetPayload.bridge.status -eq "stale" -and [string]$missingTargetPayload.findings[-1].code -eq "bridge.target.missing") -Message "Missing bridge target did not report stale."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-missing"; status = [string]$missingTargetPayload.bridge.status })
+
+    $nonLink = New-BridgeStatusFixture -Name "bridge-target-not-link"
+    Remove-BridgeStatusFixtureItem -Path ([string]$nonLink.records[0].target)
+    New-Item -ItemType Directory -Path ([string]$nonLink.records[0].target) | Out-Null
+    $nonLinkPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $nonLink.runtime)
+    Assert-StatusCondition -Condition ([string]$nonLinkPayload.bridge.status -eq "conflict" -and [string]$nonLinkPayload.findings[-1].code -eq "bridge.target.not_link") -Message "Non-link bridge target did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-not-link"; status = [string]$nonLinkPayload.bridge.status })
+
+    $brokenSource = New-BridgeStatusFixture -Name "bridge-source-missing"
+    Remove-BridgeStatusFixtureItem -Path ([string]$brokenSource.records[0].target)
+    Remove-Item -LiteralPath ([string]$brokenSource.records[0].source) -Force
+    $brokenSourcePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $brokenSource.runtime)
+    Assert-StatusCondition -Condition ([string]$brokenSourcePayload.bridge.status -eq "broken" -and [string]$brokenSourcePayload.findings[-1].code -eq "bridge.source.missing") -Message "Missing runtime skill source did not report broken."
+    $evidence.Add([ordered]@{ scenario = "bridge-source-missing"; status = [string]$brokenSourcePayload.bridge.status })
+
+    $staleSource = New-BridgeStatusFixture -Name "bridge-source-stale"
+    $staleSource.records[0].source = [System.IO.Path]::GetFullPath((Join-PathParts $fixtureRoot "old-runtime" "skills" "project-bootstrap"))
+    Write-BridgeStatusManifest -RuntimeRoot $staleSource.runtime -Records $staleSource.records
+    $staleSourcePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $staleSource.runtime)
+    Assert-StatusCondition -Condition ([string]$staleSourcePayload.bridge.status -eq "stale" -and [string]$staleSourcePayload.findings[-1].code -eq "bridge.source.stale") -Message "Historical bridge source did not report stale."
+    $evidence.Add([ordered]@{ scenario = "bridge-source-stale"; status = [string]$staleSourcePayload.bridge.status })
+
+    $unmanaged = New-BridgeStatusFixture -Name "bridge-skill-unmanaged"
+    $unmanagedManifest = Get-Content -LiteralPath (Join-PathParts $unmanaged.runtime "install-manifest.json") -Raw | ConvertFrom-Json
+    $unmanagedManifest.skills = @()
+    $unmanagedManifest.items = @()
+    Write-StatusManifest -RuntimeRoot $unmanaged.runtime -Value $unmanagedManifest
+    $unmanagedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unmanaged.runtime)
+    Assert-StatusCondition -Condition ([string]$unmanagedPayload.bridge.status -eq "stale" -and [string]$unmanagedPayload.findings[-1].code -eq "bridge.skill.not_managed") -Message "Unmanaged bridge skill did not report stale."
+    $evidence.Add([ordered]@{ scenario = "bridge-skill-unmanaged"; status = [string]$unmanagedPayload.bridge.status })
+
+    $malformedBridge = New-BridgeStatusFixture -Name "bridge-manifest-malformed"
+    Write-StatusText -Path (Join-PathParts $malformedBridge.runtime "agent-skill-bridge-manifest.json") -Text '{"schema_version":'
+    $malformedBridgePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $malformedBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$malformedBridgePayload.bridge.status -eq "unknown" -and [string]$malformedBridgePayload.bridge.manifest_status -eq "invalid") -Message "Malformed bridge manifest did not fail soft as unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-manifest-malformed"; status = [string]$malformedBridgePayload.bridge.status })
+
+    $unsupportedBridge = New-BridgeStatusFixture -Name "bridge-manifest-unsupported"
+    $unsupportedValue = Get-Content -LiteralPath (Join-PathParts $unsupportedBridge.runtime "agent-skill-bridge-manifest.json") -Raw | ConvertFrom-Json
+    $unsupportedValue.schema_version = 2
+    Write-StatusText -Path (Join-PathParts $unsupportedBridge.runtime "agent-skill-bridge-manifest.json") -Text ($unsupportedValue | ConvertTo-Json -Depth 8)
+    $unsupportedBridgePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unsupportedBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$unsupportedBridgePayload.bridge.status -eq "unknown" -and [string]$unsupportedBridgePayload.bridge.manifest_status -eq "unsupported") -Message "Unsupported bridge manifest did not report unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-manifest-unsupported"; status = [string]$unsupportedBridgePayload.bridge.status })
+
+    $invalidRecord = New-BridgeStatusFixture -Name "bridge-record-invalid"
+    Write-BridgeStatusManifest -RuntimeRoot $invalidRecord.runtime -Records @("invalid-record")
+    $invalidRecordPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidRecord.runtime)
+    Assert-StatusCondition -Condition ([string]$invalidRecordPayload.bridge.status -eq "unknown" -and [string]$invalidRecordPayload.findings[-1].code -eq "bridge.record.invalid") -Message "Invalid bridge record did not fail soft as unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-record-invalid"; status = [string]$invalidRecordPayload.bridge.status })
+
+    $invalidOwnership = New-BridgeStatusFixture -Name "bridge-ownership-invalid"
+    Write-StatusText -Path (Join-PathParts $invalidOwnership.runtime "install-manifest.json") -Text '{"schema_version":'
+    $invalidOwnershipPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidOwnership.runtime)
+    Assert-StatusCondition -Condition ([string]$invalidOwnershipPayload.bridge.status -eq "unknown" -and @($invalidOwnershipPayload.findings | Where-Object code -eq "bridge.record.invalid").Count -eq 1) -Message "Unavailable runtime ownership did not report unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-ownership-unavailable"; status = [string]$invalidOwnershipPayload.bridge.status })
+
+    $priorityBridge = New-BridgeStatusFixture -Name "bridge-priority" -Skills @("project-bootstrap", "project-context-gate")
+    Remove-BridgeStatusFixtureItem -Path ([string]$priorityBridge.records[0].target)
+    New-Item -ItemType Directory -Path ([string]$priorityBridge.records[0].target) | Out-Null
+    Remove-BridgeStatusFixtureItem -Path ([string]$priorityBridge.records[1].target)
+    $priorityPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $priorityBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$priorityPayload.bridge.status -eq "conflict" -and [int]$priorityPayload.bridge.counts.conflict -eq 1 -and [int]$priorityPayload.bridge.counts.stale -eq 1) -Message "Bridge overall status priority is unstable."
+    Assert-StatusCondition -Condition ((@($priorityPayload.bridge.skills | ForEach-Object skill) -join ',') -eq 'project-bootstrap,project-context-gate') -Message "Bridge skills are not canonically sorted."
+    $priorityText = @((Invoke-Status -RuntimeRoot $priorityBridge.runtime -Text).output) -join "`n"
+    foreach ($secretValue in @([System.IO.Path]::GetFullPath($priorityBridge.runtime), [System.IO.Path]::GetFullPath($priorityBridge.target_root), [System.Environment]::UserName)) {
+        Assert-StatusCondition -Condition (-not $priorityText.Contains($secretValue)) -Message "Bridge text output leaked local path data."
+    }
+    $priorityJson = @((Invoke-Status -RuntimeRoot $priorityBridge.runtime).output) -join "`n"
+    Assert-StatusCondition -Condition (-not $priorityJson.Contains([System.IO.Path]::GetFullPath($priorityBridge.target_root))) -Message "Bridge JSON output leaked a target path."
+    $evidence.Add([ordered]@{ scenario = "bridge-priority-public-safe"; status = [string]$priorityPayload.bridge.status })
 
     $allowedStatuses = @("current", "legacy", "missing", "invalid", "unsupported")
     $allowedReasons = @("recorded", "not-recorded", "legacy-manifest", "manifest-missing", "manifest-invalid", "unsupported-schema", "invalid-value")

@@ -95,3 +95,33 @@ to a source repository.
 The helper only establishes filesystem discovery links. It does not verify
 that a client supports every skill field, tool, hook, instruction, or runtime
 behavior.
+
+## Read-Only Status
+
+`scripts/status.ps1 -RuntimeDir <runtime>` reports live health only for links
+explicitly recorded in that runtime's bridge manifest. It never searches for
+Codex, Claude Code, or another client, and it does not scan a target parent or
+client skill directory. `not-configured` means only that
+`agent-skill-bridge-manifest.json` is absent from the selected runtime; manually
+created links may still exist elsewhere.
+
+The bridge status combines the bridge manifest contract, case-exact ownership
+from the already parsed install manifest, the canonical runtime skill source,
+and the live target link:
+
+- `current`: every recorded link safely resolves to its owned runtime copy;
+- `stale`: recorded metadata or configuration no longer matches this runtime;
+- `broken`: a recorded link or its expected runtime source is unavailable;
+- `conflict`: the target is occupied by non-link or unexpected linked content;
+- `unknown`: the manifest, record, path, or link cannot be trusted or resolved;
+- `not-configured`: the bridge manifest is absent.
+
+For mixed records, the deterministic priority is `conflict`, `broken`, `stale`,
+`unknown`, then `current`. JSON and text output include canonical skill names,
+statuses, and link modes, but never include runtime, manifest, source, target,
+home-directory, or raw exception data. Status is fail-soft and read-only: it
+does not create, repair, rebuild, or delete links or client content.
+
+Live bridge health proves the recorded filesystem discovery chain only. It is
+not evidence that an agent client supports every skill field, tool, hook,
+instruction, or runtime behavior.
