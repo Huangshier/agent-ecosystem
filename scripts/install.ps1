@@ -103,7 +103,7 @@ function Get-InstallerSourceProvenance {
             return $unknown
         }
 
-        $versionTags = @(& git -C $SourceRoot tag --points-at HEAD 2>$null | Where-Object { [string]$_ -match '^v\d+\.\d+\.\d+$' })
+        $versionTags = @(& git -C $SourceRoot tag --points-at HEAD 2>$null | Where-Object { [string]$_ -cmatch '^v\d+\.\d+\.\d+$' })
         if ($LASTEXITCODE -ne 0 -or $versionTags.Count -gt 1) {
             return $unknown
         }

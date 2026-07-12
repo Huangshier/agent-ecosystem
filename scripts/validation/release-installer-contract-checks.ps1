@@ -146,12 +146,14 @@ function Invoke-InstallerContractFixtureChecks {
     $legacyRuntime = Join-PathParts $ScratchRoot "installer-contract-legacy-runtime"
     $taggedSource = Join-PathParts $ScratchRoot "installer-provenance-tagged-source"
     $taggedRuntime = Join-PathParts $ScratchRoot "installer-provenance-tagged-runtime"
+    $uppercaseTagSource = Join-PathParts $ScratchRoot "installer-provenance-uppercase-tag-source"
+    $uppercaseTagRuntime = Join-PathParts $ScratchRoot "installer-provenance-uppercase-tag-runtime"
     $ambiguousTagRuntime = Join-PathParts $ScratchRoot "installer-provenance-ambiguous-tag-runtime"
     $untaggedSource = Join-PathParts $ScratchRoot "installer-provenance-untagged-source"
     $untaggedRuntime = Join-PathParts $ScratchRoot "installer-provenance-untagged-runtime"
     $dirtySource = Join-PathParts $ScratchRoot "installer-provenance-dirty-source"
     $dirtyRuntime = Join-PathParts $ScratchRoot "installer-provenance-dirty-runtime"
-    foreach ($path in @($fixtureSource, $runtimeRoot, $profileShrinkRuntime, $rootConflictRuntime, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime, $taggedSource, $taggedRuntime, $ambiguousTagRuntime, $untaggedSource, $untaggedRuntime, $dirtySource, $dirtyRuntime)) {
+    foreach ($path in @($fixtureSource, $runtimeRoot, $profileShrinkRuntime, $rootConflictRuntime, $devLinkRuntime, $legacyLinkRuntime, $legacyRuntime, $taggedSource, $taggedRuntime, $uppercaseTagSource, $uppercaseTagRuntime, $ambiguousTagRuntime, $untaggedSource, $untaggedRuntime, $dirtySource, $dirtyRuntime)) {
         Assert-PathInsideRoot -Path $path -Root $ScratchRoot
     }
 
@@ -214,6 +216,13 @@ function Invoke-InstallerContractFixtureChecks {
     Assert-InstallerCondition -Condition ([string]$taggedManifest.source_commit -eq [string]$taggedCommit -and [string]$taggedManifest.source_commit -match '^[0-9a-f]{40}$') -Message "Tagged source commit provenance was not recorded as a full SHA."
     Assert-InstallerCondition -Condition (-not $taggedManifestText.Contains([System.IO.Path]::GetFullPath($taggedSource)) -and -not $taggedManifestText.Contains([System.IO.Path]::GetFullPath($taggedRuntime))) -Message "Tagged provenance manifest leaked an absolute path."
     $scenarioEvidence.Add([ordered]@{ scenario = "clean-git-exact-version-tag"; exit_code = $taggedRun.exit_code; release_version = [string]$taggedManifest.release_version; source_commit = [string]$taggedManifest.source_commit })
+
+    $uppercaseTagCommit = New-GitProvenanceFixture -TemplateRoot $fixtureSource -SourceRoot $uppercaseTagSource -VersionTag "V9.8.7"
+    $uppercaseTagRun = Invoke-FixtureInstall -Installer (Join-PathParts $uppercaseTagSource "scripts" "install.ps1") -RuntimeRoot $uppercaseTagRuntime
+    $uppercaseTagManifest = Read-InstallArtifact -RuntimeRoot $uppercaseTagRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($uppercaseTagRun.exit_code -eq 0 -and $null -eq $uppercaseTagManifest.release_version) -Message "Non-canonical uppercase version tag was recorded."
+    Assert-InstallerCondition -Condition ([string]$uppercaseTagManifest.source_commit -eq [string]$uppercaseTagCommit -and [string]$uppercaseTagManifest.source_commit -match '^[0-9a-f]{40}$') -Message "Uppercase version tag discarded reliable source commit provenance."
+    $scenarioEvidence.Add([ordered]@{ scenario = "clean-git-uppercase-version-tag"; exit_code = $uppercaseTagRun.exit_code; source_commit = [string]$uppercaseTagManifest.source_commit })
 
     & git -C $taggedSource tag "v9.8.8"
     if ($LASTEXITCODE -ne 0) { throw "Unable to create ambiguous provenance tag fixture." }
