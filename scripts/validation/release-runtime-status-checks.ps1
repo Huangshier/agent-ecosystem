@@ -352,18 +352,17 @@ function Invoke-RuntimeStatusFixtureChecks {
     Assert-StatusCondition -Condition ([string]$duplicatePayload.bridge.status -eq "unknown" -and @($duplicatePayload.findings | Where-Object code -eq "bridge.record.duplicate").Count -eq 1) -Message "Duplicate bridge record did not report unknown."
     $evidence.Add([ordered]@{ scenario = "bridge-record-duplicate"; status = [string]$duplicatePayload.bridge.status })
 
-    $unresolvableBridge = New-BridgeStatusFixture -Name "bridge-target-hop-limit"
+    $unresolvableBridge = New-BridgeStatusFixture -Name "bridge-target-unresolvable-alias"
     Remove-BridgeStatusFixtureItem -Path ([string]$unresolvableBridge.records[0].target)
-    $nextTarget = [string]$unresolvableBridge.records[0].source
-    foreach ($hop in (66..0)) {
-        $aliasPath = Join-PathParts $fixtureRoot "bridge-target-hop-limit" ("alias-{0:d2}" -f $hop)
-        New-Item -ItemType SymbolicLink -Path $aliasPath -Target $nextTarget | Out-Null
-        $nextTarget = $aliasPath
-    }
-    New-Item -ItemType SymbolicLink -Path ([string]$unresolvableBridge.records[0].target) -Target $nextTarget | Out-Null
+    $missingAliasTarget = Join-PathParts $fixtureRoot "bridge-target-unresolvable-alias" "missing-target"
+    $aliasPath = Join-PathParts $fixtureRoot "bridge-target-unresolvable-alias" "broken-alias"
+    New-Item -ItemType Directory -Path $missingAliasTarget | Out-Null
+    New-Item -ItemType SymbolicLink -Path $aliasPath -Target $missingAliasTarget | Out-Null
+    New-Item -ItemType SymbolicLink -Path ([string]$unresolvableBridge.records[0].target) -Target $aliasPath | Out-Null
+    Remove-Item -LiteralPath $missingAliasTarget -Force
     $unresolvablePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unresolvableBridge.runtime)
-    Assert-StatusCondition -Condition ([string]$unresolvablePayload.bridge.status -eq "unknown" -and @($unresolvablePayload.findings | Where-Object code -eq "bridge.target.unresolvable").Count -eq 1) -Message "Bridge link hop limit did not fail soft as unknown."
-    $evidence.Add([ordered]@{ scenario = "bridge-target-hop-limit"; status = [string]$unresolvablePayload.bridge.status })
+    Assert-StatusCondition -Condition ([string]$unresolvablePayload.bridge.status -eq "unknown" -and @($unresolvablePayload.findings | Where-Object code -eq "bridge.target.unresolvable").Count -eq 1) -Message "Unresolvable bridge alias did not fail soft as unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-unresolvable-alias"; status = [string]$unresolvablePayload.bridge.status })
 
     $missingTarget = New-BridgeStatusFixture -Name "bridge-target-missing"
     Remove-BridgeStatusFixtureItem -Path ([string]$missingTarget.records[0].target)
