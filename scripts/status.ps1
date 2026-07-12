@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
 . (Join-Path $scriptDir "lib/path-guard.ps1")
+. (Join-Path $scriptDir "lib/runtime-status-action.ps1")
 
 function New-ProvenanceValue {
     param(
@@ -28,6 +29,7 @@ function New-ProvenanceValue {
 function New-RuntimePayload {
     return [ordered]@{
         schema_version = 1
+        recommended_next_action = "inspect-manually"
         runtime = [ordered]@{
             manifest_status = "missing"
             manifest_schema_version = $null
@@ -978,6 +980,7 @@ function Write-RuntimeStatusText {
     Write-Output "Migration findings: $([int]$Payload.project.memory.migration_finding_count)"
     Write-Output "Refresh findings: $([int]$Payload.project.memory.refresh_finding_count)"
     Write-Output "Diagnostic warnings: $([int]$Payload.project.memory.diagnostic_warning_count)"
+    Write-Output "Recommended next action: $([string]$Payload.recommended_next_action)"
     Write-Output "Bridge findings: $(@($Payload.findings | Where-Object { [string]$_.code -like 'bridge.*' }).Count)"
     Write-Output "Findings: $(@($Payload.findings).Count)"
     foreach ($finding in @($Payload.findings)) {
@@ -989,6 +992,7 @@ $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFrom
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
 try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir }
 catch { Reset-ProjectUnavailable -Payload $statusPayload }
+$statusPayload.recommended_next_action = Get-RecommendedNextAction -Payload $statusPayload
 if ($Json.IsPresent) {
     $statusPayload | ConvertTo-Json -Depth 8
 }

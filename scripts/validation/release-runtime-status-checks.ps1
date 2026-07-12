@@ -290,10 +290,89 @@ function Invoke-RuntimeStatusFixtureChecks {
     }
 
     $statusScript = Join-PathParts $RepositoryRoot "scripts" "status.ps1"
+    $actionHelper = Join-PathParts $RepositoryRoot "scripts" "lib" "runtime-status-action.ps1"
     $fixtureRoot = Join-PathParts $ScratchRoot "runtime-status-fixtures"
     Assert-PathInsideRoot -Path $fixtureRoot -Root $ScratchRoot
     New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
     $evidence = New-Object 'System.Collections.Generic.List[object]'
+
+    . $actionHelper
+    function New-ActionPayload {
+        param(
+            [object]$Manifest = "current",
+            [object]$Managed = "current",
+            [object]$Bridge = "current",
+            [object]$Project = "current",
+            [object]$ProjectReason = "in-sync"
+        )
+        return [pscustomobject]@{
+            schema_version = 1
+            runtime = [pscustomobject]@{
+                manifest_status = $Manifest
+                release_version = [pscustomobject]@{ value = $null; reason = "not-recorded" }
+                source_commit = [pscustomobject]@{ value = $null; reason = "not-recorded" }
+                managed_files = [pscustomobject]@{ status = $Managed }
+            }
+            bridge = [pscustomobject]@{ status = $Bridge }
+            project = [pscustomobject]@{ status = $Project; reason = $ProjectReason }
+        }
+    }
+    $allowedActions = @("none", "inspect-manually", "reinstall-runtime", "review-managed-conflicts", "repair-bridge", "refresh-project-templates", "run-memory-migration-analysis")
+    $actionCases = @(
+        @{ name = "healthy"; expected = "none" },
+        @{ name = "not-configured-not-requested"; bridge = "not-configured"; project = "unknown"; reason = "not-requested"; expected = "none" },
+        @{ name = "manifest-missing"; manifest = "missing"; expected = "reinstall-runtime" },
+        @{ name = "manifest-legacy"; manifest = "legacy"; expected = "reinstall-runtime" },
+        @{ name = "manifest-unsupported"; manifest = "unsupported"; expected = "reinstall-runtime" },
+        @{ name = "manifest-invalid-managed-conflict"; manifest = "invalid"; managed = "conflict"; expected = "reinstall-runtime" },
+        @{ name = "managed-conflict-bridge-broken"; managed = "conflict"; bridge = "broken"; expected = "review-managed-conflicts" },
+        @{ name = "managed-missing-bridge-broken"; managed = "missing"; bridge = "broken"; expected = "reinstall-runtime" },
+        @{ name = "managed-modified-bridge-broken"; managed = "modified"; bridge = "broken"; expected = "inspect-manually" },
+        @{ name = "managed-unknown-bridge-broken"; managed = "unknown"; bridge = "broken"; expected = "inspect-manually" },
+        @{ name = "bridge-stale"; bridge = "stale"; expected = "repair-bridge" },
+        @{ name = "bridge-broken-migration"; bridge = "broken"; project = "migration-required"; expected = "repair-bridge" },
+        @{ name = "bridge-conflict"; bridge = "conflict"; expected = "repair-bridge" },
+        @{ name = "bridge-unknown-refresh"; bridge = "unknown"; project = "optional-refresh"; expected = "inspect-manually" },
+        @{ name = "project-migration"; project = "migration-required"; expected = "run-memory-migration-analysis" },
+        @{ name = "project-refresh"; project = "optional-refresh"; expected = "refresh-project-templates" },
+        @{ name = "project-unknown"; project = "unknown"; reason = "missing-lock"; expected = "inspect-manually" },
+        @{ name = "manifest-unrecognized"; manifest = "future"; expected = "inspect-manually" },
+        @{ name = "managed-unrecognized"; managed = "future"; expected = "inspect-manually" },
+        @{ name = "bridge-unrecognized"; bridge = "future"; expected = "inspect-manually" },
+        @{ name = "project-unrecognized"; project = "future"; expected = "inspect-manually" },
+        @{ name = "manifest-case-variant"; manifest = "CURRENT"; expected = "inspect-manually" },
+        @{ name = "managed-case-variant"; managed = "Conflict"; expected = "inspect-manually" },
+        @{ name = "bridge-case-variant"; bridge = "Broken"; expected = "inspect-manually" },
+        @{ name = "project-case-variant"; project = "OPTIONAL-REFRESH"; expected = "inspect-manually" },
+        @{ name = "project-reason-case-variant"; project = "unknown"; reason = "NOT-REQUESTED"; expected = "inspect-manually" },
+        @{ name = "manifest-wrong-type"; manifest = 7; expected = "inspect-manually" },
+        @{ name = "managed-wrong-type"; managed = @("current", "extra"); expected = "inspect-manually" },
+        @{ name = "bridge-wrong-type"; bridge = $true; expected = "inspect-manually" },
+        @{ name = "project-wrong-type"; project = 7; expected = "inspect-manually" },
+        @{ name = "reason-wrong-type"; project = "unknown"; reason = 7; expected = "inspect-manually" }
+    )
+    foreach ($case in $actionCases) {
+        $parameters = @{}
+        foreach ($mapping in @(@("manifest", "Manifest"), @("managed", "Managed"), @("bridge", "Bridge"), @("project", "Project"), @("reason", "ProjectReason"))) {
+            if ($case.ContainsKey($mapping[0])) { $parameters[$mapping[1]] = $case[$mapping[0]] }
+        }
+        $actual = Get-RecommendedNextAction -Payload (New-ActionPayload @parameters)
+        Assert-StatusCondition -Condition ($actual -ceq $case.expected) -Message "Recommended action case $($case.name) returned $actual."
+        Assert-StatusCondition -Condition ($actual -cin $allowedActions) -Message "Recommended action case $($case.name) returned an action outside the public contract."
+        $evidence.Add([ordered]@{ scenario = "recommended-action-$($case.name)"; status = $actual })
+    }
+    foreach ($missingPayload in @(
+        [pscustomobject]@{},
+        [pscustomobject]@{ runtime = [pscustomobject]@{} },
+        [pscustomobject]@{ runtime = [pscustomobject]@{ manifest_status = "current" } }
+    )) {
+        Assert-StatusCondition -Condition ((Get-RecommendedNextAction -Payload $missingPayload) -ceq "inspect-manually") -Message "Missing recommended action property did not fail soft."
+    }
+    $throwingPayload = New-ActionPayload
+    $throwingPayload.runtime.PSObject.Properties.Remove("manifest_status")
+    $throwingPayload.runtime | Add-Member -MemberType ScriptProperty -Name manifest_status -Value { throw "private synthetic action failure" }
+    Assert-StatusCondition -Condition ((Get-RecommendedNextAction -Payload $throwingPayload) -ceq "inspect-manually") -Message "Throwing recommended action property did not fail soft."
+    Assert-StatusCondition -Condition (@($actionCases | ForEach-Object { $_.expected } | Sort-Object -Unique).Count -eq $allowedActions.Count) -Message "Recommended action fixtures do not cover every allowed action."
 
     $validRuntime = Join-PathParts $fixtureRoot "valid"
     $validManifest = New-CurrentManifest
@@ -646,6 +725,7 @@ function Invoke-RuntimeStatusFixtureChecks {
             "Install strategy: copy",
             "Profile: recommended",
             "Installed at: 2026-07-12T00:00:00.0000000Z",
+            "Recommended next action: $([string]$nullPayload.recommended_next_action)",
             "Findings: 2"
         )) {
         Assert-StatusCondition -Condition ($textOutput.Contains($expectedLine)) -Message "Text output did not match the JSON payload: $expectedLine"
@@ -1003,6 +1083,7 @@ Write-Output '{"findings":[{"code":"notes_contains_session_state"},{"code":"miss
         $run = Invoke-Status -RuntimeRoot $runtimeDir.FullName
         $payload = Read-StatusPayload -Run $run
         Assert-StatusCondition -Condition ([string]$payload.runtime.manifest_status -in $allowedStatuses) -Message "Unexpected manifest status enum."
+        Assert-StatusCondition -Condition ([string]$payload.recommended_next_action -in $allowedActions) -Message "Unexpected recommended action enum."
         Assert-StatusCondition -Condition ([string]$payload.runtime.release_version.reason -in $allowedReasons -and [string]$payload.runtime.source_commit.reason -in $allowedReasons) -Message "Unexpected provenance reason enum."
         Assert-StatusCondition -Condition (@($payload.findings | Where-Object { [string]$_.severity -notin $allowedSeverities }).Count -eq 0) -Message "Unexpected finding severity enum."
     }
