@@ -69,7 +69,10 @@ function Invoke-RuntimeStatusFixtureChecks {
             [Parameter(Mandatory = $true)][string]$AliasPath,
             [Parameter(Mandatory = $true)][string]$TargetPath
         )
-        $alias = Get-Item -LiteralPath $AliasPath -Force -ErrorAction SilentlyContinue
+        $aliasName = [System.IO.Path]::GetFileName($AliasPath)
+        $alias = Get-ChildItem -LiteralPath (Split-Path -Parent $AliasPath) -Force |
+            Where-Object { [string]::Equals([string]$_.Name, $aliasName, [System.StringComparison]::Ordinal) } |
+            Select-Object -First 1
         return [ordered]@{
             manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "install-manifest.json") -Algorithm SHA256).Hash
             alias_type = if ($null -eq $alias) { $null } else { [string]$alias.LinkType }
