@@ -45,6 +45,11 @@ try {
     if ($hubLockStatusLine.Count -lt 1 -or $hubLockStatusLine[0] -notmatch 'Status:\s+in_sync') {
         throw ("hub.lock drift check did not report in_sync. Output: {0}" -f ($hubLockOutput -join " | "))
     }
+    foreach ($expectedLine in @("Lock file:", "Locked hub dir:", "Locked hub remote:", "Locked hub branch:", "Locked hub commit:", "Resolved hub dir:", "Current hub remote:", "Current hub branch:", "Current hub commit:", "Current hub dirty:", "Template language:", "Current template hash:", "Locked template hash:")) {
+        if (@($hubLockOutput | Where-Object { [string]$_ -like ("{0}*" -f $expectedLine) }).Count -eq 0) {
+            throw ("hub.lock in_sync text omitted {0}" -f $expectedLine)
+        }
+    }
 
     $batchHubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture,$batchProjectFixture -HubDir $hubFixture)
     $batchInSyncCount = @($batchHubLockOutput | Where-Object { $_ -match '^Status:\s+in_sync' }).Count
@@ -75,8 +80,45 @@ try {
     $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "missing-lock" -Arguments @("-ProjectDir", $missingLockProject, "-HubDir", $hubFixture) -ExpectedStatus "missing_lock"))
     $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "invalid-hub-dir" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $invalidHubDir) -ExpectedStatus "invalid_hub_dir"))
 
+    $plainHub = Join-PathParts $scratchRootFull "hub-lock-plain-hub"
+    New-Item -ItemType Directory -Force -Path $plainHub | Out-Null
+    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "hub-not-git" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $plainHub) -ExpectedStatus "hub_not_git"))
+
+    Set-Content -LiteralPath (Join-Path $hubFixture "commit-drift.txt") -Value "commit drift fixture"
+    & git -C $hubFixture add commit-drift.txt
+    & git -C $hubFixture commit -m "Add commit drift fixture" | Out-Null
+    $commitDrift = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture)
+    if ($commitDrift.exit_code -eq 0 -or @($commitDrift.output | Where-Object { $_ -match '^- hub_commit drift: lock=.* current=.*$' }).Count -ne 1) {
+        throw ("hub.lock commit-only drift text was not diagnostic. Output: {0}" -f ($commitDrift.output -join " | "))
+    }
+    $commitDriftJson = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture, "-Json")
+    $commitDriftPayload = (@($commitDriftJson.output) -join "`n") | ConvertFrom-Json
+    if ($commitDriftJson.exit_code -ne 0 -or [string]$commitDriftPayload.results[0].status -ne "drift" -or [string]$commitDriftPayload.results[0].reason -ne "hub-commit-drift") {
+        throw "hub.lock commit-only drift JSON mapping or exit code changed."
+    }
+    $commitDriftJsonText = @($commitDriftJson.output) -join "`n"
+    foreach ($privateValue in @($projectFixture, $hubFixture, "https://example.invalid/release-validation-hub.git", [string](& git -C $hubFixture rev-parse HEAD))) {
+        if ($commitDriftJsonText.Contains($privateValue)) { throw "hub.lock JSON leaked local diagnostic facts." }
+    }
+
+    $lockPath = Join-PathParts $projectFixture ".agents" "hub.lock.json"
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    $lock.hub_commit = [string](& git -C $hubFixture rev-parse HEAD)
+    $originalTemplateHash = [string]$lock.template_tree_hash_sha256
+    $lock.template_tree_hash_sha256 = "0" * 64
+    $lock | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lockPath -Encoding UTF8
+    $templateDrift = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture)
+    if ($templateDrift.exit_code -eq 0 -or @($templateDrift.output | Where-Object { $_ -match '^- template tree drift: lock=.* current=.*$' }).Count -ne 1) {
+        throw ("hub.lock template-only drift text was not diagnostic. Output: {0}" -f ($templateDrift.output -join " | "))
+    }
+    $lock.template_tree_hash_sha256 = $originalTemplateHash
+    $lock | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lockPath -Encoding UTF8
+
     Add-Content -LiteralPath (Join-PathParts $hubFixture "templates" "languages" "en" "project-root" "AGENTS.md") -Value "`nrelease validation drift marker"
-    $negativeEvidence.Add((Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "drift"))
+    $dirtyEvidence = Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "drift"
+    $dirtyRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture)
+    if (@($dirtyRun.output | Where-Object { $_ -match '^- hub_dirty:' }).Count -eq 0) { throw "hub.lock dirty text omitted the detailed dirty diagnostic." }
+    $negativeEvidence.Add($dirtyEvidence)
 
     Add-Check "hub.lock drift check" "PASS" "Git-backed temporary hub lock check reported in_sync." ([ordered]@{
         temp_hub = $hubFixture

@@ -52,31 +52,55 @@ function Get-TemplateTreeHash {
     } finally { $sha.Dispose() }
 }
 
-function New-LockResult {
-    param([string]$Status, [string]$Reason, [AllowNull()][object]$Language, [string[]]$ReasonCodes = @())
+function New-HubLockFacts {
+    param([string]$Project)
     return [ordered]@{
-        status = $Status
-        reason = $Reason
-        project_language = $Language
-        reason_codes = @($ReasonCodes | Sort-Object -Unique)
+        status = "unknown"; reason = "internal-error"; reason_codes = @("internal-error"); project_language = $null
+        project_path = $Project; lock_path = ""; locked_hub_dir = ""; locked_hub_remote = ""; locked_hub_branch = ""
+        locked_hub_commit = ""; locked_hub_dirty = $null; resolved_hub_dir = ""; current_hub_remote = ""
+        current_hub_branch = ""; current_hub_commit = ""; current_hub_dirty = $null; current_template_hash = ""
+        locked_template_hash = ""; differences = @()
     }
 }
 
-function Get-HubLockStatus {
-    param([string]$Project, [string]$HubOverride)
-    if (-not (Test-Path -LiteralPath $Project -PathType Container)) { return New-LockResult "unknown" "project-not-found" $null @("project-not-found") }
-    $projectFull = (Resolve-Path -LiteralPath $Project).Path
-    $lockPath = Join-PathParts $projectFull ".agents" "hub.lock.json"
-    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) { return New-LockResult "unknown" "missing-lock" $null @("missing-lock") }
+function Set-HubLockOutcome {
+    param([System.Collections.IDictionary]$Facts, [string]$Status, [string]$Reason, [string[]]$ReasonCodes)
+    $Facts.status = $Status
+    $Facts.reason = $Reason
+    $Facts.reason_codes = @($ReasonCodes | Sort-Object -Unique)
+    return $Facts
+}
 
-    try { $lock = [System.IO.File]::ReadAllText($lockPath) | ConvertFrom-Json }
-    catch { return New-LockResult "unknown" "invalid-lock" $null @("invalid-lock") }
+function Get-HubLockFacts {
+    param([string]$Project, [string]$HubOverride)
+    $facts = New-HubLockFacts -Project $Project
+    if (-not (Test-Path -LiteralPath $Project -PathType Container)) {
+        return Set-HubLockOutcome $facts "unknown" "project-not-found" @("project-not-found")
+    }
+    $facts.project_path = (Resolve-Path -LiteralPath $Project).Path
+    $facts.lock_path = Join-PathParts $facts.project_path ".agents" "hub.lock.json"
+    if (-not (Test-Path -LiteralPath $facts.lock_path -PathType Leaf)) {
+        return Set-HubLockOutcome $facts "unknown" "missing-lock" @("missing-lock")
+    }
+
+    try { $lock = [System.IO.File]::ReadAllText($facts.lock_path) | ConvertFrom-Json }
+    catch { return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock") }
     if ($null -eq $lock -or $lock -is [System.Array] -or $lock -is [string] -or $lock -is [ValueType]) {
-        return New-LockResult "unknown" "invalid-lock" $null @("invalid-lock")
+        return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock")
     }
     $lockSchema = $lock.PSObject.Properties["schema_version"]
     if ($null -eq $lockSchema -or ($lockSchema.Value -isnot [int] -and $lockSchema.Value -isnot [long]) -or [int64]$lockSchema.Value -ne 1) {
-        return New-LockResult "unknown" "invalid-lock" $null @("invalid-lock")
+        return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock")
+    }
+
+    $facts.locked_hub_dir = Get-TrimmedString $lock.hub_dir
+    $facts.locked_hub_remote = Get-TrimmedString $lock.hub_remote
+    $facts.locked_hub_branch = Get-TrimmedString $lock.hub_branch
+    $facts.locked_hub_commit = Get-TrimmedString $lock.hub_commit
+    $facts.locked_template_hash = Get-TrimmedString $lock.template_tree_hash_sha256
+    if ($lock.PSObject.Properties.Name -contains "hub_dirty") {
+        if ($lock.hub_dirty -isnot [bool]) { return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock") }
+        $facts.locked_hub_dirty = [bool]$lock.hub_dirty
     }
 
     try {
@@ -85,82 +109,111 @@ function Get-HubLockStatus {
             $rawLanguage = Get-TrimmedString $lock.project_language
             if (-not [string]::IsNullOrWhiteSpace($rawLanguage)) { $lockLanguage = Resolve-ProjectLanguageCode -Language $rawLanguage }
         }
-        $guideLanguage = Read-ProjectGuideLanguageCode -ProjectPath $projectFull
-    } catch { return New-LockResult "unknown" "project-language-unresolved" $null @("metadata-unresolved") }
-    if (-not [string]::IsNullOrWhiteSpace($lockLanguage) -and -not [string]::IsNullOrWhiteSpace($guideLanguage) -and $lockLanguage -ne $guideLanguage) {
-        return New-LockResult "unknown" "project-language-conflict" $null @("metadata-unresolved")
+        $guideLanguage = Read-ProjectGuideLanguageCode -ProjectPath $facts.project_path
+    } catch { return Set-HubLockOutcome $facts "unknown" "project-language-unresolved" @("metadata-unresolved") }
+    if ($lockLanguage -and $guideLanguage -and $lockLanguage -ne $guideLanguage) {
+        return Set-HubLockOutcome $facts "unknown" "project-language-conflict" @("metadata-unresolved")
     }
-    $language = if (-not [string]::IsNullOrWhiteSpace($lockLanguage)) { $lockLanguage } else { $guideLanguage }
-    if ([string]::IsNullOrWhiteSpace($language)) { return New-LockResult "unknown" "project-language-unresolved" $null @("metadata-unresolved") }
+    $facts.project_language = if ($lockLanguage) { $lockLanguage } else { $guideLanguage }
+    if (-not $facts.project_language) { return Set-HubLockOutcome $facts "unknown" "project-language-unresolved" @("metadata-unresolved") }
 
-    $effectiveHubDir = if (-not [string]::IsNullOrWhiteSpace($HubOverride)) { $HubOverride } else { Get-TrimmedString $lock.hub_dir }
-    if ([string]::IsNullOrWhiteSpace($effectiveHubDir) -or -not (Test-Path -LiteralPath $effectiveHubDir -PathType Container)) {
-        return New-LockResult "unknown" "invalid-hub-dir" $language @("invalid-hub-dir")
+    $facts.resolved_hub_dir = if ($HubOverride) { $HubOverride } else { $facts.locked_hub_dir }
+    if (-not $facts.resolved_hub_dir -or -not (Test-Path -LiteralPath $facts.resolved_hub_dir -PathType Container)) {
+        return Set-HubLockOutcome $facts "unknown" "invalid-hub-dir" @("invalid-hub-dir")
     }
-    if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { return New-LockResult "unknown" "git-unavailable" $language @("git-unavailable") }
-    $gitRoot = Invoke-GitProbe $effectiveHubDir @("rev-parse", "--show-toplevel")
-    if (-not $gitRoot.success -or [string]::IsNullOrWhiteSpace($gitRoot.value)) { return New-LockResult "unknown" "hub-not-git" $language @("hub-not-git") }
+    if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { return Set-HubLockOutcome $facts "unknown" "git-unavailable" @("git-unavailable") }
+    $gitRoot = Invoke-GitProbe $facts.resolved_hub_dir @("rev-parse", "--show-toplevel")
+    if (-not $gitRoot.success -or -not $gitRoot.value) { return Set-HubLockOutcome $facts "unknown" "hub-not-git" @("hub-not-git") }
 
-    $remote = Invoke-GitProbe $effectiveHubDir @("config", "--get", "remote.origin.url")
-    $branch = Invoke-GitProbe $effectiveHubDir @("rev-parse", "--abbrev-ref", "HEAD")
-    $commit = Invoke-GitProbe $effectiveHubDir @("rev-parse", "--verify", "HEAD")
-    $dirty = Invoke-GitProbe $effectiveHubDir @("status", "--porcelain")
+    $remote = Invoke-GitProbe $facts.resolved_hub_dir @("config", "--get", "remote.origin.url")
+    $branch = Invoke-GitProbe $facts.resolved_hub_dir @("rev-parse", "--abbrev-ref", "HEAD")
+    $commit = Invoke-GitProbe $facts.resolved_hub_dir @("rev-parse", "--verify", "HEAD")
+    $dirty = Invoke-GitProbe $facts.resolved_hub_dir @("status", "--porcelain")
     if (-not $remote.success -or -not $branch.success -or -not $commit.success -or -not $dirty.success) {
-        return New-LockResult "unknown" "metadata-unresolved" $language @("metadata-unresolved")
+        return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved")
     }
+    $facts.current_hub_remote = $remote.value
+    $facts.current_hub_branch = $branch.value
+    $facts.current_hub_commit = $commit.value
+    $facts.current_hub_dirty = -not [string]::IsNullOrWhiteSpace($dirty.value)
 
-    $lockedRemote = Get-TrimmedString $lock.hub_remote
-    $lockedBranch = Get-TrimmedString $lock.hub_branch
-    $lockedCommit = Get-TrimmedString $lock.hub_commit
-    if ([string]::IsNullOrWhiteSpace($lockedRemote) -or [string]::IsNullOrWhiteSpace($lockedBranch) -or $lockedCommit -cnotmatch '^[0-9a-fA-F]{40}$') {
-        return New-LockResult "unknown" "metadata-unresolved" $language @("metadata-unresolved")
+    if (-not $facts.locked_hub_remote -or -not $facts.locked_hub_branch -or $facts.locked_hub_commit -cnotmatch '^[0-9a-fA-F]{40}$') {
+        return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved")
     }
     $unknownCodes = @()
-    if ($lockedRemote -ne $remote.value) { $unknownCodes += "hub-remote-drift" }
-    if ($lockedBranch -ne $branch.value) { $unknownCodes += "hub-branch-drift" }
-    if ($lock.PSObject.Properties.Name -contains "hub_dirty" -and $lock.hub_dirty -isnot [bool]) {
-        return New-LockResult "unknown" "invalid-lock" $language @("invalid-lock")
+    if ($facts.locked_hub_remote -ne $facts.current_hub_remote) {
+        $unknownCodes += "hub-remote-drift"; $facts.differences += ("hub_remote drift: lock={0} current={1}" -f $facts.locked_hub_remote, $facts.current_hub_remote)
     }
-    if ($lock.PSObject.Properties.Name -contains "hub_dirty" -and [bool]$lock.hub_dirty) { $unknownCodes += "locked-hub-dirty" }
-    if (-not [string]::IsNullOrWhiteSpace($dirty.value)) { $unknownCodes += "current-hub-dirty" }
-    if ($unknownCodes.Count -gt 0) { return New-LockResult "unknown" $unknownCodes[0] $language $unknownCodes }
+    if ($facts.locked_hub_branch -ne $facts.current_hub_branch) {
+        $unknownCodes += "hub-branch-drift"; $facts.differences += ("hub_branch drift: lock={0} current={1}" -f $facts.locked_hub_branch, $facts.current_hub_branch)
+    }
+    if ($facts.locked_hub_dirty) {
+        $unknownCodes += "locked-hub-dirty"; $facts.differences += "hub_dirty: lock was created from a dirty hub; reinstall bootstrap after committing or discarding hub changes"
+    }
+    if ($facts.current_hub_dirty) {
+        $unknownCodes += "current-hub-dirty"; $facts.differences += "hub_dirty: current hub has uncommitted changes; commit or discard them before treating the lock as reproducible"
+    }
+    if ($unknownCodes.Count -gt 0) { return Set-HubLockOutcome $facts "unknown" $unknownCodes[0] $unknownCodes }
 
-    try { $templateHash = Get-TemplateTreeHash -HubRoot $effectiveHubDir -ProjectLanguage $language }
-    catch { return New-LockResult "unknown" "metadata-unresolved" $language @("metadata-unresolved") }
-    $lockedTemplateHash = Get-TrimmedString $lock.template_tree_hash_sha256
-    if (-not [string]::IsNullOrWhiteSpace($lockedTemplateHash) -and $lockedTemplateHash -cnotmatch '^[0-9a-fA-F]{64}$') {
-        return New-LockResult "unknown" "invalid-lock" $language @("invalid-lock")
+    try { $facts.current_template_hash = Get-TemplateTreeHash $facts.resolved_hub_dir $facts.project_language }
+    catch { return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved") }
+    if ($facts.locked_template_hash -and $facts.locked_template_hash -cnotmatch '^[0-9a-fA-F]{64}$') {
+        return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock")
     }
     $driftCodes = @()
-    if ($lockedCommit -ne $commit.value) { $driftCodes += "hub-commit-drift" }
-    if ([string]::IsNullOrWhiteSpace($lockedTemplateHash)) { $driftCodes += "template-hash-missing" }
-    elseif ($lockedTemplateHash -ne $templateHash) { $driftCodes += "template-tree-drift" }
-    if ($driftCodes.Count -gt 0) { return New-LockResult "drift" $driftCodes[0] $language $driftCodes }
-    return New-LockResult "in-sync" "hub-lock-in-sync" $language @()
+    if ($facts.locked_hub_commit -ne $facts.current_hub_commit) {
+        $driftCodes += "hub-commit-drift"; $facts.differences += ("hub_commit drift: lock={0} current={1}" -f $facts.locked_hub_commit, $facts.current_hub_commit)
+    }
+    if (-not $facts.locked_template_hash) {
+        $driftCodes += "template-hash-missing"; $facts.differences += "template tree drift: lock does not contain a template hash"
+    } elseif ($facts.locked_template_hash -ne $facts.current_template_hash) {
+        $driftCodes += "template-tree-drift"; $facts.differences += ("template tree drift: lock={0} current={1}" -f $facts.locked_template_hash, $facts.current_template_hash)
+    }
+    if ($driftCodes.Count -gt 0) { return Set-HubLockOutcome $facts "drift" $driftCodes[0] $driftCodes }
+    return Set-HubLockOutcome $facts "in-sync" "hub-lock-in-sync" @()
 }
 
-$results = @($ProjectDir | ForEach-Object {
-        try { Get-HubLockStatus -Project $_ -HubOverride $HubDir }
-        catch { New-LockResult "unknown" "internal-error" $null @("internal-error") }
+function Write-HubLockText {
+    param([System.Collections.IDictionary]$Facts)
+    Write-Output ("Project: {0}" -f $Facts.project_path)
+    Write-Output ("Lock file: {0}" -f $(if ($Facts.lock_path) { $Facts.lock_path } else { "missing" }))
+    Write-Output ("Locked hub dir: {0}" -f $Facts.locked_hub_dir)
+    Write-Output ("Locked hub remote: {0}" -f $Facts.locked_hub_remote)
+    Write-Output ("Locked hub branch: {0}" -f $Facts.locked_hub_branch)
+    Write-Output ("Locked hub commit: {0}" -f $Facts.locked_hub_commit)
+    if ($null -ne $Facts.locked_hub_dirty) { Write-Output ("Locked hub dirty: {0}" -f $Facts.locked_hub_dirty) }
+    Write-Output ("Resolved hub dir: {0}" -f $Facts.resolved_hub_dir)
+    Write-Output ("Current hub remote: {0}" -f $Facts.current_hub_remote)
+    Write-Output ("Current hub branch: {0}" -f $Facts.current_hub_branch)
+    Write-Output ("Current hub commit: {0}" -f $Facts.current_hub_commit)
+    Write-Output ("Current hub dirty: {0}" -f $Facts.current_hub_dirty)
+    Write-Output ("Template language: {0}" -f $Facts.project_language)
+    Write-Output ("Current template hash: {0}" -f $Facts.current_template_hash)
+    Write-Output ("Locked template hash: {0}" -f $Facts.locked_template_hash)
+    $textStatus = switch ($Facts.reason) {
+        "missing-lock" { "missing_lock" }
+        "invalid-hub-dir" { "invalid_hub_dir" }
+        "hub-not-git" { "hub_not_git" }
+        default { if ($Facts.status -eq "in-sync") { "in_sync" } else { "drift" } }
+    }
+    Write-Output ("Status: {0}" -f $textStatus)
+    foreach ($difference in $Facts.differences) { Write-Output ("- {0}" -f $difference) }
+    Write-Output ""
+}
+
+$facts = @($ProjectDir | ForEach-Object {
+        try { Get-HubLockFacts -Project $_ -HubOverride $HubDir }
+        catch { Set-HubLockOutcome (New-HubLockFacts -Project $_) "unknown" "internal-error" @("internal-error") }
     })
+
 if ($Json.IsPresent) {
+    $results = @($facts | ForEach-Object {
+        [ordered]@{ status = $_.status; reason = $_.reason; project_language = $_.project_language; reason_codes = @($_.reason_codes) }
+    })
     [ordered]@{ schema_version = 1; results = $results } | ConvertTo-Json -Depth 6
     $global:LASTEXITCODE = 0
     return
 }
 
-$hasDrift = $false
-for ($index = 0; $index -lt $results.Count; $index++) {
-    Write-Output ("Project: {0}" -f $ProjectDir[$index])
-    $textStatus = switch ([string]$results[$index].reason) {
-        "missing-lock" { "missing_lock" }
-        "invalid-hub-dir" { "invalid_hub_dir" }
-        "hub-not-git" { "hub_not_git" }
-        default { if ([string]$results[$index].status -eq "in-sync") { "in_sync" } else { "drift" } }
-    }
-    Write-Output ("Status: {0}" -f $textStatus)
-    Write-Output ("Reason: {0}" -f $results[$index].reason)
-    Write-Output ""
-    if ([string]$results[$index].status -ne "in-sync") { $hasDrift = $true }
-}
-if ($hasDrift) { exit 1 }
+foreach ($item in $facts) { Write-HubLockText -Facts $item }
+if (@($facts | Where-Object { $_.status -ne "in-sync" }).Count -gt 0) { exit 1 }

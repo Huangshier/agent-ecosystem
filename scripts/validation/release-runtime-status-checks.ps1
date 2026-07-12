@@ -103,12 +103,30 @@ function Invoke-RuntimeStatusFixtureChecks {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
             [string]$ProjectRoot = "",
-            [switch]$Text
+            [switch]$Text,
+            [string]$LockHelper = "",
+            [string]$UpgradeHelper = "",
+            [string]$DiagnoseHelper = ""
         )
         $arguments = @("-RuntimeDir", $RuntimeRoot)
         if (-not [string]::IsNullOrWhiteSpace($ProjectRoot)) { $arguments += @("-ProjectDir", $ProjectRoot) }
+        if ($LockHelper) { $arguments += @("-LockHelperPath", $LockHelper) }
+        if ($UpgradeHelper) { $arguments += @("-UpgradeHelperPath", $UpgradeHelper) }
+        if ($DiagnoseHelper) { $arguments += @("-DiagnoseHelperPath", $DiagnoseHelper) }
         if (-not $Text.IsPresent) { $arguments += "-Json" }
         return Invoke-IsolatedPowerShellScript -ScriptPath $statusScript -Arguments $arguments
+    }
+
+    function New-StatusHelperFixture {
+        param([string]$Name, [string]$Kind, [string]$Json)
+        $path = Join-PathParts $fixtureRoot "helpers" ("{0}.ps1" -f $Name)
+        $parameters = switch ($Kind) {
+            "lock" { 'param([string[]]$ProjectDir, [switch]$Json)' }
+            "upgrade" { 'param([string]$ProjectDir, [string]$Mode, [switch]$Json)' }
+            default { 'param([string]$ProjectRoot, [switch]$Json)' }
+        }
+        Write-StatusText -Path $path -Text ($parameters + "`nWrite-Output @'`n" + $Json + "`n'@")
+        return $path
     }
 
     function Get-ProjectFixtureTreeState {
@@ -862,6 +880,60 @@ function Invoke-RuntimeStatusFixtureChecks {
     $diagnosticPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $diagnosticProject.root)
     Assert-StatusCondition -Condition ([string]$diagnosticPayload.project.status -eq "current" -and [int]$diagnosticPayload.project.memory.migration_finding_count -eq 0 -and [int]$diagnosticPayload.project.memory.diagnostic_warning_count -gt 0) -Message "Diagnostic-only finding changed project drift status."
     $evidence.Add([ordered]@{ scenario = "project-diagnostic-only"; status = [string]$diagnosticPayload.project.status })
+
+    $validLockHelper = New-StatusHelperFixture -Name "lock-valid" -Kind "lock" -Json '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}'
+    $validUpgradeHelper = New-StatusHelperFixture -Name "upgrade-valid" -Kind "upgrade" -Json '{"findings":[]}'
+    $validDiagnoseHelper = New-StatusHelperFixture -Name "diagnose-valid" -Kind "diagnose" -Json '{"findings":[]}'
+    $separator = [string][char]92
+    $maliciousValue = "C:{0}Users{0}private-{1}{0}data" -f $separator, "user"
+    $lockContractCases = @(
+        @{ name = "schema-string"; json = '{"schema_version":"bad","results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}' },
+        @{ name = "results-null"; json = '{"schema_version":1,"results":null}' },
+        @{ name = "results-empty"; json = '{"schema_version":1,"results":[]}' },
+        @{ name = "results-multiple"; json = '{"schema_version":1,"results":[{},{}]}' },
+        @{ name = "result-scalar"; json = '{"schema_version":1,"results":[7]}' },
+        @{ name = "result-array"; json = '{"schema_version":1,"results":[[]]}' },
+        @{ name = "unknown-status"; json = '{"schema_version":1,"results":[{"status":"unsafe","reason":"hub-lock-in-sync","project_language":"en"}]}' },
+        @{ name = "unknown-reason"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"__VALUE__","project_language":null}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) },
+        @{ name = "invalid-language"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"private"}]}' }
+    )
+    foreach ($case in $lockContractCases) {
+        $helper = New-StatusHelperFixture -Name ("lock-{0}" -f $case.name) -Kind "lock" -Json $case.json
+        foreach ($textMode in @($false, $true)) {
+            $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -Text:$textMode -LockHelper $helper -UpgradeHelper $validUpgradeHelper -DiagnoseHelper $validDiagnoseHelper
+            Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0) -Message "Malformed lock helper $($case.name) did not fail soft."
+            $output = @($run.output) -join "`n"
+            Assert-StatusCondition -Condition (-not $output.Contains($maliciousValue) -and -not $output.Contains("ParameterBinding") -and -not $output.Contains("Cannot bind argument")) -Message "Malformed lock helper $($case.name) leaked untrusted content."
+            if (-not $textMode) {
+                $payload = $output | ConvertFrom-Json
+                Assert-StatusCondition -Condition ([string]$payload.project.reason -eq "baseline-helper-unavailable" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and $null -eq $payload.project.project_language) -Message "Malformed lock helper $($case.name) returned the wrong fallback."
+            }
+        }
+        $evidence.Add([ordered]@{ scenario = "project-lock-contract-$($case.name)"; status = "unknown" })
+    }
+
+    $memoryContractCases = @(
+        @{ name = "top-null"; json = 'null' }, @{ name = "top-scalar"; json = '7' }, @{ name = "top-array"; json = '[]' },
+        @{ name = "findings-missing"; json = '{}' }, @{ name = "findings-null"; json = '{"findings":null}' },
+        @{ name = "finding-scalar"; json = '{"findings":[7]}' },
+        @{ name = "unknown-code"; json = '{"findings":[{"code":"__VALUE__"}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) },
+        @{ name = "mixed-codes"; json = '{"findings":[{"code":"notes_contains_session_state"},{"code":"__VALUE__"}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) }
+    )
+    foreach ($case in $memoryContractCases) {
+        $helper = New-StatusHelperFixture -Name ("memory-{0}" -f $case.name) -Kind "upgrade" -Json $case.json
+        $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -LockHelper $validLockHelper -UpgradeHelper $helper -DiagnoseHelper $validDiagnoseHelper
+        $payloadText = @($run.output) -join "`n"
+        Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0 -and -not $payloadText.Contains($maliciousValue)) -Message "Memory helper $($case.name) did not remain public-safe and fail-soft."
+        $payload = $payloadText | ConvertFrom-Json
+        if ($case.name -eq "unknown-code") {
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "current" -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Unknown memory finding code changed status or entered output."
+        } elseif ($case.name -eq "mixed-codes") {
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "migration-required" -and (@($payload.project.memory.finding_codes) -join ',') -eq "notes_contains_session_state") -Message "Mixed memory findings did not retain only the known code."
+        } else {
+            Assert-StatusCondition -Condition ([string]$payload.project.reason -eq "memory-helper-unavailable" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Malformed memory helper $($case.name) returned the wrong fallback."
+        }
+        $evidence.Add([ordered]@{ scenario = "project-memory-contract-$($case.name)"; status = [string]$payload.project.status })
+    }
 
     foreach ($unknownCase in @("malformed-lock", "invalid-hub", "hub-not-git", "locked-dirty", "current-dirty", "remote-mismatch", "branch-mismatch")) {
         $unknownFixture = New-ProjectStatusFixture -Name $unknownCase
