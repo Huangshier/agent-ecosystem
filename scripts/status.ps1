@@ -98,13 +98,18 @@ function Test-ProjectHelperInteger {
         $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64]
 }
 
-function Reset-ProjectBaselineUnavailable {
+function Reset-ProjectUnavailable {
     param([object]$Payload)
     $Payload.project.status = "unknown"
     $Payload.project.reason = "baseline-helper-unavailable"
+    $Payload.project.project_language = $null
     $Payload.project.baseline.status = "unknown"
     $Payload.project.baseline.reason = "helper-unavailable"
-    $Payload.project.project_language = $null
+    $Payload.project.memory.status = "unknown"
+    $Payload.project.memory.migration_finding_count = 0
+    $Payload.project.memory.refresh_finding_count = 0
+    $Payload.project.memory.diagnostic_warning_count = 0
+    $Payload.project.memory.finding_codes = @()
 }
 
 function Reset-ProjectMemoryUnavailable {
@@ -149,7 +154,7 @@ function Set-ProjectStatus {
         -not (Test-ProjectHelperInteger -Value $lockSchemaProperty.Value) -or [int64]$lockSchemaProperty.Value -ne 1 -or
         $lockResultsProperty.Value -isnot [System.Array] -or $lockResultsProperty.Value.Count -ne 1 -or
         -not (Test-ProjectHelperObject -Value $lockResultsProperty.Value[0])) {
-        Reset-ProjectBaselineUnavailable -Payload $Payload
+        Reset-ProjectUnavailable -Payload $Payload
         return
     }
 
@@ -159,19 +164,26 @@ function Set-ProjectStatus {
     $lockStatus = if ($null -eq $lockStatusProperty) { $null } else { $lockStatusProperty.Value }
     $lockReason = if ($null -eq $lockReasonProperty) { $null } else { $lockReasonProperty.Value }
     $lockLanguageProperty = $lockResult.PSObject.Properties["project_language"]
-    $allowedLockReasons = @(
-        "hub-lock-in-sync", "hub-commit-drift", "template-tree-drift", "template-hash-missing", "missing-lock",
-        "invalid-lock", "project-not-found", "invalid-hub-dir", "hub-not-git", "git-unavailable", "hub-remote-drift",
-        "hub-branch-drift", "locked-hub-dirty", "current-hub-dirty", "metadata-unresolved", "project-language-unresolved",
-        "project-language-conflict", "internal-error"
-    )
-    if ($lockStatus -isnot [string] -or $lockStatus -notin @("in-sync", "drift", "unknown") -or
-        $lockReason -isnot [string] -or $lockReason -notin $allowedLockReasons -or $null -eq $lockLanguageProperty -or
-        ($null -ne $lockLanguageProperty.Value -and ($lockLanguageProperty.Value -isnot [string] -or $lockLanguageProperty.Value -notin @("en", "zh-CN")))) {
-        Reset-ProjectBaselineUnavailable -Payload $Payload
+    $allowedReasonsByStatus = @{
+        "in-sync" = @("hub-lock-in-sync")
+        "drift" = @("hub-commit-drift", "template-tree-drift", "template-hash-missing")
+        "unknown" = @(
+            "missing-lock", "invalid-lock", "project-not-found", "invalid-hub-dir", "hub-not-git", "git-unavailable",
+            "hub-remote-drift", "hub-branch-drift", "locked-hub-dirty", "current-hub-dirty", "metadata-unresolved",
+            "project-language-unresolved", "project-language-conflict", "internal-error"
+        )
+    }
+    $lockLanguage = if ($null -eq $lockLanguageProperty) { $null } else { $lockLanguageProperty.Value }
+    $hasValidStatusReason = $lockStatus -is [string] -and $allowedReasonsByStatus.ContainsKey($lockStatus) -and
+        $lockReason -is [string] -and $lockReason -in $allowedReasonsByStatus[$lockStatus]
+    $hasValidLanguage = $null -ne $lockLanguageProperty -and
+        ($null -eq $lockLanguage -or ($lockLanguage -is [string] -and $lockLanguage -in @("en", "zh-CN")))
+    $hasRequiredLanguage = $lockStatus -eq "unknown" -or $null -ne $lockLanguage
+    if (-not $hasValidStatusReason -or -not $hasValidLanguage -or -not $hasRequiredLanguage) {
+        Reset-ProjectUnavailable -Payload $Payload
         return
     }
-    if ($null -ne $lockLanguageProperty.Value) { $Payload.project.project_language = [string]$lockLanguageProperty.Value }
+    if ($null -ne $lockLanguage) { $Payload.project.project_language = [string]$lockLanguage }
     if ($lockStatus -eq "in-sync") {
         $Payload.project.baseline.status = "current"
         $Payload.project.baseline.reason = "hub-lock-in-sync"
@@ -976,7 +988,7 @@ function Write-RuntimeStatusText {
 $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeDir)
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
 try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir }
-catch { Reset-ProjectBaselineUnavailable -Payload $statusPayload }
+catch { Reset-ProjectUnavailable -Payload $statusPayload }
 if ($Json.IsPresent) {
     $statusPayload | ConvertTo-Json -Depth 8
 }

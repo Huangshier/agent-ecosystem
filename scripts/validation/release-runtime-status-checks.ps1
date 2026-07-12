@@ -895,7 +895,12 @@ function Invoke-RuntimeStatusFixtureChecks {
         @{ name = "result-array"; json = '{"schema_version":1,"results":[[]]}' },
         @{ name = "unknown-status"; json = '{"schema_version":1,"results":[{"status":"unsafe","reason":"hub-lock-in-sync","project_language":"en"}]}' },
         @{ name = "unknown-reason"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"__VALUE__","project_language":null}]}'.Replace('__VALUE__', ($maliciousValue -replace '\\','\\')) },
-        @{ name = "invalid-language"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"private"}]}' }
+        @{ name = "invalid-language"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"private"}]}' },
+        @{ name = "in-sync-missing-lock-null"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"missing-lock","project_language":null}]}' },
+        @{ name = "in-sync-language-null"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":null}]}' },
+        @{ name = "drift-invalid-lock-en"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"invalid-lock","project_language":"en"}]}' },
+        @{ name = "unknown-in-sync-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"hub-lock-in-sync","project_language":null}]}' },
+        @{ name = "unknown-template-drift-en"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"template-tree-drift","project_language":"en"}]}' }
     )
     foreach ($case in $lockContractCases) {
         $helper = New-StatusHelperFixture -Name ("lock-{0}" -f $case.name) -Kind "lock" -Json $case.json
@@ -906,11 +911,44 @@ function Invoke-RuntimeStatusFixtureChecks {
             Assert-StatusCondition -Condition (-not $output.Contains($maliciousValue) -and -not $output.Contains("ParameterBinding") -and -not $output.Contains("Cannot bind argument")) -Message "Malformed lock helper $($case.name) leaked untrusted content."
             if (-not $textMode) {
                 $payload = $output | ConvertFrom-Json
-                Assert-StatusCondition -Condition ([string]$payload.project.reason -eq "baseline-helper-unavailable" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and $null -eq $payload.project.project_language) -Message "Malformed lock helper $($case.name) returned the wrong fallback."
+                Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "baseline-helper-unavailable" -and $null -eq $payload.project.project_language -and [string]$payload.project.baseline.status -eq "unknown" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and [string]$payload.project.memory.status -eq "unknown" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and [int]$payload.project.memory.refresh_finding_count -eq 0 -and [int]$payload.project.memory.diagnostic_warning_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Malformed lock helper $($case.name) returned the wrong fallback."
             }
         }
         $evidence.Add([ordered]@{ scenario = "project-lock-contract-$($case.name)"; status = "unknown" })
     }
+
+    $validLockCombinations = @(
+        @{ name = "in-sync-en"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"en"}]}'; expected = "current"; language = "en" },
+        @{ name = "in-sync-zh"; json = '{"schema_version":1,"results":[{"status":"in-sync","reason":"hub-lock-in-sync","project_language":"zh-CN"}]}'; expected = "current"; language = "zh-CN" },
+        @{ name = "commit-drift-en"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"hub-commit-drift","project_language":"en"}]}'; expected = "optional-refresh"; language = "en" },
+        @{ name = "tree-drift-zh"; json = '{"schema_version":1,"results":[{"status":"drift","reason":"template-tree-drift","project_language":"zh-CN"}]}'; expected = "optional-refresh"; language = "zh-CN" },
+        @{ name = "missing-lock-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"missing-lock","project_language":null}]}'; expected = "unknown"; language = $null },
+        @{ name = "language-conflict-null"; json = '{"schema_version":1,"results":[{"status":"unknown","reason":"project-language-conflict","project_language":null}]}'; expected = "unknown"; language = $null }
+    )
+    foreach ($case in $validLockCombinations) {
+        $helper = New-StatusHelperFixture -Name ("lock-valid-{0}" -f $case.name) -Kind "lock" -Json $case.json
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -LockHelper $helper -UpgradeHelper $validUpgradeHelper -DiagnoseHelper $validDiagnoseHelper)
+        Assert-StatusCondition -Condition ([string]$payload.project.status -eq $case.expected -and $payload.project.project_language -eq $case.language) -Message "Valid lock helper combination $($case.name) changed mapping."
+        $evidence.Add([ordered]@{ scenario = "project-lock-combination-$($case.name)"; status = [string]$payload.project.status })
+    }
+
+    $catchUpgradeHelper = Join-PathParts $fixtureRoot "helpers" "memory-final-catch.ps1"
+    Write-StatusText -Path $catchUpgradeHelper -Text @'
+param([string]$ProjectDir, [string]$Mode, [switch]$Json)
+function global:Sort-Object { throw "private final aggregation failure" }
+Write-Output '{"findings":[{"code":"notes_contains_session_state"},{"code":"missing_scaffold"},{"code":"hot_memory_plan_long"}]}'
+'@
+    foreach ($textMode in @($false, $true)) {
+        $run = Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root -Text:$textMode -LockHelper $validLockHelper -UpgradeHelper $catchUpgradeHelper -DiagnoseHelper $validDiagnoseHelper
+        Assert-StatusCondition -Condition ([int]$run.exit_code -eq 0) -Message "Final project aggregation catch did not fail soft."
+        $output = @($run.output) -join "`n"
+        Assert-StatusCondition -Condition (-not $output.Contains("private final aggregation failure") -and -not $output.Contains("ParameterBinding") -and -not $output.Contains("Cannot bind argument")) -Message "Final project aggregation catch leaked exception content."
+        if (-not $textMode) {
+            $payload = $output | ConvertFrom-Json
+            Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "baseline-helper-unavailable" -and $null -eq $payload.project.project_language -and [string]$payload.project.baseline.status -eq "unknown" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and [string]$payload.project.memory.status -eq "unknown" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and [int]$payload.project.memory.refresh_finding_count -eq 0 -and [int]$payload.project.memory.diagnostic_warning_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Final project aggregation catch retained partial project state."
+        }
+    }
+    $evidence.Add([ordered]@{ scenario = "project-final-catch-full-reset"; status = "unknown" })
 
     $memoryContractCases = @(
         @{ name = "top-null"; json = 'null' }, @{ name = "top-scalar"; json = '7' }, @{ name = "top-array"; json = '[]' },
