@@ -390,6 +390,11 @@ function Set-ManagedFilesUnavailable {
     )
     $Payload.runtime.managed_files.status = "unknown"
     $Payload.runtime.managed_files.reason = $Reason
+    foreach ($status in @("current", "modified", "missing", "conflict", "unknown")) {
+        $Payload.runtime.managed_files.counts[$status] = 0
+    }
+    $Payload.runtime.managed_files.counts.unknown = [int]$Payload.runtime.managed_files.tracked_file_count
+    $Payload.runtime.managed_files.problems = @()
     if (-not [string]::IsNullOrWhiteSpace($Code)) {
         Add-RuntimeFinding -List $Findings -Code $Code -Severity $Severity -Message $Message
     }
@@ -472,6 +477,13 @@ function Set-ManagedFilesStatus {
         foreach ($destination in @($seenItems.ToArray())) {
             $itemPath = Get-NormalizedFullPath -Path (Join-PathParts $Root $destination)
             if (-not (Test-PathIsEqualOrChild -Path $itemPath -Root $Root)) { throw "unsafe" }
+            $itemParent = Split-Path -Parent $itemPath
+            $physicalItemParent = Resolve-PhysicalPathForWrite -Path $itemParent
+            if (-not (Test-PlatformPathEqual -Left $physicalItemParent -Right $itemParent) -or
+                -not (Test-PathIsEqualOrChild -Path $physicalItemParent -Root $Root)) {
+                $itemStates[$destination] = "conflict"
+                continue
+            }
             $item = Get-StatusItem -Path $itemPath
             if ($null -eq $item) { $itemStates[$destination] = "missing"; continue }
             if (-not $item.PSIsContainer -or (Test-ReparsePoint -Item $item)) { $itemStates[$destination] = "conflict"; continue }
@@ -487,7 +499,7 @@ function Set-ManagedFilesStatus {
         return
     }
 
-    $problems = New-Object 'System.Collections.Generic.List[object]'
+    $preflight = New-Object 'System.Collections.Generic.List[object]'
     foreach ($record in @($records.ToArray() | Sort-Object { [string]$_.path })) {
         $status = "current"
         $diverged = [string]$record.source -cne [string]$record.installed
@@ -499,15 +511,18 @@ function Set-ManagedFilesStatus {
             try {
                 $filePath = Get-NormalizedFullPath -Path (Join-PathParts $Root ([string]$record.path))
                 if (-not (Test-PathIsEqualOrChild -Path $filePath -Root $Root)) { throw "unsafe" }
+                $itemPath = Get-NormalizedFullPath -Path (Join-PathParts $Root ([string]$record.item))
                 $parent = Split-Path -Parent $filePath
+                if (-not (Test-PathIsEqualOrChild -Path $parent -Root $itemPath)) { throw "unsafe" }
                 $physicalParent = Resolve-PhysicalPathForWrite -Path $parent
-                if (-not (Test-PathIsEqualOrChild -Path $physicalParent -Root $Root)) { throw "unsafe" }
-                $leaf = Get-StatusItem -Path $filePath
-                if ($null -eq $leaf) { $status = "missing" }
-                elseif ($leaf.PSIsContainer -or (Test-ReparsePoint -Item $leaf)) { $status = "conflict" }
-                else {
-                    $liveHash = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
-                    if ($liveHash -cne [string]$record.installed) { $status = "modified" }
+                if (-not (Test-PlatformPathEqual -Left $physicalParent -Right $parent) -or
+                    -not (Test-PathIsEqualOrChild -Path $physicalParent -Root $itemPath)) {
+                    $status = "conflict"
+                }
+                if ($status -eq "current") {
+                    $leaf = Get-StatusItem -Path $filePath
+                    if ($null -eq $leaf) { $status = "missing" }
+                    elseif ($leaf.PSIsContainer -or (Test-ReparsePoint -Item $leaf)) { $status = "conflict" }
                 }
             }
             catch {
@@ -516,16 +531,42 @@ function Set-ManagedFilesStatus {
                 return
             }
         }
+        $preflight.Add([ordered]@{ record = $record; status = $status })
+    }
+
+    $problems = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($entry in @($preflight.ToArray())) {
+        $record = $entry.record
+        $status = [string]$entry.status
+        if ($status -eq "current") {
+            try {
+                $filePath = Get-NormalizedFullPath -Path (Join-PathParts $Root ([string]$record.path))
+                $liveHash = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($liveHash -cne [string]$record.installed) { $status = "modified" }
+            }
+            catch {
+                Set-ManagedFilesUnavailable -Payload $Payload -Reason "path-unresolvable" -Findings $Findings `
+                    -Code "runtime.managed.path_unresolvable" -Message "A managed file path cannot be inspected safely."
+                return
+            }
+        }
         $managed.counts[$status] = [int]$managed.counts[$status] + 1
-        if ($status -ne "current") { $problems.Add([ordered]@{ path = [string]$record.path; status = $status }) }
+        if ($status -ne "current") { $problems.Add([ordered]@{ scope = "file"; path = [string]$record.path; status = $status }) }
+    }
+    foreach ($destination in @($seenItems.ToArray() | Sort-Object)) {
+        if (@($records.ToArray() | Where-Object { [string]$_.item -ceq $destination }).Count -gt 0) { continue }
+        $itemStatus = [string]$itemStates[$destination]
+        if ($itemStatus -eq "directory") { continue }
+        $problems.Add([ordered]@{ scope = "item"; path = $destination; status = $itemStatus })
     }
     $managed.problems = @($problems.ToArray())
     $managed.reason = "scanned"
     foreach ($status in @("conflict", "missing", "modified", "unknown", "current")) {
-        if ([int]$managed.counts[$status] -gt 0 -or ($status -eq "current" -and $records.Count -eq 0)) { $managed.status = $status; break }
+        $hasEmptyItemStatus = @($problems.ToArray() | Where-Object { [string]$_.scope -eq "item" -and [string]$_.status -eq $status }).Count -gt 0
+        if ([int]$managed.counts[$status] -gt 0 -or $hasEmptyItemStatus -or ($status -eq "current" -and $records.Count -eq 0)) { $managed.status = $status; break }
     }
     foreach ($status in @("modified", "missing", "conflict")) {
-        if ([int]$managed.counts[$status] -gt 0) {
+        if ([int]$managed.counts[$status] -gt 0 -or @($managed.problems | Where-Object { [string]$_.status -eq $status }).Count -gt 0) {
             $severity = if ($status -eq "conflict") { "error" } else { "warning" }
             Add-RuntimeFinding -List $Findings -Code "runtime.managed.$status" -Severity $severity -Message "One or more managed runtime files report $status."
         }
@@ -738,7 +779,7 @@ function Write-RuntimeStatusText {
     Write-Output "Managed status reason: $([string]$runtime.managed_files.reason)"
     Write-Output "Tracked managed items: $([int]$runtime.managed_files.tracked_item_count)"
     Write-Output "Tracked managed files: $([int]$runtime.managed_files.tracked_file_count)"
-    Write-Output "Managed file problems: $(@($runtime.managed_files.problems).Count)"
+    Write-Output "Managed problems: $(@($runtime.managed_files.problems).Count)"
     foreach ($problem in @($runtime.managed_files.problems)) {
         Write-Output ("- {0}: {1}" -f [string]$problem.path, [string]$problem.status)
     }

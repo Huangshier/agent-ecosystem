@@ -63,6 +63,22 @@ function Invoke-RuntimeStatusFixtureChecks {
         }
     }
 
+    function Get-ManagedAliasState {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [Parameter(Mandatory = $true)][string]$AliasPath,
+            [Parameter(Mandatory = $true)][string]$TargetPath
+        )
+        $alias = Get-Item -LiteralPath $AliasPath -Force -ErrorAction SilentlyContinue
+        return [ordered]@{
+            manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "install-manifest.json") -Algorithm SHA256).Hash
+            alias_type = if ($null -eq $alias) { $null } else { [string]$alias.LinkType }
+            alias_target = if ($null -eq $alias) { $null } else { @($alias.Target) -join "|" }
+            target_hash = if (Test-Path -LiteralPath $TargetPath -PathType Leaf) { (Get-FileHash -LiteralPath $TargetPath -Algorithm SHA256).Hash } else { $null }
+            runtime_tree = @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot)
+        }
+    }
+
     function Invoke-Status {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
@@ -267,6 +283,96 @@ function Invoke-RuntimeStatusFixtureChecks {
     $aliasedRootPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $aliasedRoot.runtime)
     Assert-StatusCondition -Condition ([string]$aliasedRootPayload.runtime.managed_files.status -eq "conflict") -Message "Managed item root alias did not report conflict."
     $evidence.Add([ordered]@{ scenario = "managed-item-root-alias"; status = [string]$aliasedRootPayload.runtime.managed_files.status })
+
+    foreach ($aliasCase in @(
+            [ordered]@{ name = "inside"; outside = $false; broken = $false },
+            [ordered]@{ name = "outside"; outside = $true; broken = $false },
+            [ordered]@{ name = "broken"; outside = $true; broken = $true }
+        )) {
+        $aliasFixture = New-ManagedStatusFixture -Name ("managed-nested-alias-{0}" -f $aliasCase.name)
+        $aliasFixture.manifest.items[0].files = @([ordered]@{ path = "nested/SKILL.md"; source_sha256 = $aliasFixture.content_hash; installed_sha256 = $aliasFixture.content_hash })
+        [System.IO.File]::Delete($aliasFixture.live_path)
+        $aliasPath = Join-PathParts $aliasFixture.runtime "skills" "project-bootstrap" "nested"
+        $targetRoot = if ($aliasCase.outside) { Join-PathParts $fixtureRoot ("managed-alias-target-{0}" -f $aliasCase.name) } else { Join-PathParts $aliasFixture.runtime "other" ("target-{0}" -f $aliasCase.name) }
+        $targetFile = Join-PathParts $targetRoot "SKILL.md"
+        Write-StatusText -Path $targetFile -Text "managed content"
+        if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $aliasPath -Target $targetRoot | Out-Null }
+        else { New-Item -ItemType SymbolicLink -Path $aliasPath -Target $targetRoot | Out-Null }
+        if ($aliasCase.broken) { [System.IO.Directory]::Delete($targetRoot, $true) }
+        Write-StatusManifest -RuntimeRoot $aliasFixture.runtime -Value $aliasFixture.manifest
+        $aliasBefore = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile
+        $aliasRun = Invoke-Status -RuntimeRoot $aliasFixture.runtime
+        $aliasPayload = Read-StatusPayload -Run $aliasRun
+        $aliasAfter = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile
+        if ($aliasCase.broken) {
+            Assert-StatusCondition -Condition ([string]$aliasPayload.runtime.managed_files.status -eq "unknown" -and [string]$aliasPayload.runtime.managed_files.reason -eq "path-unresolvable") -Message "Broken nested managed alias did not fail soft."
+        }
+        else {
+            Assert-StatusCondition -Condition ([string]$aliasPayload.runtime.managed_files.status -eq "conflict" -and [int]$aliasPayload.runtime.managed_files.counts.conflict -eq 1) -Message "Nested managed alias was followed instead of reporting conflict."
+        }
+        Assert-StatusCondition -Condition (($aliasBefore | ConvertTo-Json -Depth 6 -Compress) -ceq ($aliasAfter | ConvertTo-Json -Depth 6 -Compress)) -Message "Managed alias inspection changed the alias, target, manifest, or runtime tree."
+        $aliasJson = @($aliasRun.output) -join "`n"
+        foreach ($privateValue in @([System.IO.Path]::GetFullPath($targetRoot), $aliasFixture.content_hash, $env:USERNAME)) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$privateValue)) {
+                Assert-StatusCondition -Condition (-not $aliasJson.Contains([string]$privateValue)) -Message "Managed alias status exposed a private path, hash, user name, or raw resolution detail."
+            }
+        }
+        $evidence.Add([ordered]@{ scenario = "managed-nested-alias-$($aliasCase.name)"; status = [string]$aliasPayload.runtime.managed_files.status })
+    }
+
+    $partial = New-ManagedStatusFixture -Name "managed-partial-then-unresolvable"
+    $partial.manifest.items[0].files = @(
+        [ordered]@{ path = "a-current.txt"; source_sha256 = $partial.content_hash; installed_sha256 = $partial.content_hash },
+        [ordered]@{ path = "broken/SKILL.md"; source_sha256 = $partial.content_hash; installed_sha256 = $partial.content_hash }
+    )
+    Write-StatusText -Path (Join-PathParts $partial.runtime "skills" "project-bootstrap" "a-current.txt") -Text "managed content"
+    [System.IO.File]::Delete($partial.live_path)
+    $partialBrokenTarget = Join-PathParts $fixtureRoot "managed-partial-broken-target"
+    New-Item -ItemType Directory -Force -Path $partialBrokenTarget | Out-Null
+    $partialBrokenAlias = Join-PathParts $partial.runtime "skills" "project-bootstrap" "broken"
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $partialBrokenAlias -Target $partialBrokenTarget | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path $partialBrokenAlias -Target $partialBrokenTarget | Out-Null }
+    [System.IO.Directory]::Delete($partialBrokenTarget, $true)
+    Write-StatusManifest -RuntimeRoot $partial.runtime -Value $partial.manifest
+    $partialPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $partial.runtime)
+    Assert-StatusCondition -Condition ([string]$partialPayload.runtime.managed_files.status -eq "unknown" -and [string]$partialPayload.runtime.managed_files.reason -eq "path-unresolvable" -and [int]$partialPayload.runtime.managed_files.counts.current -eq 0 -and [int]$partialPayload.runtime.managed_files.counts.unknown -eq 2 -and @($partialPayload.runtime.managed_files.problems).Count -eq 0) -Message "Section-wide unknown retained partial managed file results."
+    $evidence.Add([ordered]@{ scenario = "managed-partial-then-unresolvable"; status = [string]$partialPayload.runtime.managed_files.status })
+
+    foreach ($emptyCase in @("directory", "missing", "file", "alias", "unresolvable")) {
+        $empty = New-ManagedStatusFixture -Name ("managed-empty-item-{0}" -f $emptyCase)
+        [System.IO.File]::Delete($empty.live_path)
+        $empty.manifest.items[0].files = @()
+        $emptyRoot = Join-PathParts $empty.runtime "skills" "project-bootstrap"
+        if ($emptyCase -eq "missing") { [System.IO.Directory]::Delete($emptyRoot, $true) }
+        elseif ($emptyCase -eq "file") { [System.IO.Directory]::Delete($emptyRoot, $true); Write-StatusText -Path $emptyRoot -Text "occupied" }
+        elseif ($emptyCase -eq "alias") {
+            [System.IO.Directory]::Delete($emptyRoot, $true)
+            $emptyTarget = Join-PathParts $fixtureRoot "managed-empty-item-alias-target"
+            New-Item -ItemType Directory -Force -Path $emptyTarget | Out-Null
+            if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $emptyRoot -Target $emptyTarget | Out-Null }
+            else { New-Item -ItemType SymbolicLink -Path $emptyRoot -Target $emptyTarget | Out-Null }
+        }
+        elseif ($emptyCase -eq "unresolvable") {
+            [System.IO.Directory]::Delete((Join-PathParts $empty.runtime "skills"), $true)
+            $emptyBrokenTarget = Join-PathParts $fixtureRoot "managed-empty-item-broken-target"
+            New-Item -ItemType Directory -Force -Path $emptyBrokenTarget | Out-Null
+            if ($isWindowsPlatform) { New-Item -ItemType Junction -Path (Join-PathParts $empty.runtime "skills") -Target $emptyBrokenTarget | Out-Null }
+            else { New-Item -ItemType SymbolicLink -Path (Join-PathParts $empty.runtime "skills") -Target $emptyBrokenTarget | Out-Null }
+            [System.IO.Directory]::Delete($emptyBrokenTarget, $true)
+        }
+        Write-StatusManifest -RuntimeRoot $empty.runtime -Value $empty.manifest
+        $emptyPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $empty.runtime)
+        $expectedEmptyStatus = if ($emptyCase -eq "directory") { "current" } elseif ($emptyCase -eq "missing") { "missing" } elseif ($emptyCase -eq "unresolvable") { "unknown" } else { "conflict" }
+        Assert-StatusCondition -Condition ([string]$emptyPayload.runtime.managed_files.status -eq $expectedEmptyStatus -and [int]$emptyPayload.runtime.managed_files.tracked_file_count -eq 0) -Message "Empty managed item root status is incorrect."
+        if ($emptyCase -notin @("directory", "unresolvable")) {
+            Assert-StatusCondition -Condition (@($emptyPayload.runtime.managed_files.problems).Count -eq 1 -and [string]$emptyPayload.runtime.managed_files.problems[0].scope -eq "item" -and [string]$emptyPayload.runtime.managed_files.problems[0].path -eq "skills/project-bootstrap") -Message "Empty managed item root problem is missing."
+        }
+        if ($emptyCase -eq "file") {
+            $emptyText = @((Invoke-Status -RuntimeRoot $empty.runtime -Text).output) -join "`n"
+            Assert-StatusCondition -Condition ($emptyText.Contains("Managed files: conflict") -and $emptyText.Contains("- skills/project-bootstrap: conflict")) -Message "Managed text output omitted an empty item root problem."
+        }
+        $evidence.Add([ordered]@{ scenario = "managed-empty-item-$emptyCase"; status = [string]$emptyPayload.runtime.managed_files.status })
+    }
 
     $mixed = New-ManagedStatusFixture -Name "managed-mixed-priority" -Content "current"
     $currentHash = [string]$mixed.content_hash
