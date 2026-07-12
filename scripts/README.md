@@ -42,7 +42,7 @@ Manifest-based uninstall:
 .\uninstall.ps1 -TargetDir <runtime>
 ```
 
-Read-only runtime manifest status:
+Read-only runtime and Agent skill bridge status:
 
 ```powershell
 .\status.ps1
@@ -51,16 +51,25 @@ Read-only runtime manifest status:
 ```
 
 The status command reads `install-manifest.json` once and emits a schema-1
-payload or a text view derived from that payload. It does not install, repair,
-refresh, scan managed files, access the network, or write runtime content.
+payload or a text view derived from that payload. When local bridge metadata is
+present, it also reads `agent-skill-bridge-manifest.json` once and verifies only
+the links explicitly managed there against runtime ownership and live link
+state. It does not auto-discover agent clients or scan client skill directories.
+It does not install, create, repair, refresh, rebuild, or delete links; scan
+managed files; access the network; or write runtime or client content.
 `manifest_status = current` means only that the recognized schema-2 runtime
 status fields are valid. It does not mean the runtime matches the latest
 Release, that managed files are unchanged, or that no live conflicts exist; the
 command does not scan managed files. Missing Git provenance, including installs
 from GitHub Release source archives, is reported as `not-recorded` rather than
-guessed. Bridge health, project drift, managed conflicts, and recommended
-actions are not included yet; future sections must extend the same payload
-model instead of reparsing the manifest.
+guessed. Bridge status is `not-configured` only when this runtime has no bridge
+manifest; it does not claim that manually created links do not exist. Bridge
+records report `current`, `stale`, `broken`, `conflict`, or `unknown` without
+exposing runtime, source, target, manifest, or home-directory paths. Bridge
+health proves only the recorded filesystem discovery chain, not complete client
+compatibility. Project drift, managed conflicts, and recommended actions are
+not included yet; future sections must extend the same payload model instead of
+reparsing the manifest.
 
 Context gate benchmark:
 
