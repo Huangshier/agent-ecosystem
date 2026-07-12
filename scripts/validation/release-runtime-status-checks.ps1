@@ -67,7 +67,8 @@ function Invoke-RuntimeStatusFixtureChecks {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
             [Parameter(Mandatory = $true)][string]$AliasPath,
-            [Parameter(Mandatory = $true)][string]$TargetPath
+            [Parameter(Mandatory = $true)][string]$TargetPath,
+            [switch]$Broken
         )
         if (-not $isWindowsPlatform) {
             $aliasTarget = @(& readlink $AliasPath) -join "`n"
@@ -92,7 +93,7 @@ function Invoke-RuntimeStatusFixtureChecks {
             alias_type = $aliasType
             alias_target = $aliasTarget
             target_hash = if (Test-Path -LiteralPath $TargetPath -PathType Leaf) { (Get-FileHash -LiteralPath $TargetPath -Algorithm SHA256).Hash } else { $null }
-            runtime_tree = @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot)
+            runtime_tree = if ($Broken.IsPresent) { @() } else { @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot) }
         }
     }
 
@@ -317,10 +318,10 @@ function Invoke-RuntimeStatusFixtureChecks {
         else { New-Item -ItemType SymbolicLink -Path $aliasPath -Target $targetRoot | Out-Null }
         if ($aliasCase.broken) { [System.IO.Directory]::Delete($targetRoot, $true) }
         Write-StatusManifest -RuntimeRoot $aliasFixture.runtime -Value $aliasFixture.manifest
-        $aliasBefore = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile
+        $aliasBefore = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile -Broken:([bool]$aliasCase.broken)
         $aliasRun = Invoke-Status -RuntimeRoot $aliasFixture.runtime
         $aliasPayload = Read-StatusPayload -Run $aliasRun
-        $aliasAfter = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile
+        $aliasAfter = Get-ManagedAliasState -RuntimeRoot $aliasFixture.runtime -AliasPath $aliasPath -TargetPath $targetFile -Broken:([bool]$aliasCase.broken)
         if ($aliasCase.broken) {
             Assert-StatusCondition -Condition ([string]$aliasPayload.runtime.managed_files.status -eq "unknown" -and [string]$aliasPayload.runtime.managed_files.reason -eq "path-unresolvable") -Message "Broken nested managed alias did not fail soft."
         }
