@@ -45,6 +45,24 @@ function Invoke-RuntimeStatusFixtureChecks {
         )
     }
 
+    function Get-BridgeFixtureState {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [Parameter(Mandatory = $true)][string]$TargetRoot,
+            [Parameter(Mandatory = $true)][string]$TargetPath
+        )
+
+        $targetItem = Get-Item -LiteralPath $TargetPath -Force -ErrorAction SilentlyContinue
+        return [ordered]@{
+            install_manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "install-manifest.json") -Algorithm SHA256).Hash
+            bridge_manifest_hash = (Get-FileHash -LiteralPath (Join-PathParts $RuntimeRoot "agent-skill-bridge-manifest.json") -Algorithm SHA256).Hash
+            link_type = if ($null -eq $targetItem) { $null } else { [string]$targetItem.LinkType }
+            link_target = if ($null -eq $targetItem) { $null } else { @($targetItem.Target) -join "|" }
+            client_tree = @(Get-StatusTreeState -RuntimeRoot $TargetRoot)
+            runtime_tree = @(Get-StatusTreeState -RuntimeRoot $RuntimeRoot)
+        }
+    }
+
     function Invoke-Status {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
@@ -190,6 +208,21 @@ function Invoke-RuntimeStatusFixtureChecks {
     Assert-StatusCondition -Condition ([string]$malformedPayload.runtime.manifest_status -eq "invalid" -and [string]$malformedPayload.findings[0].code -eq "runtime.manifest.invalid_json") -Message "Malformed JSON did not fail soft."
     $evidence.Add([ordered]@{ scenario = "malformed-json"; status = [string]$malformedPayload.runtime.manifest_status })
 
+    foreach ($invalidTopLevel in @(
+            [ordered]@{ name = "null"; json = "null" },
+            [ordered]@{ name = "string"; json = '"invalid"' },
+            [ordered]@{ name = "number"; json = "123" },
+            [ordered]@{ name = "array"; json = "[]" }
+        )) {
+        $invalidTopLevelFixture = New-BridgeStatusFixture -Name ("install-manifest-{0}" -f $invalidTopLevel.name)
+        Write-StatusText -Path (Join-PathParts $invalidTopLevelFixture.runtime "install-manifest.json") -Text ([string]$invalidTopLevel.json)
+        $invalidTopLevelText = @((Invoke-Status -RuntimeRoot $invalidTopLevelFixture.runtime).output) -join "`n"
+        $invalidTopLevelPayload = $invalidTopLevelText | ConvertFrom-Json
+        Assert-StatusCondition -Condition ([string]$invalidTopLevelPayload.runtime.manifest_status -eq "invalid" -and [string]$invalidTopLevelPayload.bridge.status -eq "unknown" -and [string]$invalidTopLevelPayload.bridge.manifest_status -ne "missing") -Message "Invalid install manifest top-level type did not fail soft with bridge evidence."
+        Assert-StatusCondition -Condition (-not $invalidTopLevelText.Contains("ParameterBinding") -and -not $invalidTopLevelText.Contains("Cannot bind argument")) -Message "Invalid install manifest output exposed an exception."
+        $evidence.Add([ordered]@{ scenario = "install-manifest-$($invalidTopLevel.name)"; status = [string]$invalidTopLevelPayload.runtime.manifest_status })
+    }
+
     $unsupportedRuntime = Join-PathParts $fixtureRoot "unsupported"
     Write-StatusManifest -RuntimeRoot $unsupportedRuntime -Value ([ordered]@{ schema_version = 3 })
     $unsupportedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unsupportedRuntime)
@@ -275,12 +308,62 @@ function Invoke-RuntimeStatusFixtureChecks {
     $evidence.Add([ordered]@{ scenario = "text-json-semantic-parity"; status = "current" })
 
     $bridgeCurrent = New-BridgeStatusFixture -Name "bridge-current"
-    $bridgeManifestHash = (Get-FileHash -LiteralPath (Join-PathParts $bridgeCurrent.runtime "agent-skill-bridge-manifest.json") -Algorithm SHA256).Hash
+    $currentStateBefore = Get-BridgeFixtureState -RuntimeRoot $bridgeCurrent.runtime -TargetRoot $bridgeCurrent.target_root -TargetPath ([string]$bridgeCurrent.records[0].target)
     $currentPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $bridgeCurrent.runtime)
     Assert-StatusCondition -Condition ([string]$currentPayload.bridge.status -eq "current" -and [string]$currentPayload.bridge.manifest_status -eq "current" -and [int]$currentPayload.bridge.configured_count -eq 1 -and [int]$currentPayload.bridge.counts.current -eq 1) -Message "Live bridge did not report current."
     Assert-StatusCondition -Condition ([string]$currentPayload.bridge.skills[0].skill -eq "project-bootstrap" -and [string]$currentPayload.bridge.skills[0].link_mode -in @("junction", "symboliclink")) -Message "Live bridge skill shape is incorrect."
-    Assert-StatusCondition -Condition ((Get-FileHash -LiteralPath (Join-PathParts $bridgeCurrent.runtime "agent-skill-bridge-manifest.json") -Algorithm SHA256).Hash -eq $bridgeManifestHash) -Message "Status modified the bridge manifest."
+    $currentStateAfter = Get-BridgeFixtureState -RuntimeRoot $bridgeCurrent.runtime -TargetRoot $bridgeCurrent.target_root -TargetPath ([string]$bridgeCurrent.records[0].target)
+    Assert-StatusCondition -Condition (($currentStateBefore | ConvertTo-Json -Depth 8 -Compress) -ceq ($currentStateAfter | ConvertTo-Json -Depth 8 -Compress)) -Message "Status modified a valid bridge fixture."
     $evidence.Add([ordered]@{ scenario = "bridge-current-live-link"; status = [string]$currentPayload.bridge.status })
+
+    $unexpectedTarget = New-BridgeStatusFixture -Name "bridge-target-unexpected"
+    $unexpectedDirectory = Join-PathParts $fixtureRoot "bridge-target-unexpected" "other-skill"
+    New-Item -ItemType Directory -Force -Path $unexpectedDirectory | Out-Null
+    Remove-BridgeStatusFixtureItem -Path ([string]$unexpectedTarget.records[0].target)
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path ([string]$unexpectedTarget.records[0].target) -Target $unexpectedDirectory | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path ([string]$unexpectedTarget.records[0].target) -Target $unexpectedDirectory | Out-Null }
+    $unexpectedStateBefore = Get-BridgeFixtureState -RuntimeRoot $unexpectedTarget.runtime -TargetRoot $unexpectedTarget.target_root -TargetPath ([string]$unexpectedTarget.records[0].target)
+    $unexpectedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unexpectedTarget.runtime)
+    Assert-StatusCondition -Condition ([string]$unexpectedPayload.bridge.status -eq "conflict" -and @($unexpectedPayload.findings | Where-Object code -eq "bridge.target.unexpected").Count -eq 1) -Message "Unexpected live bridge target did not report conflict."
+    $unexpectedStateAfter = Get-BridgeFixtureState -RuntimeRoot $unexpectedTarget.runtime -TargetRoot $unexpectedTarget.target_root -TargetPath ([string]$unexpectedTarget.records[0].target)
+    Assert-StatusCondition -Condition (($unexpectedStateBefore | ConvertTo-Json -Depth 8 -Compress) -ceq ($unexpectedStateAfter | ConvertTo-Json -Depth 8 -Compress)) -Message "Status modified an anomalous bridge fixture."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-unexpected"; status = [string]$unexpectedPayload.bridge.status })
+
+    $danglingTarget = New-BridgeStatusFixture -Name "bridge-target-broken"
+    $danglingDirectory = Join-PathParts $fixtureRoot "bridge-target-broken" "temporary-target"
+    New-Item -ItemType Directory -Force -Path $danglingDirectory | Out-Null
+    Remove-BridgeStatusFixtureItem -Path ([string]$danglingTarget.records[0].target)
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path ([string]$danglingTarget.records[0].target) -Target $danglingDirectory | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path ([string]$danglingTarget.records[0].target) -Target $danglingDirectory | Out-Null }
+    Remove-Item -LiteralPath $danglingDirectory -Force
+    $danglingPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $danglingTarget.runtime)
+    Assert-StatusCondition -Condition ([string]$danglingPayload.bridge.status -eq "broken" -and @($danglingPayload.findings | Where-Object code -eq "bridge.target.broken").Count -eq 1) -Message "Dangling live bridge target did not report broken."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-broken"; status = [string]$danglingPayload.bridge.status })
+
+    $runtimeMismatch = New-BridgeStatusFixture -Name "bridge-runtime-mismatch"
+    Write-BridgeStatusManifest -RuntimeRoot $runtimeMismatch.runtime -Records $runtimeMismatch.records -RecordedRuntime (Join-PathParts $fixtureRoot "old-runtime")
+    $runtimeMismatchPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $runtimeMismatch.runtime)
+    Assert-StatusCondition -Condition ([string]$runtimeMismatchPayload.bridge.status -eq "stale" -and @($runtimeMismatchPayload.findings | Where-Object code -eq "bridge.manifest.runtime_mismatch").Count -eq 1) -Message "Bridge runtime mismatch did not report stale."
+    $evidence.Add([ordered]@{ scenario = "bridge-runtime-mismatch"; status = [string]$runtimeMismatchPayload.bridge.status })
+
+    $duplicateBridge = New-BridgeStatusFixture -Name "bridge-record-duplicate"
+    Write-BridgeStatusManifest -RuntimeRoot $duplicateBridge.runtime -Records @($duplicateBridge.records[0], $duplicateBridge.records[0])
+    $duplicatePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $duplicateBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$duplicatePayload.bridge.status -eq "unknown" -and @($duplicatePayload.findings | Where-Object code -eq "bridge.record.duplicate").Count -eq 1) -Message "Duplicate bridge record did not report unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-record-duplicate"; status = [string]$duplicatePayload.bridge.status })
+
+    $unresolvableBridge = New-BridgeStatusFixture -Name "bridge-target-hop-limit"
+    Remove-BridgeStatusFixtureItem -Path ([string]$unresolvableBridge.records[0].target)
+    $nextTarget = [string]$unresolvableBridge.records[0].source
+    foreach ($hop in (66..0)) {
+        $aliasPath = Join-PathParts $fixtureRoot "bridge-target-hop-limit" ("alias-{0:d2}" -f $hop)
+        New-Item -ItemType SymbolicLink -Path $aliasPath -Target $nextTarget | Out-Null
+        $nextTarget = $aliasPath
+    }
+    New-Item -ItemType SymbolicLink -Path ([string]$unresolvableBridge.records[0].target) -Target $nextTarget | Out-Null
+    $unresolvablePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $unresolvableBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$unresolvablePayload.bridge.status -eq "unknown" -and @($unresolvablePayload.findings | Where-Object code -eq "bridge.target.unresolvable").Count -eq 1) -Message "Bridge link hop limit did not fail soft as unknown."
+    $evidence.Add([ordered]@{ scenario = "bridge-target-hop-limit"; status = [string]$unresolvablePayload.bridge.status })
 
     $missingTarget = New-BridgeStatusFixture -Name "bridge-target-missing"
     Remove-BridgeStatusFixtureItem -Path ([string]$missingTarget.records[0].target)
@@ -343,6 +426,29 @@ function Invoke-RuntimeStatusFixtureChecks {
     $invalidOwnershipPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidOwnership.runtime)
     Assert-StatusCondition -Condition ([string]$invalidOwnershipPayload.bridge.status -eq "unknown" -and @($invalidOwnershipPayload.findings | Where-Object code -eq "bridge.record.invalid").Count -eq 1) -Message "Unavailable runtime ownership did not report unknown."
     $evidence.Add([ordered]@{ scenario = "bridge-ownership-unavailable"; status = [string]$invalidOwnershipPayload.bridge.status })
+
+    $invalidIdentityBridge = New-BridgeStatusFixture -Name "bridge-source-identity-invalid"
+    $invalidIdentityManifest = Get-Content -LiteralPath (Join-PathParts $invalidIdentityBridge.runtime "install-manifest.json") -Raw | ConvertFrom-Json
+    $invalidIdentityManifest.source_identity = "untrusted-runtime"
+    Write-StatusManifest -RuntimeRoot $invalidIdentityBridge.runtime -Value $invalidIdentityManifest
+    $invalidIdentityPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidIdentityBridge.runtime)
+    Assert-StatusCondition -Condition ([string]$invalidIdentityPayload.runtime.manifest_status -eq "invalid" -and [string]$invalidIdentityPayload.bridge.status -eq "unknown" -and [string]$invalidIdentityPayload.bridge.manifest_status -eq "current" -and @($invalidIdentityPayload.findings | Where-Object code -eq "bridge.record.invalid").Count -eq 1) -Message "Invalid source identity suppressed existing bridge manifest status."
+    $evidence.Add([ordered]@{ scenario = "bridge-source-identity-invalid"; status = [string]$invalidIdentityPayload.bridge.status })
+
+    foreach ($invalidBridgeTopLevel in @(
+            [ordered]@{ name = "null"; json = "null" },
+            [ordered]@{ name = "string"; json = '"invalid"' },
+            [ordered]@{ name = "number"; json = "123" },
+            [ordered]@{ name = "array"; json = "[]" }
+        )) {
+        $invalidBridgeFixture = New-BridgeStatusFixture -Name ("bridge-manifest-{0}" -f $invalidBridgeTopLevel.name)
+        Write-StatusText -Path (Join-PathParts $invalidBridgeFixture.runtime "agent-skill-bridge-manifest.json") -Text ([string]$invalidBridgeTopLevel.json)
+        $invalidBridgeText = @((Invoke-Status -RuntimeRoot $invalidBridgeFixture.runtime).output) -join "`n"
+        $invalidBridgePayload = $invalidBridgeText | ConvertFrom-Json
+        Assert-StatusCondition -Condition ([string]$invalidBridgePayload.bridge.status -eq "unknown" -and [string]$invalidBridgePayload.bridge.manifest_status -eq "invalid" -and @($invalidBridgePayload.findings | Where-Object code -eq "bridge.manifest.invalid").Count -eq 1) -Message "Invalid bridge manifest top-level type did not fail soft."
+        Assert-StatusCondition -Condition (-not $invalidBridgeText.Contains("ParameterBinding") -and -not $invalidBridgeText.Contains("Cannot bind argument")) -Message "Invalid bridge manifest output exposed an exception."
+        $evidence.Add([ordered]@{ scenario = "bridge-manifest-$($invalidBridgeTopLevel.name)"; status = [string]$invalidBridgePayload.bridge.status })
+    }
 
     $priorityBridge = New-BridgeStatusFixture -Name "bridge-priority" -Skills @("project-bootstrap", "project-context-gate")
     Remove-BridgeStatusFixtureItem -Path ([string]$priorityBridge.records[0].target)

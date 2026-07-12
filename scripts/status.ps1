@@ -100,6 +100,12 @@ function Set-BridgeStatus {
         Add-RuntimeFinding -List $Findings -Code "bridge.manifest.invalid" -Severity "error" -Message "The Agent skill bridge manifest is not valid JSON."
         return
     }
+    if (-not (Test-ManifestObject -Value $bridgeManifest)) {
+        $Payload.bridge.status = "unknown"
+        $Payload.bridge.manifest_status = "invalid"
+        Add-RuntimeFinding -List $Findings -Code "bridge.manifest.invalid" -Severity "error" -Message "The Agent skill bridge manifest must be a JSON object."
+        return
+    }
 
     $schemaVersion = Get-ManifestPropertyValue -Manifest $bridgeManifest -Name "schema_version"
     $metadataKind = Get-ManifestPropertyValue -Manifest $bridgeManifest -Name "metadata_kind"
@@ -248,14 +254,13 @@ function Set-BridgeStatus {
                                     $recordStatus = "broken"
                                     Add-RuntimeFinding -List $Findings -Code "bridge.target.broken" -Severity "error" -Message "A configured Agent skill link is broken."
                                 }
-                                elseif (-not (Test-PlatformPathEqual -Left $actualTarget -Right $expectedSource)) {
-                                    $recordStatus = "conflict"
-                                    Add-RuntimeFinding -List $Findings -Code "bridge.target.unexpected" -Severity "error" -Message "A configured Agent skill link points to unexpected content."
-                                }
                                 else {
                                     $visited = New-Object 'System.Collections.Generic.List[string]'
                                     $resolvedTarget = Resolve-ExistingPhysicalPath -Path $targetPath -VisitedLinks $visited
-                                    if (-not (Test-PlatformPathEqual -Left $resolvedTarget -Right $expectedSource)) { throw "unresolved" }
+                                    if (-not (Test-PlatformPathEqual -Left $resolvedTarget -Right $expectedSource)) {
+                                        $recordStatus = "conflict"
+                                        Add-RuntimeFinding -List $Findings -Code "bridge.target.unexpected" -Severity "error" -Message "A configured Agent skill link points to unexpected content."
+                                    }
                                 }
                             }
                             catch {
@@ -317,10 +322,13 @@ function Test-IntegerValue {
 
 function Get-ManifestPropertyValue {
     param(
-        [Parameter(Mandatory = $true)][object]$Manifest,
+        [AllowNull()][object]$Manifest,
         [Parameter(Mandatory = $true)][string]$Name
     )
 
+    if ($null -eq $Manifest) {
+        return $null
+    }
     $property = $Manifest.PSObject.Properties[$Name]
     if ($null -eq $property) {
         return $null
@@ -329,6 +337,16 @@ function Get-ManifestPropertyValue {
         return ,$property.Value
     }
     return $property.Value
+}
+
+function Test-ManifestObject {
+    param([AllowNull()][object]$Value)
+
+    return $null -ne $Value -and
+        $Value -isnot [System.Array] -and
+        $Value -isnot [string] -and
+        -not $Value.GetType().IsPrimitive -and
+        $Value -isnot [System.ValueType]
 }
 
 function Get-ProvenanceValue {
@@ -379,6 +397,15 @@ function Get-RuntimeStatusPayload {
         $payload.findings = @($findings.ToArray())
         return $payload
     }
+    if (-not (Test-ManifestObject -Value $manifest)) {
+        $payload.runtime.manifest_status = "invalid"
+        $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
+        $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
+        Add-RuntimeFinding -List $findings -Code "runtime.manifest.invalid_type" -Severity "error" -Message "Runtime install manifest must be a JSON object."
+        Set-BridgeStatus -Payload $payload -Root $Root -InstallManifest $null -Findings $findings
+        $payload.findings = @($findings.ToArray())
+        return $payload
+    }
 
     $rawSchemaVersion = Get-ManifestPropertyValue -Manifest $manifest -Name "schema_version"
     if (-not (Test-IntegerValue -Value $rawSchemaVersion)) {
@@ -420,6 +447,7 @@ function Get-RuntimeStatusPayload {
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         Add-RuntimeFinding -List $findings -Code "runtime.manifest.source_identity_invalid" -Severity "error" -Message "Runtime install manifest source identity is invalid."
+        Set-BridgeStatus -Payload $payload -Root $Root -InstallManifest $null -Findings $findings
         $payload.findings = @($findings.ToArray())
         return $payload
     }
