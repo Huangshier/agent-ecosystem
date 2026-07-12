@@ -33,6 +33,14 @@ function New-RuntimePayload {
             install_strategy = $null
             profile = $null
             installed_at_utc = $null
+            managed_files = [ordered]@{
+                status = "unknown"
+                reason = "manifest-missing"
+                tracked_item_count = 0
+                tracked_file_count = 0
+                counts = [ordered]@{ current = 0; modified = 0; missing = 0; conflict = 0; unknown = 0 }
+                problems = @()
+            }
         }
         bridge = [ordered]@{
             status = "not-configured"
@@ -371,6 +379,159 @@ function Get-ProvenanceValue {
     return New-ProvenanceValue -Value ([string]$RawValue) -Reason "recorded"
 }
 
+function Set-ManagedFilesUnavailable {
+    param(
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [Parameter(Mandatory = $true)][string]$Reason,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings,
+        [string]$Code,
+        [ValidateSet("info", "warning", "error")][string]$Severity = "error",
+        [string]$Message
+    )
+    $Payload.runtime.managed_files.status = "unknown"
+    $Payload.runtime.managed_files.reason = $Reason
+    if (-not [string]::IsNullOrWhiteSpace($Code)) {
+        Add-RuntimeFinding -List $Findings -Code $Code -Severity $Severity -Message $Message
+    }
+}
+
+function Test-CanonicalManagedPath {
+    param([AllowNull()][object]$Value)
+    if ($Value -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$Value)) { return $false }
+    $path = [string]$Value
+    return -not [System.IO.Path]::IsPathRooted($path) -and
+        $path -cnotmatch '\\' -and $path -cnotmatch '(^|/)\.{1,2}(/|$)' -and
+        $path -cnotmatch '//|^/|/$' -and $path -cmatch '^[^:]+$'
+}
+
+function Set-ManagedFilesStatus {
+    param(
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][object]$Manifest,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $managed = $Payload.runtime.managed_files
+    if ([string]$Payload.runtime.install_strategy -eq "dev-link") {
+        Set-ManagedFilesUnavailable -Payload $Payload -Reason "dev-link-source-not-recorded" -Findings $Findings `
+            -Code "runtime.managed.dev_link_unverifiable" -Severity "info" -Message "Managed files cannot be verified for a development-link runtime."
+        return
+    }
+    if ([string]$Payload.runtime.install_strategy -ne "copy") {
+        Set-ManagedFilesUnavailable -Payload $Payload -Reason "contract-invalid" -Findings $Findings `
+            -Code "runtime.managed.contract_invalid" -Message "The managed file contract is invalid."
+        return
+    }
+
+    $items = Get-ManifestPropertyValue -Manifest $Manifest -Name "items"
+    if ($items -isnot [System.Array]) {
+        Set-ManagedFilesUnavailable -Payload $Payload -Reason "contract-invalid" -Findings $Findings `
+            -Code "runtime.managed.contract_invalid" -Message "The managed file contract is invalid."
+        return
+    }
+
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    $seenItems = New-Object 'System.Collections.Generic.List[string]'
+    $seenPaths = New-Object 'System.Collections.Generic.List[string]'
+    $contractInvalid = $false
+    foreach ($item in @($items)) {
+        if (-not (Test-ManifestObject -Value $item)) { $contractInvalid = $true; break }
+        $destination = Get-ManifestPropertyValue -Manifest $item -Name "destination"
+        $mode = Get-ManifestPropertyValue -Manifest $item -Name "mode"
+        $isManaged = Get-ManifestPropertyValue -Manifest $item -Name "managed"
+        $files = Get-ManifestPropertyValue -Manifest $item -Name "files"
+        if (-not (Test-CanonicalManagedPath -Value $destination) -or $mode -isnot [string] -or [string]$mode -cne "copy" -or
+            $isManaged -isnot [bool] -or -not [bool]$isManaged -or $files -isnot [System.Array]) { $contractInvalid = $true; break }
+        if (@($seenItems.ToArray() | Where-Object { [string]::Equals($_, [string]$destination, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { $contractInvalid = $true; break }
+        $seenItems.Add([string]$destination)
+        foreach ($file in @($files)) {
+            if (-not (Test-ManifestObject -Value $file)) { $contractInvalid = $true; break }
+            $relative = Get-ManifestPropertyValue -Manifest $file -Name "path"
+            $sourceHash = Get-ManifestPropertyValue -Manifest $file -Name "source_sha256"
+            $installedHash = Get-ManifestPropertyValue -Manifest $file -Name "installed_sha256"
+            if (-not (Test-CanonicalManagedPath -Value $relative) -or $installedHash -isnot [string] -or [string]$installedHash -cnotmatch '^[0-9a-f]{64}$' -or
+                $sourceHash -isnot [string] -or ([string]$sourceHash -cne "" -and [string]$sourceHash -cnotmatch '^[0-9a-f]{64}$')) { $contractInvalid = $true; break }
+            $runtimePath = "{0}/{1}" -f [string]$destination, [string]$relative
+            if (@($seenPaths.ToArray() | Where-Object { [string]::Equals($_, $runtimePath, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { $contractInvalid = $true; break }
+            $seenPaths.Add($runtimePath)
+            $records.Add([ordered]@{ item = [string]$destination; relative = [string]$relative; path = $runtimePath; source = [string]$sourceHash; installed = [string]$installedHash })
+        }
+        if ($contractInvalid) { break }
+    }
+    if ($contractInvalid) {
+        Set-ManagedFilesUnavailable -Payload $Payload -Reason "contract-invalid" -Findings $Findings `
+            -Code "runtime.managed.contract_invalid" -Message "The managed file contract is invalid."
+        return
+    }
+
+    $managed.tracked_item_count = $seenItems.Count
+    $managed.tracked_file_count = $records.Count
+    $itemStates = @{}
+    try {
+        foreach ($destination in @($seenItems.ToArray())) {
+            $itemPath = Get-NormalizedFullPath -Path (Join-PathParts $Root $destination)
+            if (-not (Test-PathIsEqualOrChild -Path $itemPath -Root $Root)) { throw "unsafe" }
+            $item = Get-StatusItem -Path $itemPath
+            if ($null -eq $item) { $itemStates[$destination] = "missing"; continue }
+            if (-not $item.PSIsContainer -or (Test-ReparsePoint -Item $item)) { $itemStates[$destination] = "conflict"; continue }
+            $visited = New-Object 'System.Collections.Generic.List[string]'
+            $physical = Resolve-ExistingPhysicalPath -Path $itemPath -VisitedLinks $visited
+            if (-not (Test-PlatformPathEqual -Left $physical -Right $itemPath)) { throw "unsafe" }
+            $itemStates[$destination] = "directory"
+        }
+    }
+    catch {
+        Set-ManagedFilesUnavailable -Payload $Payload -Reason "path-unresolvable" -Findings $Findings `
+            -Code "runtime.managed.path_unresolvable" -Message "A managed file path cannot be inspected safely."
+        return
+    }
+
+    $problems = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($record in @($records.ToArray() | Sort-Object { [string]$_.path })) {
+        $status = "current"
+        $diverged = [string]$record.source -cne [string]$record.installed
+        $itemState = [string]$itemStates[[string]$record.item]
+        if ($diverged) { $status = "conflict" }
+        elseif ($itemState -eq "missing") { $status = "missing" }
+        elseif ($itemState -eq "conflict") { $status = "conflict" }
+        else {
+            try {
+                $filePath = Get-NormalizedFullPath -Path (Join-PathParts $Root ([string]$record.path))
+                if (-not (Test-PathIsEqualOrChild -Path $filePath -Root $Root)) { throw "unsafe" }
+                $parent = Split-Path -Parent $filePath
+                $physicalParent = Resolve-PhysicalPathForWrite -Path $parent
+                if (-not (Test-PathIsEqualOrChild -Path $physicalParent -Root $Root)) { throw "unsafe" }
+                $leaf = Get-StatusItem -Path $filePath
+                if ($null -eq $leaf) { $status = "missing" }
+                elseif ($leaf.PSIsContainer -or (Test-ReparsePoint -Item $leaf)) { $status = "conflict" }
+                else {
+                    $liveHash = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                    if ($liveHash -cne [string]$record.installed) { $status = "modified" }
+                }
+            }
+            catch {
+                Set-ManagedFilesUnavailable -Payload $Payload -Reason "path-unresolvable" -Findings $Findings `
+                    -Code "runtime.managed.path_unresolvable" -Message "A managed file path cannot be inspected safely."
+                return
+            }
+        }
+        $managed.counts[$status] = [int]$managed.counts[$status] + 1
+        if ($status -ne "current") { $problems.Add([ordered]@{ path = [string]$record.path; status = $status }) }
+    }
+    $managed.problems = @($problems.ToArray())
+    $managed.reason = "scanned"
+    foreach ($status in @("conflict", "missing", "modified", "unknown", "current")) {
+        if ([int]$managed.counts[$status] -gt 0 -or ($status -eq "current" -and $records.Count -eq 0)) { $managed.status = $status; break }
+    }
+    foreach ($status in @("modified", "missing", "conflict")) {
+        if ([int]$managed.counts[$status] -gt 0) {
+            $severity = if ($status -eq "conflict") { "error" } else { "warning" }
+            Add-RuntimeFinding -List $Findings -Code "runtime.managed.$status" -Severity $severity -Message "One or more managed runtime files report $status."
+        }
+    }
+}
+
 function Get-RuntimeStatusPayload {
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -390,6 +551,7 @@ function Get-RuntimeStatusPayload {
     }
     catch {
         $payload.runtime.manifest_status = "invalid"
+        $payload.runtime.managed_files.reason = "manifest-invalid"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         Add-RuntimeFinding -List $findings -Code "runtime.manifest.invalid_json" -Severity "error" -Message "Runtime install manifest is not valid JSON."
@@ -399,6 +561,7 @@ function Get-RuntimeStatusPayload {
     }
     if (-not (Test-ManifestObject -Value $manifest)) {
         $payload.runtime.manifest_status = "invalid"
+        $payload.runtime.managed_files.reason = "manifest-invalid"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         Add-RuntimeFinding -List $findings -Code "runtime.manifest.invalid_type" -Severity "error" -Message "Runtime install manifest must be a JSON object."
@@ -410,6 +573,7 @@ function Get-RuntimeStatusPayload {
     $rawSchemaVersion = Get-ManifestPropertyValue -Manifest $manifest -Name "schema_version"
     if (-not (Test-IntegerValue -Value $rawSchemaVersion)) {
         $payload.runtime.manifest_status = "invalid"
+        $payload.runtime.managed_files.reason = "manifest-invalid"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         Add-RuntimeFinding -List $findings -Code "runtime.manifest.schema_invalid" -Severity "error" -Message "Runtime install manifest schema version is invalid."
@@ -421,6 +585,7 @@ function Get-RuntimeStatusPayload {
     $schemaVersion = [int64]$rawSchemaVersion
     $payload.runtime.manifest_schema_version = $schemaVersion
     if ($schemaVersion -eq 1) {
+        $payload.runtime.managed_files.reason = "legacy-manifest"
         $payload.runtime.manifest_status = "legacy"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "legacy-manifest"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "legacy-manifest"
@@ -430,6 +595,7 @@ function Get-RuntimeStatusPayload {
         return $payload
     }
     if ($schemaVersion -ne 2) {
+        $payload.runtime.managed_files.reason = "unsupported-schema"
         $payload.runtime.manifest_status = "unsupported"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "unsupported-schema"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "unsupported-schema"
@@ -444,6 +610,7 @@ function Get-RuntimeStatusPayload {
     $sourceIdentity = Get-ManifestPropertyValue -Manifest $manifest -Name "source_identity"
     if ($sourceIdentity -isnot [string] -or [string]$sourceIdentity -cne "agent-ecosystem") {
         $payload.runtime.manifest_status = "invalid"
+        $payload.runtime.managed_files.reason = "manifest-invalid"
         $payload.runtime.release_version = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         $payload.runtime.source_commit = New-ProvenanceValue -Value $null -Reason "manifest-invalid"
         Add-RuntimeFinding -List $findings -Code "runtime.manifest.source_identity_invalid" -Severity "error" -Message "Runtime install manifest source identity is invalid."
@@ -526,6 +693,12 @@ function Get-RuntimeStatusPayload {
     if ($hasInvalidField) {
         $payload.runtime.manifest_status = "invalid"
     }
+    if ($payload.runtime.manifest_status -eq "current") {
+        Set-ManagedFilesStatus -Payload $payload -Root $Root -Manifest $manifest -Findings $findings
+    }
+    else {
+        Set-ManagedFilesUnavailable -Payload $payload -Reason "manifest-invalid" -Findings $findings
+    }
     Set-BridgeStatus -Payload $payload -Root $Root -InstallManifest $manifest -Findings $findings
     $payload.findings = @($findings.ToArray())
     return $payload
@@ -561,6 +734,14 @@ function Write-RuntimeStatusText {
     Write-Output "Install strategy: $(if ($null -eq $runtime.install_strategy) { 'unknown' } else { [string]$runtime.install_strategy })"
     Write-Output "Profile: $(if ($null -eq $runtime.profile) { 'unknown' } else { [string]$runtime.profile })"
     Write-Output "Installed at: $(if ($null -eq $runtime.installed_at_utc) { 'unknown' } else { [string]$runtime.installed_at_utc })"
+    Write-Output "Managed files: $([string]$runtime.managed_files.status)"
+    Write-Output "Managed status reason: $([string]$runtime.managed_files.reason)"
+    Write-Output "Tracked managed items: $([int]$runtime.managed_files.tracked_item_count)"
+    Write-Output "Tracked managed files: $([int]$runtime.managed_files.tracked_file_count)"
+    Write-Output "Managed file problems: $(@($runtime.managed_files.problems).Count)"
+    foreach ($problem in @($runtime.managed_files.problems)) {
+        Write-Output ("- {0}: {1}" -f [string]$problem.path, [string]$problem.status)
+    }
     Write-Output "Bridge: $([string]$Payload.bridge.status)"
     Write-Output "Bridge manifest: $([string]$Payload.bridge.manifest_status)"
     Write-Output "Configured skills: $([int]$Payload.bridge.configured_count)"

@@ -92,6 +92,33 @@ function Invoke-RuntimeStatusFixtureChecks {
         }
     }
 
+    function New-ManagedStatusFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [string]$Content = "managed content",
+            [switch]$Missing,
+            [AllowEmptyString()][string]$SourceHash,
+            [AllowEmptyString()][string]$InstalledHash
+        )
+        $runtime = Join-PathParts $fixtureRoot $Name
+        $relativePath = "SKILL.md"
+        $livePath = Join-PathParts $runtime "skills" "project-bootstrap" $relativePath
+        if (-not $Missing.IsPresent) { Write-StatusText -Path $livePath -Text $Content }
+        $contentHash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Content))).Replace("-", "").ToLowerInvariant()
+        if (-not $PSBoundParameters.ContainsKey("InstalledHash")) { $InstalledHash = $contentHash }
+        if (-not $PSBoundParameters.ContainsKey("SourceHash")) { $SourceHash = $InstalledHash }
+        $manifest = New-CurrentManifest
+        $manifest.items = @([ordered]@{
+                name = "skills/project-bootstrap"
+                destination = "skills/project-bootstrap"
+                mode = "copy"
+                managed = $true
+                files = @([ordered]@{ path = $relativePath; source_sha256 = $SourceHash; installed_sha256 = $InstalledHash })
+            })
+        Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
+        return [ordered]@{ runtime = $runtime; manifest = $manifest; live_path = $livePath; content_hash = $contentHash }
+    }
+
     function Write-BridgeStatusManifest {
         param(
             [Parameter(Mandatory = $true)][string]$RuntimeRoot,
@@ -120,7 +147,7 @@ function Invoke-RuntimeStatusFixtureChecks {
         $manifest = New-CurrentManifest
         $manifest.skills = @($Skills)
         $manifest.items = @($Skills | ForEach-Object {
-                [ordered]@{ name = "skills/$_"; destination = "skills/$_"; mode = "copy"; managed = $true }
+                [ordered]@{ name = "skills/$_"; destination = "skills/$_"; mode = "copy"; managed = $true; files = @() }
             })
         Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
         New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
@@ -169,6 +196,123 @@ function Invoke-RuntimeStatusFixtureChecks {
     Assert-StatusCondition -Condition (@($validPayload.findings).Count -eq 0) -Message "Valid schema-2 manifest produced findings."
     Assert-StatusCondition -Condition ((@($beforeState) -join "`n") -ceq (@($afterState) -join "`n")) -Message "Runtime status changed the runtime tree."
     $evidence.Add([ordered]@{ scenario = "schema-2-valid-provenance"; status = [string]$validPayload.runtime.manifest_status; findings = @($validPayload.findings).Count })
+
+    $managedCurrent = New-ManagedStatusFixture -Name "managed-current"
+    Write-StatusText -Path (Join-PathParts $managedCurrent.runtime "skills" "project-bootstrap" "unrecorded.txt") -Text "ignored"
+    $managedBefore = @(Get-StatusTreeState -RuntimeRoot $managedCurrent.runtime)
+    $managedCurrentPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCurrent.runtime)
+    $managedAfter = @(Get-StatusTreeState -RuntimeRoot $managedCurrent.runtime)
+    Assert-StatusCondition -Condition ([string]$managedCurrentPayload.runtime.managed_files.status -eq "current" -and [string]$managedCurrentPayload.runtime.managed_files.reason -eq "scanned") -Message "Matching managed file did not report current."
+    Assert-StatusCondition -Condition ([int]$managedCurrentPayload.runtime.managed_files.tracked_item_count -eq 1 -and [int]$managedCurrentPayload.runtime.managed_files.tracked_file_count -eq 1 -and [int]$managedCurrentPayload.runtime.managed_files.counts.current -eq 1) -Message "Managed file counts are incorrect."
+    Assert-StatusCondition -Condition (@($managedCurrentPayload.runtime.managed_files.problems).Count -eq 0 -and (@($managedBefore) -join "`n") -ceq (@($managedAfter) -join "`n")) -Message "Managed status scanned unknown files or modified the runtime."
+    $evidence.Add([ordered]@{ scenario = "managed-current-unrecorded-ignored"; status = [string]$managedCurrentPayload.runtime.managed_files.status })
+
+    $managedModified = New-ManagedStatusFixture -Name "managed-modified" -Content "original"
+    Write-StatusText -Path $managedModified.live_path -Text "changed"
+    $modifiedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedModified.runtime)
+    Assert-StatusCondition -Condition ([string]$modifiedPayload.runtime.managed_files.status -eq "modified" -and [string]$modifiedPayload.runtime.managed_files.problems[0].path -eq "skills/project-bootstrap/SKILL.md" -and @($modifiedPayload.findings | Where-Object code -eq "runtime.managed.modified").Count -eq 1) -Message "Locally modified managed file was not reported."
+    $evidence.Add([ordered]@{ scenario = "managed-modified"; status = [string]$modifiedPayload.runtime.managed_files.status })
+
+    $managedMissing = New-ManagedStatusFixture -Name "managed-missing" -Missing
+    $missingManagedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedMissing.runtime)
+    Assert-StatusCondition -Condition ([string]$missingManagedPayload.runtime.managed_files.status -eq "missing" -and @($missingManagedPayload.findings | Where-Object code -eq "runtime.managed.missing").Count -eq 1) -Message "Missing managed file was not reported."
+    $evidence.Add([ordered]@{ scenario = "managed-missing"; status = [string]$missingManagedPayload.runtime.managed_files.status })
+
+    $installedBytes = [System.Text.Encoding]::UTF8.GetBytes("installed")
+    $sourceBytes = [System.Text.Encoding]::UTF8.GetBytes("source")
+    $installedBaseline = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($installedBytes)).Replace("-", "").ToLowerInvariant()
+    $sourceBaseline = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash($sourceBytes)).Replace("-", "").ToLowerInvariant()
+    foreach ($conflictCase in @(
+            [ordered]@{ name = "live-installed"; content = "installed"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "live-source"; content = "source"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "live-third"; content = "third"; source = $sourceBaseline; installed = $installedBaseline; missing = $false },
+            [ordered]@{ name = "missing"; content = "installed"; source = $sourceBaseline; installed = $installedBaseline; missing = $true },
+            [ordered]@{ name = "source-removed"; content = "installed"; source = ""; installed = $installedBaseline; missing = $false }
+        )) {
+        $fixture = New-ManagedStatusFixture -Name ("managed-conflict-{0}" -f $conflictCase.name) -Content ([string]$conflictCase.content) -SourceHash ([string]$conflictCase.source) -InstalledHash ([string]$conflictCase.installed) -Missing:([bool]$conflictCase.missing)
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $fixture.runtime)
+        Assert-StatusCondition -Condition ([string]$payload.runtime.managed_files.status -eq "conflict" -and [int]$payload.runtime.managed_files.counts.conflict -eq 1) -Message "Recorded source divergence did not remain conflict."
+        $evidence.Add([ordered]@{ scenario = "managed-conflict-$($conflictCase.name)"; status = [string]$payload.runtime.managed_files.status })
+    }
+
+    $devLink = New-CurrentManifest
+    $devLink.install_strategy = "dev-link"
+    $devLinkRuntime = Join-PathParts $fixtureRoot "managed-dev-link"
+    Write-StatusManifest -RuntimeRoot $devLinkRuntime -Value $devLink
+    $devLinkPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $devLinkRuntime)
+    Assert-StatusCondition -Condition ([string]$devLinkPayload.runtime.managed_files.status -eq "unknown" -and [string]$devLinkPayload.runtime.managed_files.reason -eq "dev-link-source-not-recorded" -and @($devLinkPayload.findings | Where-Object code -eq "runtime.managed.dev_link_unverifiable").Count -eq 1) -Message "Development-link runtime did not fail soft."
+    $evidence.Add([ordered]@{ scenario = "managed-dev-link"; status = [string]$devLinkPayload.runtime.managed_files.status })
+
+    $rootConflict = New-ManagedStatusFixture -Name "managed-item-root-file"
+    [System.IO.Directory]::Delete((Join-PathParts $rootConflict.runtime "skills" "project-bootstrap"), $true)
+    Write-StatusText -Path (Join-PathParts $rootConflict.runtime "skills" "project-bootstrap") -Text "occupied"
+    $rootConflictPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $rootConflict.runtime)
+    Assert-StatusCondition -Condition ([string]$rootConflictPayload.runtime.managed_files.status -eq "conflict") -Message "Managed item root occupied by a file did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-item-root-file"; status = [string]$rootConflictPayload.runtime.managed_files.status })
+
+    $leafDirectory = New-ManagedStatusFixture -Name "managed-leaf-directory"
+    [System.IO.File]::Delete($leafDirectory.live_path)
+    New-Item -ItemType Directory -Path $leafDirectory.live_path | Out-Null
+    $leafDirectoryPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $leafDirectory.runtime)
+    Assert-StatusCondition -Condition ([string]$leafDirectoryPayload.runtime.managed_files.status -eq "conflict") -Message "Managed leaf occupied by a directory did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-leaf-directory"; status = [string]$leafDirectoryPayload.runtime.managed_files.status })
+
+    $aliasedRoot = New-ManagedStatusFixture -Name "managed-item-root-alias"
+    $aliasedRootPath = Join-PathParts $aliasedRoot.runtime "skills" "project-bootstrap"
+    $externalRoot = Join-PathParts $fixtureRoot "managed-item-root-alias-external"
+    [System.IO.Directory]::Delete($aliasedRootPath, $true)
+    New-Item -ItemType Directory -Force -Path $externalRoot | Out-Null
+    if ($isWindowsPlatform) { New-Item -ItemType Junction -Path $aliasedRootPath -Target $externalRoot | Out-Null }
+    else { New-Item -ItemType SymbolicLink -Path $aliasedRootPath -Target $externalRoot | Out-Null }
+    $aliasedRootPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $aliasedRoot.runtime)
+    Assert-StatusCondition -Condition ([string]$aliasedRootPayload.runtime.managed_files.status -eq "conflict") -Message "Managed item root alias did not report conflict."
+    $evidence.Add([ordered]@{ scenario = "managed-item-root-alias"; status = [string]$aliasedRootPayload.runtime.managed_files.status })
+
+    $mixed = New-ManagedStatusFixture -Name "managed-mixed-priority" -Content "current"
+    $currentHash = [string]$mixed.content_hash
+    $mixed.manifest.items[0].files = @(
+        [ordered]@{ path = "a-current.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "b-modified.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "c-missing.txt"; source_sha256 = $currentHash; installed_sha256 = $currentHash },
+        [ordered]@{ path = "d-conflict.txt"; source_sha256 = ("a" * 64); installed_sha256 = $currentHash }
+    )
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "a-current.txt") -Text "current"
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "b-modified.txt") -Text "changed"
+    Write-StatusText -Path (Join-PathParts $mixed.runtime "skills" "project-bootstrap" "d-conflict.txt") -Text "current"
+    [System.IO.File]::Delete($mixed.live_path)
+    Write-StatusManifest -RuntimeRoot $mixed.runtime -Value $mixed.manifest
+    $mixedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $mixed.runtime)
+    Assert-StatusCondition -Condition ([string]$mixedPayload.runtime.managed_files.status -eq "conflict" -and [int]$mixedPayload.runtime.managed_files.counts.current -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.modified -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.missing -eq 1 -and [int]$mixedPayload.runtime.managed_files.counts.conflict -eq 1) -Message "Managed mixed-state priority is unstable."
+    Assert-StatusCondition -Condition ((@($mixedPayload.runtime.managed_files.problems | ForEach-Object path) -join ",") -eq "skills/project-bootstrap/b-modified.txt,skills/project-bootstrap/c-missing.txt,skills/project-bootstrap/d-conflict.txt") -Message "Managed problems are not canonically sorted."
+    $evidence.Add([ordered]@{ scenario = "managed-mixed-priority"; status = [string]$mixedPayload.runtime.managed_files.status })
+
+    foreach ($invalidContract in @(
+            [ordered]@{ name = "absolute-path"; mutate = { param($m) $m.items[0].files[0].path = if ($isWindowsPlatform) { "C:/outside.txt" } else { "/outside.txt" } } },
+            [ordered]@{ name = "traversal"; mutate = { param($m) $m.items[0].files[0].path = "../outside.txt" } },
+            [ordered]@{ name = "duplicate-item"; mutate = { param($m) $m.items = @($m.items[0], $m.items[0]) } },
+            [ordered]@{ name = "duplicate-file"; mutate = { param($m) $m.items[0].files = @($m.items[0].files[0], $m.items[0].files[0]) } },
+            [ordered]@{ name = "case-conflict"; mutate = { param($m) $other = [ordered]@{ path = "skill.md"; source_sha256 = $m.items[0].files[0].source_sha256; installed_sha256 = $m.items[0].files[0].installed_sha256 }; $m.items[0].files = @($m.items[0].files[0], $other) } },
+            [ordered]@{ name = "uppercase-hash"; mutate = { param($m) $m.items[0].files[0].installed_sha256 = ([string]$m.items[0].files[0].installed_sha256).ToUpperInvariant() } },
+            [ordered]@{ name = "scalar-file"; mutate = { param($m) $m.items[0].files = @("invalid") } },
+            [ordered]@{ name = "null-file"; mutate = { param($m) $m.items[0].files = @($null) } }
+        )) {
+        $invalidFixture = New-ManagedStatusFixture -Name ("managed-invalid-{0}" -f $invalidContract.name)
+        & $invalidContract.mutate $invalidFixture.manifest
+        Write-StatusManifest -RuntimeRoot $invalidFixture.runtime -Value $invalidFixture.manifest
+        $invalidPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $invalidFixture.runtime)
+        Assert-StatusCondition -Condition ([string]$invalidPayload.runtime.managed_files.status -eq "unknown" -and [string]$invalidPayload.runtime.managed_files.reason -eq "contract-invalid" -and @($invalidPayload.findings | Where-Object code -eq "runtime.managed.contract_invalid").Count -eq 1) -Message "Invalid managed contract did not fail soft."
+        $evidence.Add([ordered]@{ scenario = "managed-invalid-$($invalidContract.name)"; status = [string]$invalidPayload.runtime.managed_files.status })
+    }
+
+    $safeJson = @((Invoke-Status -RuntimeRoot $managedModified.runtime).output) -join "`n"
+    $safeText = @((Invoke-Status -RuntimeRoot $managedModified.runtime -Text).output) -join "`n"
+    foreach ($privateValue in @([System.IO.Path]::GetFullPath($managedModified.runtime), $managedModified.content_hash, $env:USERNAME)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$privateValue)) {
+            Assert-StatusCondition -Condition (-not $safeJson.Contains([string]$privateValue) -and -not $safeText.Contains([string]$privateValue)) -Message "Managed status exposed private path or hash data."
+        }
+    }
+    Assert-StatusCondition -Condition ($safeText.Contains("Managed files: modified") -and $safeText.Contains("- skills/project-bootstrap/SKILL.md: modified")) -Message "Managed text output was not rendered from the payload."
+    $evidence.Add([ordered]@{ scenario = "managed-public-safe-text-json"; status = "current" })
 
     $nullRuntime = Join-PathParts $fixtureRoot "null-provenance"
     $nullManifest = New-CurrentManifest

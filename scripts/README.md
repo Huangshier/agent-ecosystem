@@ -71,6 +71,17 @@ compatibility. Project drift, managed conflicts, and recommended actions are
 not included yet; future sections must extend the same payload model instead of
 reparsing the manifest.
 
+For schema-2 copy runtimes, `runtime.managed_files` checks only files explicitly
+recorded under managed copy items in `install-manifest.json`. It does not scan
+unrecorded files or recursively inventory managed directories. `modified` means
+the live file differs from an unchanged recorded installed/source baseline;
+`conflict` means the manifest already records source/installed divergence or a
+managed path is occupied by non-regular content. Development-link runtimes are
+`unknown` because the source root is not recorded, and status does not guess it.
+This inspection is read-only: it does not repair or reinstall the runtime,
+access a source repository, or use the network. `install-report.json` is an
+installation result, not durable current-state authority.
+
 Context gate benchmark:
 
 ```powershell
