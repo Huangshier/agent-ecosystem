@@ -74,8 +74,14 @@ discovers or scans a project from the current directory. The project section
 combines the read-only hub-lock machine contract, memory upgrade Analyze mode,
 and memory diagnostics. It reports only stable status, reason, language,
 counts, and finding codes; project paths, hub Git identity, hashes, and raw
-helper output are never copied into the payload. Recommended actions are not
-included yet.
+helper output are never copied into the payload. After all three sections are
+aggregated, `recommended_next_action` is derived once from that same payload.
+The first matching manifest, managed-file, bridge, or project rule wins;
+unrecognized or malformed state conservatively maps to `inspect-manually`.
+`not-configured` bridge state and project `unknown / not-requested` are neutral,
+and missing provenance marked `not-recorded` does not imply reinstallation.
+The recommendation is an enum-only read-only result: the command never executes
+it or emits a command, path, URL, parameter, or free-text instruction for it.
 
 For schema-2 copy runtimes, `runtime.managed_files` checks only files explicitly
 recorded under managed copy items in `install-manifest.json`. It does not scan
