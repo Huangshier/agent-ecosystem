@@ -122,9 +122,11 @@ if ([int]$classification.detected_tier -ge 1) {
     if ($requiredSuites -contains "runtime-smoke") {
         $runtimeRoot = Join-Path $ScratchRoot "runtime"
         & (Join-Path $scriptDir "install.ps1") -Profile minimal -TargetDir $runtimeRoot | Out-Null
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json"))) { throw "Minimal copy-first install smoke failed." }
+        $installSucceeded = $?
+        if (-not $installSucceeded -or -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json"))) { throw "Minimal copy-first install smoke failed." }
         & (Join-Path $scriptDir "uninstall.ps1") -TargetDir $runtimeRoot -Json | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Manifest uninstall smoke failed." }
+        $uninstallSucceeded = $?
+        if (-not $uninstallSucceeded) { throw "Manifest uninstall smoke failed." }
         Add-Result "installer-runtime-smoke" "PASS" "Minimal copy-first install and manifest uninstall completed in scratch space."
         $executedSuites.Add("runtime-smoke")
     }

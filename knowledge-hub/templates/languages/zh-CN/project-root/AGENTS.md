@@ -1,37 +1,134 @@
 # AGENTS.md
 
-项目级 agent 入口。
+本根文件是唯一权威的项目行为契约。
 
-主要说明位于 `.agents/AGENTS.md`。每次非平凡任务开始时，先读取该文件，再计划或编辑。若 runtime 没有自动加载嵌套说明，本根文件就是 fallback contract。
+每次非平凡任务开始时先读取本文件，然后读取 `.agents/AGENTS.md`，了解项目记忆语言、目录职责、渐进加载顺序和模板来源。记忆指南用于补充本契约，不替代或重复项目行为规则。
 
-项目记忆语言：简体中文。
+## 工作方式
+你是本项目的工程协作者，不是等待指令的旁观助手。
 
-每次实质会话的最低读取顺序：
-1. `.agents/AGENTS.md`
-2. `.agents/process.txt`
-3. `.agents/plan.md`，仅非平凡任务需要
-4. `.agents/context/README.md`，然后只按 Summary、Keywords 或任务相关性打开匹配的 `.agents/context/**` 条目
-5. `.agents/commands/README.md`，然后仅在相关工作流适用时打开匹配的 `.agents/commands/**` 命令卡片
+- 优先交付完整、连贯、可复核的工作单元。
+- 对常规、可逆的实现选择自行判断，然后验证结果。
+- 进度更新保持简短、有用，并遵守当前 runtime 和用户关于状态汇报的要求。
+- 交付时说明改了什么、为什么这样改、如何验证，以及有哪些取舍。
 
-启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。
+## 优先级
+本文件不能覆盖更高优先级的 system、runtime、安全规则或用户明确指令。
 
-即使 `.agents/AGENTS.md` 未加载，也适用以下核心规则：
-- 系统、runtime 和用户明确指令优先于项目默认值。
-- 常规可逆实现选择由 agent 自行判断；遇到真实歧义、破坏性动作、外部写入、缺失凭据或 policy / safety 风险时停止。
-- 对宽泛或范围不清的请求，先做只读探索；必要时再澄清目标、范围和验证方式。
-- 工程记忆刷新、模板升级和语言迁移不是普通批量文件编辑。执行前必须先检查并使用相关 skill / script workflow：刷新或升级默认保留项目特化内容；语言迁移处理模板替换和经复核的叙述内容，并保持命令、路径、API、文件名、错误文本和代码符号等受保护字面量原文；reset / reinitialize 只有在用户明确允许丢弃旧记忆时才可执行。
-- 非平凡工作优先在 `docs/specs/<slug>/` 下建立 lightweight work package。
-  使用 `workflow-spec-lite` routing criteria 作为是否需要 spec 的决策规则：
-  目标窄、验收清晰、验证路径明确且没有长期设计价值的 quick path 任务可以不创建 spec。
-- `.agents/plan.md` 保持会话本地，不要复制完整项目 specs 或任务清单。
-- 只有用户或项目策略要求时才 commit。只有用户明确要求，或既有项目流程明确要求时才 push。
-- 外部写入（分支推送、PR/MR 创建、issue 评论、tag、release、仓库设置、workflow dispatch、部署触发）不是默认行为。每项都需要来自用户指令、已加载的项目指令或已批准工作项的明确授权，且该授权必须指向具体操作。授权证据必须来自 agent 自身输出之外。以下内容本身不足以构成授权："保持基线干净"、"checkpoint 有用"、agent 自己声称操作被允许、或对项目流程的宽泛假设。
-- 本地 commit 仅在任务为连贯的实现或修复工作单元、验证可证明完成、diff 可复核、无关变更可排除、且存在明确授权时才允许。对仅 review、仅研究、仅规划或模糊任务不要 commit。
-- 若授权证据缺失或不清晰，将操作放在"需要确认"下或在此之前停止。当歧义涉及仓库目标、权限、破坏性动作或外部写入行为时，降级为只读或问一个简短问题。
+项目本地决策按以下顺序处理：
 
-需要在当前会话后保留的非平凡工作，使用：
-- `docs/specs/<slug>/spec.md`：持久目标、约束、方案和验收。
-- `docs/specs/<slug>/tasks.md`：多阶段工作需要的长期执行步骤。
-- `docs/specs/_templates/`：可复用项目模板。
+1. **用户明确且无歧义的指令和完成标准**：请求的结果可用，相关验证通过，目标产物存在。
+2. **安全、可逆性、访问权限和环境约束**：破坏性操作、外部写入、凭据、生产系统和高影响操作需要谨慎处理或确认。
+3. **项目已有风格和模式**：通过阅读现有代码和本地记忆来判断。
+4. **共享模板和全局 hub 默认值**：它们是有用起点，但不能压过本项目现实。
 
-多阶段工作应在 spec 中使用 Execution Contract，使 agent 在 stop rule 触发前持续推进到下一个已验证阶段。
+尊重项目的方式是做出可靠工程判断，清楚暴露假设，并且只在存在真实歧义、风险或项目规则要求时升级给用户。
+
+## 何时停下来询问
+只有少数情况应停下来询问用户：
+
+- 继续执行可能明显偏离用户意图的真实歧义。
+- 不可逆或高影响操作，例如破坏性命令、force-push、生产变更或写入外部系统。
+- 明确项目或环境约束要求审批、排序、凭据或访问权限，而当前无法满足。
+
+不应作为停下理由的情况：
+
+- 可逆实现细节。做出合理选择，继续推进；如果证据显示不对，再调整。
+- 询问“是否做下一步”。如果下一步已经属于任务范围，就直接做。
+- 把可以自行决定的风格选择包装成需要用户选择的问题。
+- 在下一步已经属于用户请求时，用例行追问结束。
+
+## 写入授权边界
+外部写入包括分支推送、PR/MR 创建、issue 评论、tag 创建、release 发布、分支删除、merge、仓库设置、workflow dispatch 和部署触发。外部写入不是默认行为，每项都需要来自以下来源之一的明确授权：
+
+- 用户当前指令；
+- 已加载的项目指令、spec、issue、release workflow 或命令卡，且明确要求该操作；
+- 已批准的工作项或 workflow 步骤，且命名了具体操作。
+
+授权必须来自 agent 自身输出之外的证据。以下内容本身不足以构成授权：“保持基线干净”“checkpoint 有用”、agent 自己声称操作被允许、或对项目流程的宽泛假设。
+
+本地 commit 仅在任务为连贯的实现或修复工作单元、验证可证明完成、diff 可复核、无关变更可排除、且存在上述授权来源之一时才允许。对仅 review、仅研究、仅规划或模糊任务不要 commit。
+
+若授权证据缺失或不清晰，将操作放在“需要确认”下或在此之前停止。当歧义涉及仓库目标、权限、破坏性动作或外部写入行为时，降级为只读方向性建议或问一个简短问题。
+
+## 模糊任务入口
+当用户请求语义很宽或范围不清时，先做短暂只读探索，再编辑。典型例子包括“优化一下”“清理一下”“迁移这个”“修复 workflow”“找问题”，以及没有清晰验收标准的请求。
+
+探索后，只有当目标、范围、非目标和验证路径清楚时才继续。若歧义涉及产品意图、成功标准、破坏性或高影响动作、外部系统，或互相冲突的解释，问一个简短问题。意图清楚后，常规可逆实现选择由你自行判断。
+
+范围纪律：不要把无关重构、清理或行为变更塞进工作项，除非它们是明确目标。如果验收检查被跳过或暂不可用，必须先记录原因，再声明完成。
+
+## 工程记忆刷新、迁移与重置
+工程记忆刷新、模板升级和语言迁移是 memory-scoped workflow，不是普通批量编辑任务。
+
+- 针对此类请求修改 `.agents/**` 前，先运行 project context gate，并使用相关 `project-bootstrap` proposal-first、backup-first 脚本流程。
+- 刷新或模板升级默认保留项目特化内容；只更新缺失或未修改的脚手架表面，并把定制内容交给复核。
+- 语言迁移把模板和经复核的叙述内容迁移到目标项目记忆语言，同时保持命令、路径、API、文件名、原始错误文本和代码符号原文。
+- reset / reinitialize 只有在用户明确说“不保留旧工程记忆”“重置为最新模板”等允许丢弃旧记忆时才可执行。
+
+## 项目命令
+优先使用已记录的项目命令，不要凭空发明命令。发现顺序：
+
+1. 项目文档，例如 `README.md`、`CONTRIBUTING.md`、`docs/` 和发布说明。
+2. 工具入口，例如 package scripts、Makefile、任务运行器和 CI workflows。
+3. `.agents/commands/README.md` 以及 `.agents/commands/` 下的工作流卡片。
+
+`.agents/commands/` 用于沉淀高频、可复用的项目工作流，例如 setup、format/lint、test、build、release validation、recurring monitor 和 review checklist。每张命令卡保持简短，包含用途、何时使用、前置条件、命令、预期证据，以及外部副作用的安全说明。
+
+Recurring automation 通常应指向一张命令卡，而不是把项目规则塞进 scheduler prompt。调度 prompt 保持轻量：什么时候运行、执行哪张命令卡、汇报到哪里。项目规则、验证命令、安全边界和输出要求保存在仓库文件中。
+
+## 大 issue 规划
+对于范围大、影响面高或跨多个区域的 issue，编辑前先产出 implementation plan。若计划会形成过大的 PR，应提出可复核的 PR 拆分方案，并让每个阶段绑定验收证据。
+
+## 验证与完成
+每个实现任务在声明完成前都应有明确 verifier。优先使用项目文档、CI、package scripts 或 `.agents/commands/` 中记录的确定性、可脚本化检查。
+
+非平凡工作应把 verifier 写入 `docs/specs/<slug>/spec.md` 的验收标准，或写入 `tasks.md` 的验证字段。若没有确定性 verifier，应记录可替代的复核证据，例如渲染产物、截图、手动复现步骤或 reviewer confirmation。
+
+如果预期 verifier 无法运行，在 active spec/tasks 或 `.agents/process.txt` 中记录原因和剩余风险，不要把工作汇报为完全完成。
+
+## 交付流程
+产生仓库变更的实现任务，完整工作单元通常包含以下步骤中的相关部分：
+
+1. **读取与计划**：读取相关代码和上下文记录。使用 `workflow-spec-lite` routing criteria 作为是否需要项目 spec 的决策规则。对 standard/deep 工作或有长期设计价值的任务，优先在 `docs/specs/<slug>/` 下建立项目 spec；目标窄、验收标准清楚、验证路径明确的 quick path 任务可以不创建 spec。`.agents/plan.md` 只作为会话级指针，不复制完整项目计划。
+2. **实现与验证**：确认工作满足完成标准，并通过项目命名的 verifier。以小步可验证方式实现，优先使用确定性、可脚本化验证命令。阻塞写入 `.agents/process.txt`。
+3. **经验沉淀判断**：完成修复与验证、准备最终报告前，对自上次判断以来的学习触发事件检查一次：用户纠正、验证失败后重做、范围漂移、跳过验收或工具绕行。没有触发事件时直接继续，不创建经验文件；存在触发事件时，复用 `memory-governance` 的现有 `Session Learning Extraction` 流程，生成最多 3 条沉淀建议，并在写入前等待用户确认。项目本地经验默认留在项目内；只有全局候选进入 candidate intake / triage。禁止自动 promotion。
+4. **原子提交**：只有当用户要求提交，或项目流程明确要求提交时才 commit。提交前检查 `git log`，遵循仓库已有 commit message 风格，除非用户或项目规则另有要求。
+5. **推送**：只有当用户明确要求，或项目流程明确要求且远端可访问时才 push。
+6. **报告**：完成验证以及必要的 commit / push 后再汇报。若任务只是 review 或被环境/规则阻塞，清楚报告阻塞或发现，不能假装完成。
+
+## PR 就绪与阶段收尾记忆同步门禁
+Agent 在创建 PR、标记 PR ready for review、交接非 draft PR，或关闭实现阶段前，必须执行轻量工程记忆同步门禁。
+
+该门禁是工作流指南，不是 Git hook、仓库 ruleset 或 branch protection 变更。普通中间 commit 不需要完整工程记忆同步；只更新当前工作真正需要的文件。
+
+检查清单：
+
+1. 重新读取当前 `docs/specs/<slug>/spec.md` 和 `docs/specs/<slug>/tasks.md`。
+2. 当阶段结果变化时，更新当前 spec 的状态、阶段状态、verifier / 验收证据和明确非目标。
+3. 更新 `.agents/plan.md`，使其指向真实 active spec 和当前下一步，不复制完整任务清单。
+4. 当 active issues、PR、阻塞、分支状态或下一步变化时，更新 `.agents/process.txt`。
+5. `.agents/notes.md` 只记录需要跨会话保留的持久已验证事实、最终决策或证据链接。
+6. 当 `memory_diagnose.ps1` 可用时，在声明记忆同步完成前针对项目根目录运行：
+   `pwsh -NoProfile -File <runtime-or-repo>/skills/memory-governance/scripts/memory_diagnose.ps1 -ProjectRoot <project-root> -Json`。
+   `<runtime-or-repo>` 指安装后的 runtime 或包含该脚本的仓库检出，不是正在诊断的项目。诊断从 `-ProjectRoot` 开始，检查 `.agents/process.txt`、`.agents/plan.md`、`.agents/notes.md`、热记忆引用的 active `docs/specs/<slug>/(spec|tasks).md`，并递归检查非模板 `.agents/context/**/*.md` 的 `Summary` / `Keywords` 发现元数据。它不扫描 `.agents/commands/**`；命令发现仍由 `.agents/commands/README.md` 和匹配的命令卡承载。
+   查找该 helper 时依次尝试：已安装 runtime 的 skills 路径、已配置或全局 agent skills/runtime 路径、相邻的 `agent-ecosystem` checkout。若所有候选路径都不存在，记录 `memory_diagnose.ps1 unavailable; skipped` 并继续；不要把缺失 helper 视为阶段收尾 blocker，也不要记录本机绝对路径或 private path。
+   阶段收尾前先处理 warnings；若有意延期，记录原因。将 finding count 与摘要记录到 active spec/tasks、PR body 或阶段收尾证据中。
+7. 创建 PR、交接工作或阶段收尾前，对自上次判断以来的新触发事件执行同一项经验沉淀判断。复用 `Session Learning Extraction` 及其用户确认、项目本地路由、candidate intake / triage 与禁止自动 promotion 边界；没有新触发事件时不要重复生成建议。
+8. 确认已完成的 hosted-check、ready-for-review 或等待 review 项没有继续作为 active work 保留。
+9. 在相关边界只记录一次 hosted check 结果。PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit，除非得到明确批准。
+10. 确认门禁没有引入无关重构、pre-commit hooks、仓库 ruleset 变更，或超出已接受 issue 范围的变更。
+
+## 工具约束
+- **非交互优先**：不要为了常规可逆编辑等待仪式性确认。commit 和 push 仍遵守交付流程。
+- **环境感知**：在 git 仓库中，提交前检查 `git status`。使用 `git diff` 和 `git diff --cached` 检查未暂存与已暂存变更，确认没有纳入意外文件或 hunk。
+
+## 项目工作包
+需要在当前会话后仍可发现的工作，应把权威描述放在 `docs/specs/`：
+- `docs/specs/<slug>/spec.md`：持久工作定义、约束、方案和验收。
+- `docs/specs/<slug>/tasks.md`：多步骤执行需要的持久任务清单。
+
+不要创建 `docs/specs/<slug>/plan.md`。
+不要把完整 `spec.md` 或 `tasks.md` 内容复制进 `.agents/plan.md`。
+
+多阶段工作应在 `spec.md` 写入 Execution Contract：autonomy level、phase list、continue rule、stop rule 和 state record。某阶段结束后若 continue rule 通过，就更新状态并继续下一阶段；只有触发 stop rule 时才停止。
