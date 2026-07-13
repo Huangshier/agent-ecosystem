@@ -50,6 +50,7 @@ $evidence = [ordered]@{
     agent_skill_bridge = @()
     runtime_smoke = [ordered]@{}
     runtime_status = @()
+    project_context_gate = [ordered]@{}
     audit = [ordered]@{}
     knowledge_hub = [ordered]@{}
     duplicate_helpers = @()

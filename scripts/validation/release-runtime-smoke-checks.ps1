@@ -315,6 +315,27 @@ catch {
 }
 
 try {
+    $contextGateSuite = Join-PathParts $repoRoot "scripts" "validation" "project-context-gate-checks.ps1"
+    $contextGateJson = @(
+        & $contextGateSuite `
+            -RepositoryRoot $repoRoot `
+            -ScratchRoot (Join-PathParts $scratchRootFull "project-context-gate-targeted") `
+            -Json
+    ) -join [Environment]::NewLine
+    $contextGateEvidence = $contextGateJson | ConvertFrom-Json
+    if ([string]$contextGateEvidence.status -ne "PASS" -or
+        [int]$contextGateEvidence.scenario_count -lt 2 -or
+        -not [bool]$contextGateEvidence.project_read_only) {
+        throw "Project context gate targeted suite returned incomplete evidence."
+    }
+    $script:evidence.project_context_gate = $contextGateEvidence
+    Add-Check "project context gate targeted suite" "PASS" "Source and copy-install layouts preserve text, JSON, brief, inventory, git-state, and read-only behavior." $contextGateEvidence
+}
+catch {
+    Add-Check "project context gate targeted suite" "FAIL" $_.Exception.Message
+}
+
+try {
     if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
         throw "Recommended copy runtime was not created."
     }

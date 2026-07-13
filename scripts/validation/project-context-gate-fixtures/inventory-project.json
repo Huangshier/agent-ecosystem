@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "files": [
+    { "path": "AGENTS.md", "content": "# Fixture Project\n\nProject-level guidance.\n" },
+    { "path": ".agents/AGENTS.md", "content": "# Fixture Agent Guide\n\nPrimary project agent guide.\n" },
+    { "path": ".agents/process.txt", "content": "# Current state\n\nContext gate validation fixture.\n" },
+    { "path": ".agents/plan.md", "content": "# Current plan\n\nActive spec: `docs/specs/context-gate-fixture/spec.md`.\n" },
+    { "path": ".agents/notes.md", "content": "# Stable notes\n\nFixture-only stable note.\n" },
+    { "path": ".agents/context/README.md", "content": "# Context index\n\nFixture discovery index.\n" },
+    { "path": "docs/specs/context-gate-fixture/spec.md", "content": "# Context Gate Fixture\n\nFixture specification.\n" },
+    { "path": "docs/specs/context-gate-fixture/tasks.md", "content": "# Context Gate Fixture Tasks\n\n- [ ] Validate inventory.\n" }
+  ]
+}

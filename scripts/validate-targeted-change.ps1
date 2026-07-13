@@ -128,6 +128,23 @@ if ([int]$classification.detected_tier -ge 1) {
         Add-Result "installer-runtime-smoke" "PASS" "Minimal copy-first install and manifest uninstall completed in scratch space."
         $executedSuites.Add("runtime-smoke")
     }
+    if ($requiredSuites -contains "project-context-gate") {
+        $contextGateOutput = @(
+            & (Join-Path $scriptDir "validation/project-context-gate-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "project-context-gate") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Project context gate checks failed." }
+        $contextGateEvidence = $contextGateOutput | ConvertFrom-Json
+        if ([string]$contextGateEvidence.status -ne "PASS" -or
+            [int]$contextGateEvidence.scenario_count -lt 2 -or
+            -not [bool]$contextGateEvidence.project_read_only) {
+            throw "Project context gate checks returned incomplete evidence."
+        }
+        Add-Result "project-context-gate" "PASS" ("Executed {0} source/copy-install layout scenarios with text, JSON, brief, inventory, git-state, and read-only assertions." -f [int]$contextGateEvidence.scenario_count)
+        $executedSuites.Add("project-context-gate")
+    }
     if ($requiredSuites -contains "agent-skill-bridge") {
         . (Join-Path $scriptDir "lib/path-guard.ps1")
         . (Join-Path $scriptDir "validation/release-test-helper.ps1")
