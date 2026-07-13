@@ -29,13 +29,16 @@ if ($knownEvents -cnotcontains $EventName) {
 if ($knownTiers -cnotcontains $Tier) {
     throw "Required validation gate received missing or invalid Tier '$Tier'."
 }
+if ($EventName -ceq "workflow_dispatch" -and $Tier -cne "3") {
+    throw "Required validation gate requires Tier '3' for workflow_dispatch, got '$Tier'."
+}
 foreach ($entry in $results.GetEnumerator()) {
     if ($knownResults -cnotcontains [string]$entry.Value) {
         throw "Required validation gate received unknown result '$($entry.Value)' for '$($entry.Key)'."
     }
 }
 
-$expected = if ($EventName -ceq "pull_request") {
+$expected = if ($EventName -ceq "pull_request" -or $EventName -ceq "push") {
     switch ($Tier) {
         { $_ -ceq "0" -or $_ -ceq "1" } {
             [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; full_pwsh = "skipped"; windows_powershell = "skipped" }

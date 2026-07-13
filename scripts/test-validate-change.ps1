@@ -12,6 +12,116 @@ $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
 
+function Invoke-FixtureGit {
+    param([string]$Root, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    $output = @(& git -C $Root @Arguments 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw "Fixture git failed in '$Root': git $($Arguments -join ' ')" }
+    return @($output)
+}
+
+function New-GitFixtureRepository {
+    param([string]$Root)
+    New-Item -ItemType Directory -Force -Path $Root | Out-Null
+    & git -C $Root init -b main 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not initialize fixture repository '$Root'." }
+    Invoke-FixtureGit $Root config user.name "Validation Fixture" | Out-Null
+    Invoke-FixtureGit $Root config user.email "validation-fixture@example.invalid" | Out-Null
+}
+
+function Add-GitFixtureCommit {
+    param([string]$Root, [string]$Path, [string]$Content, [string]$Message)
+    $fullPath = Join-Path $Root $Path
+    $parent = Split-Path -Parent $fullPath
+    if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    Set-Content -LiteralPath $fullPath -Value $Content -Encoding utf8
+    Invoke-FixtureGit $Root add -- $Path | Out-Null
+    Invoke-FixtureGit $Root commit -m $Message | Out-Null
+    return [string](@(Invoke-FixtureGit $Root rev-parse HEAD)[-1])
+}
+
+function Assert-GitBoundaryCase {
+    param(
+        [string]$Name,
+        [string]$Root,
+        [string]$Base,
+        [string]$Head,
+        [int]$Tier,
+        [switch]$ForcePush,
+        [switch]$ExpectNormalizedBoundary
+    )
+    $raw = @(& $validator -RepositoryRoot $Root -BaseRef $Base -HeadRef $Head -ForcePush:$ForcePush -Json) -join "`n"
+    $value = $raw | ConvertFrom-Json
+    if ([int]$value.detected_tier -ne $Tier) { throw "Git boundary case '$Name' expected Tier $Tier, got Tier $($value.detected_tier): $($value.escalation_reason)" }
+    if ($ExpectNormalizedBoundary.IsPresent) {
+        $expectedBase = [string](@(Invoke-FixtureGit $Root rev-parse "$Base^{commit}")[-1])
+        $expectedHead = [string](@(Invoke-FixtureGit $Root rev-parse "$Head^{commit}")[-1])
+        if ([string]$value.base_ref -cne $expectedBase.ToLowerInvariant() -or [string]$value.head_ref -cne $expectedHead.ToLowerInvariant()) {
+            throw "Git boundary case '$Name' did not return normalized base/head commit IDs."
+        }
+    }
+    return [ordered]@{ name = $Name; tier = $Tier; status = "PASS" }
+}
+
+function Invoke-PushRoutingFixtures {
+    $root = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-push-routing-{0}" -f ([Guid]::NewGuid().ToString("N")))
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+    try {
+        $linear = Join-Path $root "linear"
+        New-GitFixtureRepository $linear
+        $base = Add-GitFixtureCommit $linear "README.md" "base" "base"
+        $tierZero = Add-GitFixtureCommit $linear "README.md" "tier zero" "tier zero"
+        $tierOne = Add-GitFixtureCommit $linear "knowledge-hub/knowledge/catalog.md" "tier one" "tier one"
+        $tierTwo = Add-GitFixtureCommit $linear "scripts/install.ps1" "Write-Output 'tier two'" "tier two"
+        $tierThree = Add-GitFixtureCommit $linear ".github/workflows/release-validation.yml" "name: tier-three" "tier three"
+
+        $fixtureResults.Add((Assert-GitBoundaryCase "push-tier-0" $linear $base $tierZero 0 -ExpectNormalizedBoundary))
+        $fixtureResults.Add((Assert-GitBoundaryCase "push-tier-1" $linear $tierZero $tierOne 1 -ExpectNormalizedBoundary))
+        $fixtureResults.Add((Assert-GitBoundaryCase "push-tier-2" $linear $tierOne $tierTwo 2 -ExpectNormalizedBoundary))
+        $fixtureResults.Add((Assert-GitBoundaryCase "multi-commit-push" $linear $base $tierTwo 2 -ExpectNormalizedBoundary))
+        $fixtureResults.Add((Assert-GitBoundaryCase "push-tier-3" $linear $tierTwo $tierThree 3 -ExpectNormalizedBoundary))
+        $fixtureResults.Add((Assert-GitBoundaryCase "all-zero-before" $linear ("0" * 40) $tierThree 3))
+        $fixtureResults.Add((Assert-GitBoundaryCase "missing-before" $linear "refs/heads/definitely-missing" $tierThree 3))
+        $fixtureResults.Add((Assert-GitBoundaryCase "forced-push" $linear $base $tierZero 3 -ForcePush))
+
+        Invoke-FixtureGit $linear switch --quiet --orphan unrelated | Out-Null
+        $unrelated = Add-GitFixtureCommit $linear "future-surface/value.bin" "unrelated" "unrelated root"
+        $fixtureResults.Add((Assert-GitBoundaryCase "non-ancestor-push" $linear $base $unrelated 3))
+
+        $shallow = Join-Path $root "shallow"
+        $linearUri = ([System.Uri]::new(($linear.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar))).AbsoluteUri
+        & git clone --quiet --depth 1 --branch main $linearUri $shallow 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Could not create shallow history fixture." }
+        $fixtureResults.Add((Assert-GitBoundaryCase "shallow-history" $shallow $tierTwo $tierThree 3))
+
+        $merge = Join-Path $root "merge"
+        New-GitFixtureRepository $merge
+        $mergeBase = Add-GitFixtureCommit $merge "README.md" "base" "base"
+        Invoke-FixtureGit $merge switch --quiet -c feature | Out-Null
+        Add-GitFixtureCommit $merge "knowledge-hub/knowledge/catalog.md" "feature" "feature" | Out-Null
+        Invoke-FixtureGit $merge switch --quiet main | Out-Null
+        $beforeMerge = Add-GitFixtureCommit $merge "README.md" "main" "main"
+        Invoke-FixtureGit $merge merge --no-ff feature -m "merge feature" | Out-Null
+        $mergeHead = [string](@(Invoke-FixtureGit $merge rev-parse HEAD)[-1])
+        $fixtureResults.Add((Assert-GitBoundaryCase "merge-commit-push" $merge $beforeMerge $mergeHead 1 -ExpectNormalizedBoundary))
+
+        $squash = Join-Path $root "squash"
+        New-GitFixtureRepository $squash
+        $squashBase = Add-GitFixtureCommit $squash "README.md" "base" "base"
+        Invoke-FixtureGit $squash switch --quiet -c feature | Out-Null
+        Add-GitFixtureCommit $squash "scripts/install.ps1" "Write-Output 'feature'" "feature" | Out-Null
+        Invoke-FixtureGit $squash switch --quiet main | Out-Null
+        Invoke-FixtureGit $squash merge --squash feature | Out-Null
+        Invoke-FixtureGit $squash commit -m "squash feature" | Out-Null
+        $squashHead = [string](@(Invoke-FixtureGit $squash rev-parse HEAD)[-1])
+        $fixtureResults.Add((Assert-GitBoundaryCase "squash-commit-push" $squash $squashBase $squashHead 2 -ExpectNormalizedBoundary))
+
+        return @($fixtureResults.ToArray())
+    }
+    finally {
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    }
+}
+
 function Invoke-TargetedRegression {
     param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
     $caseScratch = Join-Path $targetedScratch $Name
@@ -65,28 +175,24 @@ foreach ($case in @($cases)) {
 $invalidRaw = @(& $validator -BaseRef "refs/heads/definitely-missing" -HeadRef HEAD -Json) -join "`n"
 $invalid = $invalidRaw | ConvertFrom-Json
 if ([int]$invalid.detected_tier -ne 3 -or [string]$invalid.escalation_reason -notmatch "Classification input") { throw "Invalid base ref did not conservatively escalate." }
-# Clean up the stale $LASTEXITCODE left by the expected git failure inside the validator.
-# Failing to reset this leaks a non-zero exit code to the caller (e.g. GitHub Actions step)
-# even though every test passed, breaking push-only classification runs.
-$global:LASTEXITCODE = 0
+if ($LASTEXITCODE -ne 0) { throw "Invalid base ref leaked LASTEXITCODE=$LASTEXITCODE instead of returning a clean Tier 3 fallback." }
 
-# Regression: simulate the push-only classify scenario where the test script
-# is immediately followed by a -ChangedPath classifier call.  On PRs the
-# classifier runs with -BaseRef (which calls successful git commands that
-# overwrite $LASTEXITCODE), but on main push only -ChangedPath is used.
-# This ensures the stale-code cleanup above prevents a leaked non-zero exit.
-$pushLikeRaw = @(
+# Regression: a direct-path Tier 3 classification after the expected invalid-ref
+# fallback must also leave a clean native-command exit status.
+$directPathRaw = @(
     & $validator `
         -ChangedPath ".github/workflows/release-validation.yml" `
         -Json
 ) -join "`n"
-$pushLike = $pushLikeRaw | ConvertFrom-Json
-if ([int]$pushLike.detected_tier -ne 3) {
-    throw "Push-like classifier scenario did not produce Tier 3."
+$directPath = $directPathRaw | ConvertFrom-Json
+if ([int]$directPath.detected_tier -ne 3) {
+    throw "Direct-path classifier scenario did not produce Tier 3."
 }
 if ($LASTEXITCODE -ne 0) {
-    throw "Push-like classifier scenario leaked LASTEXITCODE=$LASTEXITCODE."
+    throw "Direct-path classifier scenario leaked LASTEXITCODE=$LASTEXITCODE."
 }
+
+$pushRoutingResults = @(Invoke-PushRoutingFixtures)
 
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/release-validation.yml") -Raw
 $workflowMarkers = @(
@@ -94,7 +200,10 @@ $workflowMarkers = @(
     "needs.classify.outputs.tier == '1'",
     "needs.classify.outputs.tier == '2'",
     "needs.classify.outputs.tier == '3'",
-    "github.event_name != 'pull_request'",
+    "github.event.before",
+    "github.event.forced",
+    "needs.classify.outputs.base",
+    "needs.classify.outputs.head",
     "needs.classify.result != 'success'",
     "./scripts/validate-targeted-change.ps1",
     "./scripts/validate-release.ps1"
@@ -107,8 +216,10 @@ foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/"
 }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression")).Count -ne 2) { throw "Tier 3/full validation jobs must run targeted regressions under both PowerShell hosts." }
-if (@([regex]::Matches($workflow, "if: \(github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'\) && matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must be restricted to the Windows Tier 3/main/manual job." }
-if (@([regex]::Matches($workflow, "if: github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 1) { throw "Windows PowerShell targeted regressions must be restricted to Tier 3, main, or manual jobs." }
+if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier base boundary." }
+if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier head boundary." }
+if (@([regex]::Matches($workflow, "if: \(needs\.classify\.result != 'success' \|\| needs\.classify\.outputs\.tier == '3'\) && matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must be restricted to the Windows Tier 3/classifier-failure job." }
+if (@([regex]::Matches($workflow, "if: needs\.classify\.result != 'success' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 1) { throw "Windows PowerShell targeted regressions must be restricted to Tier 3 or classifier failure." }
 if (@([regex]::Matches($workflow, "matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must run once on the Windows full-validation job." }
 
 $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
@@ -143,5 +254,5 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; push_like_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $pushRoutingResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 6 } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
