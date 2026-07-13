@@ -194,3 +194,37 @@ jobs:
           name: validation-windows-powershell
           path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
           if-no-files-found: ignore
+
+  validation-gate:
+    name: validation gate
+    if: always()
+    needs:
+      - classify
+      - quick-validation
+      - targeted-validation
+      - validate
+      - validate-windows-powershell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Evaluate required validation contract
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TIER: ${{ needs.classify.outputs.tier }}
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          QUICK_RESULT: ${{ needs.quick-validation.result }}
+          TARGETED_RESULT: ${{ needs.targeted-validation.result }}
+          FULL_PWSH_RESULT: ${{ needs.validate.result }}
+          WINDOWS_POWERSHELL_RESULT: ${{ needs.validate-windows-powershell.result }}
+        run: |
+          ./scripts/validation/required-validation-gate.ps1 `
+            -EventName $env:EVENT_NAME `
+            -Tier $env:TIER `
+            -ClassifyResult $env:CLASSIFY_RESULT `
+            -QuickResult $env:QUICK_RESULT `
+            -TargetedResult $env:TARGETED_RESULT `
+            -FullPwshResult $env:FULL_PWSH_RESULT `
+            -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT

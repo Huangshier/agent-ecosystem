@@ -98,6 +98,19 @@ function Invoke-ReleaseValidationRepositoryChecks {
 
 Invoke-ReleaseRepositoryChecks
 
+try {
+    $gateFixtures = Join-PathParts $repoRoot "scripts" "test-required-validation-gate.ps1"
+    $gateEvidence = @(& $gateFixtures -Json) -join "`n" | ConvertFrom-Json
+    if ([int]$gateEvidence.fail -ne 0) {
+        throw "Required validation gate fixtures reported failures."
+    }
+    $script:evidence.routing.required_validation_gate = $gateEvidence
+    Add-Check "required validation gate" "PASS" "Tier 0-3, main/manual routing, fail-closed results, and the fixed workflow gate contract passed." $gateEvidence
+}
+catch {
+    Add-Check "required validation gate" "FAIL" $_.Exception.Message
+}
+
 }
 
 # Invoke-ReleaseValidationSpecAndDocumentationChecks: No parameters; runs workflow-spec-lite fixture, template guidance, README, and release notes checks in the original order.
