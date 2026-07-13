@@ -38,6 +38,17 @@ foreach ($case in @($cases)) {
     $value = $raw | ConvertFrom-Json
     if ([int]$value.detected_tier -ne [int]$case.tier) { throw "Case '$($case.name)' expected Tier $($case.tier), got Tier $($value.detected_tier)." }
     if ($null -ne $case.full_validator_calls -and [int]$value.hosted_plan.full_validator_calls -ne [int]$case.full_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted full-validator call count." }
+    if ($null -ne $case.targeted_os_jobs -and [int]$value.hosted_plan.targeted_os_jobs -ne [int]$case.targeted_os_jobs) { throw "Case '$($case.name)' has an incorrect hosted targeted OS job count." }
+    if ($null -ne $case.affected_modules) {
+        $actualModules = @($value.affected_modules | Sort-Object)
+        $expectedModules = @($case.affected_modules | Sort-Object)
+        if (($actualModules -join ',') -cne ($expectedModules -join ',')) { throw "Case '$($case.name)' has incorrect affected modules." }
+    }
+    if ($null -ne $case.required_suites) {
+        $actualSuites = @($value.required_suites | Sort-Object)
+        $expectedSuites = @($case.required_suites | Sort-Object)
+        if (($actualSuites -join ',') -cne ($expectedSuites -join ',')) { throw "Case '$($case.name)' has incorrect required suites." }
+    }
     $text = if (@($case.paths).Count -eq 0) {
         @(& $validator -BaseRef HEAD -HeadRef HEAD) -join "`n"
     } else {
@@ -100,7 +111,7 @@ if (@([regex]::Matches($workflow, "if: \(github\.event_name != 'pull_request' \|
 if (@([regex]::Matches($workflow, "if: github\.event_name != 'pull_request' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 1) { throw "Windows PowerShell targeted regressions must be restricted to Tier 3, main, or manual jobs." }
 if (@([regex]::Matches($workflow, "matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must run once on the Windows full-validation job." }
 
-$unsupported = (& $validator -ChangedPath "skills/project-context-gate/scripts/runtime.ps1" -Json | Out-String) | ConvertFrom-Json
+$unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unsupported.detected_tier -ne 3) { throw "Runtime skill without a reliable targeted suite did not escalate to Tier 3." }
 $unmappedTest = (& $validator -ChangedPath "scripts/test-future-runtime.ps1" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unmappedTest.detected_tier -ne 3) { throw "Unmapped future test path did not conservatively escalate to Tier 3." }
@@ -114,8 +125,11 @@ if ($RunTargetedRegression.IsPresent) {
         Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
         Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
         Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
+        Invoke-TargetedRegression -Name "context-gate" -Path "skills/project-context-gate/scripts/context_gate.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
+        Invoke-TargetedRegression -Name "context-gate-check" -Path "scripts/validation/project-context-gate-checks.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
         Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
         Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
+        Invoke-TargetedRegression -Name "docs-context-gate" -Path @("README.md", "skills/project-context-gate/scripts/context_gate.ps1") -ExpectedModule @("documentation", "context-gate") -ExpectedSuite "project-context-gate" -Mode "targeted"
     )
     $tierZeroText = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero-text")) -join "`n"
     if ($tierZeroText -notmatch "0 actual module suites") { throw "Targeted text output disagrees with Tier 0 JSON evidence." }
