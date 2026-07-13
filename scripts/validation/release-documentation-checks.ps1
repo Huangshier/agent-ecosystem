@@ -16,8 +16,8 @@ try {
         "skills/workflow-spec-lite/references/spec-template.md" = @("## 4. Goals", "## 5. Non-Goals", "## 10. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "knowledge-hub/templates/languages/en/project-root/docs/specs/_templates/spec-lite.md" = @("## 4. Goals", "## 5. Non-Goals", "## 10. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/docs/specs/_templates/spec-lite.md" = @("## 4. Goals", "## 5. Non-Goals", "## 10. Acceptance / Evidence", "Scope control:", "scope drift", "skipped acceptance")
-        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
+        "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @("Scope discipline:", "unrelated refactors", "acceptance checks are skipped")
         "skills/workflow-spec-lite/SKILL.md" = @("scope drift", "unrelated refactors", "skipped acceptance checks", "validate_spec.ps1", "memory_diagnose.ps1", "finding count")
         "skills/memory-governance/SKILL.md" = @("Scope drift", "Unrelated refactor", "Skipped acceptance")
     }
@@ -96,10 +96,10 @@ catch {
 try {
     $rootGuidanceFiles = [ordered]@{
         "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
-        "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
-        "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', '启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @('`.agents/context/README.md`', '`.agents/commands/README.md`', '启动时不要预加载完整 `.agents/context/` 或 `.agents/commands/` 目录。')
+        "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @("single authoritative project behavior contract", "## Working Philosophy", "## On Stopping to Ask", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Verification And Completion", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "## Project Work Packages", '`.agents/commands/README.md`')
+        "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @("唯一权威的项目行为契约", "## 工作方式", "## 何时停下来询问", "## 写入授权边界", "## 模糊任务入口", "## 验证与完成", "## 交付流程", "## PR 就绪与阶段收尾记忆同步门禁", "## 项目工作包", '`.agents/commands/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @("single authoritative project behavior contract", "## Working Philosophy", "## On Stopping to Ask", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Verification And Completion", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "## Project Work Packages", '`.agents/commands/README.md`')
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/AGENTS.md" = @("唯一权威的项目行为契约", "## 工作方式", "## 何时停下来询问", "## 写入授权边界", "## 模糊任务入口", "## 验证与完成", "## 交付流程", "## PR 就绪与阶段收尾记忆同步门禁", "## 项目工作包", '`.agents/commands/README.md`')
     }
     $claudeShimFiles = [ordered]@{
         "knowledge-hub/templates/languages/en/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
@@ -108,10 +108,10 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-root/CLAUDE.md" = @('@AGENTS.md', '@.agents/AGENTS.md', '@.agents/process.txt', '@.agents/plan.md', '@.agents/context/README.md', '@.agents/commands/README.md')
     }
     $agentGuidanceFiles = [ordered]@{
-        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "memory_diagnose.ps1", "finding count", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "memory_diagnose.ps1", "finding count", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("## Project Commands", '`.agents/commands/README.md`', "## Large Issue Planning", "implementation plan", "PR-Ready And Phase-Close Memory Sync Gate", "opens a pull request", "memory_diagnose.ps1", "finding count", "After a PR has been opened, do not push memory-only commits", '`.agents/context/README.md`')
-        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 项目命令", '`.agents/commands/README.md`', "## 大 issue 规划", "implementation plan", "PR 就绪与阶段收尾记忆同步门禁", "创建 PR", "memory_diagnose.ps1", "finding count", "PR 创建后，不要仅为了刷新状态或 hosted-check 时间戳而推送 memory-only commit", '`.agents/context/README.md`')
+        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @('Project behavior rules live exclusively in the root `AGENTS.md`', "## Project Memory Language", "## Directory Responsibilities And Memory Routing", "## Progressive Load Order", "## Template Source And Conservative Refresh", '`.agents/context/README.md`', '`.agents/commands/README.md`', '`.agents/hub.lock.json`', "-RefreshUnmodifiedTemplates", "manual review")
+        "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @('项目行为规则仅以根 `AGENTS.md` 为准', "## 项目记忆语言", "## 目录职责与记忆路由", "## 渐进加载顺序", "## 模板来源与保守刷新", '`.agents/context/README.md`', '`.agents/commands/README.md`', '`.agents/hub.lock.json`', "-RefreshUnmodifiedTemplates", "manual review")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @('Project behavior rules live exclusively in the root `AGENTS.md`', "## Project Memory Language", "## Directory Responsibilities And Memory Routing", "## Progressive Load Order", "## Template Source And Conservative Refresh", '`.agents/context/README.md`', '`.agents/commands/README.md`', '`.agents/hub.lock.json`', "-RefreshUnmodifiedTemplates", "manual review")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @('项目行为规则仅以根 `AGENTS.md` 为准', "## 项目记忆语言", "## 目录职责与记忆路由", "## 渐进加载顺序", "## 模板来源与保守刷新", '`.agents/context/README.md`', '`.agents/commands/README.md`', '`.agents/hub.lock.json`', "-RefreshUnmodifiedTemplates", "manual review")
     }
     $commandGuidanceFiles = [ordered]@{
         "knowledge-hub/templates/languages/en/project-agent/commands/README.md" = @('`.agents/AGENTS.md`', "reusable high-frequency project workflows", "Do not invent commands", "Expected pass/fail evidence")
@@ -144,16 +144,31 @@ try {
         }
     }
 
+    $nestedBehaviorForbidden = [ordered]@{
+        "knowledge-hub/templates/languages/en/project-agent/AGENTS.md" = @("## Working Philosophy", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "External writes include")
+        "knowledge-hub/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 工作方式", "## 写入授权边界", "## 模糊任务入口", "## 交付流程", "## PR 就绪与阶段收尾记忆同步门禁", "外部写入包括")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent/AGENTS.md" = @("## Working Philosophy", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "External writes include")
+        "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/zh-CN/project-agent/AGENTS.md" = @("## 工作方式", "## 写入授权边界", "## 模糊任务入口", "## 交付流程", "## PR 就绪与阶段收尾记忆同步门禁", "外部写入包括")
+    }
+    foreach ($relativePath in $nestedBehaviorForbidden.Keys) {
+        $text = Get-FileText -RelativePath $relativePath
+        foreach ($token in $nestedBehaviorForbidden[$relativePath]) {
+            if ($text.Contains($token)) {
+                $guidanceMissing.Add("$relativePath contains forbidden behavior-contract token: $token")
+            }
+        }
+    }
+
     $script:evidence.agent_template_guidance = [ordered]@{
         checked_files = @($guidanceExpectations.Keys)
         missing = @($guidanceMissing.ToArray())
     }
 
     if ($guidanceMissing.Count -gt 0) {
-        Add-Check "agent template startup guidance" "FAIL" "Root, project-agent, or commands templates are missing lean startup, command, PR-ready, or large-issue guidance." $evidence.agent_template_guidance
+        Add-Check "agent template startup guidance" "FAIL" "Root behavior contracts, project-memory guides, Claude shims, or command templates violate ownership/startup guidance." $evidence.agent_template_guidance
     }
     else {
-        Add-Check "agent template startup guidance" "PASS" "Root, project-agent, and commands templates include lean startup context and command discovery, Project Commands, PR-ready memory sync, and large-issue planning guidance." $evidence.agent_template_guidance
+        Add-Check "agent template startup guidance" "PASS" "Root templates own the full behavior contract, nested guides own only project-memory routing/provenance, and Claude/command startup surfaces remain aligned." $evidence.agent_template_guidance
     }
 }
 catch {

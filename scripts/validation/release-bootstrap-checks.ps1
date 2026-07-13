@@ -1114,4 +1114,93 @@ catch {
     Add-Check "bootstrap memory preservation" "FAIL" $_.Exception.Message
 }
 
+try {
+    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
+        throw "Recommended copy runtime was not created."
+    }
+
+    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
+    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    $currentRootTemplate = Join-PathParts $hubDir "templates" "languages" "en" "project-root" "AGENTS.md"
+    $currentNestedTemplate = Join-PathParts $hubDir "templates" "languages" "en" "project-agent" "AGENTS.md"
+
+    function Set-PriorTemplateFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$ProjectDir,
+            [Parameter(Mandatory = $true)][bool]$RecordPriorHashes
+        )
+
+        New-Item -ItemType Directory -Force -Path $ProjectDir | Out-Null
+        & $bootstrapScript -ProjectDir $ProjectDir -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
+
+        $rootPath = Join-PathParts $ProjectDir "AGENTS.md"
+        $nestedPath = Join-PathParts $ProjectDir ".agents" "AGENTS.md"
+        Set-Content -LiteralPath $rootPath -Value "# Legacy Root Guide`n`nLegacy root template content." -Encoding UTF8
+        Set-Content -LiteralPath $nestedPath -Value "# Legacy Nested Guide`n`nLegacy nested template content." -Encoding UTF8
+
+        $lockPath = Join-PathParts $ProjectDir ".agents" "hub.lock.json"
+        $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+        foreach ($entry in @(
+            [ordered]@{ path = "AGENTS.md"; file = $rootPath },
+            [ordered]@{ path = ".agents/AGENTS.md"; file = $nestedPath }
+        )) {
+            $property = $lock.template_installed_hashes_sha256.PSObject.Properties[[string]$entry.path]
+            if ($RecordPriorHashes) {
+                $property.Value = (Get-FileHash -LiteralPath ([string]$entry.file) -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            else {
+                $lock.template_installed_hashes_sha256.PSObject.Properties.Remove([string]$entry.path)
+            }
+        }
+        $lock | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $lockPath -Encoding UTF8
+        return [ordered]@{ root = $rootPath; nested = $nestedPath; lock = $lockPath }
+    }
+
+    $refreshProject = Join-PathParts $scratchRootFull "ownership-refresh-recorded-prior-hash"
+    $refreshPaths = Set-PriorTemplateFixture -ProjectDir $refreshProject -RecordPriorHashes $true
+    & $bootstrapScript -ProjectDir $refreshProject -HubDir $hubDir -RefreshUnmodifiedTemplates -SkipMemoryUpgradeAnalysis | Out-Host
+    $refreshLock = Get-Content -LiteralPath $refreshPaths.lock -Raw | ConvertFrom-Json
+    foreach ($entry in @(
+        [ordered]@{ relative = "AGENTS.md"; actual = $refreshPaths.root; expected = $currentRootTemplate },
+        [ordered]@{ relative = ".agents/AGENTS.md"; actual = $refreshPaths.nested; expected = $currentNestedTemplate }
+    )) {
+        if ((Get-FileHash -LiteralPath ([string]$entry.actual) -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath ([string]$entry.expected) -Algorithm SHA256).Hash) {
+            throw "Recorded prior template hash did not refresh $($entry.relative) to the current ownership template."
+        }
+        if (@($refreshLock.template_replaced_paths | ForEach-Object { [string]$_ }) -notcontains [string]$entry.relative) {
+            throw "Recorded prior template hash refresh did not report $($entry.relative) as replaced."
+        }
+    }
+    if ([int]$refreshLock.template_backup_count -lt 2) {
+        throw "Recorded prior template hash refresh did not create backup evidence for both ownership guides."
+    }
+
+    $missingHashProject = Join-PathParts $scratchRootFull "ownership-refresh-missing-prior-hash"
+    $missingHashPaths = Set-PriorTemplateFixture -ProjectDir $missingHashProject -RecordPriorHashes $false
+    $missingRootBefore = (Get-FileHash -LiteralPath $missingHashPaths.root -Algorithm SHA256).Hash
+    $missingNestedBefore = (Get-FileHash -LiteralPath $missingHashPaths.nested -Algorithm SHA256).Hash
+    & $bootstrapScript -ProjectDir $missingHashProject -HubDir $hubDir -RefreshUnmodifiedTemplates -SkipMemoryUpgradeAnalysis | Out-Host
+    $missingHashLock = Get-Content -LiteralPath $missingHashPaths.lock -Raw | ConvertFrom-Json
+    if ((Get-FileHash -LiteralPath $missingHashPaths.root -Algorithm SHA256).Hash -ne $missingRootBefore -or
+        (Get-FileHash -LiteralPath $missingHashPaths.nested -Algorithm SHA256).Hash -ne $missingNestedBefore) {
+        throw "Missing prior template hashes did not preserve legacy ownership guides."
+    }
+    foreach ($relativePath in @("AGENTS.md", ".agents/AGENTS.md")) {
+        if (@($missingHashLock.template_manual_review_paths | ForEach-Object { [string]$_ }) -notcontains $relativePath) {
+            throw "Missing prior template hash did not route $relativePath to manual review."
+        }
+    }
+
+    Add-Check "ownership template conservative refresh" "PASS" "Recorded prior hashes refresh both ownership guides with backups; missing hashes preserve both guides for manual review." ([ordered]@{
+        refreshed_project = $refreshProject
+        refreshed_paths = @("AGENTS.md", ".agents/AGENTS.md")
+        backup_count = [int]$refreshLock.template_backup_count
+        missing_hash_project = $missingHashProject
+        manual_review_paths = @($missingHashLock.template_manual_review_paths)
+    })
+}
+catch {
+    Add-Check "ownership template conservative refresh" "FAIL" $_.Exception.Message
+}
+
 }

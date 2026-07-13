@@ -38,7 +38,7 @@ try {
         $bootstrapAgentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
         if (Test-Path -LiteralPath $bootstrapAgentGuidePath) {
             $bootstrapAgentGuide = Get-Content -LiteralPath $bootstrapAgentGuidePath -Raw
-            $bootstrapLanguagePolicyPresent = $bootstrapAgentGuide -match '(?m)^## Project Language Policy\s*$'
+            $bootstrapLanguagePolicyPresent = $bootstrapAgentGuide -match '(?m)^## Project Memory Language\s*$'
         }
     }
 
@@ -46,6 +46,7 @@ try {
         param(
             [Parameter(Mandatory = $true)][string]$Language,
             [Parameter(Mandatory = $true)][string]$ExpectedMarker,
+            [Parameter(Mandatory = $true)][string]$ExpectedRootContractToken,
             [Parameter(Mandatory = $true)][string]$ExpectedContextToken,
             [Parameter(Mandatory = $true)][string]$ExpectedCommandToken,
             [Parameter(Mandatory = $true)][string]$ExpectedSpecToken
@@ -65,7 +66,7 @@ try {
         & $bootstrapScript -ProjectDir $languageProjectDir -HubDir $hubDir -ProjectLanguage $Language -SkipMemoryUpgradeAnalysis | Out-Host
 
         $requiredMarkers = [ordered]@{
-            "AGENTS.md" = $ExpectedMarker
+            "AGENTS.md" = $ExpectedRootContractToken
             ".agents/AGENTS.md" = $ExpectedMarker
             ".agents/process.txt" = $ExpectedMarker
             ".agents/plan.md" = $ExpectedMarker
@@ -157,6 +158,7 @@ try {
         $mismatched = New-Object 'System.Collections.Generic.List[string]'
         $testingGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
         $learningDepositGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
+        $ownershipGuidanceErrors = New-Object 'System.Collections.Generic.List[string]'
         foreach ($language in @("en", "zh-CN")) {
             foreach ($relativePath in $requiredRelativePaths) {
                 $authorityPath = Join-PathParts $authorityRoot $language $relativePath
@@ -233,21 +235,21 @@ try {
             $expectation = $learningDepositExpectations[$language]
             foreach ($templateKind in @("authority", "snapshot")) {
                 $templateRoot = if ($templateKind -eq "authority") { $authorityRoot } else { $snapshotRoot }
-                $agentGuidePath = Join-PathParts $templateRoot $language "project-agent" "AGENTS.md"
-                if (-not (Test-Path -LiteralPath $agentGuidePath)) {
-                    $learningDepositGuidanceErrors.Add("missing $templateKind/$language/project-agent/AGENTS.md")
+                $rootGuidePath = Join-PathParts $templateRoot $language "project-root" "AGENTS.md"
+                if (-not (Test-Path -LiteralPath $rootGuidePath)) {
+                    $learningDepositGuidanceErrors.Add("missing $templateKind/$language/project-root/AGENTS.md")
                     continue
                 }
-                $agentGuideText = [System.IO.File]::ReadAllText($agentGuidePath, [System.Text.Encoding]::UTF8)
-                $deliveryStart = $agentGuideText.IndexOf([string]$expectation.delivery_heading, [System.StringComparison]::Ordinal)
-                $gateStart = $agentGuideText.IndexOf([string]$expectation.gate_heading, [System.StringComparison]::Ordinal)
-                $nextStart = $agentGuideText.IndexOf([string]$expectation.next_heading, [System.StringComparison]::Ordinal)
+                $rootGuideText = [System.IO.File]::ReadAllText($rootGuidePath, [System.Text.Encoding]::UTF8)
+                $deliveryStart = $rootGuideText.IndexOf([string]$expectation.delivery_heading, [System.StringComparison]::Ordinal)
+                $gateStart = $rootGuideText.IndexOf([string]$expectation.gate_heading, [System.StringComparison]::Ordinal)
+                $nextStart = $rootGuideText.IndexOf([string]$expectation.next_heading, [System.StringComparison]::Ordinal)
                 if ($deliveryStart -lt 0 -or $gateStart -le $deliveryStart -or $nextStart -le $gateStart) {
-                    $learningDepositGuidanceErrors.Add("$templateKind/$language project-agent learning-deposit section boundaries are missing or out of order")
+                    $learningDepositGuidanceErrors.Add("$templateKind/$language project-root learning-deposit section boundaries are missing or out of order")
                     continue
                 }
-                $deliveryText = $agentGuideText.Substring($deliveryStart, $gateStart - $deliveryStart)
-                $gateText = $agentGuideText.Substring($gateStart, $nextStart - $gateStart)
+                $deliveryText = $rootGuideText.Substring($deliveryStart, $gateStart - $deliveryStart)
+                $gateText = $rootGuideText.Substring($gateStart, $nextStart - $gateStart)
                 foreach ($token in $expectation.delivery_tokens) {
                     if (-not $deliveryText.Contains([string]$token)) {
                         $learningDepositGuidanceErrors.Add("$templateKind/$language Delivery Protocol missing learning-deposit token: $token")
@@ -256,6 +258,110 @@ try {
                 foreach ($token in $expectation.gate_tokens) {
                     if (-not $gateText.Contains([string]$token)) {
                         $learningDepositGuidanceErrors.Add("$templateKind/$language PR-ready gate missing learning-deposit token: $token")
+                    }
+                }
+            }
+        }
+
+        $ownershipExpectations = [ordered]@{
+            "en" = [ordered]@{
+                root_required = @(
+                    "single authoritative project behavior contract",
+                    "## Working Philosophy",
+                    "## On Stopping to Ask",
+                    "## Write Authorization Boundaries",
+                    "## Ambiguous Task Gate",
+                    "## Engineering Memory Refresh, Migration, And Reset",
+                    "## Verification And Completion",
+                    "## Delivery Protocol & Working Loop",
+                    "## PR-Ready And Phase-Close Memory Sync Gate",
+                    "## Project Work Packages"
+                )
+                nested_required = @(
+                    'Project behavior rules live exclusively in the root `AGENTS.md`',
+                    "## Project Memory Language",
+                    "## Directory Responsibilities And Memory Routing",
+                    "## Progressive Load Order",
+                    "## Template Source And Conservative Refresh",
+                    '`.agents/hub.lock.json`',
+                    "-RefreshUnmodifiedTemplates",
+                    "manual review"
+                )
+                nested_forbidden = @(
+                    "## Working Philosophy",
+                    "## On Stopping to Ask",
+                    "## Write Authorization Boundaries",
+                    "## Ambiguous Task Gate",
+                    "## Verification And Completion",
+                    "## Delivery Protocol & Working Loop",
+                    "## PR-Ready And Phase-Close Memory Sync Gate",
+                    "## Project Work Packages",
+                    "External writes include",
+                    "Local commit is allowed only"
+                )
+            }
+            "zh-CN" = [ordered]@{
+                root_required = @(
+                    "唯一权威的项目行为契约",
+                    "## 工作方式",
+                    "## 何时停下来询问",
+                    "## 写入授权边界",
+                    "## 模糊任务入口",
+                    "## 工程记忆刷新、迁移与重置",
+                    "## 验证与完成",
+                    "## 交付流程",
+                    "## PR 就绪与阶段收尾记忆同步门禁",
+                    "## 项目工作包"
+                )
+                nested_required = @(
+                    '项目行为规则仅以根 `AGENTS.md` 为准',
+                    "## 项目记忆语言",
+                    "## 目录职责与记忆路由",
+                    "## 渐进加载顺序",
+                    "## 模板来源与保守刷新",
+                    '`.agents/hub.lock.json`',
+                    "-RefreshUnmodifiedTemplates",
+                    "manual review"
+                )
+                nested_forbidden = @(
+                    "## 工作方式",
+                    "## 何时停下来询问",
+                    "## 写入授权边界",
+                    "## 模糊任务入口",
+                    "## 验证与完成",
+                    "## 交付流程",
+                    "## PR 就绪与阶段收尾记忆同步门禁",
+                    "## 项目工作包",
+                    "外部写入包括",
+                    "本地 commit 仅在"
+                )
+            }
+        }
+        foreach ($language in @("en", "zh-CN")) {
+            $expectation = $ownershipExpectations[$language]
+            foreach ($templateKind in @("authority", "snapshot")) {
+                $templateRoot = if ($templateKind -eq "authority") { $authorityRoot } else { $snapshotRoot }
+                $rootGuidePath = Join-PathParts $templateRoot $language "project-root" "AGENTS.md"
+                $nestedGuidePath = Join-PathParts $templateRoot $language "project-agent" "AGENTS.md"
+                if (-not (Test-Path -LiteralPath $rootGuidePath) -or -not (Test-Path -LiteralPath $nestedGuidePath)) {
+                    $ownershipGuidanceErrors.Add("missing $templateKind/$language ownership guide")
+                    continue
+                }
+                $rootGuideText = [System.IO.File]::ReadAllText($rootGuidePath, [System.Text.Encoding]::UTF8)
+                $nestedGuideText = [System.IO.File]::ReadAllText($nestedGuidePath, [System.Text.Encoding]::UTF8)
+                foreach ($token in $expectation.root_required) {
+                    if (-not $rootGuideText.Contains([string]$token)) {
+                        $ownershipGuidanceErrors.Add("$templateKind/$language project-root missing ownership token: $token")
+                    }
+                }
+                foreach ($token in $expectation.nested_required) {
+                    if (-not $nestedGuideText.Contains([string]$token)) {
+                        $ownershipGuidanceErrors.Add("$templateKind/$language project-agent missing memory-guide token: $token")
+                    }
+                }
+                foreach ($token in $expectation.nested_forbidden) {
+                    if ($nestedGuideText.Contains([string]$token)) {
+                        $ownershipGuidanceErrors.Add("$templateKind/$language project-agent contains forbidden behavior-contract token: $token")
                     }
                 }
             }
@@ -300,8 +406,8 @@ try {
             }
         }
 
-        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0 -or $testingGuidanceErrors.Count -gt 0 -or $learningDepositGuidanceErrors.Count -gt 0) {
-            throw ("Project language file templates are missing, mismatched, missing testing or learning-deposit guidance, or legacy paths remain. Missing: {0}; mismatched: {1}; testing guidance: {2}; learning-deposit guidance: {3}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "), ($testingGuidanceErrors.ToArray() -join "; "), ($learningDepositGuidanceErrors.ToArray() -join "; "))
+        if ($missing.Count -gt 0 -or $mismatched.Count -gt 0 -or $testingGuidanceErrors.Count -gt 0 -or $learningDepositGuidanceErrors.Count -gt 0 -or $ownershipGuidanceErrors.Count -gt 0) {
+            throw ("Project language file templates are missing, mismatched, missing testing/learning-deposit/ownership guidance, or legacy paths remain. Missing: {0}; mismatched: {1}; testing guidance: {2}; learning-deposit guidance: {3}; ownership guidance: {4}" -f ($missing.ToArray() -join "; "), ($mismatched.ToArray() -join "; "), ($testingGuidanceErrors.ToArray() -join "; "), ($learningDepositGuidanceErrors.ToArray() -join "; "), ($ownershipGuidanceErrors.ToArray() -join "; "))
         }
 
         return [ordered]@{
@@ -320,6 +426,11 @@ try {
                 delivery_protocol_triggers = @("user correction", "validation failure rework", "scope drift", "skipped acceptance", "tool workaround")
                 write_requires_user_confirmation = $true
                 auto_promotion_forbidden = $true
+            }
+            ownership_guidance = [ordered]@{
+                root_contract_authoritative = $true
+                nested_memory_guide_only = $true
+                nested_forbidden_behavior_tokens_checked = $true
             }
         }
     }
@@ -383,8 +494,8 @@ try {
         $agentText = Get-Content -LiteralPath (Join-PathParts $projectDir ".agents" "AGENTS.md") -Raw
         $lock = Get-Content -LiteralPath (Join-PathParts $projectDir ".agents" "hub.lock.json") -Raw | ConvertFrom-Json
 
-        if ($rootText -notlike "*Project memory language: English.*") {
-            throw "Plain bootstrap root template did not use English."
+        if ($rootText -notlike "*single authoritative project behavior contract*") {
+            throw "Plain bootstrap root template did not install the authoritative behavior contract."
         }
         if ($agentText -notlike "*Project memory language: English.*") {
             throw "Plain bootstrap project-agent template did not use English."
@@ -403,8 +514,8 @@ try {
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $script:recommendedCopyRuntime
         $autoWriteEvidence += Test-PlainBootstrapDefaultsToEnglish -RuntimeDir $script:recommendedCopyRuntime
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedRootContractToken "single authoritative project behavior contract" -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedRootContractToken "唯一权威的项目行为契约" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
         $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $script:recommendedCopyRuntime
     }
 
