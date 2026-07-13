@@ -191,12 +191,32 @@ function Test-TrustedHelperFile {
     )
 
     try {
-        $path = Join-PathParts $RuntimeRoot $RelativePath
-        $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
-        if ($item.PSIsContainer -or (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) { return $null }
-        $parentItem = Get-Item -LiteralPath (Split-Path -Parent $path) -Force -ErrorAction Stop
-        if (($parentItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $null }
-        return $item.FullName
+        if ([System.IO.Path]::IsPathRooted($RelativePath)) { return $null }
+        $segments = @($RelativePath -split '[\\/]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($segments.Count -eq 0 -or @($segments | Where-Object { $_ -in @(".", "..") }).Count -gt 0) { return $null }
+
+        $rootFull = [System.IO.Path]::GetFullPath($RuntimeRoot)
+        $candidateFull = $rootFull
+        foreach ($segment in $segments) { $candidateFull = Join-Path $candidateFull $segment }
+        $candidateFull = [System.IO.Path]::GetFullPath($candidateFull)
+        $separator = [System.IO.Path]::DirectorySeparatorChar
+        $rootPrefix = $rootFull.TrimEnd([char[]]"\\/") + $separator
+        $comparison = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            [System.StringComparison]::OrdinalIgnoreCase
+        } else {
+            [System.StringComparison]::Ordinal
+        }
+        if (-not $candidateFull.StartsWith($rootPrefix, $comparison)) { return $null }
+
+        $current = $rootFull
+        for ($index = 0; $index -lt $segments.Count; $index++) {
+            $current = Join-Path $current $segments[$index]
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $null }
+            $isLeaf = $index -eq ($segments.Count - 1)
+            if (($isLeaf -and $item.PSIsContainer) -or (-not $isLeaf -and -not $item.PSIsContainer)) { return $null }
+        }
+        return $candidateFull
     } catch {
         return $null
     }
@@ -214,6 +234,7 @@ function New-ProjectTemplateStatus {
         project_language = $null
         guidance = "inspect-manually"
         command = $null
+        command_reason = "not-applicable"
         helper = [ordered]@{
             availability = "unavailable"
             trust = "unresolved"
@@ -320,7 +341,12 @@ function Get-ProjectTemplateStatus {
                             (ConvertTo-PowerShellSingleQuotedLiteral $bootstrapScript), [Environment]::NewLine,
                             (ConvertTo-PowerShellSingleQuotedLiteral $ProjectRoot),
                             (ConvertTo-PowerShellSingleQuotedLiteral ([string]$result.project_language))
+                        $result.command_reason = "available"
+                    } else {
+                        $result.command_reason = "trusted-guidance-helper-unavailable"
                     }
+                } else {
+                    $result.command_reason = "project-language-unavailable"
                 }
             }
             "migration-required" {
@@ -330,6 +356,9 @@ function Get-ProjectTemplateStatus {
                     $result.command = "& {0} ```{1}  -ProjectDir {2} ```{1}  -Mode Analyze ```{1}  -Json" -f
                         (ConvertTo-PowerShellSingleQuotedLiteral $upgradeScript), [Environment]::NewLine,
                         (ConvertTo-PowerShellSingleQuotedLiteral $ProjectRoot)
+                    $result.command_reason = "available"
+                } else {
+                    $result.command_reason = "trusted-guidance-helper-unavailable"
                 }
             }
             "unknown" { $result.guidance = "inspect-manually" }
@@ -340,6 +369,7 @@ function Get-ProjectTemplateStatus {
         $result.project_language = $null
         $result.guidance = "inspect-manually"
         $result.command = $null
+        $result.command_reason = "not-applicable"
         $result.helper.availability = "failed"
     }
     return $result
@@ -375,6 +405,10 @@ function Add-ProjectTemplateText {
         foreach ($commandLine in @([string]$ProjectTemplate.command -split '\r?\n')) {
             $Lines.Add(("  {0}" -f $commandLine)) | Out-Null
         }
+    } elseif ([string]$ProjectTemplate.command_reason -eq "trusted-guidance-helper-unavailable") {
+        $Lines.Add("- suggested command: unavailable (trusted guidance helper not found)") | Out-Null
+    } elseif ([string]$ProjectTemplate.command_reason -eq "project-language-unavailable") {
+        $Lines.Add("- suggested command: unavailable (project language not validated)") | Out-Null
     }
 }
 

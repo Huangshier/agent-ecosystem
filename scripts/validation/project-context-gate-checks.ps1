@@ -143,7 +143,7 @@ function Test-ContextGateLayout {
     foreach ($propertyName in @("gate", "project_root", "files", "hot_files", "warm_files", "cold_files", "git", "project_template", "warnings")) {
         Assert-ContextGateCondition -Condition ($null -ne $payload.PSObject.Properties[$propertyName]) -Message "$Name JSON output is missing '$propertyName'."
     }
-    foreach ($propertyName in @("status", "reason", "project_language", "guidance", "command", "helper")) {
+    foreach ($propertyName in @("status", "reason", "project_language", "guidance", "command", "command_reason", "helper")) {
         Assert-ContextGateCondition -Condition ($null -ne $payload.project_template.PSObject.Properties[$propertyName]) -Message "$Name project_template is missing '$propertyName'."
     }
     foreach ($propertyName in @("availability", "trust")) {
@@ -177,7 +177,8 @@ function New-ContextGateTestRuntime {
     param(
         [Parameter(Mandatory = $true)][string]$RuntimeRoot,
         [Parameter(Mandatory = $true)][string]$SourceSkillRoot,
-        [Parameter(Mandatory = $true)][string]$StatusHelperFixture
+        [Parameter(Mandatory = $true)][string]$StatusHelperFixture,
+        [switch]$SkipGuidanceHelpers
     )
 
     $skillRoot = Join-ContextGatePath $RuntimeRoot "skills" "project-context-gate"
@@ -186,13 +187,15 @@ function New-ContextGateTestRuntime {
     $scriptsRoot = Join-ContextGatePath $RuntimeRoot "scripts"
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
     Copy-Item -LiteralPath $StatusHelperFixture -Destination (Join-Path $scriptsRoot "status.ps1")
-    foreach ($relativePath in @(
-        "skills/project-bootstrap/scripts/bootstrap_project.ps1",
-        "skills/project-bootstrap/scripts/memory_upgrade.ps1"
-    )) {
-        $helperPath = Join-ContextGatePath $RuntimeRoot $relativePath
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $helperPath) | Out-Null
-        Set-Content -LiteralPath $helperPath -Value "throw 'Guidance helper must not be executed by context gate.'" -Encoding UTF8
+    if (-not $SkipGuidanceHelpers.IsPresent) {
+        foreach ($relativePath in @(
+            "skills/project-bootstrap/scripts/bootstrap_project.ps1",
+            "skills/project-bootstrap/scripts/memory_upgrade.ps1"
+        )) {
+            $helperPath = Join-ContextGatePath $RuntimeRoot $relativePath
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $helperPath) | Out-Null
+            Set-Content -LiteralPath $helperPath -Value "throw 'Guidance helper must not be executed by context gate.'" -Encoding UTF8
+        }
     }
     return $skillRoot
 }
@@ -225,6 +228,39 @@ function New-ContextGateSkillLink {
     New-Item -ItemType $itemType -Path $LinkPath -Target $TargetPath -ErrorAction Stop | Out-Null
 }
 
+function Test-UntrustedGuidanceAncestor {
+    param(
+        [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][string]$PowerShellPath,
+        [Parameter(Mandatory = $true)][string]$StatusHelperFixture,
+        [Parameter(Mandatory = $true)][object[]]$Cases,
+        [Parameter(Mandatory = $true)][string]$ExternalRoot
+    )
+
+    $results = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($case in $Cases) {
+        Set-ContextGateStatusCase -RuntimeRoot $RuntimeRoot -Case $case -StatusHelperFixture $StatusHelperFixture
+        foreach ($mode in @("json", "text", "brief")) {
+            $output = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode $mode
+            Assert-ContextGateCondition -Condition (-not $output.Contains($ExternalRoot)) -Message "$($case.name) $mode output leaked the external guidance path."
+            Assert-ContextGateCondition -Condition (-not $output.Contains("CONTEXT_GATE_UNTRUSTED_GUIDANCE_SENTINEL")) -Message "$($case.name) $mode output leaked the untrusted guidance sentinel."
+            if ($mode -eq "json") {
+                $payload = $output | ConvertFrom-Json
+                Assert-ContextGateCondition -Condition ([string]$payload.project_template.status -ceq [string]$case.expected_status) -Message "$($case.name) lost its validated project status."
+                Assert-ContextGateCondition -Condition ($null -eq $payload.project_template.command) -Message "$($case.name) exposed a command through an untrusted ancestor link."
+                Assert-ContextGateCondition -Condition ([string]$payload.project_template.command_reason -ceq "trusted-guidance-helper-unavailable") -Message "$($case.name) did not identify the untrusted guidance helper boundary."
+            }
+            else {
+                Assert-ContextGateCondition -Condition $output.Contains("- suggested command: unavailable (trusted guidance helper not found)") -Message "$($case.name) $mode output did not explain that trusted guidance is unavailable."
+            }
+        }
+        $results.Add([ordered]@{ name = [string]$case.name; status_preserved = $true; command = $false })
+    }
+    return @($results.ToArray())
+}
+
 function Test-ProjectTemplateCase {
     param(
         [Parameter(Mandatory = $true)][object]$Case,
@@ -249,6 +285,15 @@ function Test-ProjectTemplateCase {
     Assert-ContextGateCondition -Condition ([string]$template.helper.trust -ceq "trusted") -Message "$($Case.name) did not report a trusted helper root."
     $hasCommand = $null -ne $template.command -and -not [string]::IsNullOrWhiteSpace([string]$template.command)
     Assert-ContextGateCondition -Condition ($hasCommand -eq [bool]$Case.expects_command) -Message "$($Case.name) command presence is incorrect."
+    if ($hasCommand) {
+        Assert-ContextGateCondition -Condition ([string]$template.command_reason -ceq "available") -Message "$($Case.name) did not mark its trusted command available."
+    }
+    elseif ([string]$Case.name -eq "optional-null-language") {
+        Assert-ContextGateCondition -Condition ([string]$template.command_reason -ceq "project-language-unavailable") -Message "$($Case.name) did not preserve the language-specific command reason."
+    }
+    else {
+        Assert-ContextGateCondition -Condition ([string]$template.command_reason -ceq "not-applicable") -Message "$($Case.name) returned an unexpected command reason."
+    }
 
     if ($hasCommand) {
         $command = [string]$template.command
@@ -302,6 +347,7 @@ $fixtureRoot = Join-ContextGatePath $repositoryRootFull "scripts" "validation" "
 $fixturePath = Join-ContextGatePath $fixtureRoot "inventory-project.json"
 $casesPath = Join-ContextGatePath $fixtureRoot "project-template-status-cases.json"
 $statusHelperFixture = Join-ContextGatePath $fixtureRoot "status-helper.ps1"
+$untrustedGuidanceFixture = Join-ContextGatePath $fixtureRoot "untrusted-guidance-helper.ps1"
 $sourceSkillRoot = Join-ContextGatePath $repositoryRootFull "skills" "project-context-gate"
 $projectRoot = Join-ContextGatePath $scratchRootFull "project with spaces"
 New-ContextGateFixtureProject -FixturePath $fixturePath -ProjectRoot $projectRoot
@@ -346,6 +392,19 @@ foreach ($case in @($caseFixture.cases)) {
     $caseResults.Add((Test-ProjectTemplateCase -Case $case -RuntimeRoot $copyRuntime -ScriptPath $installedScript -ProjectRoot $projectRoot -PowerShellPath $powerShellPath -StatusHelperFixture $statusHelperFixture -CheckTextModes:([string]$case.name -in @("optional-zh", "migration-required", "payload-sentinel"))))
 }
 
+$untrustedRuntime = Join-ContextGatePath $scratchRootFull "runtime with untrusted guidance ancestor"
+$untrustedSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $untrustedRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture -SkipGuidanceHelpers
+$untrustedScript = Join-ContextGatePath $untrustedSkillRoot "scripts" "context_gate.ps1"
+$externalGuidanceRoot = Join-ContextGatePath $scratchRootFull "external guidance payload"
+$externalGuidanceScripts = Join-ContextGatePath $externalGuidanceRoot "scripts"
+New-Item -ItemType Directory -Force -Path $externalGuidanceScripts | Out-Null
+Copy-Item -LiteralPath $untrustedGuidanceFixture -Destination (Join-Path $externalGuidanceScripts "bootstrap_project.ps1")
+Copy-Item -LiteralPath $untrustedGuidanceFixture -Destination (Join-Path $externalGuidanceScripts "memory_upgrade.ps1")
+New-ContextGateSkillLink -LinkPath (Join-ContextGatePath $untrustedRuntime "skills" "project-bootstrap") -TargetPath $externalGuidanceRoot
+$untrustedCases = @($caseFixture.cases | Where-Object { [string]$_.name -in @("optional-zh", "migration-required") })
+$untrustedGuidanceResults = @(Test-UntrustedGuidanceAncestor -RuntimeRoot $untrustedRuntime -ScriptPath $untrustedScript -ProjectRoot $projectRoot -PowerShellPath $powerShellPath -StatusHelperFixture $statusHelperFixture -Cases $untrustedCases -ExternalRoot $externalGuidanceRoot)
+Assert-ContextGateCondition -Condition ($untrustedGuidanceResults.Count -eq 2) -Message "Untrusted guidance ancestor coverage is incomplete."
+
 Assert-ContextGateCondition -Condition (-not (Test-Path -LiteralPath (Join-ContextGatePath $projectRoot "MALICIOUS_STATUS_EXECUTED"))) -Message "Context gate executed the target project's malicious scripts/status.ps1."
 
 $after = Get-ContextGateProjectSnapshot -ProjectRoot $projectRoot
@@ -361,6 +420,8 @@ $result = [ordered]@{
     scenario_count = $results.Count
     project_template_cases = @($caseResults.ToArray())
     project_template_case_count = $caseResults.Count
+    untrusted_guidance_ancestor_cases = $untrustedGuidanceResults
+    untrusted_guidance_ancestor_case_count = $untrustedGuidanceResults.Count
     unresolved_locator_fail_soft = $true
     malicious_project_helper_ignored = $true
     project_read_only = $true
