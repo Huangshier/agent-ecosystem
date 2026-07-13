@@ -125,6 +125,293 @@ function Get-GitState {
     }
 }
 
+function Test-ContextGateObject {
+    param([AllowNull()][object]$Value)
+    return $null -ne $Value -and $Value -isnot [string] -and $Value -isnot [System.Array] -and
+        ($Value -is [System.Collections.IDictionary] -or $null -ne $Value.PSObject)
+}
+
+function Test-ContextGateInteger {
+    param([AllowNull()][object]$Value)
+    return $Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or
+        $Value -is [uint16] -or $Value -is [int32] -or $Value -is [uint32] -or
+        $Value -is [int64] -or $Value -is [uint64]
+}
+
+function Get-LinkTargetCandidate {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        $targetProperty = $item.PSObject.Properties["Target"]
+        if ($null -eq $targetProperty -or $null -eq $targetProperty.Value) { return "" }
+        $target = @($targetProperty.Value | Select-Object -First 1)
+        if ($target.Count -eq 0 -or [string]::IsNullOrWhiteSpace([string]$target[0])) { return "" }
+        $targetPath = [string]$target[0]
+        if (-not [System.IO.Path]::IsPathRooted($targetPath)) {
+            $targetPath = Join-Path (Split-Path -Parent $Path) $targetPath
+        }
+        return [System.IO.Path]::GetFullPath($targetPath)
+    } catch {
+        return ""
+    }
+}
+
+function Get-TrustedRuntimeRoot {
+    $skillRoot = Split-Path -Parent $PSScriptRoot
+    $skillCandidates = New-Object 'System.Collections.Generic.List[string]'
+
+    foreach ($candidate in @(
+        (Get-LinkTargetCandidate -Path $skillRoot),
+        $skillRoot
+    )) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        try { $fullCandidate = [System.IO.Path]::GetFullPath($candidate) } catch { continue }
+        if ($fullCandidate -notin $skillCandidates) { $skillCandidates.Add($fullCandidate) }
+    }
+
+    foreach ($candidate in @($skillCandidates.ToArray())) {
+        try {
+            if ([System.IO.Path]::GetFileName($candidate.TrimEnd([char[]]"\/")) -cne "project-context-gate") { continue }
+            $skillsRoot = Split-Path -Parent $candidate
+            if ([System.IO.Path]::GetFileName($skillsRoot.TrimEnd([char[]]"\/")) -cne "skills") { continue }
+            $runtimeRoot = Split-Path -Parent $skillsRoot
+            if ([string]::IsNullOrWhiteSpace($runtimeRoot)) { continue }
+            return [ordered]@{ root = [System.IO.Path]::GetFullPath($runtimeRoot); trust = "trusted" }
+        } catch {}
+    }
+
+    return [ordered]@{ root = $null; trust = "unresolved" }
+}
+
+function Test-TrustedHelperFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+
+    try {
+        if ([System.IO.Path]::IsPathRooted($RelativePath)) { return $null }
+        $segments = @($RelativePath -split '[\\/]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($segments.Count -eq 0 -or @($segments | Where-Object { $_ -in @(".", "..") }).Count -gt 0) { return $null }
+
+        $rootFull = [System.IO.Path]::GetFullPath($RuntimeRoot)
+        $candidateFull = $rootFull
+        foreach ($segment in $segments) { $candidateFull = Join-Path $candidateFull $segment }
+        $candidateFull = [System.IO.Path]::GetFullPath($candidateFull)
+        $separator = [System.IO.Path]::DirectorySeparatorChar
+        $rootPrefix = $rootFull.TrimEnd([char[]]"\\/") + $separator
+        $comparison = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            [System.StringComparison]::OrdinalIgnoreCase
+        } else {
+            [System.StringComparison]::Ordinal
+        }
+        if (-not $candidateFull.StartsWith($rootPrefix, $comparison)) { return $null }
+
+        $current = $rootFull
+        for ($index = 0; $index -lt $segments.Count; $index++) {
+            $current = Join-Path $current $segments[$index]
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $null }
+            $isLeaf = $index -eq ($segments.Count - 1)
+            if (($isLeaf -and $item.PSIsContainer) -or (-not $isLeaf -and -not $item.PSIsContainer)) { return $null }
+        }
+        return $candidateFull
+    } catch {
+        return $null
+    }
+}
+
+function ConvertTo-PowerShellSingleQuotedLiteral {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    return "'{0}'" -f $Value.Replace("'", "''")
+}
+
+function New-ProjectTemplateStatus {
+    return [ordered]@{
+        status = "unknown"
+        reason = "trusted-runtime-root-unresolved"
+        project_language = $null
+        guidance = "inspect-manually"
+        command = $null
+        command_reason = "not-applicable"
+        helper = [ordered]@{
+            availability = "unavailable"
+            trust = "unresolved"
+        }
+    }
+}
+
+function Get-ProjectTemplateStatus {
+    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+
+    $result = New-ProjectTemplateStatus
+    $runtime = Get-TrustedRuntimeRoot
+    $result.helper.trust = [string]$runtime.trust
+    if ([string]$runtime.trust -ne "trusted" -or [string]::IsNullOrWhiteSpace([string]$runtime.root)) { return $result }
+
+    $statusScript = Test-TrustedHelperFile -RuntimeRoot ([string]$runtime.root) -RelativePath "scripts/status.ps1"
+    if ([string]::IsNullOrWhiteSpace($statusScript)) {
+        $result.reason = "status-helper-missing"
+        return $result
+    }
+    $result.helper.availability = "available"
+
+    try {
+        $powerShellPath = (Get-Process -Id $PID -ErrorAction Stop).Path
+        if ([string]::IsNullOrWhiteSpace($powerShellPath)) { throw "unavailable" }
+        $global:LASTEXITCODE = 0
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            # Windows PowerShell 5.1 promotes native stderr to an ErrorRecord under Stop.
+            # Keep stderr quarantined and judge the child only by its exit code and stdout.
+            $ErrorActionPreference = "Continue"
+            $rawOutput = @(& $powerShellPath -NoProfile -File $statusScript -ProjectDir $ProjectRoot -Json 2>$null)
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        $exitCode = $LASTEXITCODE
+        $global:LASTEXITCODE = 0
+        if ($exitCode -ne 0) {
+            $result.helper.availability = "failed"
+            $result.reason = "status-helper-failed"
+            return $result
+        }
+        $jsonText = ($rawOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        if ([string]::IsNullOrWhiteSpace($jsonText)) {
+            $result.helper.availability = "failed"
+            $result.reason = "status-helper-empty-output"
+            return $result
+        }
+        try { $payload = $jsonText | ConvertFrom-Json -ErrorAction Stop }
+        catch {
+            $result.helper.availability = "failed"
+            $result.reason = "status-helper-invalid-json"
+            return $result
+        }
+
+        if (-not (Test-ContextGateObject -Value $payload)) { $result.reason = "status-payload-invalid"; return $result }
+        $schemaProperty = $payload.PSObject.Properties["schema_version"]
+        $projectProperty = $payload.PSObject.Properties["project"]
+        if ($null -eq $schemaProperty -or -not (Test-ContextGateInteger -Value $schemaProperty.Value) -or [int64]$schemaProperty.Value -ne 1) {
+            $result.reason = "status-schema-unsupported"
+            return $result
+        }
+        if ($null -eq $projectProperty -or -not (Test-ContextGateObject -Value $projectProperty.Value)) {
+            $result.reason = "status-project-invalid"
+            return $result
+        }
+
+        $project = $projectProperty.Value
+        $statusProperty = $project.PSObject.Properties["status"]
+        $reasonProperty = $project.PSObject.Properties["reason"]
+        $languageProperty = $project.PSObject.Properties["project_language"]
+        $status = if ($null -eq $statusProperty) { $null } else { $statusProperty.Value }
+        $reason = if ($null -eq $reasonProperty) { $null } else { $reasonProperty.Value }
+        $language = if ($null -eq $languageProperty) { "__missing__" } else { $languageProperty.Value }
+        $reasonsByStatus = @{
+            "current" = @("in-sync")
+            "optional-refresh" = @("template-baseline-drift", "memory-scaffold-refresh")
+            "migration-required" = @("structural-memory-findings")
+            "unknown" = @(
+                "not-requested", "baseline-helper-unavailable", "memory-helper-unavailable", "missing-lock", "invalid-lock",
+                "project-not-found", "invalid-hub-dir", "hub-not-git", "git-unavailable", "hub-remote-drift",
+                "hub-branch-drift", "locked-hub-dirty", "current-hub-dirty", "metadata-unresolved",
+                "project-language-unresolved", "project-language-conflict", "internal-error"
+            )
+        }
+        $validStatusReason = $status -is [string] -and @($reasonsByStatus.Keys) -ccontains $status -and
+            $reason -is [string] -and $reasonsByStatus[$status] -ccontains $reason
+        $validLanguage = $null -ne $languageProperty -and
+            ($null -eq $language -or ($language -is [string] -and @("en", "zh-CN") -ccontains $language))
+        if (-not $validStatusReason) { $result.reason = "status-project-invalid"; return $result }
+        if (-not $validLanguage) { $result.reason = "status-language-invalid"; return $result }
+
+        $result.status = [string]$status
+        $result.reason = [string]$reason
+        $result.project_language = if ($null -eq $language) { $null } else { [string]$language }
+        switch ([string]$status) {
+            "current" { $result.guidance = "none" }
+            "optional-refresh" {
+                $result.guidance = "refresh-available"
+                if ($null -ne $result.project_language) {
+                    $bootstrapScript = Test-TrustedHelperFile -RuntimeRoot ([string]$runtime.root) -RelativePath "skills/project-bootstrap/scripts/bootstrap_project.ps1"
+                    if (-not [string]::IsNullOrWhiteSpace($bootstrapScript)) {
+                        $result.command = "& {0} ```{1}  -ProjectDir {2} ```{1}  -ProjectLanguage {3} ```{1}  -RefreshUnmodifiedTemplates" -f
+                            (ConvertTo-PowerShellSingleQuotedLiteral $bootstrapScript), [Environment]::NewLine,
+                            (ConvertTo-PowerShellSingleQuotedLiteral $ProjectRoot),
+                            (ConvertTo-PowerShellSingleQuotedLiteral ([string]$result.project_language))
+                        $result.command_reason = "available"
+                    } else {
+                        $result.command_reason = "trusted-guidance-helper-unavailable"
+                    }
+                } else {
+                    $result.command_reason = "project-language-unavailable"
+                }
+            }
+            "migration-required" {
+                $result.guidance = "analyze-migration"
+                $upgradeScript = Test-TrustedHelperFile -RuntimeRoot ([string]$runtime.root) -RelativePath "skills/project-bootstrap/scripts/memory_upgrade.ps1"
+                if (-not [string]::IsNullOrWhiteSpace($upgradeScript)) {
+                    $result.command = "& {0} ```{1}  -ProjectDir {2} ```{1}  -Mode Analyze ```{1}  -Json" -f
+                        (ConvertTo-PowerShellSingleQuotedLiteral $upgradeScript), [Environment]::NewLine,
+                        (ConvertTo-PowerShellSingleQuotedLiteral $ProjectRoot)
+                    $result.command_reason = "available"
+                } else {
+                    $result.command_reason = "trusted-guidance-helper-unavailable"
+                }
+            }
+            "unknown" { $result.guidance = "inspect-manually" }
+        }
+    } catch {
+        $result.status = "unknown"
+        $result.reason = "status-helper-failed"
+        $result.project_language = $null
+        $result.guidance = "inspect-manually"
+        $result.command = $null
+        $result.command_reason = "not-applicable"
+        $result.helper.availability = "failed"
+    }
+    return $result
+}
+
+function Add-ProjectTemplateWarning {
+    param(
+        [System.Collections.Generic.List[string]]$Warnings,
+        [Parameter(Mandatory = $true)][object]$ProjectTemplate
+    )
+
+    switch ([string]$ProjectTemplate.status) {
+        "optional-refresh" { $Warnings.Add("PROJECT_TEMPLATE_OPTIONAL_REFRESH: Project templates or scaffold can be refreshed.") }
+        "migration-required" { $Warnings.Add("PROJECT_TEMPLATE_MIGRATION_REQUIRED: Analyze project memory migration before refreshing templates.") }
+        "unknown" { $Warnings.Add(("PROJECT_TEMPLATE_UNKNOWN: Inspect project template status manually ({0})." -f [string]$ProjectTemplate.reason)) }
+    }
+}
+
+function Add-ProjectTemplateText {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [Parameter(Mandatory = $true)][object]$ProjectTemplate
+    )
+
+    $Lines.Add(("- status: {0}" -f [string]$ProjectTemplate.status)) | Out-Null
+    $Lines.Add(("- reason: {0}" -f [string]$ProjectTemplate.reason)) | Out-Null
+    $Lines.Add(("- project language: {0}" -f $(if ($null -eq $ProjectTemplate.project_language) { "unknown" } else { [string]$ProjectTemplate.project_language }))) | Out-Null
+    $Lines.Add(("- guidance: {0}" -f [string]$ProjectTemplate.guidance)) | Out-Null
+    $Lines.Add(("- helper availability: {0}" -f [string]$ProjectTemplate.helper.availability)) | Out-Null
+    $Lines.Add(("- helper trust: {0}" -f [string]$ProjectTemplate.helper.trust)) | Out-Null
+    if ($null -ne $ProjectTemplate.command) {
+        $Lines.Add("- suggested command (not executed):") | Out-Null
+        foreach ($commandLine in @([string]$ProjectTemplate.command -split '\r?\n')) {
+            $Lines.Add(("  {0}" -f $commandLine)) | Out-Null
+        }
+    } elseif ([string]$ProjectTemplate.command_reason -eq "trusted-guidance-helper-unavailable") {
+        $Lines.Add("- suggested command: unavailable (trusted guidance helper not found)") | Out-Null
+    } elseif ([string]$ProjectTemplate.command_reason -eq "project-language-unavailable") {
+        $Lines.Add("- suggested command: unavailable (project language not validated)") | Out-Null
+    }
+}
+
 # Format-BriefItemList: render context items for brief output.
 function Format-BriefItemList {
     param(
@@ -168,6 +455,10 @@ function Write-ContextBrief {
             $lines.Add(("  - {0}" -f $statusItem)) | Out-Null
         }
     }
+    $lines.Add("") | Out-Null
+
+    $lines.Add("Project template status:") | Out-Null
+    Add-ProjectTemplateText -Lines $lines -ProjectTemplate $Payload.project_template
     $lines.Add("") | Out-Null
 
     $lines.Add("Hot files (load now):") | Out-Null
@@ -277,6 +568,8 @@ if ((Test-Path -LiteralPath $contextDir) -and -not $IncludeTemplates.IsPresent) 
 }
 
 $gitState = Get-GitState -Root $root
+$projectTemplate = Get-ProjectTemplateStatus -ProjectRoot $root
+Add-ProjectTemplateWarning -Warnings $warnings -ProjectTemplate $projectTemplate
 $allFiles = @($contextItems.ToArray())
 $hotFiles = @($allFiles | Where-Object { $_.tier -eq "hot" })
 $warmFiles = @($allFiles | Where-Object { $_.tier -eq "warm" })
@@ -290,6 +583,7 @@ $payload = [ordered]@{
     warm_files = $warmFiles
     cold_files = $coldFiles
     git = $gitState
+    project_template = $projectTemplate
     warnings = $warningList
 }
 
@@ -332,6 +626,12 @@ if ($gitState.branch) { Write-Host ("- branch: {0}" -f $gitState.branch) }
 if ($gitState.status.Count -gt 0) {
     $gitState.status | ForEach-Object { Write-Host ("  {0}" -f $_) }
 }
+Write-Host ""
+
+Write-Host "Project template status:"
+$projectTemplateLines = New-Object 'System.Collections.Generic.List[string]'
+Add-ProjectTemplateText -Lines $projectTemplateLines -ProjectTemplate $projectTemplate
+$projectTemplateLines | ForEach-Object { Write-Host $_ }
 Write-Host ""
 
 if ($warnings.Count -gt 0) {

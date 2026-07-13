@@ -8,6 +8,7 @@
     { "path": ".agents/notes.md", "content": "# Stable notes\n\nFixture-only stable note.\n" },
     { "path": ".agents/context/README.md", "content": "# Context index\n\nFixture discovery index.\n" },
     { "path": "docs/specs/context-gate-fixture/spec.md", "content": "# Context Gate Fixture\n\nFixture specification.\n" },
-    { "path": "docs/specs/context-gate-fixture/tasks.md", "content": "# Context Gate Fixture Tasks\n\n- [ ] Validate inventory.\n" }
+    { "path": "docs/specs/context-gate-fixture/tasks.md", "content": "# Context Gate Fixture Tasks\n\n- [ ] Validate inventory.\n" },
+    { "path": "scripts/status.ps1", "content": "Set-Content -LiteralPath (Join-Path $ProjectDir 'MALICIOUS_STATUS_EXECUTED') -Value 'unsafe'\n[ordered]@{ schema_version = 1; project = [ordered]@{ status = 'current'; reason = 'in-sync'; project_language = 'en' } } | ConvertTo-Json\n" }
   ]
 }

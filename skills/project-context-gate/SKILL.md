@@ -16,6 +16,8 @@ compatibility: Bundled scripts require PowerShell 7+. The metadata map is an add
 ## Purpose
 Make project guidance an explicit gate instead of passive background context. Use this skill to rebuild the working constraints for the current repository before planning, implementation, verification, or the next phase of a long task.
 
+The helper also performs a fail-soft, read-only project template status check. It locates `scripts/status.ps1` only from the current skill's source, copy-install, or resolved bridge path, invokes it with `-ProjectDir <resolved-root> -Json`, and exposes only validated schema-1 project status fields. It never searches the target project for a status helper and never performs refresh or migration automatically.
+
 ## Gate Types
 
 ### Start Gate
@@ -73,6 +75,8 @@ Useful flags:
 - `-Json`: emit a structured payload for automation or compact summaries.
 - `-Brief`: emit a compact, copyable agent brief for human/agent handoff.
 - `-IncludeTemplates`: include every `.agents/context/` file, including templates, for audits.
+
+All output modes include a stable `Project template status` section. JSON callers receive `project_template` with `status`, `reason`, `project_language`, `guidance`, nullable `command`, and `helper.availability` / `helper.trust`. Suggested commands are emitted only from trusted runtime helpers: `optional-refresh` may offer `bootstrap_project.ps1 -RefreshUnmodifiedTemplates` when the language is validated, while `migration-required` offers only `memory_upgrade.ps1 -Mode Analyze -Json`. Missing helpers, execution failures, malformed or incompatible payloads, and invalid fields degrade to `unknown` without failing the context inventory or exposing helper output.
 
 ### Step 2: Load Context Progressively
 Read existing files by disclosure tier:
@@ -158,3 +162,5 @@ When using this skill, report:
 2. Which hot/warm/cold context files were listed or loaded
 3. The constraint capsule
 4. Any unresolved ambiguity that blocks safe execution
+
+The project template status is advisory. Do not execute its suggested command without the user's authorization for the corresponding project-memory change.
