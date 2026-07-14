@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$RunTargetedRegression
+    [switch]$RunTargetedRegression,
+    [string]$OutputPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -125,7 +126,11 @@ function Invoke-PushRoutingFixtures {
 function Invoke-TargetedRegression {
     param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
     $caseScratch = Join-Path $targetedScratch $Name
+    $startedAt = [DateTimeOffset]::UtcNow
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $raw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -ScratchRoot $caseScratch -Json) -join "`n"
+    $stopwatch.Stop()
+    $completedAt = [DateTimeOffset]::UtcNow
     $value = $raw | ConvertFrom-Json
     if ([int]$value.executed_suite_count -lt 1) { throw "Targeted case '$Name' executed no actual module suite." }
     foreach ($suite in $ExpectedSuite) { if (@($value.executed_suites) -notcontains $suite) { throw "Targeted case '$Name' did not execute '$suite'." } }
@@ -136,7 +141,33 @@ function Invoke-TargetedRegression {
         if ([string]$coverage[0].coverage -ne $expectedCoverage) { throw "Targeted case '$Name' used '$($coverage[0].coverage)' coverage for '$module', expected '$expectedCoverage'." }
     }
     if (@($value.checks.name) -contains "skill-metadata" -or @($value.checks.name) -contains "targeted-module-matrix") { throw "Targeted case '$Name' emitted a forbidden empty/generic PASS." }
-    return [ordered]@{ name = $Name; modules = $ExpectedModule; suites = $ExpectedSuite; check_count = [int]$value.summary.pass; status = "PASS" }
+    $telemetry = @($value.telemetry)
+    if ($telemetry.Count -lt 2) { throw "Targeted case '$Name' emitted incomplete suite telemetry." }
+    foreach ($record in $telemetry) {
+        if ([string]::IsNullOrWhiteSpace([string]$record.suite) -or
+            [string]::IsNullOrWhiteSpace([string]$record.case) -or
+            [string]::IsNullOrWhiteSpace([string]$record.host) -or
+            [string]::IsNullOrWhiteSpace([string]$record.started_at_utc) -or
+            [string]::IsNullOrWhiteSpace([string]$record.completed_at_utc) -or
+            [long]$record.duration_ms -lt 0 -or
+            [string]::IsNullOrWhiteSpace([string]$record.unique_coverage_category)) {
+            throw "Targeted case '$Name' emitted an invalid suite telemetry record."
+        }
+    }
+    return [ordered]@{
+        name = $Name
+        case = $Name
+        modules = $ExpectedModule
+        suite = $ExpectedSuite
+        suites = $ExpectedSuite
+        host = [string]$telemetry[0].host
+        started_at_utc = $startedAt.ToString("o")
+        completed_at_utc = $completedAt.ToString("o")
+        duration_ms = [long]$stopwatch.ElapsedMilliseconds
+        unique_coverage_category = ("routing-regression:{0}" -f $Name)
+        check_count = [int]$value.summary.pass
+        status = "PASS"
+    }
 }
 
 foreach ($case in @($cases)) {
@@ -255,4 +286,8 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
 $summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $pushRoutingResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
-if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 6 } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
+$summaryJson = $summary | ConvertTo-Json -Depth 8
+if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+    Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
+}
+if ($Json.IsPresent) { $summaryJson } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }

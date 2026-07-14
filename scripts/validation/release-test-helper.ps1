@@ -21,11 +21,19 @@ function Add-Check {
         [object]$Data = $null
     )
 
+    $durationMs = 0L
+    if ($null -ne $script:validationCheckStopwatch) {
+        $elapsedMs = [long]$script:validationCheckStopwatch.ElapsedMilliseconds
+        $durationMs = [Math]::Max(0L, ($elapsedMs - [long]$script:validationCheckCheckpointMs))
+        $script:validationCheckCheckpointMs = $elapsedMs
+    }
+
     $script:checks.Add([ordered]@{
         name = $Name
         status = $Status
         detail = $Detail
         data = $Data
+        duration_ms = [long]$durationMs
     })
 }
 
