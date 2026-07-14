@@ -4,7 +4,10 @@ English: [README.en.md](README.en.md) | 简体中文（当前）
 
 > 面向 Agent 辅助软件项目的轻量工作流内核（Workflow Kernel）。
 
-当前版本：`v0.6.0`
+当前版本：`v0.6.0`（最新已发布版本）
+
+当前 README 描述 `main`。使用已发布版本时，请以对应 tag 中的 README 与
+Release Notes 为准。
 
 ## 1. 项目解决什么问题
 
@@ -72,7 +75,7 @@ Release → installed Runtime → optional Agent bridge → Project
 2. 如 agent client 需要专用 skill 目录，显式创建可选 bridge：
 
    ```powershell
-   pwsh -NoProfile -File .\scripts\link-agent-skills.ps1 `
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
      -Skill project-bootstrap,project-context-gate

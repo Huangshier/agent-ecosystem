@@ -4,7 +4,10 @@ English (current) | Simplified Chinese: [README.md](README.md)
 
 > A lightweight Workflow Kernel for agent-assisted software projects.
 
-Current release: `v0.6.0`
+Current release: `v0.6.0` (latest published release)
+
+This README describes `main`. When using a published version, follow the README
+and Release Notes from the corresponding tag.
 
 ## 1. What Problem Does This Project Solve?
 
@@ -90,7 +93,7 @@ boundary.
    bridge explicitly:
 
    ```powershell
-   pwsh -NoProfile -File .\scripts\link-agent-skills.ps1 `
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
      -Skill project-bootstrap,project-context-gate
