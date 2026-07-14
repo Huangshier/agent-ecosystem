@@ -123,7 +123,31 @@ function Get-HubLockFacts {
     }
     if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { return Set-HubLockOutcome $facts "unknown" "git-unavailable" @("git-unavailable") }
     $gitRoot = Invoke-GitProbe $facts.resolved_hub_dir @("rev-parse", "--show-toplevel")
-    if (-not $gitRoot.success -or -not $gitRoot.value) { return Set-HubLockOutcome $facts "unknown" "hub-not-git" @("hub-not-git") }
+    if (-not $gitRoot.success -or -not $gitRoot.value) {
+        $hasLockedGitMetadata = -not [string]::IsNullOrWhiteSpace($facts.locked_hub_remote) -or
+            (-not [string]::IsNullOrWhiteSpace($facts.locked_hub_branch) -and $facts.locked_hub_branch -ne "UNKNOWN") -or
+            (-not [string]::IsNullOrWhiteSpace($facts.locked_hub_commit) -and $facts.locked_hub_commit -ne "UNKNOWN")
+        if ($hasLockedGitMetadata) {
+            return Set-HubLockOutcome $facts "unknown" "hub-not-git" @("hub-not-git")
+        }
+        if ($facts.locked_hub_dirty) {
+            return Set-HubLockOutcome $facts "unknown" "locked-hub-dirty" @("locked-hub-dirty")
+        }
+        try { $facts.current_template_hash = Get-TemplateTreeHash $facts.resolved_hub_dir $facts.project_language }
+        catch { return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved") }
+        if ($facts.locked_template_hash -and $facts.locked_template_hash -cnotmatch '^[0-9a-fA-F]{64}$') {
+            return Set-HubLockOutcome $facts "unknown" "invalid-lock" @("invalid-lock")
+        }
+        if (-not $facts.locked_template_hash) {
+            $facts.differences += "template tree drift: lock does not contain a template hash"
+            return Set-HubLockOutcome $facts "drift" "template-hash-missing" @("template-hash-missing")
+        }
+        if ($facts.locked_template_hash -ne $facts.current_template_hash) {
+            $facts.differences += ("template tree drift: lock={0} current={1}" -f $facts.locked_template_hash, $facts.current_template_hash)
+            return Set-HubLockOutcome $facts "drift" "template-tree-drift" @("template-tree-drift")
+        }
+        return Set-HubLockOutcome $facts "in-sync" "hub-lock-in-sync" @()
+    }
 
     $remote = Invoke-GitProbe $facts.resolved_hub_dir @("config", "--get", "remote.origin.url")
     $branch = Invoke-GitProbe $facts.resolved_hub_dir @("rev-parse", "--abbrev-ref", "HEAD")

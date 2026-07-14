@@ -155,10 +155,38 @@ function Get-FileSha256 {
 }
 
 function Get-DirectoryFileMap {
-    param([Parameter(Mandatory = $true)][string]$Root)
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [string[]]$IncludedFiles = @()
+    )
 
     $result = @{}
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        return $result
+    }
+
+    if ($IncludedFiles.Count -gt 0) {
+        foreach ($includedFile in @($IncludedFiles | Sort-Object -Unique)) {
+            if ([System.IO.Path]::IsPathRooted($includedFile)) {
+                throw "Included managed file must be relative: $includedFile"
+            }
+            $relativePath = ConvertTo-NormalizedRelativePath -Path $includedFile
+            $segments = @($relativePath -split '/' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($segments.Count -eq 0 -or @($segments | Where-Object { $_ -in @('.', '..') }).Count -gt 0) {
+                throw "Included managed file path is invalid: $includedFile"
+            }
+            $sourcePath = $Root
+            foreach ($segment in $segments) {
+                $sourcePath = Join-Path $sourcePath $segment
+            }
+            if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+                throw "Included managed file was not found: $includedFile"
+            }
+            $result[$relativePath] = [ordered]@{
+                path = $sourcePath
+                sha256 = Get-FileSha256 -Path $sourcePath
+            }
+        }
         return $result
     }
 
@@ -355,7 +383,8 @@ function Install-CopyItem {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$SourceRelative,
-        [Parameter(Mandatory = $true)][string]$DestinationRelative
+        [Parameter(Mandatory = $true)][string]$DestinationRelative,
+        [string[]]$IncludedSourceFiles = @()
     )
 
     $source = Join-PathParts $repoRoot $SourceRelative
@@ -407,7 +436,7 @@ function Install-CopyItem {
         New-Item -ItemType Directory -Force -Path $destination | Out-Null
     }
 
-    $sourceFiles = Get-DirectoryFileMap -Root $source
+    $sourceFiles = Get-DirectoryFileMap -Root $source -IncludedFiles $IncludedSourceFiles
     $targetFiles = Get-DirectoryFileMap -Root $destination
     $paths = @($sourceFiles.Keys) + @($previousFiles.Keys)
     $paths = @($paths | Sort-Object -Unique)
@@ -697,7 +726,16 @@ function Install-DevLinkItem {
 }
 
 $skillNames = @(Get-PublicSkillNames -SelectedProfile $Profile)
+$statusProviderFiles = @(
+    "status.ps1",
+    "lib/path-guard.ps1",
+    "lib/runtime-status-action.ps1"
+)
+$installStatusProvider = $installStrategy -eq "copy" -and "project-context-gate" -in $skillNames
 $managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
+if ($installStatusProvider) {
+    $managedSourcePaths += @($statusProviderFiles | ForEach-Object { "scripts/$_" })
+}
 $sourceProvenance = Get-InstallerSourceProvenance -SourceRoot $repoRoot -ManagedSourcePaths $managedSourcePaths
 $itemSpecs = New-Object 'System.Collections.Generic.List[object]'
 $desiredItemNames = @{}
@@ -711,6 +749,15 @@ foreach ($skillName in $skillNames) {
         })
     $desiredItemNames["skills/$skillName"] = $true
 }
+if ($installStatusProvider) {
+    $itemSpecs.Add([ordered]@{
+            name = "runtime-status-provider"
+            source = "scripts"
+            destination = "scripts"
+            included_source_files = @($statusProviderFiles)
+        })
+    $desiredItemNames["runtime-status-provider"] = $true
+}
 
 New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
 foreach ($spec in $itemSpecs) {
@@ -719,7 +766,11 @@ foreach ($spec in $itemSpecs) {
         $item = Install-DevLinkItem -Name $spec.name -SourceRelative $spec.source -DestinationRelative $spec.destination
     }
     else {
-        $item = Install-CopyItem -Name $spec.name -SourceRelative $spec.source -DestinationRelative $spec.destination
+        $includedSourceFiles = @()
+        if ($null -ne $spec.included_source_files) {
+            $includedSourceFiles = @($spec.included_source_files)
+        }
+        $item = Install-CopyItem -Name $spec.name -SourceRelative $spec.source -DestinationRelative $spec.destination -IncludedSourceFiles $includedSourceFiles
     }
     if ($null -ne $item) {
         $manifestItems.Add($item)

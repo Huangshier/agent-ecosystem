@@ -161,6 +161,8 @@ function Invoke-InstallerContractFixtureChecks {
     Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "install.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "install.ps1") -Force
     Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "uninstall.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "uninstall.ps1") -Force
     Copy-Item -LiteralPath (Join-PathParts $RepositoryRoot "scripts" "lib" "path-guard.ps1") -Destination (Join-PathParts $fixtureSource "scripts" "lib" "path-guard.ps1") -Force
+    Write-FixtureText -Path (Join-PathParts $fixtureSource "scripts" "status.ps1") -Text "Write-Output 'fixture status provider'"
+    Write-FixtureText -Path (Join-PathParts $fixtureSource "scripts" "lib" "runtime-status-action.ps1") -Text "function Get-FixtureRuntimeStatusAction { return 'none' }"
 
     $hubManagedSource = Join-PathParts $fixtureSource "knowledge-hub" "managed.txt"
     $hubStableSource = Join-PathParts $fixtureSource "knowledge-hub" "stable.txt"
@@ -342,11 +344,18 @@ function Invoke-InstallerContractFixtureChecks {
 
     $recommendedInstall = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $profileShrinkRuntime -Profile "recommended"
     Assert-InstallerCondition -Condition ($recommendedInstall.exit_code -eq 0) -Message "Recommended profile setup for shrink fixture failed."
+    $recommendedManifest = Read-InstallArtifact -RuntimeRoot $profileShrinkRuntime -Name "install-manifest.json"
+    $statusProviderItem = @($recommendedManifest.items | Where-Object { [string]$_.name -eq "runtime-status-provider" })
+    Assert-InstallerCondition -Condition ($statusProviderItem.Count -eq 1) -Message "Recommended copy install did not record one runtime status provider item."
+    Assert-InstallerCondition -Condition (Test-ExactArray -Actual @($statusProviderItem[0].files | ForEach-Object { [string]$_.path }) -Expected @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1")) -Message "Runtime status provider item did not contain the exact dependency closure."
+    Assert-InstallerCondition -Condition (@(Get-ChildItem -LiteralPath (Join-PathParts $profileShrinkRuntime "scripts") -Recurse -File).Count -eq 3) -Message "Recommended copy install copied unrelated scripts."
+    $scenarioEvidence.Add([ordered]@{ scenario = "recommended-status-provider-ownership"; exit_code = $recommendedInstall.exit_code; managed_file_count = @($statusProviderItem[0].files).Count })
     $profileShrinkRun = Invoke-FixtureInstall -Installer $installer -RuntimeRoot $profileShrinkRuntime -Profile "minimal"
     $profileShrinkManifest = Read-InstallArtifact -RuntimeRoot $profileShrinkRuntime -Name "install-manifest.json"
     $profileShrinkReport = Read-InstallArtifact -RuntimeRoot $profileShrinkRuntime -Name "install-report.json"
     Assert-InstallerCondition -Condition ($profileShrinkRun.exit_code -eq 0 -and [string]$profileShrinkReport.status -eq "success") -Message "Clean recommended-to-minimal profile shrink failed."
     Assert-InstallerCondition -Condition (Test-ExactArray -Actual @($profileShrinkManifest.items | ForEach-Object { [string]$_.name }) -Expected @("knowledge-hub", "skills/project-bootstrap")) -Message "Profile shrink manifest retained or lost the wrong managed items."
+    Assert-InstallerCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $profileShrinkRuntime "scripts"))) -Message "Profile shrink retained the runtime status provider."
     foreach ($skillName in @("project-context-gate", "workflow-spec-lite", "memory-governance")) {
         Assert-InstallerCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $profileShrinkRuntime "skills" $skillName))) -Message "Profile shrink left an excluded managed skill on disk."
         Assert-InstallerCondition -Condition (Test-ReportPath -Values @($profileShrinkReport.updated) -Path ("skills/{0}/managed.txt" -f $skillName)) -Message "Profile shrink did not report an excluded managed file as updated."
