@@ -63,6 +63,7 @@ $evidence = [ordered]@{
     bootstrap_command_boundary = [ordered]@{}
     bootstrap_safety = [ordered]@{}
     routing = [ordered]@{}
+    release_body_contract = [ordered]@{}
     scratch_retention = [ordered]@{}
     spec_lite = [ordered]@{}
     agent_template_guidance = [ordered]@{}
@@ -124,6 +125,19 @@ try {
 }
 catch {
     Add-Check "validation evidence contract" "FAIL" $_.Exception.Message
+}
+
+try {
+    $releaseBodyFixtures = Join-PathParts $repoRoot "scripts" "test-release-body-contract.ps1"
+    $releaseBodyContract = @(& $releaseBodyFixtures -Json) -join "`n" | ConvertFrom-Json
+    if ([int]$releaseBodyContract.fail -ne 0) {
+        throw "Release body contract fixtures reported failures."
+    }
+    $script:evidence.release_body_contract = $releaseBodyContract
+    Add-Check "release body contract" "PASS" "Future release bodies are user-facing, maintainer evidence stays outside the markers, marker errors fail closed, and published notes through v0.6.0 use an explicit compatibility boundary." $releaseBodyContract
+}
+catch {
+    Add-Check "release body contract" "FAIL" $_.Exception.Message
 }
 
 }
