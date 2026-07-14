@@ -222,6 +222,58 @@ function Test-TrustedHelperFile {
     }
 }
 
+function Get-TrustedStatusProvider {
+    param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+    $statusRelativePath = "scripts/status.ps1"
+    $statusScript = Test-TrustedHelperFile -RuntimeRoot $RuntimeRoot -RelativePath $statusRelativePath
+    if ([string]::IsNullOrWhiteSpace($statusScript)) { return $null }
+
+    $manifestPath = Test-TrustedHelperFile -RuntimeRoot $RuntimeRoot -RelativePath "install-manifest.json"
+    if ([string]::IsNullOrWhiteSpace($manifestPath)) {
+        return [ordered]@{ path = $statusScript; provenance = "source-checkout" }
+    }
+
+    try { $manifest = [System.IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json }
+    catch { return $null }
+    $schemaProperty = if (Test-ContextGateObject -Value $manifest) { $manifest.PSObject.Properties["schema_version"] } else { $null }
+    $itemsProperty = if (Test-ContextGateObject -Value $manifest) { $manifest.PSObject.Properties["items"] } else { $null }
+    if ($null -eq $schemaProperty -or -not (Test-ContextGateInteger -Value $schemaProperty.Value) -or [int64]$schemaProperty.Value -ne 2 -or
+        $null -eq $itemsProperty -or $itemsProperty.Value -isnot [System.Array]) {
+        return $null
+    }
+
+    $providerItems = @($itemsProperty.Value | Where-Object {
+            (Test-ContextGateObject -Value $_) -and [string]$_.name -ceq "runtime-status-provider"
+        })
+    if ($providerItems.Count -ne 1) { return $null }
+    $providerItem = $providerItems[0]
+    $filesProperty = $providerItem.PSObject.Properties["files"]
+    if ([string]$providerItem.source -cne "scripts" -or [string]$providerItem.destination -cne "scripts" -or
+        [string]$providerItem.mode -cne "copy" -or $providerItem.managed -isnot [bool] -or -not [bool]$providerItem.managed -or
+        $null -eq $filesProperty -or $filesProperty.Value -isnot [System.Array]) {
+        return $null
+    }
+
+    $expectedFiles = @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1")
+    $fileRecords = @($providerItem.files)
+    $recordPaths = @($fileRecords | ForEach-Object { [string]$_.path } | Sort-Object)
+    if (($recordPaths -join "`n") -cne (($expectedFiles | Sort-Object) -join "`n")) { return $null }
+
+    foreach ($record in $fileRecords) {
+        if (-not (Test-ContextGateObject -Value $record)) { return $null }
+        $relativePath = [string]$record.path
+        $installedHash = [string]$record.installed_sha256
+        if ($installedHash -cnotmatch '^[0-9a-f]{64}$') { return $null }
+        $managedPath = Test-TrustedHelperFile -RuntimeRoot $RuntimeRoot -RelativePath ("scripts/{0}" -f $relativePath)
+        if ([string]::IsNullOrWhiteSpace($managedPath)) { return $null }
+        $currentHash = (Get-FileHash -LiteralPath $managedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($currentHash -cne $installedHash) { return $null }
+    }
+
+    return [ordered]@{ path = $statusScript; provenance = "manifest-managed-copy" }
+}
+
 function ConvertTo-PowerShellSingleQuotedLiteral {
     param([Parameter(Mandatory = $true)][string]$Value)
     return "'{0}'" -f $Value.Replace("'", "''")
@@ -238,6 +290,7 @@ function New-ProjectTemplateStatus {
         helper = [ordered]@{
             availability = "unavailable"
             trust = "unresolved"
+            provenance = "unresolved"
         }
     }
 }
@@ -250,12 +303,14 @@ function Get-ProjectTemplateStatus {
     $result.helper.trust = [string]$runtime.trust
     if ([string]$runtime.trust -ne "trusted" -or [string]::IsNullOrWhiteSpace([string]$runtime.root)) { return $result }
 
-    $statusScript = Test-TrustedHelperFile -RuntimeRoot ([string]$runtime.root) -RelativePath "scripts/status.ps1"
-    if ([string]::IsNullOrWhiteSpace($statusScript)) {
+    $statusProvider = Get-TrustedStatusProvider -RuntimeRoot ([string]$runtime.root)
+    if ($null -eq $statusProvider -or [string]::IsNullOrWhiteSpace([string]$statusProvider.path)) {
         $result.reason = "status-helper-missing"
         return $result
     }
+    $statusScript = [string]$statusProvider.path
     $result.helper.availability = "available"
+    $result.helper.provenance = [string]$statusProvider.provenance
 
     try {
         $powerShellPath = (Get-Process -Id $PID -ErrorAction Stop).Path
@@ -400,6 +455,7 @@ function Add-ProjectTemplateText {
     $Lines.Add(("- guidance: {0}" -f [string]$ProjectTemplate.guidance)) | Out-Null
     $Lines.Add(("- helper availability: {0}" -f [string]$ProjectTemplate.helper.availability)) | Out-Null
     $Lines.Add(("- helper trust: {0}" -f [string]$ProjectTemplate.helper.trust)) | Out-Null
+    $Lines.Add(("- helper provenance: {0}" -f [string]$ProjectTemplate.helper.provenance)) | Out-Null
     if ($null -ne $ProjectTemplate.command) {
         $Lines.Add("- suggested command (not executed):") | Out-Null
         foreach ($commandLine in @([string]$ProjectTemplate.command -split '\r?\n')) {

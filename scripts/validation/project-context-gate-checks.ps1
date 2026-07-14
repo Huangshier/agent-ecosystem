@@ -146,7 +146,7 @@ function Test-ContextGateLayout {
     foreach ($propertyName in @("status", "reason", "project_language", "guidance", "command", "command_reason", "helper")) {
         Assert-ContextGateCondition -Condition ($null -ne $payload.project_template.PSObject.Properties[$propertyName]) -Message "$Name project_template is missing '$propertyName'."
     }
-    foreach ($propertyName in @("availability", "trust")) {
+    foreach ($propertyName in @("availability", "trust", "provenance")) {
         Assert-ContextGateCondition -Condition ($null -ne $payload.project_template.helper.PSObject.Properties[$propertyName]) -Message "$Name project_template.helper is missing '$propertyName'."
     }
     Assert-ContextGateCondition -Condition ([string]$payload.gate -eq "start") -Message "$Name JSON gate is not start."
@@ -283,6 +283,8 @@ function Test-ProjectTemplateCase {
     Assert-ContextGateCondition -Condition ([string]$template.reason -ceq [string]$Case.expected_reason) -Message "$($Case.name) returned unexpected reason."
     Assert-ContextGateCondition -Condition ([string]$template.guidance -ceq [string]$Case.expected_guidance) -Message "$($Case.name) returned unexpected guidance."
     Assert-ContextGateCondition -Condition ([string]$template.helper.trust -ceq "trusted") -Message "$($Case.name) did not report a trusted helper root."
+    $expectedProvenance = if ([string]$Case.behavior -ceq "missing") { "unresolved" } else { "source-checkout" }
+    Assert-ContextGateCondition -Condition ([string]$template.helper.provenance -ceq $expectedProvenance) -Message "$($Case.name) did not report the expected helper provenance."
     $hasCommand = $null -ne $template.command -and -not [string]::IsNullOrWhiteSpace([string]$template.command)
     Assert-ContextGateCondition -Condition ($hasCommand -eq [bool]$Case.expects_command) -Message "$($Case.name) command presence is incorrect."
     if ($hasCommand) {
@@ -405,6 +407,45 @@ $untrustedCases = @($caseFixture.cases | Where-Object { [string]$_.name -in @("o
 $untrustedGuidanceResults = @(Test-UntrustedGuidanceAncestor -RuntimeRoot $untrustedRuntime -ScriptPath $untrustedScript -ProjectRoot $projectRoot -PowerShellPath $powerShellPath -StatusHelperFixture $statusHelperFixture -Cases $untrustedCases -ExternalRoot $externalGuidanceRoot)
 Assert-ContextGateCondition -Condition ($untrustedGuidanceResults.Count -eq 2) -Message "Untrusted guidance ancestor coverage is incomplete."
 
+$tamperedRuntime = Join-ContextGatePath $scratchRootFull "runtime with tampered managed provider"
+$tamperedSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $tamperedRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture
+$tamperedScriptsRoot = Join-ContextGatePath $tamperedRuntime "scripts"
+$tamperedLibraryRoot = Join-ContextGatePath $tamperedScriptsRoot "lib"
+New-Item -ItemType Directory -Force -Path $tamperedLibraryRoot | Out-Null
+foreach ($name in @("path-guard.ps1", "runtime-status-action.ps1")) {
+    Set-Content -LiteralPath (Join-Path $tamperedLibraryRoot $name) -Value "# managed provider dependency fixture" -Encoding UTF8
+}
+$providerRecords = @(
+    foreach ($relativePath in @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1")) {
+        $providerPath = Join-ContextGatePath $tamperedScriptsRoot $relativePath
+        $providerHash = (Get-FileHash -LiteralPath $providerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        [ordered]@{ path = $relativePath; source_sha256 = $providerHash; installed_sha256 = $providerHash }
+    }
+)
+$tamperedManifest = [ordered]@{
+    schema_version = 2
+    items = @([ordered]@{
+            name = "runtime-status-provider"
+            source = "scripts"
+            destination = "scripts"
+            mode = "copy"
+            managed = $true
+            files = $providerRecords
+        })
+}
+$tamperedManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $tamperedRuntime "install-manifest.json") -Encoding UTF8
+$tamperMarker = Join-ContextGatePath $tamperedRuntime "TAMPERED_STATUS_EXECUTED"
+$tamperedStatus = Join-ContextGatePath $tamperedScriptsRoot "status.ps1"
+Set-Content -LiteralPath $tamperedStatus -Value ("Set-Content -LiteralPath '{0}' -Value executed`n'{{}}'" -f $tamperMarker.Replace("'", "''")) -Encoding UTF8
+$tamperedPayload = (Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath (Join-ContextGatePath $tamperedSkillRoot "scripts" "context_gate.ps1") -ProjectRoot $projectRoot -Mode json) | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (
+    [string]$tamperedPayload.project_template.status -ceq "unknown" -and
+    [string]$tamperedPayload.project_template.reason -ceq "status-helper-missing" -and
+    [string]$tamperedPayload.project_template.helper.availability -ceq "unavailable" -and
+    [string]$tamperedPayload.project_template.helper.provenance -ceq "unresolved" -and
+    -not (Test-Path -LiteralPath $tamperMarker)
+) -Message "Context gate executed or trusted a tampered manifest-managed status provider."
+
 Assert-ContextGateCondition -Condition (-not (Test-Path -LiteralPath (Join-ContextGatePath $projectRoot "MALICIOUS_STATUS_EXECUTED"))) -Message "Context gate executed the target project's malicious scripts/status.ps1."
 
 $after = Get-ContextGateProjectSnapshot -ProjectRoot $projectRoot
@@ -424,6 +465,7 @@ $result = [ordered]@{
     untrusted_guidance_ancestor_case_count = $untrustedGuidanceResults.Count
     unresolved_locator_fail_soft = $true
     malicious_project_helper_ignored = $true
+    tampered_managed_provider_rejected = $true
     project_read_only = $true
 }
 if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 8 }

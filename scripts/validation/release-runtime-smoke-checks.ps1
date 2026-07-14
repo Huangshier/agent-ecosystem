@@ -65,8 +65,10 @@ function Test-Manifest {
     }
 
     $items = @($manifest.items)
-    if ($items.Count -ne (1 + $ExpectedSkills.Count)) {
-        $errors.Add(("item count mismatch: expected {0}, got {1}" -f (1 + $ExpectedSkills.Count), $items.Count))
+    $expectsStatusProvider = $mode -eq "copy" -and "project-context-gate" -in $ExpectedSkills
+    $expectedItemCount = 1 + $ExpectedSkills.Count + $(if ($expectsStatusProvider) { 1 } else { 0 })
+    if ($items.Count -ne $expectedItemCount) {
+        $errors.Add(("item count mismatch: expected {0}, got {1}" -f $expectedItemCount, $items.Count))
     }
 
     foreach ($item in $items) {
@@ -89,6 +91,19 @@ function Test-Manifest {
                 $errors.Add("manifest managed file record is incomplete")
             }
         }
+    }
+
+    $statusProviderItems = @($items | Where-Object { [string]$_.name -eq "runtime-status-provider" })
+    if ($expectsStatusProvider) {
+        if ($statusProviderItems.Count -ne 1) {
+            $errors.Add("copy install did not record exactly one runtime status provider item")
+        }
+        elseif (-not (Test-ExactArray -Actual @($statusProviderItems[0].files | ForEach-Object { [string]$_.path }) -Expected @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1"))) {
+            $errors.Add("runtime status provider item did not contain the exact dependency closure")
+        }
+    }
+    elseif ($statusProviderItems.Count -ne 0) {
+        $errors.Add("non-copy or minimal install unexpectedly recorded a runtime status provider item")
     }
 
     return @($errors.ToArray())
@@ -178,6 +193,41 @@ else {
     Add-Check "installer profile matrix" "FAIL" "Profile or install mode validation failed." @($installFailures.ToArray())
 }
 
+function Test-InstalledProjectTemplateStatus {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContextGateScript,
+        [Parameter(Mandatory = $true)][string]$ProjectDir,
+        [Parameter(Mandatory = $true)][string]$Entry,
+        [Parameter(Mandatory = $true)][string]$ProviderProvenance,
+        [string]$ExpectedStatus = "current",
+        [string]$ExpectedReason = "in-sync"
+    )
+
+    $contextJsonText = & $ContextGateScript -ProjectRoot $ProjectDir -Json
+    $contextJson = $contextJsonText | ConvertFrom-Json
+    if ([string]$contextJson.project_template.status -ne $ExpectedStatus) {
+        throw "$Entry context gate did not report project_template.status=$ExpectedStatus."
+    }
+    if ([string]$contextJson.project_template.reason -ne $ExpectedReason) {
+        throw "$Entry context gate did not report reason=$ExpectedReason."
+    }
+    if ([string]$contextJson.project_template.helper.availability -ne "available" -or [string]$contextJson.project_template.helper.trust -ne "trusted") {
+        throw "$Entry context gate did not report an available trusted status helper."
+    }
+    if ([string]$contextJson.project_template.helper.provenance -ne $ProviderProvenance) {
+        throw "$Entry context gate did not report helper provenance=$ProviderProvenance."
+    }
+    return [ordered]@{
+        entry = $Entry
+        status = [string]$contextJson.project_template.status
+        reason = [string]$contextJson.project_template.reason
+        helper_availability = [string]$contextJson.project_template.helper.availability
+        helper_trust = [string]$contextJson.project_template.helper.trust
+        helper_provenance = [string]$contextJson.project_template.helper.provenance
+        helper_relative_path = "scripts/status.ps1"
+    }
+}
+
 function Invoke-RuntimeSmoke {
     param(
         [Parameter(Mandatory = $true)][string]$RuntimeDir,
@@ -196,6 +246,27 @@ function Invoke-RuntimeSmoke {
     $contextGateScript = Join-PathParts $RuntimeDir "skills" "project-context-gate" "scripts" "context_gate.ps1"
     $contextJsonText = & $contextGateScript -ProjectRoot $projectDir -Json
     $contextJson = $contextJsonText | ConvertFrom-Json
+    if ($Name -eq "copy") {
+        $projectTemplateEvidence = Test-InstalledProjectTemplateStatus `
+            -ContextGateScript $contextGateScript `
+            -ProjectDir $projectDir `
+            -Entry $Name `
+            -ProviderProvenance "manifest-managed-copy"
+    }
+    else {
+        if ([string]$contextJson.project_template.helper.availability -ne "available" -or [string]$contextJson.project_template.helper.trust -ne "trusted") {
+            throw "$Name context gate did not report an available trusted source status helper."
+        }
+        $projectTemplateEvidence = [ordered]@{
+            entry = $Name
+            status = [string]$contextJson.project_template.status
+            reason = [string]$contextJson.project_template.reason
+            helper_availability = [string]$contextJson.project_template.helper.availability
+            helper_trust = [string]$contextJson.project_template.helper.trust
+            helper_provenance = [string]$contextJson.project_template.helper.provenance
+            helper_relative_path = "scripts/status.ps1"
+        }
+    }
     $hotPaths = @($contextJson.hot_files | ForEach-Object { [string]$_.path })
     $expectedHotNames = @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md")
     foreach ($expectedName in $expectedHotNames) {
@@ -285,6 +356,7 @@ function Invoke-RuntimeSmoke {
         bootstrap = "passed"
         context_gate_hot_file_count = @($contextJson.hot_files).Count
         context_gate_brief = "passed"
+        project_template = $projectTemplateEvidence
         spec = $specTarget
         tasks = $tasksTarget
         memory_diagnose_findings = $findingCount
@@ -298,7 +370,52 @@ try {
     }
 
     $runtimeSmokeResults = New-Object 'System.Collections.Generic.List[object]'
-    $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedCopyRuntime -Name "copy"))
+    $copySmoke = Invoke-RuntimeSmoke -RuntimeDir $script:recommendedCopyRuntime -Name "copy"
+    $runtimeSmokeResults.Add($copySmoke)
+
+    $sourceContextGate = Join-PathParts $repoRoot "skills" "project-context-gate" "scripts" "context_gate.ps1"
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "source"
+            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $sourceContextGate -ProjectDir $copySmoke.project -Entry "source" -ProviderProvenance "source-checkout"
+        })
+
+    $bridgeRoot = Join-PathParts $scratchRootFull "runtime-smoke-agent-bridge"
+    $bridgeSkill = Join-PathParts $bridgeRoot "skills" "project-context-gate"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $bridgeSkill) | Out-Null
+    $bridgeItemType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { "Junction" } else { "SymbolicLink" }
+    New-Item -ItemType $bridgeItemType -Path $bridgeSkill -Target (Join-PathParts $script:recommendedCopyRuntime "skills" "project-context-gate") -ErrorAction Stop | Out-Null
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "bridge"
+            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript (Join-PathParts $bridgeSkill "scripts" "context_gate.ps1") -ProjectDir $copySmoke.project -Entry "bridge" -ProviderProvenance "manifest-managed-copy"
+        })
+
+    $copyContextGate = Join-PathParts $script:recommendedCopyRuntime "skills" "project-context-gate" "scripts" "context_gate.ps1"
+    $optionalProject = Join-PathParts $scratchRootFull "runtime-smoke-project-optional-refresh"
+    Copy-Item -LiteralPath $copySmoke.project -Destination $optionalProject -Recurse
+    $optionalLockPath = Join-PathParts $optionalProject ".agents" "hub.lock.json"
+    $optionalLock = Get-Content -LiteralPath $optionalLockPath -Raw | ConvertFrom-Json
+    $optionalLock.template_tree_hash_sha256 = "0" * 64
+    $optionalLock | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $optionalLockPath -Encoding UTF8
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "copy-optional-refresh"
+            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $optionalProject -Entry "copy-optional-refresh" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "optional-refresh" -ExpectedReason "template-baseline-drift"
+        })
+
+    $migrationProject = Join-PathParts $scratchRootFull "runtime-smoke-project-migration-required"
+    Copy-Item -LiteralPath $copySmoke.project -Destination $migrationProject -Recurse
+    Add-Content -LiteralPath (Join-PathParts $migrationProject ".agents" "notes.md") -Value "`n- TODO: historical session state fixture"
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "copy-migration-required"
+            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $migrationProject -Entry "copy-migration-required" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "migration-required" -ExpectedReason "structural-memory-findings"
+        })
+
+    $unknownProject = Join-PathParts $scratchRootFull "runtime-smoke-project-unknown"
+    Copy-Item -LiteralPath $copySmoke.project -Destination $unknownProject -Recurse
+    Remove-Item -LiteralPath (Join-PathParts $unknownProject ".agents" "hub.lock.json") -Force
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "copy-unknown"
+            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $unknownProject -Entry "copy-unknown" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "unknown" -ExpectedReason "missing-lock"
+        })
 
     if (-not $SkipLinkMode.IsPresent) {
         if ([string]::IsNullOrWhiteSpace($script:recommendedLinkRuntime)) {
