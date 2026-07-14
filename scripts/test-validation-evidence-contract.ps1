@@ -57,6 +57,9 @@ try {
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
     Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 4) "four-manifest-call-sites"
     Assert-Contract ($workflow.Contains('Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")')) "matrix-success-allowlist-follows-executed-routing"
+    Assert-Contract (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression[^\r\n]*[\r\n]+\s*(?:\(Join-Path|-Json -OutputPath)")).Count -eq 2) "routing-evidence-written-directly"
+    Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
+    Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
     $failureUploadContracts = @(
         @("name: quick-validation-failure", 'path: ${{ runner.temp }}/agent-ecosystem-quick-validation'),
         @('name: targeted-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),

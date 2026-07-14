@@ -107,7 +107,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
-            -SuccessAllowlist @("targeted-validation-result.json", "validation-output.json", "evidence-manifest.json")
+            -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
       - name: Upload quick validation success evidence
         if: success()
         uses: actions/upload-artifact@v7
@@ -115,7 +115,6 @@ jobs:
           name: quick-validation
           path: |
             ${{ runner.temp }}/agent-ecosystem-quick-validation/targeted-validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-quick-validation/validation-output.json
             ${{ runner.temp }}/agent-ecosystem-quick-validation/evidence-manifest.json
           if-no-files-found: error
       - name: Upload quick validation failure evidence
@@ -165,7 +164,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
-            -SuccessAllowlist @("targeted-validation-result.json", "validation-output.json", "evidence-manifest.json")
+            -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
       - name: Upload targeted validation success evidence
         if: success()
         uses: actions/upload-artifact@v7
@@ -173,7 +172,6 @@ jobs:
           name: targeted-validation-${{ matrix.os }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/targeted-validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-targeted-validation/validation-output.json
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/evidence-manifest.json
           if-no-files-found: error
       - name: Upload targeted validation failure evidence
@@ -207,8 +205,8 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          ./scripts/test-validate-change.ps1 -RunTargetedRegression -Json |
-            Tee-Object -FilePath (Join-Path $scratch "change-routing-tests.json")
+          ./scripts/test-validate-change.ps1 -RunTargetedRegression -Json -OutputPath `
+            (Join-Path $scratch "change-routing-tests.json")
 
       - name: Run release validator
         shell: pwsh
@@ -225,7 +223,7 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          $successAllowlist = @("validation-result.json", "validation-output.json", "evidence-manifest.json")
+          $successAllowlist = @("validation-result.json", "evidence-manifest.json")
           if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
             $successAllowlist = @("change-routing-tests.json") + $successAllowlist
           }
@@ -246,7 +244,6 @@ jobs:
           path: |
             ${{ runner.temp }}/agent-ecosystem-release-validation/change-routing-tests.json
             ${{ runner.temp }}/agent-ecosystem-release-validation/validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-release-validation/validation-output.json
             ${{ runner.temp }}/agent-ecosystem-release-validation/evidence-manifest.json
           if-no-files-found: error
       - name: Upload validation failure evidence
@@ -273,8 +270,8 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-validate-change.ps1 -RunTargetedRegression -Json |
-            Tee-Object -FilePath (Join-Path $scratch "change-routing-tests.json")
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-validate-change.ps1 -RunTargetedRegression `
+            -Json -OutputPath (Join-Path $scratch "change-routing-tests.json")
 
       - name: Run release validator
         shell: powershell
@@ -299,7 +296,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
-            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "validation-output.json", "evidence-manifest.json")
+            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "evidence-manifest.json")
       - name: Upload validation success evidence
         if: success()
         uses: actions/upload-artifact@v7
@@ -308,7 +305,6 @@ jobs:
           path: |
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/change-routing-tests.json
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-output.json
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/evidence-manifest.json
           if-no-files-found: error
       - name: Upload validation failure evidence

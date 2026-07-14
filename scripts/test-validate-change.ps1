@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$RunTargetedRegression
+    [switch]$RunTargetedRegression,
+    [string]$OutputPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -285,4 +286,8 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
 $summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $pushRoutingResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
-if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 8 } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
+$summaryJson = $summary | ConvertTo-Json -Depth 8
+if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+    Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
+}
+if ($Json.IsPresent) { $summaryJson } else { Write-Output ("validate-change fixtures: PASS={0} FAIL=0" -f $summary.pass) }
