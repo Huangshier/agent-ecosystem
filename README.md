@@ -139,7 +139,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 3. 检查 runtime 与 bridge 的只读状态：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\status.ps1 -RuntimeDir <runtime>
+   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
    ```
 
 4. 只有在审阅冲突后才选择 `-ReplaceManaged`；只有 bridge 预检仍满足时才按既有显式参数
@@ -152,7 +152,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 先检查，再选择保守刷新、迁移或重置：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
 ```
 

@@ -167,7 +167,7 @@ an Agent bridge automatically.
 3. Inspect the runtime and bridge without changing them:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\status.ps1 -RuntimeDir <runtime>
+   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
    ```
 
 4. Use `-ReplaceManaged` only after reviewing conflicts. Rerun the bridge helper
@@ -181,7 +181,7 @@ For upgrades from an older version, read the
 Inspect first, then choose conservative refresh, migration, or reset:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
 ```
 
