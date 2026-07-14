@@ -225,6 +225,10 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          $successAllowlist = @("validation-result.json", "validation-output.json", "evidence-manifest.json")
+          if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
+            $successAllowlist = @("change-routing-tests.json") + $successAllowlist
+          }
           ./scripts/validation/write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
@@ -233,7 +237,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
-            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "validation-output.json", "evidence-manifest.json")
+            -SuccessAllowlist $successAllowlist
       - name: Upload validation success evidence
         if: success()
         uses: actions/upload-artifact@v7
