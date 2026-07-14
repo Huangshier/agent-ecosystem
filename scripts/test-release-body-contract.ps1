@@ -32,6 +32,7 @@ function Assert-Fixture {
 Assert-Fixture -Name "valid-user-body" -ShouldPass $true
 Assert-Fixture -Name "valid-maintainer-record" -ShouldPass $true
 Assert-Fixture -Name "valid-governance-outside-markers" -ShouldPass $true
+Assert-Fixture -Name "valid-bilingual-user-body" -ShouldPass $true
 Assert-Fixture -Name "invalid-issue-pr-mapping" -ShouldPass $false -ExpectedCodes "issue_pr_mapping"
 Assert-Fixture -Name "invalid-exact-pass-count" -ShouldPass $false -ExpectedCodes "exact_validation_counts"
 Assert-Fixture -Name "invalid-hosted-run-id" -ShouldPass $false -ExpectedCodes "hosted_run_identity"
@@ -40,6 +41,19 @@ Assert-Fixture -Name "invalid-waiting-for-merge" -ShouldPass $false -ExpectedCod
 Assert-Fixture -Name "invalid-create-tag" -ShouldPass $false -ExpectedCodes "tag_instruction"
 Assert-Fixture -Name "invalid-publish-release" -ShouldPass $false -ExpectedCodes "publish_instruction"
 Assert-Fixture -Name "invalid-candidate-governance" -ShouldPass $false -ExpectedCodes "candidate_governance"
+Assert-Fixture -Name "invalid-zh-after-merge" -ShouldPass $false -ExpectedCodes "merge_instruction"
+Assert-Fixture -Name "invalid-zh-waiting-for-merge" -ShouldPass $false -ExpectedCodes "merge_instruction"
+Assert-Fixture -Name "invalid-zh-create-tag" -ShouldPass $false -ExpectedCodes "tag_instruction"
+Assert-Fixture -Name "invalid-zh-publish-github-release" -ShouldPass $false -ExpectedCodes "publish_instruction"
+Assert-Fixture -Name "invalid-zh-release-candidate" -ShouldPass $false -ExpectedCodes "candidate_governance"
+Assert-Fixture -Name "invalid-zh-publish-candidate" -ShouldPass $false -ExpectedCodes "candidate_governance"
+Assert-Fixture -Name "invalid-zh-release-draft" -ShouldPass $false -ExpectedCodes "candidate_governance"
+Assert-Fixture -Name "invalid-zh-maintainer-record" -ShouldPass $false -ExpectedCodes "maintainer_governance"
+Assert-Fixture -Name "invalid-zh-maintainer-recommendation" -ShouldPass $false -ExpectedCodes "maintainer_governance"
+Assert-Fixture -Name "invalid-zh-before-maintainer-confirmation" -ShouldPass $false -ExpectedCodes "maintainer_governance"
+Assert-Fixture -Name "invalid-zh-before-maintainer-review" -ShouldPass $false -ExpectedCodes "maintainer_governance"
+Assert-Fixture -Name "invalid-zh-no-additional-commits" -ShouldPass $false -ExpectedCodes "candidate_governance"
+Assert-Fixture -Name "invalid-bilingual-hosted-checks" -ShouldPass $false -ExpectedCodes "maintainer_governance"
 Assert-Fixture -Name "invalid-marker-missing" -ShouldPass $false -ExpectedCodes "marker_start_count"
 Assert-Fixture -Name "invalid-marker-missing-end" -ShouldPass $false -ExpectedCodes "marker_end_count"
 Assert-Fixture -Name "invalid-marker-duplicate" -ShouldPass $false -ExpectedCodes "marker_start_count"

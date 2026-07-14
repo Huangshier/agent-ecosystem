@@ -75,11 +75,11 @@ function Get-ReleaseBodyContractResult {
             [ordered]@{ code = "exact_validation_counts"; pattern = '(?i)(?:\b(?:PASS|FAIL|WARN|DEFERRED)\s*(?:=|:)\s*\d+\b|\b\d+(?:\s*/\s*\d+)?\s+(?:PASS|FAIL|WARN|DEFERRED)\b)' },
             [ordered]@{ code = "hosted_run_identity"; pattern = '(?i)(?:\b(?:hosted\s+)?(?:run(?:\s+ID)?|Actions run)\s*[:#]?\s*\d{6,}\b|/actions/runs/\d+)' },
             [ordered]@{ code = "hosted_platform_matrix"; pattern = '(?i)(?:\b(?:hosted|validation|platform)\s+matrix\b|\b(?:windows-latest|ubuntu-latest|macos-latest)\b|\bWindows\b[^\r\n]*\bUbuntu\b[^\r\n]*\bmacOS\b[^\r\n]*\bvalidation\b)' },
-            [ordered]@{ code = "merge_instruction"; pattern = '(?i)(?:\bwaiting for (?:the )?merge\b|\bwait for (?:the )?merge\b|\bafter merg(?:e|ing)\b|\bMerge-to-publish\b)' },
-            [ordered]@{ code = "tag_instruction"; pattern = '(?i)(?:\bcreate (?:the )?tag\b|\bpush (?:the )?tag\b|\btag target\s*:)' },
-            [ordered]@{ code = "publish_instruction"; pattern = '(?i)(?:\bpublish (?:the )?GitHub Release\b|\bready to publish\b|\bpublish-finalization\b)' },
-            [ordered]@{ code = "maintainer_governance"; pattern = '(?i)(?:\bmaintainer authorization\b|\bmaintainer record\b|\bhosted checks?\b|\brelease status\s*:)' },
-            [ordered]@{ code = "candidate_governance"; pattern = '(?i)(?:\brelease candidate\b|\brelease-prep(?:\s+draft)?\b|\bdraft PR\b|\bno additional commits required\b)' }
+            [ordered]@{ code = "merge_instruction"; pattern = '(?i)(?:\bwaiting for (?:the )?merge\b|\bwait for (?:the )?merge\b|\bafter merg(?:e|ing)\b|\bMerge-to-publish\b|\u5408\u5e76\u540e|\u7b49\u5f85\u5408\u5e76)' },
+            [ordered]@{ code = "tag_instruction"; pattern = '(?i)(?:\bcreate (?:the )?tag\b|\bpush (?:the )?tag\b|\btag target\s*:|\u521b\u5efa\s*(?:Git\s*)?(?:tag|\u6807\u7b7e))' },
+            [ordered]@{ code = "publish_instruction"; pattern = '(?i)(?:\bpublish (?:the )?GitHub Release\b|\bready to publish\b|\bpublish-finalization\b|\u53d1\u5e03\s*(?:GitHub\s*)?Release)' },
+            [ordered]@{ code = "maintainer_governance"; pattern = '(?i)(?:\bmaintainer authorization\b|\bmaintainer record\b|\bhosted checks?\b|\brelease status\s*:|\u7ef4\u62a4\u8005(?:\u8bb0\u5f55|\u5efa\u8bae|\u786e\u8ba4\u524d|\u5ba1\u6838\u524d))' },
+            [ordered]@{ code = "candidate_governance"; pattern = '(?i)(?:\brelease candidate\b|\brelease-prep(?:\s+draft)?\b|\bdraft PR\b|\bno additional commits required\b|\u5019\u9009\u7248\u672c|\u53d1\u5e03\u5019\u9009|\u53d1\u5e03\u8349\u6848|\u65e0\u9700\u989d\u5916\u63d0\u4ea4)' }
         )
         foreach ($rule in $forbiddenRules) {
             $match = [regex]::Match($body, $rule.pattern)
