@@ -55,6 +55,17 @@ reported 0 memory-upgrade and memory-diagnosis findings.
 Release body source: `docs/releases/v0.6.0.md`, between `RELEASE_BODY_START`
 and `RELEASE_BODY_END`.
 
+## Future Release Record Contract
+
+`v0.6.0` and earlier notes are immutable legacy published records. Future
+release notes use [`docs/releases/template.md`](releases/template.md). Only the
+content between the release body markers is copied to GitHub Releases; exact
+validation evidence, hosted identities, issue/PR mapping, tag target, release
+status, and authorization remain after the end marker in the Internal Release
+Record. The strict validator applies to the template and every release-note file
+outside the exact published-note allowlist through `v0.6.0`, without changing
+the published `v0.6.0` body.
+
 ## v0.5.2 Published State
 
 Current `main` includes the post-`v0.5.1` Claude hooks / skill discovery /

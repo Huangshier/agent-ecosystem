@@ -208,34 +208,33 @@ and release publication.
 
 ## GitHub Release Body Hygiene
 
-The GitHub Release body is public, final-state copy. It should describe what
-changed, validation, upgrade impact, known limitations, linked public work, and
-the public boundary. It must not contain maintainer-only workflow instructions,
-tag or publish directions, release-prep draft language, or candidate-state
-wording after publication.
+Start every future release note from
+[`docs/releases/template.md`](releases/template.md). The two marker lines are a
+machine-enforced publication boundary, not editorial hints:
 
-Release note files may keep internal release evidence, but that evidence must
-live outside the `Copyable GitHub Release Body` section. For release notes that
-combine public copy and internal evidence, wrap the copyable body with
-`<!-- RELEASE_BODY_START -->` and `<!-- RELEASE_BODY_END -->`, then place tag
-targets, validation run IDs, published URLs, or maintainer authorization notes
-under an `Internal Release Record` section after the end marker.
+- The text between `<!-- RELEASE_BODY_START -->` and
+  `<!-- RELEASE_BODY_END -->` is the user-facing GitHub Release body. It must
+  explain who the release is for, required upgrade actions, main changes,
+  compatibility, known limitations, rollback, and the public boundary. A
+  concise statement that validation succeeded is allowed.
+- The `Internal Release Record` after the end marker is the maintainer-facing
+  evidence record. Put issue/pull-request mapping, exact
+  PASS/FAIL/WARN/DEFERRED counts, hosted run IDs, platform matrix details,
+  evidence manifests and artifacts, tag target, release status, maintainer
+  authorization, and other governance facts there.
 
-Before publishing or editing a GitHub Release body, check the final body for
-these stale or internal-only phrases unless they appear in an explicitly
-historical, non-copyable internal record:
+The validator inspects only the text inside the markers for internal evidence.
+It fails closed when either marker is missing, duplicated, or reversed. Inside
+the markers it rejects issue/PR mapping, exact validation counts, hosted run or
+matrix evidence, merge waiting state, tag or publication instructions,
+maintainer authorization, and similar internal workflow language. The same
+facts are valid after the end marker in the maintainer record.
 
-- `release candidate`, `候选版本`, `发布候选版本`, `发布候选`
-- `release-prep`, `release-prep draft`, `发布草案`
-- `Maintainer Record`, `维护者记录`, `维护者建议`
-- `Merge-to-publish`
-- `after merging`, `合并后`
-- `create tag`, `创建 tag`
-- `publish GitHub Release`, `发布 GitHub Release`
-- `no additional commits required`, `无需额外提交`
-- `ready to publish`
-- `维护者确认前`, `维护者审核前`
-- `hosted checks 仍应通过`
+The tracked published release notes through `v0.6.0` predate this strict
+contract and remain unchanged. The validator recognizes those files by an exact
+closed allowlist; `template.md` and every unlisted release note use the strict
+contract. A new or backdated note cannot gain compatibility treatment by using
+an older version number or omitting its markers.
 
 Body-only edits to existing GitHub Releases must be explicitly scoped as
 body-only. They must not alter tags, tag targets, release assets, release dates,
