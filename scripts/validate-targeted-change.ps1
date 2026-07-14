@@ -26,8 +26,39 @@ $classification = if (@($ChangedPath).Count -gt 0) {
 if ([int]$classification.detected_tier -eq 3) { throw "Targeted validation cannot replace required Tier 3 full release validation." }
 
 $checks = New-Object 'System.Collections.Generic.List[object]'
+$telemetry = New-Object 'System.Collections.Generic.List[object]'
+$script:targetedCheckStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$script:targetedCheckCheckpointMs = 0L
+$script:targetedCheckCheckpointUtc = [DateTimeOffset]::UtcNow
+$hostIdentity = "{0}-{1}-{2}" -f [System.Environment]::OSVersion.Platform, $PSVersionTable.PSEdition, $PSVersionTable.PSVersion.ToString()
+
+function Get-CoverageCategory([string]$Name) {
+    switch ($Name) {
+        "diff-check" { return "repository-diff-integrity" }
+        "changed-file-parse" { return "changed-file-syntax-public-safety" }
+        "quick-repository-checks" { return "repository-syntax" }
+        default { return ("targeted-suite:{0}" -f $Name) }
+    }
+}
+
 function Add-Result([string]$Name, [string]$Status, [string]$Detail) {
-    $checks.Add([ordered]@{ name = $Name; status = $Status; detail = $Detail })
+    $completedAt = [DateTimeOffset]::UtcNow
+    $elapsedMs = [long]$script:targetedCheckStopwatch.ElapsedMilliseconds
+    $durationMs = [Math]::Max(0L, ($elapsedMs - [long]$script:targetedCheckCheckpointMs))
+    $startedAt = $script:targetedCheckCheckpointUtc
+    $script:targetedCheckCheckpointMs = $elapsedMs
+    $script:targetedCheckCheckpointUtc = $completedAt
+    $coverageCategory = Get-CoverageCategory -Name $Name
+    $checks.Add([ordered]@{ name = $Name; status = $Status; detail = $Detail; duration_ms = [long]$durationMs })
+    $telemetry.Add([ordered]@{
+        suite = $Name
+        case = ("{0}:{1}" -f $Mode, $Name)
+        host = $hostIdentity
+        started_at_utc = $startedAt.ToString("o")
+        completed_at_utc = $completedAt.ToString("o")
+        duration_ms = [long]$durationMs
+        unique_coverage_category = $coverageCategory
+    })
 }
 
 if (@($ChangedPath).Count -gt 0) { & git -C $repoRoot diff --check } else { & git -C $repoRoot diff --check "$BaseRef...$HeadRef" }
@@ -215,6 +246,7 @@ $result = [ordered]@{
     mode = $Mode
     classification = $classification
     checks = @($checks.ToArray())
+    telemetry = @($telemetry.ToArray())
     executed_suites = $(if ($null -eq $executedSuites) { @() } else { @($executedSuites.ToArray()) })
     module_coverage = $(if ($null -eq $moduleCoverage) { @() } else { @($moduleCoverage.ToArray()) })
     executed_suite_count = $(if ($null -eq $executedSuites) { 0 } else { $executedSuites.Count })

@@ -44,6 +44,8 @@ Assert-NotLiveRuntime -Path $scratchRootFull
 New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
 
 $checks = New-Object 'System.Collections.Generic.List[object]'
+$script:validationCheckStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$script:validationCheckCheckpointMs = 0L
 $evidence = [ordered]@{
     profile_matrix = @()
     installer_contract = @()
@@ -109,6 +111,19 @@ try {
 }
 catch {
     Add-Check "required validation gate" "FAIL" $_.Exception.Message
+}
+
+try {
+    $evidenceContractFixtures = Join-PathParts $repoRoot "scripts" "test-validation-evidence-contract.ps1"
+    $evidenceContract = @(& $evidenceContractFixtures -Json) -join "`n" | ConvertFrom-Json
+    if ([int]$evidenceContract.fail -ne 0) {
+        throw "Validation evidence contract fixtures reported failures."
+    }
+    $script:evidence.routing.validation_evidence_contract = $evidenceContract
+    Add-Check "validation evidence contract" "PASS" "Additive duration telemetry, public-safe manifest identity, explicit success allowlists, and full failure evidence contracts passed." $evidenceContract
+}
+catch {
+    Add-Check "validation evidence contract" "FAIL" $_.Exception.Message
 }
 
 }

@@ -67,7 +67,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: change-risk-classification
-          path: ${{ runner.temp }}/change-*.json
+          path: |
+            ${{ runner.temp }}/change-routing-tests.json
+            ${{ runner.temp }}/change-classification.json
           if-no-files-found: error
 
   quick-validation:
@@ -90,11 +92,37 @@ jobs:
             -Mode quick `
             -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-      - name: Upload quick validation evidence
+      - name: Write quick validation evidence manifest
         if: always()
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-quick-validation"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          ./scripts/validation/write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ github.sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -SuccessAllowlist @("targeted-validation-result.json", "validation-output.json", "evidence-manifest.json")
+      - name: Upload quick validation success evidence
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: quick-validation
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-quick-validation/targeted-validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-quick-validation/validation-output.json
+            ${{ runner.temp }}/agent-ecosystem-quick-validation/evidence-manifest.json
+          if-no-files-found: error
+      - name: Upload quick validation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quick-validation-failure
           path: ${{ runner.temp }}/agent-ecosystem-quick-validation
           if-no-files-found: error
 
@@ -122,11 +150,37 @@ jobs:
             -Mode targeted `
             -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-      - name: Upload targeted validation evidence
+      - name: Write targeted validation evidence manifest
         if: always()
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-targeted-validation"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          ./scripts/validation/write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ github.sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -SuccessAllowlist @("targeted-validation-result.json", "validation-output.json", "evidence-manifest.json")
+      - name: Upload targeted validation success evidence
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: targeted-validation-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-targeted-validation/targeted-validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-targeted-validation/validation-output.json
+            ${{ runner.temp }}/agent-ecosystem-targeted-validation/evidence-manifest.json
+          if-no-files-found: error
+      - name: Upload targeted validation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: targeted-validation-${{ matrix.os }}-failure
           path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
           if-no-files-found: error
 
@@ -164,13 +218,40 @@ jobs:
           ./scripts/validate-release.ps1 -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
-      - name: Upload validation evidence
+      - name: Write validation evidence manifest
         if: always()
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          ./scripts/validation/write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ github.sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "validation-output.json", "evidence-manifest.json")
+      - name: Upload validation success evidence
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: validation-pwsh-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-release-validation/change-routing-tests.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation/validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation/validation-output.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation/evidence-manifest.json
+          if-no-files-found: error
+      - name: Upload validation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-pwsh-${{ matrix.os }}-failure
           path: ${{ runner.temp }}/agent-ecosystem-release-validation
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   validate-windows-powershell:
     name: validate Windows PowerShell 5.1
@@ -199,13 +280,40 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
-      - name: Upload validation evidence
+      - name: Write validation evidence manifest
         if: always()
+        shell: powershell
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          .\scripts\validation\write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ github.sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "validation-output.json", "evidence-manifest.json")
+      - name: Upload validation success evidence
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: validation-windows-powershell
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/change-routing-tests.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-output.json
+            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/evidence-manifest.json
+          if-no-files-found: error
+      - name: Upload validation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-windows-powershell-failure
           path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   validation-gate:
     name: validation gate

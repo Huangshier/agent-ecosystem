@@ -120,6 +120,7 @@ try {
     $secretPattern = '(?i)\b(secret|password|api[_ -]?key|credential|credentials|cookie|cookies|token|tokens|private key|private keys)\b'
     $allowedSecretPaths = @(
         "AGENTS.md",
+        "README.en.md",
         ".agents/AGENTS.md",
         "CONTRIBUTING.md",
         "SECURITY.md",
