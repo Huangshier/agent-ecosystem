@@ -47,6 +47,8 @@ $job = $jobMatch.Groups['body'].Value
 foreach ($marker in @(
     "name: validation gate",
     "if: always()",
+    'EVENT_NAME: ${{ github.event_name }}',
+    'TIER: ${{ needs.classify.outputs.tier }}',
     "./scripts/validation/required-validation-gate.ps1"
 )) {
     if (-not $job.Contains($marker)) { throw "validation-gate job is missing contract marker: $marker" }
