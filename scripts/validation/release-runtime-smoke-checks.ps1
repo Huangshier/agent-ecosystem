@@ -417,6 +417,46 @@ try {
             project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $unknownProject -Entry "copy-unknown" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "unknown" -ExpectedReason "missing-lock"
         })
 
+    $missingManifestRuntime = Join-PathParts $scratchRootFull "runtime-recommended-missing-manifest"
+    Assert-NotLiveRuntime -Path $missingManifestRuntime
+    Assert-PathInsideRoot -Path $missingManifestRuntime -Root $scratchRootFull
+    & (Join-PathParts $repoRoot "scripts" "install.ps1") -Profile recommended -TargetDir $missingManifestRuntime | Out-Host
+    $missingManifestPath = Join-PathParts $missingManifestRuntime "install-manifest.json"
+    if (-not (Test-Path -LiteralPath $missingManifestPath -PathType Leaf)) {
+        throw "Missing-manifest regression setup did not produce install-manifest.json."
+    }
+    Remove-Item -LiteralPath $missingManifestPath -Force
+    $providerMarker = Join-PathParts $missingManifestRuntime "STATUS_PROVIDER_EXECUTED"
+    $residualProvider = Join-PathParts $missingManifestRuntime "scripts" "status.ps1"
+    $markerLiteral = $providerMarker.Replace("'", "''")
+    Set-Content -LiteralPath $residualProvider -Encoding UTF8 -Value @(
+        "param([string]`$ProjectDir, [switch]`$Json)",
+        "Set-Content -LiteralPath '$markerLiteral' -Value executed",
+        "'{`"schema_version`":1,`"project`":{`"status`":`"current`",`"reason`":`"in-sync`"}}'"
+    )
+    $missingManifestContextGate = Join-PathParts $missingManifestRuntime "skills" "project-context-gate" "scripts" "context_gate.ps1"
+    $missingManifestPayload = (& $missingManifestContextGate -ProjectRoot $copySmoke.project -Json) | ConvertFrom-Json
+    if (Test-Path -LiteralPath $providerMarker) {
+        throw "Installed context gate executed the residual provider after install-manifest.json was deleted."
+    }
+    if ([string]$missingManifestPayload.project_template.status -ne "unknown" -or
+        [string]$missingManifestPayload.project_template.reason -ne "status-helper-missing" -or
+        [string]$missingManifestPayload.project_template.helper.availability -ne "unavailable" -or
+        [string]$missingManifestPayload.project_template.helper.provenance -ne "unresolved") {
+        throw "Installed context gate did not fail soft with unresolved provenance after install-manifest.json was deleted."
+    }
+    $runtimeSmokeResults.Add([ordered]@{
+            name = "copy-missing-manifest"
+            project_template = [ordered]@{
+                status = [string]$missingManifestPayload.project_template.status
+                reason = [string]$missingManifestPayload.project_template.reason
+                helper_availability = [string]$missingManifestPayload.project_template.helper.availability
+                helper_trust = [string]$missingManifestPayload.project_template.helper.trust
+                helper_provenance = [string]$missingManifestPayload.project_template.helper.provenance
+                provider_executed = $false
+            }
+        })
+
     if (-not $SkipLinkMode.IsPresent) {
         if ([string]::IsNullOrWhiteSpace($script:recommendedLinkRuntime)) {
             throw "Recommended link runtime was not created."

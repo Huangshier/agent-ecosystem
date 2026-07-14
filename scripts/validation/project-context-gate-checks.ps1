@@ -187,6 +187,11 @@ function New-ContextGateTestRuntime {
     $scriptsRoot = Join-ContextGatePath $RuntimeRoot "scripts"
     New-Item -ItemType Directory -Force -Path $scriptsRoot | Out-Null
     Copy-Item -LiteralPath $StatusHelperFixture -Destination (Join-Path $scriptsRoot "status.ps1")
+    $libraryRoot = Join-ContextGatePath $scriptsRoot "lib"
+    New-Item -ItemType Directory -Force -Path $libraryRoot | Out-Null
+    foreach ($name in @("path-guard.ps1", "runtime-status-action.ps1")) {
+        Set-Content -LiteralPath (Join-Path $libraryRoot $name) -Value "# managed provider dependency fixture" -Encoding UTF8
+    }
     if (-not $SkipGuidanceHelpers.IsPresent) {
         foreach ($relativePath in @(
             "skills/project-bootstrap/scripts/bootstrap_project.ps1",
@@ -197,7 +202,32 @@ function New-ContextGateTestRuntime {
             Set-Content -LiteralPath $helperPath -Value "throw 'Guidance helper must not be executed by context gate.'" -Encoding UTF8
         }
     }
+    Write-ContextGateManagedProviderManifest -RuntimeRoot $RuntimeRoot
     return $skillRoot
+}
+
+function Write-ContextGateManagedProviderManifest {
+    param([Parameter(Mandatory = $true)][string]$RuntimeRoot)
+
+    $scriptsRoot = Join-ContextGatePath $RuntimeRoot "scripts"
+    $records = @(
+        foreach ($relativePath in @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1")) {
+            $providerPath = Join-ContextGatePath $scriptsRoot $relativePath
+            $providerHash = (Get-FileHash -LiteralPath $providerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            [ordered]@{ path = $relativePath; source_sha256 = $providerHash; installed_sha256 = $providerHash }
+        }
+    )
+    [ordered]@{
+        schema_version = 2
+        items = @([ordered]@{
+                name = "runtime-status-provider"
+                source = "scripts"
+                destination = "scripts"
+                mode = "copy"
+                managed = $true
+                files = $records
+            })
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $RuntimeRoot "install-manifest.json") -Encoding UTF8
 }
 
 function Set-ContextGateStatusCase {
@@ -213,6 +243,7 @@ function Set-ContextGateStatusCase {
     }
     else {
         Copy-Item -LiteralPath $StatusHelperFixture -Destination $statusScript -Force
+        Write-ContextGateManagedProviderManifest -RuntimeRoot $RuntimeRoot
     }
     $Case | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-ContextGatePath $RuntimeRoot "scripts" "status-case.json") -Encoding UTF8
 }
@@ -283,7 +314,7 @@ function Test-ProjectTemplateCase {
     Assert-ContextGateCondition -Condition ([string]$template.reason -ceq [string]$Case.expected_reason) -Message "$($Case.name) returned unexpected reason."
     Assert-ContextGateCondition -Condition ([string]$template.guidance -ceq [string]$Case.expected_guidance) -Message "$($Case.name) returned unexpected guidance."
     Assert-ContextGateCondition -Condition ([string]$template.helper.trust -ceq "trusted") -Message "$($Case.name) did not report a trusted helper root."
-    $expectedProvenance = if ([string]$Case.behavior -ceq "missing") { "unresolved" } else { "source-checkout" }
+    $expectedProvenance = if ([string]$Case.behavior -ceq "missing") { "unresolved" } else { "manifest-managed-copy" }
     Assert-ContextGateCondition -Condition ([string]$template.helper.provenance -ceq $expectedProvenance) -Message "$($Case.name) did not report the expected helper provenance."
     $hasCommand = $null -ne $template.command -and -not [string]::IsNullOrWhiteSpace([string]$template.command)
     Assert-ContextGateCondition -Condition ($hasCommand -eq [bool]$Case.expects_command) -Message "$($Case.name) command presence is incorrect."
@@ -360,11 +391,11 @@ $caseFixture = Get-Content -LiteralPath $casesPath -Raw | ConvertFrom-Json
 Assert-ContextGateCondition -Condition ([int]$caseFixture.schema_version -eq 1) -Message "Unsupported project template status fixture schema."
 $currentCase = @($caseFixture.cases | Where-Object { [string]$_.name -eq "current" })[0]
 $results = New-Object 'System.Collections.Generic.List[object]'
-$sourceRuntime = Join-ContextGatePath $scratchRootFull "source layout"
-$sourceFixtureSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $sourceRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture
-Set-ContextGateStatusCase -RuntimeRoot $sourceRuntime -Case $currentCase -StatusHelperFixture $statusHelperFixture
-$sourceScript = Join-ContextGatePath $sourceFixtureSkillRoot "scripts" "context_gate.ps1"
+$sourceRuntime = $repositoryRootFull
+$sourceScript = Join-ContextGatePath $sourceSkillRoot "scripts" "context_gate.ps1"
 $results.Add((Test-ContextGateLayout -Name "source" -ScriptPath $sourceScript -ProjectRoot $projectRoot -PowerShellPath $powerShellPath))
+$sourcePayload = (Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath $sourceScript -ProjectRoot $projectRoot -Mode json) | ConvertFrom-Json
+Assert-ContextGateCondition -Condition ([string]$sourcePayload.project_template.helper.provenance -ceq "source-checkout") -Message "Real source checkout did not report source-checkout provenance."
 
 $copyRuntime = Join-ContextGatePath $scratchRootFull "copy runtime"
 $installedSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $copyRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture
@@ -446,6 +477,37 @@ Assert-ContextGateCondition -Condition (
     -not (Test-Path -LiteralPath $tamperMarker)
 ) -Message "Context gate executed or trusted a tampered manifest-managed status provider."
 
+$malformedManifestRuntime = Join-ContextGatePath $scratchRootFull "runtime with malformed manifest"
+$malformedManifestSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $malformedManifestRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture
+$malformedManifestMarker = Join-ContextGatePath $malformedManifestRuntime "MALFORMED_MANIFEST_PROVIDER_EXECUTED"
+$malformedManifestStatus = Join-ContextGatePath $malformedManifestRuntime "scripts" "status.ps1"
+Set-Content -LiteralPath $malformedManifestStatus -Value ("Set-Content -LiteralPath '{0}' -Value executed`n'{{}}'" -f $malformedManifestMarker.Replace("'", "''")) -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $malformedManifestRuntime "install-manifest.json") -Value '{"schema_version":' -Encoding UTF8
+$malformedManifestPayload = (Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath (Join-ContextGatePath $malformedManifestSkillRoot "scripts" "context_gate.ps1") -ProjectRoot $projectRoot -Mode json) | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (
+    [string]$malformedManifestPayload.project_template.status -ceq "unknown" -and
+    [string]$malformedManifestPayload.project_template.reason -ceq "status-helper-missing" -and
+    [string]$malformedManifestPayload.project_template.helper.availability -ceq "unavailable" -and
+    [string]$malformedManifestPayload.project_template.helper.provenance -ceq "unresolved" -and
+    -not (Test-Path -LiteralPath $malformedManifestMarker)
+) -Message "Context gate executed a provider or failed hard when the install manifest was malformed."
+
+$unreadableProviderRuntime = Join-ContextGatePath $scratchRootFull "runtime with unreadable provider"
+$unreadableProviderSkillRoot = New-ContextGateTestRuntime -RuntimeRoot $unreadableProviderRuntime -SourceSkillRoot $sourceSkillRoot -StatusHelperFixture $statusHelperFixture
+$unreadableProviderPath = Join-ContextGatePath $unreadableProviderRuntime "scripts" "lib" "path-guard.ps1"
+$providerLock = [System.IO.File]::Open($unreadableProviderPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)
+try {
+    $unreadableProviderPayload = (Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath (Join-ContextGatePath $unreadableProviderSkillRoot "scripts" "context_gate.ps1") -ProjectRoot $projectRoot -Mode json) | ConvertFrom-Json
+} finally {
+    $providerLock.Dispose()
+}
+Assert-ContextGateCondition -Condition (
+    [string]$unreadableProviderPayload.project_template.status -ceq "unknown" -and
+    [string]$unreadableProviderPayload.project_template.reason -ceq "status-helper-missing" -and
+    [string]$unreadableProviderPayload.project_template.helper.availability -ceq "unavailable" -and
+    [string]$unreadableProviderPayload.project_template.helper.provenance -ceq "unresolved"
+) -Message "Context gate failed hard or resolved provenance while a managed provider file was unreadable during hashing."
+
 Assert-ContextGateCondition -Condition (-not (Test-Path -LiteralPath (Join-ContextGatePath $projectRoot "MALICIOUS_STATUS_EXECUTED"))) -Message "Context gate executed the target project's malicious scripts/status.ps1."
 
 $after = Get-ContextGateProjectSnapshot -ProjectRoot $projectRoot
@@ -465,7 +527,9 @@ $result = [ordered]@{
     untrusted_guidance_ancestor_case_count = $untrustedGuidanceResults.Count
     unresolved_locator_fail_soft = $true
     malicious_project_helper_ignored = $true
+    malformed_manifest_rejected = $true
     tampered_managed_provider_rejected = $true
+    unreadable_managed_provider_fail_soft = $true
     project_read_only = $true
 }
 if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 8 }
