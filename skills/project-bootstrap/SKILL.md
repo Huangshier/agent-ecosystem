@@ -53,7 +53,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps
 ```
 
 Default behavior:
-- If the configured hub is missing its template folders, bootstrap first attempts to initialize it from bundled bootstrap assets.
+- `-HubDir` identifies the knowledge hub root itself. That directory must
+  directly contain `templates/languages`; do not pass a repository root that
+  merely contains a `knowledge-hub` child directory.
+- If an explicitly supplied hub path already exists, is non-empty, and does
+  not directly contain `templates/languages`, bootstrap fails before writing
+  to the hub or project. It does not silently correct the path or initialize
+  content inside that directory.
+- If the default runtime hub is missing its template folders, bootstrap first
+  attempts to initialize it from bundled bootstrap assets. Explicit new or
+  empty hub directories remain supported initialization targets.
 - Copy template files only when missing.
 - Keep project-local edits untouched.
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
@@ -84,7 +93,8 @@ Default behavior:
 - The resolved project directory is printed before any bootstrap write.
 
 Optional flags:
-- `-HubDir <path>`: custom hub location.
+- `-HubDir <path>`: custom knowledge hub root; it must directly contain
+  `templates/languages` once initialized.
 - `-RefreshUnmodifiedTemplates`: refresh files that still match the previously installed template hash; preserve modified files for manual review.
 - `-OverwriteTemplates`: compatibility alias for `-RefreshUnmodifiedTemplates`. It emits a warning and does not overwrite modified project memory.
 - `-ForceResetScaffold`: explicit reset path for discarding scaffold customizations. It emits a warning, backs up existing files first, and cannot be combined with memory upgrade modes.

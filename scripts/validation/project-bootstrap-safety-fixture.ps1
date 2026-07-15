@@ -89,6 +89,82 @@ New-Item -ItemType Directory -Force -Path $ScratchRoot | Out-Null
 $scratchFull = (Resolve-Path -LiteralPath $ScratchRoot).Path
 $results = New-Object 'System.Collections.Generic.List[object]'
 
+$repositoryStyleHub = Join-Path $scratchFull "repository-style-hub"
+$repositoryStyleProject = Join-Path $scratchFull "repository-style-project"
+New-Item -ItemType Directory -Path (Join-Path $repositoryStyleHub "skills") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $repositoryStyleHub "knowledge-hub/templates/languages") -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $repositoryStyleHub "README.md") -Value "fixture" -Encoding ASCII
+New-Item -ItemType Directory -Path $repositoryStyleProject | Out-Null
+Set-Content -LiteralPath (Join-Path $repositoryStyleProject "sentinel.txt") -Value "project fixture" -Encoding ASCII
+$repositoryStyleHubBefore = Get-TreeFingerprint -Root $repositoryStyleHub
+$repositoryStyleProjectBefore = Get-TreeFingerprint -Root $repositoryStyleProject
+$repositoryStyleFailure = Assert-ExpectedFailure -Name "repository-style-explicit-hub" -ExpectedToken "directly contains templates/languages" -Command {
+    & $BootstrapScript -ProjectDir $repositoryStyleProject -HubDir $repositoryStyleHub -SkipMemoryUpgradeAnalysis
+}
+if ($repositoryStyleFailure.error -notlike "*knowledge-hub subdirectory*") {
+    throw "Fixture 'repository-style-explicit-hub' expected a knowledge-hub subdirectory hint."
+}
+Assert-Unchanged -Root $repositoryStyleHub -Before $repositoryStyleHubBefore -Name "repository-style-explicit-hub-hub"
+Assert-Unchanged -Root $repositoryStyleProject -Before $repositoryStyleProjectBefore -Name "repository-style-explicit-hub-project"
+$results.Add([ordered]@{ name = "repository-style-explicit-hub"; status = "PASS"; error = $repositoryStyleFailure.error }) | Out-Null
+
+$ordinaryNonHub = Join-Path $scratchFull "ordinary-non-hub"
+$ordinaryNonHubProject = Join-Path $scratchFull "ordinary-non-hub-project"
+New-Item -ItemType Directory -Path $ordinaryNonHub | Out-Null
+Set-Content -LiteralPath (Join-Path $ordinaryNonHub "sentinel.txt") -Value "hub fixture" -Encoding ASCII
+New-Item -ItemType Directory -Path $ordinaryNonHubProject | Out-Null
+Set-Content -LiteralPath (Join-Path $ordinaryNonHubProject "sentinel.txt") -Value "project fixture" -Encoding ASCII
+$ordinaryNonHubBefore = Get-TreeFingerprint -Root $ordinaryNonHub
+$ordinaryNonHubProjectBefore = Get-TreeFingerprint -Root $ordinaryNonHubProject
+$ordinaryNonHubFailure = Assert-ExpectedFailure -Name "ordinary-explicit-non-hub" -ExpectedToken "directly contains templates/languages" -Command {
+    & $BootstrapScript -ProjectDir $ordinaryNonHubProject -HubDir $ordinaryNonHub -SkipMemoryUpgradeAnalysis
+}
+if ($ordinaryNonHubFailure.error -like "*knowledge-hub subdirectory*") {
+    throw "Fixture 'ordinary-explicit-non-hub' received an inapplicable knowledge-hub subdirectory hint."
+}
+Assert-Unchanged -Root $ordinaryNonHub -Before $ordinaryNonHubBefore -Name "ordinary-explicit-non-hub-hub"
+Assert-Unchanged -Root $ordinaryNonHubProject -Before $ordinaryNonHubProjectBefore -Name "ordinary-explicit-non-hub-project"
+$results.Add([ordered]@{ name = "ordinary-explicit-non-hub"; status = "PASS"; error = $ordinaryNonHubFailure.error }) | Out-Null
+
+$explicitNewHub = Join-Path $scratchFull "explicit-new-hub"
+$explicitNewProject = Join-Path $scratchFull "explicit-new-project"
+New-Item -ItemType Directory -Path $explicitNewProject | Out-Null
+& $BootstrapScript -ProjectDir $explicitNewProject -HubDir $explicitNewHub -SkipMemoryUpgradeAnalysis | Out-Null
+if (-not (Test-Path -LiteralPath (Join-Path $explicitNewHub "templates/languages") -PathType Container)) {
+    throw "Explicit new hub directory was not initialized."
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Successful explicit new hub initialization leaked LASTEXITCODE=$LASTEXITCODE."
+}
+$results.Add([ordered]@{ name = "explicit-new-hub"; status = "PASS" }) | Out-Null
+
+$explicitEmptyHub = Join-Path $scratchFull "explicit-empty-hub"
+$explicitEmptyProject = Join-Path $scratchFull "explicit-empty-project"
+New-Item -ItemType Directory -Path $explicitEmptyHub | Out-Null
+New-Item -ItemType Directory -Path $explicitEmptyProject | Out-Null
+& $BootstrapScript -ProjectDir $explicitEmptyProject -HubDir $explicitEmptyHub -SkipMemoryUpgradeAnalysis | Out-Null
+if (-not (Test-Path -LiteralPath (Join-Path $explicitEmptyHub "templates/languages") -PathType Container)) {
+    throw "Explicit empty hub directory was not initialized."
+}
+$results.Add([ordered]@{ name = "explicit-empty-hub"; status = "PASS" }) | Out-Null
+
+$defaultHubProfile = Join-Path $scratchFull "default-hub-profile"
+$defaultHubProject = Join-Path $scratchFull "default-hub-project"
+New-Item -ItemType Directory -Path $defaultHubProfile | Out-Null
+New-Item -ItemType Directory -Path $defaultHubProject | Out-Null
+$previousUserProfile = $env:USERPROFILE
+try {
+    $env:USERPROFILE = $defaultHubProfile
+    & $BootstrapScript -ProjectDir $defaultHubProject -SkipMemoryUpgradeAnalysis | Out-Null
+} finally {
+    $env:USERPROFILE = $previousUserProfile
+}
+$expectedDefaultHub = Join-Path $defaultHubProfile ".agents/knowledge-hub/templates/languages"
+if (-not (Test-Path -LiteralPath $expectedDefaultHub -PathType Container)) {
+    throw "Missing default runtime hub was not initialized."
+}
+$results.Add([ordered]@{ name = "missing-default-hub"; status = "PASS" }) | Out-Null
+
 $inheritProject = Join-Path $scratchFull "existing-zh-cn"
 New-Item -ItemType Directory -Path $inheritProject | Out-Null
 & $BootstrapScript -ProjectDir $inheritProject -HubDir $HubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Null
@@ -110,6 +186,7 @@ if ($resolvedIndex -lt 0 -or $completeIndex -lt 0 -or $resolvedIndex -ge $comple
     throw "Resolved project dir was not visible before bootstrap completion output."
 }
 $results.Add([ordered]@{ name = "inherit-lock-language"; status = "PASS"; project_language = "zh-CN" }) | Out-Null
+$results.Add([ordered]@{ name = "valid-explicit-hub"; status = "PASS" }) | Out-Null
 
 $unknownProject = Join-Path $scratchFull "unknown-parameter"
 New-Item -ItemType Directory -Path $unknownProject | Out-Null
@@ -179,6 +256,7 @@ $report = [ordered]@{
     scratch_root = $scratchFull
     fixtures = @($results.ToArray())
 }
+$global:LASTEXITCODE = 0
 if ($Json.IsPresent) {
     $report | ConvertTo-Json -Depth 6
 } else {

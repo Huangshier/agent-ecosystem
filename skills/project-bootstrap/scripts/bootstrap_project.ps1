@@ -28,6 +28,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "project_language.ps1")
 $projectLanguageWasProvided = $PSBoundParameters.ContainsKey("ProjectLanguage")
+$hubDirWasProvided = $PSBoundParameters.ContainsKey("HubDir")
 
 if ($PSBoundParameters.ContainsKey("ProjectRoot")) {
     throw "-ProjectRoot is not supported. Use -ProjectDir to select the bootstrap target."
@@ -467,6 +468,21 @@ if (-not (Test-Path -LiteralPath $ProjectDir -PathType Container)) {
 $ProjectDir = (Resolve-Path -LiteralPath $ProjectDir).Path
 Write-Output "Resolved project dir: $ProjectDir"
 
+if ($hubDirWasProvided -and (Test-Path -LiteralPath $HubDir -PathType Container)) {
+    $hubHasEntries = $null -ne (Get-ChildItem -LiteralPath $HubDir -Force | Select-Object -First 1)
+    $hubLanguagesDir = Join-PathParts $HubDir "templates" "languages"
+    if ($hubHasEntries -and -not (Test-Path -LiteralPath $hubLanguagesDir -PathType Container)) {
+        $message = "Explicit -HubDir must be a knowledge hub root that directly contains templates/languages. The supplied directory already exists and is not empty, so bootstrap will not initialize it. No hub or project files were written."
+        $nestedHubDir = Join-Path $HubDir "knowledge-hub"
+        $looksLikeRepositoryRoot = (Test-Path -LiteralPath (Join-Path $HubDir "skills") -PathType Container) -and
+            (Test-Path -LiteralPath $nestedHubDir -PathType Container)
+        if ($looksLikeRepositoryRoot) {
+            $message += " The supplied directory appears to be a repository root; pass its knowledge-hub subdirectory explicitly if that is the intended hub."
+        }
+        throw $message
+    }
+}
+
 $languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
 if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent -or $PlanNarrativeMigration.IsPresent -or $ApplyNarrativeMigration.IsPresent -or $ValidateNarrativeMigration.IsPresent) {
     if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
@@ -785,6 +801,7 @@ $lockData = [ordered]@{
 
 $lockData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
+$global:LASTEXITCODE = 0
 Write-Output "Project bootstrap complete."
 Write-Output "Bootstrap operation mode: $bootstrapOperationMode"
 Write-Output "Project: $ProjectDir"
