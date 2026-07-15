@@ -1,0 +1,108 @@
+[
+  {
+    "name": "valid-skip-decision",
+    "valid": true,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "missing-decision",
+    "valid": false,
+    "result": {
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "null-decision",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": null,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "string-false-decision",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": "false",
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "missing-reason",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "blank-reason",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "   ",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "missing-required-coverage",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "empty-required-coverage",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": [],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "missing-full-coverage",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"]
+    }
+  },
+  {
+    "name": "inconsistent-full-coverage",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
+      "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate"]
+    }
+  },
+  {
+    "name": "matching-but-incomplete-coverage",
+    "valid": false,
+    "result": {
+      "run_heavy_targeted_regression": false,
+      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_required_suites": ["agent-skill-bridge"],
+      "full_validator_coverage_suites": ["agent-skill-bridge"]
+    }
+  }
+]
