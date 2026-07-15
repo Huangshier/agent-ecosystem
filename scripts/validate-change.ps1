@@ -36,6 +36,63 @@ function New-ChangeResult {
         $moduleSuiteMap[[string]$module] = @($suites)
         foreach ($suite in $suites) { $requiredSuites.Add([string]$suite) }
     }
+    $heavyTargetedRequiredSuites = @(
+        "agent-skill-bridge",
+        "bootstrap-safety",
+        "installer-contract",
+        "knowledge-contracts",
+        "project-context-gate",
+        "runtime-smoke"
+    )
+    $fullValidatorCoverageSuites = @(
+        "agent-skill-bridge",
+        "bootstrap-safety",
+        "installer-contract",
+        "knowledge-contracts",
+        "project-context-gate",
+        "runtime-smoke"
+    )
+    $coverageDifference = @(
+        Compare-Object -ReferenceObject $heavyTargetedRequiredSuites -DifferenceObject $fullValidatorCoverageSuites
+    )
+    $selfProtectionPatterns = @(
+        '^\.github/workflows/',
+        '^scripts/validate-(change|targeted-change|release)\.ps1$',
+        '^scripts/test-validate-change\.ps1$',
+        '^scripts/test-validation-evidence-contract\.ps1$',
+        '^scripts/validation/change-risk-rules\.json$',
+        '^scripts/validation/change-risk-fixtures/',
+        '^scripts/validation/required-validation-gate\.ps1$',
+        '^scripts/validation/write-evidence-manifest\.ps1$',
+        '^scripts/validation/release-.*\.ps1$',
+        '^scripts/validation/release-.+-fixtures/'
+    )
+    $hasSelfProtectionPath = @($Paths | Where-Object {
+        $candidate = [string]$_
+        @($selfProtectionPatterns | Where-Object { $candidate -match $_ }).Count -gt 0
+    }).Count -gt 0
+    $hasAmbiguousModule = @($Modules | Where-Object {
+        [string]$_ -match '^(unknown|unsupported-|validation-routing)'
+    }).Count -gt 0
+    $runHeavyTargeted = $false
+    $heavyTargetedReason = "not-tier-3"
+    if ($Tier -eq 3) {
+        if ($coverageDifference.Count -gt 0) {
+            $runHeavyTargeted = $true
+            $heavyTargetedReason = "full-coverage-unproven"
+        }
+        elseif ($hasSelfProtectionPath) {
+            $runHeavyTargeted = $true
+            $heavyTargetedReason = "self-protection-control-surface"
+        }
+        elseif ($hasAmbiguousModule) {
+            $runHeavyTargeted = $true
+            $heavyTargetedReason = "unknown-or-ambiguous-input"
+        }
+        else {
+            $heavyTargetedReason = "tier-3-full-covers-required-suites"
+        }
+    }
     return [ordered]@{
         schema_version = 1
         detected_tier = $Tier
@@ -49,6 +106,10 @@ function New-ChangeResult {
         required_checks = @($tierContract.required_checks)
         skipped_checks = @($tierContract.skipped_checks)
         hosted_plan = $tierContract.hosted_plan
+        run_heavy_targeted_regression = [bool]$runHeavyTargeted
+        heavy_targeted_reason = $heavyTargetedReason
+        heavy_targeted_required_suites = $heavyTargetedRequiredSuites
+        full_validator_coverage_suites = $fullValidatorCoverageSuites
         escalation_reason = (@($Reasons | Sort-Object -Unique) -join "; ")
     }
 }
@@ -151,5 +212,6 @@ if ($Json.IsPresent) {
     Write-Output ("Skipped checks (not required; not PASS): {0}" -f ($(if (@($result.skipped_checks).Count) { @($result.skipped_checks) -join ", " } else { "none" })))
     Write-Output ("Escalation reason: {0}" -f $result.escalation_reason)
     Write-Output ("Affected modules: {0}" -f (@($result.affected_modules) -join ", "))
+    Write-Output ("Run heavy targeted regression: {0} ({1})" -f $result.run_heavy_targeted_regression, $result.heavy_targeted_reason)
     Write-Output ("Hosted plan: {0} full validator call(s), {1} targeted OS job(s)" -f $result.hosted_plan.full_validator_calls, $result.hosted_plan.targeted_os_jobs)
 }

@@ -24,6 +24,8 @@ jobs:
       modules: ${{ steps.risk.outputs.modules }}
       base: ${{ steps.risk.outputs.base }}
       head: ${{ steps.risk.outputs.head }}
+      run_heavy_targeted_regression: ${{ steps.risk.outputs.run_heavy_targeted_regression }}
+      heavy_targeted_reason: ${{ steps.risk.outputs.heavy_targeted_reason }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -61,6 +63,8 @@ jobs:
           "modules=$(@($result.affected_modules) -join ',')" >> $env:GITHUB_OUTPUT
           "base=$($result.base_ref)" >> $env:GITHUB_OUTPUT
           "head=$($result.head_ref)" >> $env:GITHUB_OUTPUT
+          "run_heavy_targeted_regression=$(([bool]$result.run_heavy_targeted_regression).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "heavy_targeted_reason=$($result.heavy_targeted_reason)" >> $env:GITHUB_OUTPUT
 
       - name: Upload classification evidence
         if: always()
@@ -200,7 +204,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Tier 3 targeted routing regressions
-        if: (needs.classify.result != 'success' || needs.classify.outputs.tier == '3') && matrix.os == 'windows-latest'
+        if: (needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')) && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
@@ -223,6 +227,13 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          $isWindowsJob = "${{ matrix.os }}" -eq "windows-latest"
+          $heavyStatus = "not-applicable"
+          $heavyReason = "non-windows-full-job"
+          if ($isWindowsJob) {
+            $heavyStatus = if ("${{ needs.classify.result }}" -ne "success" -or "${{ needs.classify.outputs.run_heavy_targeted_regression }}" -ne "false") { "executed" } else { "skipped" }
+            $heavyReason = if ("${{ needs.classify.result }}" -ne "success") { "classifier-failure" } else { "${{ needs.classify.outputs.heavy_targeted_reason }}" }
+          }
           $successAllowlist = @("validation-result.json", "evidence-manifest.json")
           if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
             $successAllowlist = @("change-routing-tests.json") + $successAllowlist
@@ -235,6 +246,8 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -HeavyTargetedStatus $heavyStatus `
+            -HeavyTargetedReason $heavyReason `
             -SuccessAllowlist $successAllowlist
       - name: Upload validation success evidence
         if: success()
@@ -265,7 +278,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run Tier 3 targeted routing regressions
-        if: needs.classify.result != 'success' || needs.classify.outputs.tier == '3'
+        if: needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')
         shell: powershell
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
@@ -288,6 +301,12 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          $heavyStatus = if ("${{ needs.classify.result }}" -ne "success" -or "${{ needs.classify.outputs.run_heavy_targeted_regression }}" -ne "false") { "executed" } else { "skipped" }
+          $heavyReason = if ("${{ needs.classify.result }}" -ne "success") { "classifier-failure" } else { "${{ needs.classify.outputs.heavy_targeted_reason }}" }
+          $successAllowlist = @("validation-result.json", "evidence-manifest.json")
+          if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
+            $successAllowlist = @("change-routing-tests.json") + $successAllowlist
+          }
           .\scripts\validation\write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
@@ -296,7 +315,9 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
-            -SuccessAllowlist @("change-routing-tests.json", "validation-result.json", "evidence-manifest.json")
+            -HeavyTargetedStatus $heavyStatus `
+            -HeavyTargetedReason $heavyReason `
+            -SuccessAllowlist $successAllowlist
       - name: Upload validation success evidence
         if: success()
         uses: actions/upload-artifact@v7

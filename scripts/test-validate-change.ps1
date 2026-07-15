@@ -190,6 +190,15 @@ foreach ($case in @($cases)) {
         $expectedSuites = @($case.required_suites | Sort-Object)
         if (($actualSuites -join ',') -cne ($expectedSuites -join ',')) { throw "Case '$($case.name)' has incorrect required suites." }
     }
+    if ($null -ne $case.run_heavy_targeted_regression -and [bool]$value.run_heavy_targeted_regression -ne [bool]$case.run_heavy_targeted_regression) {
+        throw "Case '$($case.name)' has an incorrect heavy targeted decision."
+    }
+    if ($null -ne $case.heavy_targeted_reason -and [string]$value.heavy_targeted_reason -cne [string]$case.heavy_targeted_reason) {
+        throw "Case '$($case.name)' has an incorrect heavy targeted reason."
+    }
+    if ((@($value.heavy_targeted_required_suites) -join ',') -cne (@($value.full_validator_coverage_suites) -join ',')) {
+        throw "Case '$($case.name)' does not prove full coverage for the heavy targeted suite set."
+    }
     $text = if (@($case.paths).Count -eq 0) {
         @(& $validator -BaseRef HEAD -HeadRef HEAD) -join "`n"
     } else {
@@ -235,6 +244,8 @@ $workflowMarkers = @(
     "github.event.forced",
     "needs.classify.outputs.base",
     "needs.classify.outputs.head",
+    "needs.classify.outputs.run_heavy_targeted_regression",
+    "needs.classify.outputs.heavy_targeted_reason",
     "needs.classify.result != 'success'",
     "./scripts/validate-targeted-change.ps1",
     "./scripts/validate-release.ps1"
@@ -249,14 +260,14 @@ if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression")).Count -ne 2) { throw "Tier 3/full validation jobs must run targeted regressions under both PowerShell hosts." }
 if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier base boundary." }
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier head boundary." }
-if (@([regex]::Matches($workflow, "if: \(needs\.classify\.result != 'success' \|\| needs\.classify\.outputs\.tier == '3'\) && matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must be restricted to the Windows Tier 3/classifier-failure job." }
-if (@([regex]::Matches($workflow, "if: needs\.classify\.result != 'success' \|\| needs\.classify\.outputs\.tier == '3'")).Count -ne 1) { throw "Windows PowerShell targeted regressions must be restricted to Tier 3 or classifier failure." }
+if (@([regex]::Matches($workflow, "outputs\.run_heavy_targeted_regression != 'false'")).Count -ne 2) { throw "Both Windows heavy targeted steps must use the fail-closed classifier decision." }
+if (@([regex]::Matches($workflow, 'classifier-failure')).Count -ne 2) { throw "Both Windows evidence manifests must record classifier-failure execution." }
 if (@([regex]::Matches($workflow, "matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must run once on the Windows full-validation job." }
 
 $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
-if ([int]$unsupported.detected_tier -ne 3) { throw "Runtime skill without a reliable targeted suite did not escalate to Tier 3." }
+if ([int]$unsupported.detected_tier -ne 3 -or -not [bool]$unsupported.run_heavy_targeted_regression) { throw "Runtime skill without a reliable targeted suite did not fail closed to Tier 3 heavy execution." }
 $unmappedTest = (& $validator -ChangedPath "scripts/test-future-runtime.ps1" -Json | Out-String) | ConvertFrom-Json
-if ([int]$unmappedTest.detected_tier -ne 3) { throw "Unmapped future test path did not conservatively escalate to Tier 3." }
+if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.run_heavy_targeted_regression) { throw "Unmapped future test path did not fail closed to Tier 3 heavy execution." }
 
 $targetedResults = @()
 if ($RunTargetedRegression.IsPresent) {

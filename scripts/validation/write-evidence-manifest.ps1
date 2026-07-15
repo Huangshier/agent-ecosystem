@@ -7,6 +7,8 @@ param(
     [Parameter(Mandatory = $true)][string]$RunAttempt,
     [Parameter(Mandatory = $true)][string]$JobName,
     [Parameter(Mandatory = $true)][string]$HostIdentity,
+    [ValidateSet("executed", "skipped", "not-applicable")][string]$HeavyTargetedStatus = "not-applicable",
+    [string]$HeavyTargetedReason = "not-applicable",
     [Parameter(Mandatory = $true)][string[]]$SuccessAllowlist,
     [switch]$Json
 )
@@ -58,6 +60,33 @@ $releaseResult = Read-OptionalJson -FileName "validation-result.json"
 $targetedResult = Read-OptionalJson -FileName "targeted-validation-result.json"
 $routingResult = Read-OptionalJson -FileName "change-routing-tests.json"
 
+if ([string]::IsNullOrWhiteSpace($HeavyTargetedReason)) {
+    throw "HeavyTargetedReason must be non-empty."
+}
+$actualUniqueCoverage = @()
+if ($HeavyTargetedStatus -eq "executed") {
+    if ($null -eq $routingResult -or -not [bool]$routingResult.targeted_regression_executed -or @($routingResult.targeted_execution).Count -eq 0) {
+        throw "Executed heavy targeted regression requires complete routing evidence."
+    }
+    if (@($routingResult.targeted_execution | Where-Object {
+        [string]$_.status -ne "PASS" -or [string]::IsNullOrWhiteSpace([string]$_.unique_coverage_category)
+    }).Count -gt 0) {
+        throw "Executed heavy targeted routing evidence is incomplete or failed."
+    }
+    if (-not $normalizedAllowlist.Contains("change-routing-tests.json")) {
+        throw "Executed heavy targeted regression requires change-routing-tests.json in the success allowlist."
+    }
+    $actualUniqueCoverage = @($routingResult.targeted_execution | ForEach-Object {
+        [string]$_.unique_coverage_category
+    } | Sort-Object -Unique)
+}
+elseif ($null -ne $routingResult) {
+    throw "Skipped or not-applicable heavy targeted regression must not include routing execution evidence."
+}
+elseif ($normalizedAllowlist.Contains("change-routing-tests.json")) {
+    throw "Skipped or not-applicable heavy targeted regression must not require change-routing-tests.json."
+}
+
 $releaseChecks = @()
 if ($null -ne $releaseResult) {
     $releaseChecks = @($releaseResult.checks | ForEach-Object {
@@ -105,6 +134,11 @@ $manifest = [ordered]@{
         host = $HostIdentity
     }
     outcome = $Outcome
+    heavy_targeted = [ordered]@{
+        status = $HeavyTargetedStatus
+        reason = $HeavyTargetedReason
+        actual_unique_coverage = $actualUniqueCoverage
+    }
     executed = [ordered]@{
         release_checks = $releaseChecks
         targeted_suites = $targetedTelemetry

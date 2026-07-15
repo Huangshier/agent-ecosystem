@@ -25,7 +25,8 @@ try {
         telemetry = @([ordered]@{ suite = "fixture-suite"; case = "fixture-case"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.001Z"; duration_ms = 1; unique_coverage_category = "fixture-coverage" })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $scratch "targeted-validation-result.json") -Encoding UTF8
     [ordered]@{
-        targeted_execution = @([ordered]@{ suite = @("fixture-suite"); case = "routing-case"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.002Z"; duration_ms = 2; unique_coverage_category = "routing-regression:fixture" })
+        targeted_regression_executed = $true
+        targeted_execution = @([ordered]@{ suite = @("fixture-suite"); case = "routing-case"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.002Z"; duration_ms = 2; unique_coverage_category = "routing-regression:fixture"; status = "PASS" })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $scratch "change-routing-tests.json") -Encoding UTF8
     "large fixture payload" | Set-Content -LiteralPath (Join-Path $scratch "regenerable-fixture-tree/payload.txt") -Encoding UTF8
 
@@ -37,6 +38,8 @@ try {
         -RunAttempt "2" `
         -JobName "validate" `
         -HostIdentity "Windows-Core-7.5" `
+        -HeavyTargetedStatus executed `
+        -HeavyTargetedReason "self-protection-control-surface" `
         -SuccessAllowlist @("validation-result.json", "validation-output.json", "targeted-validation-result.json", "change-routing-tests.json", "evidence-manifest.json") | Out-Null
 
     $manifestPath = Join-Path $scratch "evidence-manifest.json"
@@ -47,6 +50,7 @@ try {
     Assert-Contract ($manifest.identity.run_id -ceq "123" -and $manifest.identity.run_attempt -ceq "2" -and $manifest.identity.job -ceq "validate" -and $manifest.identity.host -ceq "Windows-Core-7.5") "run-job-host-identity"
     Assert-Contract (@($manifest.executed.release_checks).Count -eq 1 -and [long]$manifest.executed.release_checks[0].duration_ms -eq 7) "release-duration"
     Assert-Contract (@($manifest.executed.targeted_suites).Count -eq 1 -and @($manifest.executed.routing_regressions).Count -eq 1) "executed-coverage"
+    Assert-Contract ($manifest.heavy_targeted.status -ceq "executed" -and $manifest.heavy_targeted.reason -ceq "self-protection-control-surface" -and @($manifest.heavy_targeted.actual_unique_coverage).Count -eq 1) "heavy-targeted-executed-evidence"
     Assert-Contract (@($manifest.artifact_contract.success.files) -notcontains "regenerable-fixture-tree/payload.txt") "success-excludes-regenerable-tree"
     Assert-Contract ($manifest.artifact_contract.failure.mode -ceq "full-scratch" -and [bool]$manifest.artifact_contract.failure.recursive) "failure-full-scratch"
     Assert-Contract (-not $manifestText.Contains($scratch)) "manifest-omits-local-path"
@@ -57,6 +61,7 @@ try {
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
     Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 4) "four-manifest-call-sites"
     Assert-Contract ($workflow.Contains('Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")')) "matrix-success-allowlist-follows-executed-routing"
+    Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
     Assert-Contract (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression[^\r\n]*[\r\n]+\s*(?:\(Join-Path|-Json -OutputPath)")).Count -eq 2) "routing-evidence-written-directly"
     Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
     Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
@@ -84,6 +89,44 @@ try {
         -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
     $failureManifest = Get-Content -LiteralPath (Join-Path $failureScratch "evidence-manifest.json") -Raw | ConvertFrom-Json
     Assert-Contract ($failureManifest.outcome -ceq "failure" -and $failureManifest.artifact_contract.failure.preserve_all_generated_files) "failure-policy-fixture"
+
+    $skippedScratch = Join-Path $scratch "skipped-case"
+    New-Item -ItemType Directory -Force -Path $skippedScratch | Out-Null
+    Copy-Item -LiteralPath (Join-Path $scratch "validation-result.json") -Destination (Join-Path $skippedScratch "validation-result.json")
+    & $writer `
+        -ScratchRoot $skippedScratch `
+        -Outcome success `
+        -CommitSha $commitSha `
+        -RunId "125" `
+        -RunAttempt "1" `
+        -JobName "validate-skipped" `
+        -HostIdentity "Windows-Core-7.5" `
+        -HeavyTargetedStatus skipped `
+        -HeavyTargetedReason "tier-3-full-covers-required-suites" `
+        -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+    $skippedManifest = Get-Content -LiteralPath (Join-Path $skippedScratch "evidence-manifest.json") -Raw | ConvertFrom-Json
+    Assert-Contract ($skippedManifest.heavy_targeted.status -ceq "skipped" -and @($skippedManifest.heavy_targeted.actual_unique_coverage).Count -eq 0 -and @($skippedManifest.artifact_contract.success.files) -notcontains "change-routing-tests.json") "heavy-targeted-skipped-evidence"
+
+    $contradictionScratch = Join-Path $scratch "contradiction-case"
+    New-Item -ItemType Directory -Force -Path $contradictionScratch | Out-Null
+    Copy-Item -LiteralPath (Join-Path $scratch "validation-result.json") -Destination (Join-Path $contradictionScratch "validation-result.json")
+    $contradictionFailed = $false
+    try {
+        & $writer -ScratchRoot $contradictionScratch -Outcome success -CommitSha $commitSha -RunId "126" -RunAttempt "1" -JobName "validate-contradiction" -HostIdentity "Windows-Desktop-5.1" -HeavyTargetedStatus executed -HeavyTargetedReason "fixture" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+    }
+    catch { $contradictionFailed = $true }
+    Assert-Contract $contradictionFailed "heavy-targeted-missing-evidence-fails-closed"
+
+    $skippedContradictionScratch = Join-Path $scratch "skipped-contradiction-case"
+    New-Item -ItemType Directory -Force -Path $skippedContradictionScratch | Out-Null
+    Copy-Item -LiteralPath (Join-Path $scratch "validation-result.json") -Destination (Join-Path $skippedContradictionScratch "validation-result.json")
+    Copy-Item -LiteralPath (Join-Path $scratch "change-routing-tests.json") -Destination (Join-Path $skippedContradictionScratch "change-routing-tests.json")
+    $skippedContradictionFailed = $false
+    try {
+        & $writer -ScratchRoot $skippedContradictionScratch -Outcome success -CommitSha $commitSha -RunId "127" -RunAttempt "1" -JobName "validate-skipped-contradiction" -HostIdentity "Windows-Core-7.5" -HeavyTargetedStatus skipped -HeavyTargetedReason "fixture" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+    }
+    catch { $skippedContradictionFailed = $true }
+    Assert-Contract $skippedContradictionFailed "heavy-targeted-skipped-with-evidence-fails-closed"
 
     $result = [ordered]@{ schema_version = 1; pass = $checks.Count; fail = 0; checks = @($checks.ToArray()) }
     if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 6 } else { Write-Output ("validation evidence contract fixtures: PASS={0} FAIL=0" -f $result.pass) }
