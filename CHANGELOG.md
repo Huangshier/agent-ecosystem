@@ -4,7 +4,30 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.6.0` release.
+- No unreleased public changes after the `v0.7.0` release.
+
+## v0.7.0 - 2026-07-15
+
+- Added schema-2 installer provenance and a read-only runtime status surface for
+  source identity, release/commit provenance, managed files, agent skill bridge
+  health, project template drift, and deterministic next actions. (Issue #244;
+  PRs #245-#250)
+- Connected project template drift to the installed context gate, including a
+  trusted status provider, conservative refresh guidance, and targeted routing
+  coverage. (Issue #251; PRs #252, #253)
+- Made the project-root `AGENTS.md` the single authoritative behavior contract
+  and reduced `.agents/AGENTS.md` to an engineering-memory guide. (Issue #256;
+  PR #257)
+- Reorganized the bilingual README around the Release → Runtime → Agent bridge
+  → Project lifecycle and defined a strict boundary between copyable GitHub
+  Release content and maintainer-only evidence. (Issue #262; PRs #263, #266)
+- Added risk-tiered validation, a fixed required gate, actual-diff routing for
+  main pushes, public-safe duration/identity/coverage evidence, success artifact
+  allowlists, failure full-scratch retention, and proven duplicate-heavy-work
+  elimination. (Issues #241, #254, #258, #264; PRs #242, #243, #255, #259,
+  #265, #267)
+- Grew full release validation from the `v0.6.0` 86-PASS baseline to
+  `PASS=92 FAIL=0 WARN=0 DEFERRED=0` on PowerShell 7 and Windows PowerShell 5.1.
 
 ## v0.6.0 - 2026-07-11
 
