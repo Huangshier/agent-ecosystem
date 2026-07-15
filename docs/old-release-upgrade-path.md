@@ -188,9 +188,12 @@ No upgrade or migration steps are needed for fresh installs.
 
 ## Rehearsal Evidence
 
-The `v0.4.6` → current `main` upgrade path has been rehearsed. See
-[Old-Release Rehearsal Evidence](old-release-rehearsal-evidence.md) for
-the full results.
+The `v0.6.0` → `v0.7.0` upgrade path has been rehearsed for this release.
+Earlier rehearsals remain in
+[Old-Release Rehearsal Evidence](old-release-rehearsal-evidence.md) as retained
+historical evidence; they are not deleted or rewritten. A publish-finalization
+branch SHA is provisional review evidence, not the final tag target. The final
+tag target is determined only after the authorized merge.
 
 ## Release Process Implications
 
