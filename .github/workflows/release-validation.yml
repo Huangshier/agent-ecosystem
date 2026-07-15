@@ -59,6 +59,7 @@ jobs:
           }
           $result | ConvertTo-Json -Depth 8 |
             Tee-Object -FilePath "$env:RUNNER_TEMP/change-classification.json"
+          $result = ./scripts/validation/release-classifier-output-contract.ps1 -Result $result
           "tier=$($result.detected_tier)" >> $env:GITHUB_OUTPUT
           "modules=$(@($result.affected_modules) -join ',')" >> $env:GITHUB_OUTPUT
           "base=$($result.base_ref)" >> $env:GITHUB_OUTPUT
