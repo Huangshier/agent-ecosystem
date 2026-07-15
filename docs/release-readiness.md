@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.6.0` published public release.
+Status: `v0.7.0` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -30,6 +30,33 @@ release validation growth to 81 passing checks. `v0.6.0` packages copy-first
 runtime installation with schema-2 migration, the explicit agent skill bridge,
 candidate intake, session-learning triggers, opt-in directory index diagnostics,
 and experience search correctness fixes.
+
+`v0.7.0` packages reliable runtime and project status, proactive project drift
+guidance, a single authoritative project behavior contract, lifecycle-oriented
+adoption docs, and risk-tiered release validation with evidence and cost
+guardrails.
+
+## v0.7.0 Published State
+
+Current `main` includes the post-`v0.6.0` stabilization changes summarized in
+`docs/releases/v0.7.0.md`. `v0.7.0` is aligned for tag and GitHub Release
+publication from the merge commit of the `v0.7.0` publish-finalization PR.
+
+GitHub Release `v0.7.0` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.0
+
+Tag target: merge commit for the `v0.7.0` publish-finalization PR.
+
+Local release validation for this alignment passed on PowerShell 7 and Windows
+PowerShell 5.1 with `PASS=92 FAIL=0 WARN=0 DEFERRED=0`.
+
+The `v0.6.0` to current-main isolated rehearsal passed for fresh
+install/status/uninstall, default copy-mode runtime upgrade, project template
+drift detection, conservative refresh for unmodified and customized projects,
+managed-file protection, and an explicit two-skill bridge.
+
+Release body source: `docs/releases/v0.7.0.md`, between `RELEASE_BODY_START`
+and `RELEASE_BODY_END`.
 
 ## v0.6.0 Published State
 
@@ -327,6 +354,11 @@ Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
   runtime, project refresh, bridge, compatibility, and command guidance.
 - `v0.6.0` final local release validation passed on PowerShell 7 and Windows
   PowerShell 5.1 with `PASS=86 FAIL=0 WARN=0 DEFERRED=0`.
+- Public release notes are present at `docs/releases/v0.7.0.md` with runtime
+  status, project refresh, compatibility, rollback, and public-boundary
+  guidance.
+- `v0.7.0` final local release validation passed on PowerShell 7 and Windows
+  PowerShell 5.1 with `PASS=92 FAIL=0 WARN=0 DEFERRED=0`.
 - Release validator thin-entrypoint closeout: `scripts/validate-release.ps1`
   refactored from 2,496 lines to 566 lines with 10 extracted validation helper
   modules; 62 checks preserved with identical output contract.

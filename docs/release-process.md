@@ -258,13 +258,22 @@ the upgrade path from a published tag to the current `main`.
 
 ### What to Rehearse
 
-1. **Runtime install upgrade**: Install from the source tag, then upgrade
-   from current `main` with `-Force`. Verify the install manifest.
+1. **Runtime install upgrade**: Install from the source tag, then upgrade from
+   the target release source through the ordinary default incremental install
+   path. A schema-2 runtime does not require `-Force`. Verify the install
+   manifest.
 2. **Project memory upgrade**: Bootstrap a project from the source tag's
    runtime, then upgrade the runtime and run memory upgrade analyze, hub
    lock check, context gate, and memory diagnosis.
 3. **Record evidence**: Add results to
    `docs/old-release-rehearsal-evidence.md`.
+
+For a schema-1 runtime whose managed content differs from the target source,
+the default installer fails closed and preserves the existing content. The
+maintainer must review or back up those differences first, and use
+`-ReplaceManaged` only after explicitly accepting replacement of managed
+content. `-Force` remains a deprecated compatibility alias for
+`-ReplaceManaged`; it is not a required or recommended rehearsal path.
 
 ### Minimum Source Tag
 

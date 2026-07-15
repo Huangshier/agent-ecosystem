@@ -155,3 +155,78 @@ scaffold migration for v0.6.0.
 - Agent-specific skill bridge targets remain an explicit post-install opt-in
   and were validated by the dedicated release fixture matrix rather than a live
   client directory.
+
+## Rehearsal: v0.6.0 → v0.7.0
+
+**Date**: 2026-07-15
+
+**Source tag**: `v0.6.0` (commit
+`65a857e69df253f058baa4198cffc675c0018a11`)
+
+**Target**: `v0.7.0` publish-finalization branch based on public `main`
+`f77562f165dfd4799986f3bbb23bbbc08e31e085`
+
+**Install mode**: copy
+
+**Profile**: `recommended`
+
+### Isolated runtime lifecycle
+
+1. A fresh current-main install created a schema-2 copy runtime with 175
+   managed files, exact source-commit identity, and no conflicts.
+2. Runtime status reported all 175 managed files as current. Because the source
+   was an untagged main commit, release provenance was correctly reported as
+   not recorded instead of inventing a version.
+3. Uninstall completed the schema-2 copy preflight, preserved unknown content,
+   and removed the isolated runtime.
+
+Result: **PASS**. Fresh install, status, managed-file accounting, provenance,
+and uninstall remain conservative and deterministic.
+
+### Runtime upgrade
+
+1. Installed the `v0.6.0` `recommended` profile into an isolated runtime with
+   171 managed files.
+2. Re-ran the current-main installer with the ordinary default command and no
+   replacement flag.
+3. The upgrade updated 18 files, left 157 unchanged, reported 0 conflicts, and
+   produced a current schema-2 copy manifest with 175 managed files.
+
+Result: **PASS**. An existing `v0.6.0` copy runtime upgrades directly through
+the default incremental path.
+
+### Existing project memory
+
+Two Simplified Chinese projects were created from the isolated `v0.6.0`
+runtime before the runtime upgrade. One project remained unmodified; the other
+customized `.agents/AGENTS.md` before refresh.
+
+- Both projects reported `optional-refresh` with
+  `template-baseline-drift` after the runtime upgrade.
+- The installed context gate used the trusted manifest-managed-copy provider
+  and offered the conservative `-RefreshUnmodifiedTemplates` action.
+- The unmodified project refreshed all 25 template files.
+- The customized project refreshed 24 of 25 files, skipped the customized
+  `.agents/AGENTS.md`, and preserved its SHA-256 value exactly.
+- Both projects ended in the `current` / `in-sync` state.
+
+Result: **PASS**. Project drift is visible, unmodified templates can refresh,
+and customized project memory remains protected.
+
+### Agent skill bridge
+
+An explicit bridge for `project-bootstrap` and `project-context-gate` completed
+with both links current and no stale, broken, conflicting, or unknown entries.
+
+Result: **PASS**. The bridge remains opt-in and status-visible after upgrade.
+
+### Limitations
+
+- The rehearsal used the `recommended` profile on Windows; full release
+  validation separately covers all profiles, supported operating systems, and
+  both PowerShell runtimes.
+- The rehearsal exercised two representative existing projects. It does not
+  replace project-specific review before accepting a suggested template
+  refresh.
+- Bridge targets were isolated client directories, not production client
+  runtimes.
