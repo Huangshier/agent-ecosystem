@@ -20,9 +20,29 @@ Pull requests are classified before expensive validation starts. The classifier 
 
 Text and JSON report the detected tier, required checks, skipped checks, escalation reason, changed paths, affected modules, and required suites. Targeted JSON evidence records the executed suite names, counts, and per-module coverage. A skipped check means it was not required; it is never reported as passing.
 
+Classifier JSON also owns a schema-1 `local_plan` for `iteration`, `pre_push`,
+and `release`. Run it through the single local entrypoint:
+
+```powershell
+./scripts/invoke-local-validation.ps1 -Stage iteration -BaseRef origin/main -HeadRef HEAD -DryRun
+./scripts/invoke-local-validation.ps1 -Stage pre-push -BaseRef origin/main -HeadRef HEAD
+```
+
+Iteration never runs full or heavy validation. Pre-push uses quick or targeted
+affected-module checks for Tier 0-2; Tier 3 uses the complete validator under
+PowerShell 7 and Windows PowerShell 5.1, plus the separate heavy targeted
+regression only when the classifier's fail-closed self-protection decision
+requires it. Release always keeps both local PowerShell full-validator hosts.
+Dry-run output includes exact commands, hosts, suites, reasons, and explicit
+skips. Executed plans add actual action and stage timestamps and durations;
+timing is observational and never changes pass/fail.
+Executed stages also checkpoint `local-validation-result.json` after each
+completed action, preserving prior evidence if a later long-running action is
+interrupted by the caller.
+
 The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
 
-The classifier job runs only deterministic path-classification and routing-contract tests. Executable knowledge, bootstrap, bridge, installer, and mixed-path targeted regressions run only with the explicit `-RunTargetedRegression` switch from Tier 3/full validation jobs, including `main` and manual dispatch. Documentation modules in mixed Tier 1/2 changes are covered by diff, parse, and public-safe base checks; every affected runtime module must still execute a mapped targeted suite. Only the two existing repository guard test surfaces map to `repository-guards`; future or unmapped `scripts/test-*` paths escalate to Tier 3.
+The classifier job runs only deterministic path-classification and routing-contract tests. Executable knowledge, bootstrap, bridge, installer, and mixed-path targeted regressions run through `test-heavy-targeted-regression.ps1`; the hosted workflow retains the compatible `test-validate-change.ps1 -RunTargetedRegression` spelling until a separately reviewed workflow change. Documentation modules in mixed Tier 1/2 changes are covered by diff, parse, and public-safe base checks; every affected runtime module must still execute a mapped targeted suite. Only the two existing repository guard test surfaces map to `repository-guards`; future or unmapped `scripts/test-*` paths escalate to Tier 3.
 
 ## Expected hosted cost
 

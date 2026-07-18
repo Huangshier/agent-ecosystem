@@ -11,6 +11,7 @@ $validator = Join-Path $PSScriptRoot "validate-change.ps1"
 $cases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/change-risk-fixtures/cases.json") -Raw | ConvertFrom-Json
 $classifierOutputContract = Join-Path $PSScriptRoot "validation/release-classifier-output-contract.ps1"
 $classifierOutputCases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") -Raw | ConvertFrom-Json
+$localPlanValidator = Join-Path $PSScriptRoot "test-local-validation-plan.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
@@ -258,6 +259,9 @@ if ($LASTEXITCODE -ne 0) {
 
 $pushRoutingResults = @(Invoke-PushRoutingFixtures)
 $classifierOutputResults = @(Invoke-ClassifierOutputContractFixtures)
+$localPlanRaw = @(& $localPlanValidator -Json) -join "`n"
+$localPlanResult = $localPlanRaw | ConvertFrom-Json
+if ([int]$localPlanResult.fail -ne 0 -or [int]$localPlanResult.pass -lt 8) { throw "Local validation plan fixtures returned incomplete evidence." }
 
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/release-validation.yml") -Raw
 $workflowMarkers = @(
@@ -327,7 +331,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + $pushRoutingResults.Count + $classifierOutputResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8

@@ -21,9 +21,28 @@ Classify a pull request or explicit path set before choosing validation cost:
 .\validate-change.ps1 -ChangedPath README.md,scripts/install.ps1 -Json
 ```
 
+Use the classifier-owned local plan instead of manually composing validators:
+
+```powershell
+.\invoke-local-validation.ps1 -Stage iteration -BaseRef origin/main -HeadRef HEAD -DryRun
+.\invoke-local-validation.ps1 -Stage pre-push -BaseRef origin/main -HeadRef HEAD
+.\invoke-local-validation.ps1 -Stage release -ChangedPath CHANGELOG.md
+```
+
+`iteration` never invokes the full release validator. `pre-push` runs affected
+checks for Tier 0-2 and preserves the PowerShell 7 plus Windows PowerShell 5.1
+full boundary for Tier 3. `release` always preserves that dual-host full
+boundary. `-DryRun -Json` reports each command, host, suite, reason, skipped
+action, and non-negative observational timing without executing validation.
+Executed stages checkpoint `local-validation-result.json` after every completed
+action so a caller timeout does not erase earlier evidence.
+The heavyweight classifier regression entrypoint is
+`test-heavy-targeted-regression.ps1`; `test-validate-change.ps1` remains the
+lightweight routing-contract entrypoint.
+
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
-`validate-release.ps1` remains the complete Tier 3 and release-boundary entrypoint.
+`validate-release.ps1` remains the complete Tier 3 and release-boundary validator.
 
 Explicitly bridge installed-copy skills into an agent client's verified skill
 directory:
