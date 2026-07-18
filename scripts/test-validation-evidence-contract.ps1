@@ -18,6 +18,8 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $scratch "regenerable-fixture-tree") | Out-Null
     [ordered]@{
         schema_version = 1
+        validation_shard = "RuntimePlatform"
+        shard_coverage = [ordered]@{ status = "PASS" }
         checks = @([ordered]@{ name = "fixture-check"; status = "PASS"; detail = "fixture"; data = $null; duration_ms = 7 })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $scratch "validation-result.json") -Encoding UTF8
     '{"output":"fixture"}' | Set-Content -LiteralPath (Join-Path $scratch "validation-output.json") -Encoding UTF8
@@ -48,6 +50,7 @@ try {
     Assert-Contract ($manifest.schema_version -eq 1) "schema-version"
     Assert-Contract ($manifest.identity.commit_sha -ceq $commitSha) "commit-identity"
     Assert-Contract ($manifest.identity.run_id -ceq "123" -and $manifest.identity.run_attempt -ceq "2" -and $manifest.identity.job -ceq "validate" -and $manifest.identity.host -ceq "Windows-Core-7.5") "run-job-host-identity"
+    Assert-Contract ($manifest.validation_shard -ceq "RuntimePlatform" -and $manifest.executed.validation_shard -ceq "RuntimePlatform" -and @($manifest.executed.coverage_categories) -contains "release-validator:runtime-platform") "release-shard-evidence"
     Assert-Contract (@($manifest.executed.release_checks).Count -eq 1 -and [long]$manifest.executed.release_checks[0].duration_ms -eq 7) "release-duration"
     Assert-Contract (@($manifest.executed.targeted_suites).Count -eq 1 -and @($manifest.executed.routing_regressions).Count -eq 1) "executed-coverage"
     Assert-Contract ($manifest.heavy_targeted.status -ceq "executed" -and $manifest.heavy_targeted.reason -ceq "self-protection-control-surface" -and @($manifest.heavy_targeted.actual_unique_coverage).Count -eq 1) "heavy-targeted-executed-evidence"
@@ -56,10 +59,10 @@ try {
     Assert-Contract (-not $manifestText.Contains($scratch)) "manifest-omits-local-path"
 
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
-    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 4) "four-success-upload-contracts"
-    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 4) "four-failure-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 5) "five-success-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 5) "five-failure-upload-contracts"
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
-    Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 4) "four-manifest-call-sites"
+    Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 5) "five-manifest-call-sites"
     Assert-Contract ($workflow.Contains('Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")')) "matrix-success-allowlist-follows-executed-routing"
     Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
     Assert-Contract (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression[^\r\n]*[\r\n]+\s*(?:\(Join-Path|-Json -OutputPath)")).Count -eq 2) "routing-evidence-written-directly"
@@ -68,6 +71,7 @@ try {
     $failureUploadContracts = @(
         @("name: quick-validation-failure", 'path: ${{ runner.temp }}/agent-ecosystem-quick-validation'),
         @('name: targeted-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
+        @('name: validation-platform-neutral-failure', 'path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation'),
         @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation'),
         @("name: validation-windows-powershell-failure", 'path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
     )

@@ -536,10 +536,16 @@ try {
     }
     else {
         Add-Check "language policy templates" "FAIL" "Language policy guidance or bootstrap hot memory generation check failed." $evidence.language_policy
+        Add-Check "file-based memory template sources" "FAIL" "Language template validation did not complete the file-based source contract." @($fileTemplateEvidence)
+        Add-Check "first-session language auto-write behavior" "FAIL" "Language template validation did not complete the first-session auto-write contract." @($autoWriteEvidence)
+        Add-Check "missing language template fallback" "FAIL" "Language template validation did not complete the missing-template fallback contract." @($fallbackEvidence)
     }
 }
 catch {
     Add-Check "language policy templates" "FAIL" $_.Exception.Message
+    Add-Check "file-based memory template sources" "FAIL" "Blocked by the language template validation exception."
+    Add-Check "first-session language auto-write behavior" "FAIL" "Blocked by the language template validation exception."
+    Add-Check "missing language template fallback" "FAIL" "Blocked by the language template validation exception."
 }
 
 }

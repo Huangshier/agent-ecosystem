@@ -318,6 +318,6 @@ if ($Json.IsPresent) {
     Write-Output ("Escalation reason: {0}" -f $result.escalation_reason)
     Write-Output ("Affected modules: {0}" -f (@($result.affected_modules) -join ", "))
     Write-Output ("Run heavy targeted regression: {0} ({1})" -f $result.run_heavy_targeted_regression, $result.heavy_targeted_reason)
-    Write-Output ("Hosted plan: {0} full validator call(s), {1} targeted OS job(s)" -f $result.hosted_plan.full_validator_calls, $result.hosted_plan.targeted_os_jobs)
+    Write-Output ("Hosted plan: full={0}, platform-neutral={1}, runtime-platform={2}, targeted OS jobs={3}" -f $result.hosted_plan.full_validator_calls, $result.hosted_plan.platform_neutral_validator_calls, $result.hosted_plan.runtime_platform_validator_calls, $result.hosted_plan.targeted_os_jobs)
     Write-Output ("Local plan: iteration={0}, pre-push={1}, release={2} action(s)" -f @($result.local_plan.stages.iteration.actions).Count, @($result.local_plan.stages.pre_push.actions).Count, @($result.local_plan.stages.release.actions).Count)
 }

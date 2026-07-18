@@ -65,4 +65,22 @@ $expectedCoverageSuites = @(
 Assert-CoverageSuiteList -InputObject $Result -Name "heavy_targeted_required_suites" -Expected $expectedCoverageSuites
 Assert-CoverageSuiteList -InputObject $Result -Name "full_validator_coverage_suites" -Expected $expectedCoverageSuites
 
+$hostedPlan = Get-RequiredPropertyValue -InputObject $Result -Name "hosted_plan"
+foreach ($field in @("full_validator_calls", "platform_neutral_validator_calls", "runtime_platform_validator_calls", "targeted_os_jobs")) {
+    $value = Get-RequiredPropertyValue -InputObject $hostedPlan -Name $field
+    if ($value -isnot [int] -and $value -isnot [long]) {
+        throw "Classifier hosted_plan property '$field' must be an integer."
+    }
+    if ([int]$value -lt 0) {
+        throw "Classifier hosted_plan property '$field' must be non-negative."
+    }
+}
+if ([int]$Result.detected_tier -eq 3) {
+    if ([int]$hostedPlan.full_validator_calls -ne 0 -or
+        [int]$hostedPlan.platform_neutral_validator_calls -ne 1 -or
+        [int]$hostedPlan.runtime_platform_validator_calls -ne 4) {
+        throw "Tier 3 hosted_plan must route one platform-neutral and four runtime-platform validators without PR/push full calls."
+    }
+}
+
 Write-Output $Result

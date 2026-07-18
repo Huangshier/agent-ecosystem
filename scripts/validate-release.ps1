@@ -3,6 +3,8 @@ param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
     [string]$TargetVersion = "v0.7.0",
+    [ValidateSet("Full", "PlatformNeutral", "RuntimePlatform")]
+    [string]$ValidationShard = "Full",
     [switch]$Json
 )
 
@@ -12,11 +14,14 @@ $scriptDir = Split-Path -Parent $PSCommandPath
 $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "lib/path-guard.ps1")
 . (Join-Path $scriptDir "validation/release-test-helper.ps1")
+. (Join-Path $scriptDir "validation/release-shard-contract.ps1")
 . (Join-Path $scriptDir "validation/workflow-spec-lite-fixture-helper.ps1")
 . (Join-Path $scriptDir "validation/release-repository-checks.ps1")
+. (Join-Path $scriptDir "validation/release-hub-initialization-checks.ps1")
 . (Join-Path $scriptDir "validation/release-parser-safety-checks.ps1")
 . (Join-Path $scriptDir "validation/release-documentation-checks.ps1")
 . (Join-Path $scriptDir "validation/release-knowledge-hub-checks.ps1")
+. (Join-Path $scriptDir "validation/release-knowledge-search-checks.ps1")
 . (Join-Path $scriptDir "validation/release-template-language-checks.ps1")
 . (Join-Path $scriptDir "validation/release-installer-contract-checks.ps1")
 . (Join-Path $scriptDir "validation/release-agent-skill-bridge-checks.ps1")
@@ -230,28 +235,19 @@ Invoke-ReleaseClaudeHooksGuardrailsChecks
 
 }
 
-# Invoke-ReleaseValidationParserSafetyChecks: Delegates to Invoke-ReleaseParserSafetyChecks for git diff,
-# encoding, PowerShell/JSON parser, and public safety scan checks.
+# Invoke-ReleaseValidationParserSafetyChecks: Delegates the selected safety/parser responsibility.
 function Invoke-ReleaseValidationParserSafetyChecks {
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("PlatformNeutral", "RuntimePlatform")]
+    [string]$Shard
+)
 
-Invoke-ReleaseParserSafetyChecks
+Invoke-ReleaseParserSafetyChecks -ValidationShard $Shard
 
 }
 
-try {
-    Invoke-ReleaseValidationRepositoryChecks
-    Invoke-ReleaseValidationInstallerRuntimeChecks
-    Invoke-ReleaseValidationSpecAndDocumentationChecks
-    Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks
-    Invoke-ReleaseKnowledgeHubChecks
-    Invoke-ReleaseValidationParserSafetyChecks
-    Invoke-ReleaseValidationLanguageTemplateChecks
-    Invoke-ReleaseTemplateLanguageChecks
-}
-catch {
-    Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
-}
-
+function Invoke-ReleaseValidationRoadmapChecks {
 try {
     $thinRoadmapPath = Join-PathParts $repoRoot "docs" "roadmap" "release-validator-thin-entrypoint-plan.md"
     $thinRoadmapExists = Test-Path -LiteralPath $thinRoadmapPath
@@ -332,10 +328,49 @@ try {
 catch {
     Add-Check "cross-runtime compatibility audit" "FAIL" $_.Exception.Message
 }
+}
+
+try {
+    if ($ValidationShard -in @("Full", "PlatformNeutral")) {
+        Invoke-ReleaseValidationRepositoryChecks
+        Invoke-ReleaseValidationSpecAndDocumentationChecks
+        Invoke-ReleaseKnowledgeHubChecks
+        Invoke-ReleaseValidationParserSafetyChecks -Shard PlatformNeutral
+        Invoke-ReleaseTemplateLanguageChecks
+        Invoke-ReleaseValidationRoadmapChecks
+    }
+    if ($ValidationShard -in @("Full", "RuntimePlatform")) {
+        Invoke-ReleaseHubInitializationChecks
+        Invoke-ReleaseValidationInstallerRuntimeChecks
+        Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks
+        Invoke-ReleaseKnowledgeCandidateChecks
+        Invoke-ReleaseKnowledgeSearchChecks
+        Invoke-ReleaseValidationParserSafetyChecks -Shard RuntimePlatform
+        Invoke-ReleaseValidationLanguageTemplateChecks
+    }
+}
+catch {
+    Add-Check "validator execution" "FAIL" ("Unhandled validator error: {0}" -f $_.Exception.Message)
+}
+
+$shardCoverage = $null
+try {
+    $shardCoverage = Assert-ReleaseShardCoverage -ValidationShard $ValidationShard -Checks @($checks.ToArray())
+}
+catch {
+    Add-Check "release shard coverage" "FAIL" $_.Exception.Message
+    $shardCoverage = [ordered]@{
+        validation_shard = $ValidationShard
+        status = "FAIL"
+        error = $_.Exception.Message
+    }
+}
 
 $result = [ordered]@{
     schema_version = 1
     validated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+    validation_shard = $ValidationShard
+    shard_coverage = $shardCoverage
     repo_root = $repoRoot
     scratch_root = $scratchRootFull
     live_runtime_candidates = @($liveRuntimeCandidates)
