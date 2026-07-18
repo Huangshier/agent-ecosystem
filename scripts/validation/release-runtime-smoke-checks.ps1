@@ -373,6 +373,48 @@ try {
     $copySmoke = Invoke-RuntimeSmoke -RuntimeDir $script:recommendedCopyRuntime -Name "copy"
     $runtimeSmokeResults.Add($copySmoke)
 
+    $copyLockPath = Join-PathParts $copySmoke.project ".agents" "hub.lock.json"
+    $copyLockOriginal = [System.IO.File]::ReadAllText($copyLockPath)
+    try {
+        $legacyLock = $copyLockOriginal | ConvertFrom-Json
+        $legacyLock.hub_remote = "https://example.invalid/legacy-hub.git"
+        $legacyLock.hub_branch = "main"
+        $legacyLock.hub_commit = "0123456789abcdef0123456789abcdef01234567"
+        [System.IO.File]::WriteAllText($copyLockPath, ($legacyLock | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+
+        $sourceStatusScript = Join-PathParts $repoRoot "scripts" "status.ps1"
+        $installedStatusScript = Join-PathParts $script:recommendedCopyRuntime "scripts" "status.ps1"
+        $sourceLegacyCurrent = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
+        $installedLegacyCurrent = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
+        foreach ($payload in @($sourceLegacyCurrent, $installedLegacyCurrent)) {
+            if ([string]$payload.project.status -ne "current" -or [string]$payload.project.reason -ne "in-sync" -or
+                [string]$payload.recommended_next_action -ne "none") {
+                throw "Source and installed status providers did not accept the same trusted legacy managed-copy lock contract."
+            }
+        }
+
+        $legacyLock.template_tree_hash_sha256 = "0" * 64
+        [System.IO.File]::WriteAllText($copyLockPath, ($legacyLock | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+        $sourceLegacyDrift = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
+        $installedLegacyDrift = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
+        foreach ($payload in @($sourceLegacyDrift, $installedLegacyDrift)) {
+            if ([string]$payload.project.status -ne "optional-refresh" -or [string]$payload.project.reason -ne "template-baseline-drift" -or
+                [string]$payload.recommended_next_action -ne "refresh-project-templates") {
+                throw "Source and installed status providers did not map the same trusted managed-copy template drift contract."
+            }
+        }
+        $runtimeSmokeResults.Add([ordered]@{
+                name = "legacy-managed-copy-provider-contract"
+                source_current = [string]$sourceLegacyCurrent.project.status
+                installed_current = [string]$installedLegacyCurrent.project.status
+                source_drift = [string]$sourceLegacyDrift.project.status
+                installed_drift = [string]$installedLegacyDrift.project.status
+            })
+    }
+    finally {
+        [System.IO.File]::WriteAllText($copyLockPath, $copyLockOriginal, (New-Object System.Text.UTF8Encoding($false)))
+    }
+
     $sourceContextGate = Join-PathParts $repoRoot "skills" "project-context-gate" "scripts" "context_gate.ps1"
     $runtimeSmokeResults.Add([ordered]@{
             name = "source"

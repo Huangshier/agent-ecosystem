@@ -5,6 +5,10 @@ function Get-RecommendedNextAction {
         function Get-ActionProperty {
             param([Parameter(Mandatory = $true)][object]$InputObject, [Parameter(Mandatory = $true)][string]$Name)
             if ($InputObject -is [string] -or $InputObject -is [System.Array]) { throw "invalid payload shape" }
+            if ($InputObject -is [System.Collections.IDictionary]) {
+                if (-not $InputObject.Contains($Name)) { throw "missing payload property" }
+                return $InputObject[$Name]
+            }
             $property = $InputObject.PSObject.Properties[$Name]
             if ($null -eq $property) { throw "missing payload property" }
             return $property.Value

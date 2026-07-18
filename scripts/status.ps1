@@ -142,14 +142,14 @@ function Get-ValidatedMemoryFindingCodes {
 }
 
 function Set-ProjectStatus {
-    param([object]$Payload, [string]$Root)
+    param([object]$Payload, [string]$Root, [string]$RuntimeRoot)
     if ([string]::IsNullOrWhiteSpace($Root)) { return }
 
     $repoRoot = Split-Path -Parent $scriptDir
     $lockScript = if ([string]::IsNullOrWhiteSpace($LockHelperPath)) { Join-Path $repoRoot "skills/project-bootstrap/scripts/check_hub_lock.ps1" } else { $LockHelperPath }
     $upgradeScript = if ([string]::IsNullOrWhiteSpace($UpgradeHelperPath)) { Join-Path $repoRoot "skills/project-bootstrap/scripts/memory_upgrade.ps1" } else { $UpgradeHelperPath }
     $diagnoseScript = if ([string]::IsNullOrWhiteSpace($DiagnoseHelperPath)) { Join-Path $repoRoot "skills/memory-governance/scripts/memory_diagnose.ps1" } else { $DiagnoseHelperPath }
-    $lockPayload = Invoke-ProjectJsonHelper -ScriptPath $lockScript -Parameters @{ ProjectDir = @($Root); Json = $true }
+    $lockPayload = Invoke-ProjectJsonHelper -ScriptPath $lockScript -Parameters @{ ProjectDir = @($Root); RuntimeDir = $RuntimeRoot; Json = $true }
     $lockSchemaProperty = if (Test-ProjectHelperObject -Value $lockPayload) { $lockPayload.PSObject.Properties["schema_version"] } else { $null }
     $lockResultsProperty = if (Test-ProjectHelperObject -Value $lockPayload) { $lockPayload.PSObject.Properties["results"] } else { $null }
     if (-not (Test-ProjectHelperObject -Value $lockPayload) -or $null -eq $lockSchemaProperty -or $null -eq $lockResultsProperty -or
@@ -990,7 +990,7 @@ function Write-RuntimeStatusText {
 
 $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeDir)
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
-try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir }
+try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
 catch { Reset-ProjectUnavailable -Payload $statusPayload }
 $statusPayload.recommended_next_action = Get-RecommendedNextAction -Payload $statusPayload
 if ($Json.IsPresent) {
