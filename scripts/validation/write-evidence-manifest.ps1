@@ -88,7 +88,15 @@ elseif ($normalizedAllowlist.Contains("change-routing-tests.json")) {
 }
 
 $releaseChecks = @()
+$validationShard = "not-applicable"
 if ($null -ne $releaseResult) {
+    $validationShard = [string]$releaseResult.validation_shard
+    if ($validationShard -notin @("Full", "PlatformNeutral", "RuntimePlatform")) {
+        throw "validation-result.json is missing a recognized validation_shard."
+    }
+    if ($Outcome -eq "success" -and [string]$releaseResult.shard_coverage.status -cne "PASS") {
+        throw "Successful release evidence requires a passing shard coverage contract."
+    }
     $releaseChecks = @($releaseResult.checks | ForEach-Object {
         [ordered]@{
             name = [string]$_.name
@@ -116,7 +124,12 @@ foreach ($record in @($targetedTelemetry) + @($routingRegressions)) {
     }
 }
 if ($releaseChecks.Count -gt 0) {
-    $coverageCategories.Add("release-validator-checks")
+    $categoryShard = switch ($validationShard) {
+        "PlatformNeutral" { "platform-neutral" }
+        "RuntimePlatform" { "runtime-platform" }
+        default { "full" }
+    }
+    $coverageCategories.Add(("release-validator:{0}" -f $categoryShard))
 }
 
 $availableTopLevelFiles = @(
@@ -134,6 +147,7 @@ $manifest = [ordered]@{
         host = $HostIdentity
     }
     outcome = $Outcome
+    validation_shard = $validationShard
     heavy_targeted = [ordered]@{
         status = $HeavyTargetedStatus
         reason = $HeavyTargetedReason
@@ -141,6 +155,7 @@ $manifest = [ordered]@{
     }
     executed = [ordered]@{
         release_checks = $releaseChecks
+        validation_shard = $validationShard
         targeted_suites = $targetedTelemetry
         routing_regressions = $routingRegressions
         coverage_categories = @($coverageCategories.ToArray())

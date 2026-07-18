@@ -18,26 +18,26 @@
     "0": {
       "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard"],
       "skipped_checks": ["quick-repository-checks", "targeted-module-checks", "full-release-matrix"],
-      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "targeted_os_jobs": 0 }
+      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "platform_neutral_validator_calls": 0, "runtime_platform_validator_calls": 0, "targeted_os_jobs": 0 }
     },
     "1": {
       "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "quick-repository-checks", "targeted-module-checks", "base-guard", "identity-guard"],
       "skipped_checks": ["full-release-matrix"],
-      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "targeted_os_jobs": 0 }
+      "hosted_plan": { "validation_jobs": ["classify", "quick-validation"], "full_validator_calls": 0, "platform_neutral_validator_calls": 0, "runtime_platform_validator_calls": 0, "targeted_os_jobs": 0 }
     },
     "2": {
       "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "quick-repository-checks", "targeted-module-checks", "base-guard", "identity-guard"],
       "skipped_checks": ["full-release-matrix"],
-      "hosted_plan": { "validation_jobs": ["classify", "targeted-validation"], "full_validator_calls": 0, "targeted_os_jobs": 3 }
+      "hosted_plan": { "validation_jobs": ["classify", "targeted-validation"], "full_validator_calls": 0, "platform_neutral_validator_calls": 0, "runtime_platform_validator_calls": 0, "targeted_os_jobs": 3 }
     },
     "3": {
       "required_checks": ["change-classification", "base-guard", "identity-guard", "full-release-matrix"],
       "skipped_checks": [],
-      "hosted_plan": { "validation_jobs": ["classify", "validate", "validate-windows-powershell"], "full_validator_calls": 4, "targeted_os_jobs": 0 }
+      "hosted_plan": { "validation_jobs": ["classify", "validate-platform-neutral", "validate", "validate-windows-powershell"], "full_validator_calls": 0, "platform_neutral_validator_calls": 1, "runtime_platform_validator_calls": 4, "targeted_os_jobs": 0 }
     }
   },
   "rules": [
-    { "id": "validation-routing", "tier": 3, "pattern": "^(scripts/(validate-(change|targeted-change)|invoke-local-validation)\\.ps1|scripts/test-(validate-change|heavy-targeted-regression|local-validation-plan)\\.ps1|scripts/validation/(change-risk-rules\\.json|change-risk-fixtures/|local-validation-plan-contract\\.ps1$)|\\.github/workflows/release-validation\\.yml$)", "modules": ["validation-routing"] },
+    { "id": "validation-routing", "tier": 3, "pattern": "^(scripts/(validate-(change|targeted-change)|invoke-local-validation)\\.ps1|scripts/test-(validate-change|heavy-targeted-regression|local-validation-plan|release-sharding)\\.ps1|scripts/validation/(change-risk-rules\\.json|change-risk-fixtures/|local-validation-plan-contract\\.ps1$|release-shard-contract\\.(json|ps1)$)|\\.github/workflows/release-validation\\.yml$)", "modules": ["validation-routing"] },
     { "id": "release-and-cross-module-contract", "tier": 3, "pattern": "^(CHANGELOG\\.md$|VERSION$|docs/releases/|docs/release-(process|readiness)\\.md$|profiles/|schemas?/|scripts/validate-release\\.ps1$|scripts/validation/release-|\\.github/workflows/)", "modules": ["release"] },
     { "id": "agent-skill-bridge", "tier": 2, "pattern": "^scripts/link-agent-skills\\.ps1$", "modules": ["bridge"] },
     { "id": "installer-runtime", "tier": 2, "pattern": "^scripts/(install|uninstall)\\.ps1$", "modules": ["installer", "runtime"] },

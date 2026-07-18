@@ -42,7 +42,11 @@ lightweight routing-contract entrypoint.
 
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
-`validate-release.ps1` remains the complete Tier 3 and release-boundary validator.
+`validate-release.ps1` remains the authoritative validator and accepts
+`-ValidationShard Full`, `PlatformNeutral`, or `RuntimePlatform`. Hosted Tier 3
+validation runs the platform-neutral shard once and the runtime/platform shard
+on the required host matrix. Manual dispatch and release checkpoints retain the
+complete validator on every required host.
 
 Explicitly bridge installed-copy skills into an agent client's verified skill
 directory:

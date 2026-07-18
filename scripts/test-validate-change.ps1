@@ -204,6 +204,8 @@ foreach ($case in @($cases)) {
     $value = $raw | ConvertFrom-Json
     if ([int]$value.detected_tier -ne [int]$case.tier) { throw "Case '$($case.name)' expected Tier $($case.tier), got Tier $($value.detected_tier)." }
     if ($null -ne $case.full_validator_calls -and [int]$value.hosted_plan.full_validator_calls -ne [int]$case.full_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted full-validator call count." }
+    if ($null -ne $case.platform_neutral_validator_calls -and [int]$value.hosted_plan.platform_neutral_validator_calls -ne [int]$case.platform_neutral_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted platform-neutral call count." }
+    if ($null -ne $case.runtime_platform_validator_calls -and [int]$value.hosted_plan.runtime_platform_validator_calls -ne [int]$case.runtime_platform_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted runtime-platform call count." }
     if ($null -ne $case.targeted_os_jobs -and [int]$value.hosted_plan.targeted_os_jobs -ne [int]$case.targeted_os_jobs) { throw "Case '$($case.name)' has an incorrect hosted targeted OS job count." }
     if ($null -ne $case.affected_modules) {
         $actualModules = @($value.affected_modules | Sort-Object)
@@ -286,8 +288,8 @@ $firstClassifierOutputIndex = $workflow.IndexOf('"tier=$($result.detected_tier)"
 if ($classifierContractIndex -lt 0 -or $firstClassifierOutputIndex -lt 0 -or $classifierContractIndex -gt $firstClassifierOutputIndex) {
     throw "Classifier schema validation must complete before the first GITHUB_OUTPUT write."
 }
-$fullCallSites = @([regex]::Matches($workflow, "validate-release\.ps1")).Count
-if ($fullCallSites -ne 2) { throw "Expected two full-validator workflow call sites, found $fullCallSites." }
+$releaseValidatorCallSites = @([regex]::Matches($workflow, "validate-release\.ps1")).Count
+if ($releaseValidatorCallSites -ne 3) { throw "Expected one platform-neutral and two runtime/full validator workflow call sites, found $releaseValidatorCallSites." }
 foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/", "scripts/install.ps1")) {
     if ($workflow.Contains($duplicatedRuleToken)) { throw "Workflow duplicates a path-routing rule: $duplicatedRuleToken" }
 }

@@ -1,15 +1,20 @@
 # release-parser-safety-checks.ps1
 # Extracted from scripts/validate-release.ps1 Invoke-ReleaseValidationParserSafetyChecks (Phase 2).
-# Runs git diff, encoding, PowerShell/JSON parser, and public safety scan checks.
+# Routes repository safety checks to PlatformNeutral and parser compatibility checks to RuntimePlatform.
 # Depends on: release-test-helper.ps1 (Add-Check, ConvertTo-DisplayPath, Get-GitFiles, Get-LineMatches,
 #             Get-ValidationFilesByExtension, Test-BytesHaveUtf8Bom, Test-BytesHaveNonAscii,
 #             Get-PowerShellParseError), path-guard.ps1 (Join-PathParts).
 # Scope: script-level $repoRoot, $script:evidence, $checks.
 
-# Invoke-ReleaseParserSafetyChecks: No parameters; runs git diff, encoding, PowerShell/JSON parser,
-# and public safety scan checks in the original order.
+# Invoke-ReleaseParserSafetyChecks: Runs the selected parser/safety responsibility shard.
 function Invoke-ReleaseParserSafetyChecks {
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("PlatformNeutral", "RuntimePlatform")]
+    [string]$ValidationShard
+)
 
+if ($ValidationShard -ceq "PlatformNeutral") {
 try {
     $gitDiffCheck = & git -c core.autocrlf=false -c core.safecrlf=false -C $repoRoot diff --check 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -20,7 +25,9 @@ try {
 catch {
     Add-Check "git diff check" "FAIL" $_.Exception.Message
 }
+}
 
+if ($ValidationShard -ceq "RuntimePlatform") {
 try {
     $encodingErrors = New-Object 'System.Collections.Generic.List[string]'
     $psFiles = @(Get-ValidationFilesByExtension -Root $repoRoot -Filter "*.ps1")
@@ -90,7 +97,9 @@ try {
 catch {
     Add-Check "JSON parse" "FAIL" $_.Exception.Message
 }
+}
 
+if ($ValidationShard -ceq "PlatformNeutral") {
 try {
     $gitFiles = @(Get-GitFiles)
     $highRiskPatterns = @(
@@ -146,6 +155,10 @@ try {
         "scripts/validation/release-bootstrap-checks.ps1",
         "scripts/validation/release-claude-hooks-guardrails-checks.ps1",
         "scripts/validation/release-project-template-checks.ps1",
+        "scripts/validation/release-hub-initialization-checks.ps1",
+        "scripts/validation/release-knowledge-search-checks.ps1",
+        "scripts/validation/release-shard-contract.ps1",
+        "scripts/validation/release-shard-contract.json",
         "scripts/validation/release-template-language-checks.ps1",
         "scripts/validation/release-eval-iteration-checks.ps1",
         "scripts/validation/release-memory-diagnostics-fixture-checks.ps1",
@@ -195,6 +208,7 @@ try {
 }
 catch {
     Add-Check "sensitive audit" "FAIL" $_.Exception.Message
+}
 }
 
 }

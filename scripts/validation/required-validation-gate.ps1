@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ClassifyResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$QuickResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$TargetedResult,
-    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$FullPwshResult,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PlatformNeutralResult,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PwshMatrixResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$WindowsPowerShellResult,
     [switch]$Json
 )
@@ -19,7 +20,8 @@ $results = [ordered]@{
     classify = $ClassifyResult
     quick = $QuickResult
     targeted = $TargetedResult
-    full_pwsh = $FullPwshResult
+    platform_neutral = $PlatformNeutralResult
+    pwsh_matrix = $PwshMatrixResult
     windows_powershell = $WindowsPowerShellResult
 }
 
@@ -41,21 +43,21 @@ foreach ($entry in $results.GetEnumerator()) {
 $expected = if ($EventName -ceq "pull_request" -or $EventName -ceq "push") {
     switch ($Tier) {
         { $_ -ceq "0" -or $_ -ceq "1" } {
-            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; full_pwsh = "skipped"; windows_powershell = "skipped" }
+            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; platform_neutral = "skipped"; pwsh_matrix = "skipped"; windows_powershell = "skipped" }
             break
         }
         "2" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; full_pwsh = "skipped"; windows_powershell = "skipped" }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; platform_neutral = "skipped"; pwsh_matrix = "skipped"; windows_powershell = "skipped" }
             break
         }
         "3" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; full_pwsh = "success"; windows_powershell = "success" }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; platform_neutral = "success"; pwsh_matrix = "success"; windows_powershell = "success" }
             break
         }
     }
 }
 else {
-    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; full_pwsh = "success"; windows_powershell = "success" }
+    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; platform_neutral = "skipped"; pwsh_matrix = "success"; windows_powershell = "success" }
 }
 
 $mismatches = New-Object 'System.Collections.Generic.List[string]'

@@ -26,11 +26,28 @@ jobs:
       head: ${{ steps.risk.outputs.head }}
       run_heavy_targeted_regression: ${{ steps.risk.outputs.run_heavy_targeted_regression }}
       heavy_targeted_reason: ${{ steps.risk.outputs.heavy_targeted_reason }}
+      validation_sha: ${{ steps.target.outputs.sha }}
     steps:
+      - name: Resolve validation SHA
+        id: target
+        shell: pwsh
+        run: |
+          $sha = if ("${{ github.event_name }}" -eq "pull_request") {
+            "${{ github.event.pull_request.head.sha }}"
+          }
+          else {
+            "${{ github.sha }}"
+          }
+          if ($sha -notmatch '^[0-9a-fA-F]{40}$') {
+            throw "Validation SHA must be a 40-character commit ID."
+          }
+          "sha=$($sha.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ steps.target.outputs.sha }}
 
       - name: Classify change risk and test routing contract
         id: risk
@@ -87,6 +104,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ needs.classify.outputs.validation_sha }}
       - name: Run quick checks
         shell: pwsh
         run: |
@@ -107,7 +125,7 @@ jobs:
           ./scripts/validation/write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
-            -CommitSha "${{ github.sha }}" `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
             -RunId "${{ github.run_id }}" `
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
@@ -144,6 +162,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ needs.classify.outputs.validation_sha }}
       - name: Run affected-module checks
         shell: pwsh
         run: |
@@ -164,7 +183,7 @@ jobs:
           ./scripts/validation/write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
-            -CommitSha "${{ github.sha }}" `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
             -RunId "${{ github.run_id }}" `
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
@@ -187,6 +206,61 @@ jobs:
           path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
           if-no-files-found: error
 
+  validate-platform-neutral:
+    name: validate platform-neutral contracts
+    needs: classify
+    if: always() && github.event_name != 'workflow_dispatch' && (needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head or push commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.validation_sha }}
+
+      - name: Run platform-neutral release contracts once
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-platform-neutral-validation"
+          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+          ./scripts/validate-release.ps1 `
+            -ValidationShard PlatformNeutral `
+            -ScratchRoot $scratch `
+            -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
+
+      - name: Write platform-neutral validation evidence manifest
+        if: always()
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-platform-neutral-validation"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          ./scripts/validation/write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -SuccessAllowlist @("validation-result.json", "evidence-manifest.json")
+      - name: Upload platform-neutral validation success evidence
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-platform-neutral
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation/validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation/evidence-manifest.json
+          if-no-files-found: error
+      - name: Upload platform-neutral validation failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-platform-neutral-failure
+          path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation
+          if-no-files-found: error
+
   validate:
     name: validate pwsh (${{ matrix.os }})
     needs: classify
@@ -203,6 +277,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.validation_sha }}
 
       - name: Run Tier 3 targeted routing regressions
         if: (needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')) && matrix.os == 'windows-latest'
@@ -218,7 +294,8 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          ./scripts/validate-release.ps1 -ScratchRoot $scratch -Json |
+          $shard = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "Full" } else { "RuntimePlatform" }
+          ./scripts/validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
       - name: Write validation evidence manifest
@@ -242,7 +319,7 @@ jobs:
           ./scripts/validation/write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
-            -CommitSha "${{ github.sha }}" `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
             -RunId "${{ github.run_id }}" `
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
@@ -277,6 +354,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.validation_sha }}
 
       - name: Run Tier 3 targeted routing regressions
         if: needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')
@@ -292,7 +371,8 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot $scratch -Json |
+          $shard = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "Full" } else { "RuntimePlatform" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
       - name: Write validation evidence manifest
@@ -311,7 +391,7 @@ jobs:
           .\scripts\validation\write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
-            -CommitSha "${{ github.sha }}" `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
             -RunId "${{ github.run_id }}" `
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
@@ -344,12 +424,15 @@ jobs:
       - classify
       - quick-validation
       - targeted-validation
+      - validate-platform-neutral
       - validate
       - validate-windows-powershell
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.classify.outputs.validation_sha }}
 
       - name: Evaluate required validation contract
         shell: pwsh
@@ -359,7 +442,8 @@ jobs:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           QUICK_RESULT: ${{ needs.quick-validation.result }}
           TARGETED_RESULT: ${{ needs.targeted-validation.result }}
-          FULL_PWSH_RESULT: ${{ needs.validate.result }}
+          PLATFORM_NEUTRAL_RESULT: ${{ needs.validate-platform-neutral.result }}
+          PWSH_MATRIX_RESULT: ${{ needs.validate.result }}
           WINDOWS_POWERSHELL_RESULT: ${{ needs.validate-windows-powershell.result }}
         run: |
           ./scripts/validation/required-validation-gate.ps1 `
@@ -368,5 +452,6 @@ jobs:
             -ClassifyResult $env:CLASSIFY_RESULT `
             -QuickResult $env:QUICK_RESULT `
             -TargetedResult $env:TARGETED_RESULT `
-            -FullPwshResult $env:FULL_PWSH_RESULT `
+            -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
+            -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
             -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT
