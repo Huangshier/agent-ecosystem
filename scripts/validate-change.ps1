@@ -20,6 +20,109 @@ $defaultRepoRoot = Split-Path -Parent $scriptDir
 $repoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) { $defaultRepoRoot } else { [System.IO.Path]::GetFullPath($RepositoryRoot) }
 $rulesPath = Join-Path $scriptDir "validation/change-risk-rules.json"
 
+function New-LocalValidationAction {
+    param(
+        [string]$Id,
+        [string]$Script,
+        [string[]]$Arguments,
+        [string]$HostName,
+        [string]$Suite,
+        [string]$Reason
+    )
+    return [ordered]@{
+        id = $Id
+        script = $Script
+        arguments = @($Arguments)
+        host = $HostName
+        suite = $Suite
+        reason = $Reason
+    }
+}
+
+function New-LocalValidationSkip {
+    param([string]$Id, [string]$Reason)
+    return [ordered]@{ id = $Id; status = "SKIPPED"; reason = $Reason }
+}
+
+function New-LocalValidationPlan {
+    param([int]$Tier, [bool]$RunHeavyTargeted, [string]$HeavyTargetedReason)
+
+    $lightweight = New-LocalValidationAction `
+        -Id "classifier-contracts" `
+        -Script "scripts/test-validate-change.ps1" `
+        -Arguments @() `
+        -HostName "current" `
+        -Suite "classification-and-routing-contracts" `
+        -Reason "Always verify deterministic classification and routing before costlier validation."
+    $targetedMode = if ($Tier -le 1) { "quick" } else { "targeted" }
+    $targeted = New-LocalValidationAction `
+        -Id "affected-change-validation" `
+        -Script "scripts/validate-targeted-change.ps1" `
+        -Arguments @("-Mode", $targetedMode) `
+        -HostName "current" `
+        -Suite ("tier-{0}-{1}" -f $Tier, $targetedMode) `
+        -Reason "Run the affected-module checks selected by the classifier."
+
+    $iterationActions = New-Object 'System.Collections.Generic.List[object]'
+    $iterationSkips = New-Object 'System.Collections.Generic.List[object]'
+    $iterationActions.Add($lightweight)
+    if ($Tier -lt 3) {
+        $iterationActions.Add($targeted)
+        $iterationSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Tier 0-2 iteration uses affected checks instead of full validation."))
+    }
+    else {
+        $iterationSkips.Add((New-LocalValidationSkip -Id "affected-change-validation" -Reason "Tier 3 cannot be represented by targeted validation."))
+        $iterationSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason "Iteration never runs heavy targeted regression; defer it to pre-push."))
+        $iterationSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Iteration never runs full validation; defer it to pre-push."))
+    }
+
+    $prePushActions = New-Object 'System.Collections.Generic.List[object]'
+    $prePushSkips = New-Object 'System.Collections.Generic.List[object]'
+    $prePushActions.Add($lightweight)
+    if ($Tier -lt 3) {
+        $prePushActions.Add($targeted)
+        $prePushSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Tier 0-2 pre-push validation is satisfied by affected checks."))
+    }
+    else {
+        $prePushSkips.Add((New-LocalValidationSkip -Id "affected-change-validation" -Reason "Tier 3 requires the complete validator."))
+        if ($RunHeavyTargeted) {
+            foreach ($hostName in @("pwsh", "windows-powershell")) {
+                $prePushActions.Add((New-LocalValidationAction -Id ("heavy-targeted-regression-{0}" -f $hostName) -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName $hostName -Suite "heavy-targeted-regression" -Reason $HeavyTargetedReason))
+            }
+        }
+        else {
+            $prePushSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason $HeavyTargetedReason))
+        }
+        foreach ($hostName in @("pwsh", "windows-powershell")) {
+            $prePushActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @() -HostName $hostName -Suite "full-release-validation" -Reason "Tier 3 pre-push preserves the complete dual-host local boundary."))
+        }
+    }
+
+    $releaseActions = New-Object 'System.Collections.Generic.List[object]'
+    $releaseSkips = New-Object 'System.Collections.Generic.List[object]'
+    $releaseActions.Add($lightweight)
+    if ($Tier -eq 3 -and $RunHeavyTargeted) {
+        foreach ($hostName in @("pwsh", "windows-powershell")) {
+            $releaseActions.Add((New-LocalValidationAction -Id ("heavy-targeted-regression-{0}" -f $hostName) -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName $hostName -Suite "heavy-targeted-regression" -Reason $HeavyTargetedReason))
+        }
+    }
+    else {
+        $releaseSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason $(if ($Tier -eq 3) { $HeavyTargetedReason } else { "Heavy targeted regression is a Tier 3 self-protection check." })))
+    }
+    foreach ($hostName in @("pwsh", "windows-powershell")) {
+        $releaseActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @() -HostName $hostName -Suite "full-release-validation" -Reason "Release validation always preserves the complete dual-host local boundary."))
+    }
+
+    return [ordered]@{
+        schema_version = 1
+        stages = [ordered]@{
+            iteration = [ordered]@{ actions = @($iterationActions.ToArray()); skipped = @($iterationSkips.ToArray()) }
+            pre_push = [ordered]@{ actions = @($prePushActions.ToArray()); skipped = @($prePushSkips.ToArray()) }
+            release = [ordered]@{ actions = @($releaseActions.ToArray()); skipped = @($releaseSkips.ToArray()) }
+        }
+    }
+}
+
 function New-ConservativeResult {
     param([string]$Reason, [string[]]$Paths = @(), [string]$Base = "", [string]$Head = "")
     return New-ChangeResult -Tier 3 -Paths $Paths -Reasons @($Reason) -Modules @("validation-routing") -Base $Base -Head $Head
@@ -93,6 +196,7 @@ function New-ChangeResult {
             $heavyTargetedReason = "tier-3-full-covers-required-suites"
         }
     }
+    $localPlan = New-LocalValidationPlan -Tier $Tier -RunHeavyTargeted $runHeavyTargeted -HeavyTargetedReason $heavyTargetedReason
     return [ordered]@{
         schema_version = 1
         detected_tier = $Tier
@@ -106,6 +210,7 @@ function New-ChangeResult {
         required_checks = @($tierContract.required_checks)
         skipped_checks = @($tierContract.skipped_checks)
         hosted_plan = $tierContract.hosted_plan
+        local_plan = $localPlan
         run_heavy_targeted_regression = [bool]$runHeavyTargeted
         heavy_targeted_reason = $heavyTargetedReason
         heavy_targeted_required_suites = $heavyTargetedRequiredSuites
@@ -205,7 +310,7 @@ try {
 $global:LASTEXITCODE = 0
 
 if ($Json.IsPresent) {
-    $result | ConvertTo-Json -Depth 8
+    $result | ConvertTo-Json -Depth 12
 } else {
     Write-Output ("Detected tier: Tier {0}" -f $result.detected_tier)
     Write-Output ("Required checks: {0}" -f (@($result.required_checks) -join ", "))
@@ -214,4 +319,5 @@ if ($Json.IsPresent) {
     Write-Output ("Affected modules: {0}" -f (@($result.affected_modules) -join ", "))
     Write-Output ("Run heavy targeted regression: {0} ({1})" -f $result.run_heavy_targeted_regression, $result.heavy_targeted_reason)
     Write-Output ("Hosted plan: {0} full validator call(s), {1} targeted OS job(s)" -f $result.hosted_plan.full_validator_calls, $result.hosted_plan.targeted_os_jobs)
+    Write-Output ("Local plan: iteration={0}, pre-push={1}, release={2} action(s)" -f @($result.local_plan.stages.iteration.actions).Count, @($result.local_plan.stages.pre_push.actions).Count, @($result.local_plan.stages.release.actions).Count)
 }
