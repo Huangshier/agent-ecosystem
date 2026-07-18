@@ -4,7 +4,13 @@
 # Depends on: release-test-helper.ps1, path-guard.ps1.
 
 function Invoke-ReleaseClaudeHooksGuardrailsChecks {
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("PlatformNeutral", "RuntimePlatform")]
+    [string]$ValidationShard
+)
 
+if ($ValidationShard -ceq "PlatformNeutral") {
 try {
     $contractPath = "docs/claude-code-hooks-guardrails.md"
     $contractText = Get-FileText -RelativePath $contractPath
@@ -247,7 +253,9 @@ try {
 catch {
     Add-Check "Claude hooks guardrails fixtures" "FAIL" $_.Exception.Message
 }
+}
 
+if ($ValidationShard -ceq "RuntimePlatform") {
 try {
     $runtimeValidatorPath = Join-PathParts $repoRoot "scripts" "validation" "test-claude-hooks-runtime.ps1"
     $runtimeResult = Invoke-IsolatedPowerShellScript -ScriptPath $runtimeValidatorPath -Arguments @(
@@ -268,6 +276,7 @@ try {
 }
 catch {
     Add-Check "Claude hooks runtime fixtures" "FAIL" $_.Exception.Message
+}
 }
 
 }

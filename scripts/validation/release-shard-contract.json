@@ -55,7 +55,6 @@
         "Claude hooks guardrails contract",
         "Claude hooks guardrails templates",
         "Claude hooks guardrails fixtures",
-        "Claude hooks runtime fixtures",
         "knowledge hub catalog",
         "experience lifecycle metadata",
         "experience promote closure",
@@ -100,7 +99,8 @@
         "language policy templates",
         "file-based memory template sources",
         "first-session language auto-write behavior",
-        "missing language template fallback"
+        "missing language template fallback",
+        "Claude hooks runtime fixtures"
       ]
     }
   },
@@ -117,6 +117,7 @@
     "Windows PowerShell script encoding",
     "PowerShell parse",
     "JSON parse",
-    "language policy templates"
+    "language policy templates",
+    "Claude hooks runtime fixtures"
   ]
 }

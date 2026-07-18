@@ -230,7 +230,7 @@ catch {
 
 Invoke-ReleaseGovernanceWorkflowChecks -RepositoryRoot $repoRoot
 
-Invoke-ReleaseClaudeHooksGuardrailsChecks
+Invoke-ReleaseClaudeHooksGuardrailsChecks -ValidationShard PlatformNeutral
 
 
 }
@@ -347,6 +347,7 @@ try {
         Invoke-ReleaseKnowledgeSearchChecks
         Invoke-ReleaseValidationParserSafetyChecks -Shard RuntimePlatform
         Invoke-ReleaseValidationLanguageTemplateChecks
+        Invoke-ReleaseClaudeHooksGuardrailsChecks -ValidationShard RuntimePlatform
     }
 }
 catch {

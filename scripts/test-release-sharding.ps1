@@ -21,8 +21,8 @@ $runtime = @(Get-ExpectedReleaseCheckNames -ValidationShard RuntimePlatform -Con
 $full = @(Get-ExpectedReleaseCheckNames -ValidationShard Full -Contract $contract)
 $intersection = @($neutral | Where-Object { $runtime -ccontains $_ })
 
-Assert-Fixture ($neutral.Count -eq 62) "platform-neutral-count"
-Assert-Fixture ($runtime.Count -eq 30) "runtime-platform-count"
+Assert-Fixture ($neutral.Count -eq 61) "platform-neutral-count"
+Assert-Fixture ($runtime.Count -eq 31) "runtime-platform-count"
 Assert-Fixture ($full.Count -eq 92) "full-union-count"
 Assert-Fixture ($intersection.Count -eq 0) "shards-disjoint"
 Assert-Fixture (@($full | Sort-Object -Unique).Count -eq 92) "full-check-ownership-unique"
@@ -40,7 +40,8 @@ foreach ($required in @(
     "Windows PowerShell script encoding",
     "PowerShell parse",
     "JSON parse",
-    "language policy templates"
+    "language policy templates",
+    "Claude hooks runtime fixtures"
 )) {
     Assert-Fixture ($runtime -ccontains $required) ("runtime-owns:{0}" -f $required)
 }

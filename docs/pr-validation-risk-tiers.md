@@ -45,8 +45,9 @@ The targeted mappings reuse existing release helpers and fixtures: knowledge cha
 Tier 3 sharding changes only execution placement. Repository, documentation,
 release, specification, evaluation, and governance contracts run once in the
 platform-neutral shard. Installer, runtime, bootstrap, path, link, encoding,
-PowerShell parsing, JSON parsing, language/template behavior, and other
-host-sensitive contracts remain in the runtime/platform shard. Windows
+PowerShell parsing, JSON parsing, language/template behavior, executable Claude
+hooks runtime fixtures, and other host-sensitive contracts remain in the
+runtime/platform shard. Windows
 PowerShell 5.1 therefore retains parsing, parameter-binding, sorting, path, and
 critical runtime compatibility coverage. `workflow_dispatch` and local release
 checkpoints run `Full` on all required hosts.
