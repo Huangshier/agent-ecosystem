@@ -1,11 +1,13 @@
 param(
     [string[]]$ProjectDir = @((Get-Location).Path),
     [string]$HubDir = "",
+    [string]$RuntimeDir = "",
     [switch]$Json
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "project_language.ps1")
+. (Join-Path $PSScriptRoot "managed_copy_hub_provenance.ps1")
 
 function Join-PathParts {
     param([string]$Root, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Children)
@@ -72,7 +74,7 @@ function Set-HubLockOutcome {
 }
 
 function Get-HubLockFacts {
-    param([string]$Project, [string]$HubOverride)
+    param([string]$Project, [string]$HubOverride, [string]$RuntimeRoot)
     $facts = New-HubLockFacts -Project $Project
     if (-not (Test-Path -LiteralPath $Project -PathType Container)) {
         return Set-HubLockOutcome $facts "unknown" "project-not-found" @("project-not-found")
@@ -127,7 +129,9 @@ function Get-HubLockFacts {
         $hasLockedGitMetadata = -not [string]::IsNullOrWhiteSpace($facts.locked_hub_remote) -or
             (-not [string]::IsNullOrWhiteSpace($facts.locked_hub_branch) -and $facts.locked_hub_branch -ne "UNKNOWN") -or
             (-not [string]::IsNullOrWhiteSpace($facts.locked_hub_commit) -and $facts.locked_hub_commit -ne "UNKNOWN")
-        if ($hasLockedGitMetadata) {
+        $trustedManagedCopy = -not [string]::IsNullOrWhiteSpace($RuntimeRoot) -and
+            (Test-TrustedManagedCopyHub -RuntimeDir $RuntimeRoot -HubDir $facts.resolved_hub_dir)
+        if ($hasLockedGitMetadata -and -not $trustedManagedCopy) {
             return Set-HubLockOutcome $facts "unknown" "hub-not-git" @("hub-not-git")
         }
         if ($facts.locked_hub_dirty) {
@@ -226,7 +230,7 @@ function Write-HubLockText {
 }
 
 $facts = @($ProjectDir | ForEach-Object {
-        try { Get-HubLockFacts -Project $_ -HubOverride $HubDir }
+        try { Get-HubLockFacts -Project $_ -HubOverride $HubDir -RuntimeRoot $RuntimeDir }
         catch { Set-HubLockOutcome (New-HubLockFacts -Project $_) "unknown" "internal-error" @("internal-error") }
     })
 

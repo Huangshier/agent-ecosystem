@@ -121,7 +121,7 @@ function Invoke-RuntimeStatusFixtureChecks {
         param([string]$Name, [string]$Kind, [string]$Json)
         $path = Join-PathParts $fixtureRoot "helpers" ("{0}.ps1" -f $Name)
         $parameters = switch ($Kind) {
-            "lock" { 'param([string[]]$ProjectDir, [switch]$Json)' }
+            "lock" { 'param([string[]]$ProjectDir, [string]$RuntimeDir, [switch]$Json)' }
             "upgrade" { 'param([string]$ProjectDir, [string]$Mode, [switch]$Json)' }
             default { 'param([string]$ProjectRoot, [switch]$Json)' }
         }
@@ -200,7 +200,56 @@ function Invoke-RuntimeStatusFixtureChecks {
             install_strategy = "copy"
             profile = "recommended"
             installed_at_utc = "2026-07-12T00:00:00.0000000Z"
+            target_dir = "."
             items = @()
+        }
+    }
+
+    function New-ManagedCopyProjectFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [ValidateSet("legacy-git", "copy")][string]$LockKind = "legacy-git"
+        )
+
+        $project = New-ProjectStatusFixture -Name ("managed-copy-{0}" -f $Name)
+        $runtime = Join-PathParts $fixtureRoot ("managed-copy-runtime-{0}" -f $Name)
+        $hub = Join-PathParts $runtime "knowledge-hub"
+        $templateFiles = @(
+            "templates/languages/en/project-root/AGENTS.md",
+            "templates/languages/en/project-agent/AGENTS.md"
+        )
+        $records = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($relativePath in $templateFiles) {
+            $livePath = Join-PathParts $hub $relativePath
+            Write-StatusText -Path $livePath -Text ("managed template {0}" -f $relativePath)
+            $hash = (Get-FileHash -LiteralPath $livePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $records.Add([ordered]@{ path = $relativePath; source_sha256 = $hash; installed_sha256 = $hash })
+        }
+        $manifest = New-CurrentManifest
+        $manifest.items = @([ordered]@{
+                name = "knowledge-hub"
+                source = "knowledge-hub"
+                destination = "knowledge-hub"
+                mode = "copy"
+                managed = $true
+                files = @($records.ToArray())
+            })
+        Write-StatusManifest -RuntimeRoot $runtime -Value $manifest
+
+        $project.lock.hub_dir = $hub
+        $project.lock.template_tree_hash_sha256 = Get-ProjectTemplateHash $hub "en"
+        if ($LockKind -eq "copy") {
+            $project.lock.hub_remote = ""
+            $project.lock.hub_branch = "UNKNOWN"
+            $project.lock.hub_commit = "UNKNOWN"
+        }
+        Write-StatusText -Path (Join-PathParts $project.root ".agents" "hub.lock.json") -Text ($project.lock | ConvertTo-Json)
+        return [ordered]@{
+            project = $project
+            runtime = $runtime
+            hub = $hub
+            manifest = $manifest
+            first_managed_file = Join-PathParts $hub $templateFiles[0]
         }
     }
 
@@ -361,6 +410,13 @@ function Invoke-RuntimeStatusFixtureChecks {
         Assert-StatusCondition -Condition ($actual -cin $allowedActions) -Message "Recommended action case $($case.name) returned an action outside the public contract."
         $evidence.Add([ordered]@{ scenario = "recommended-action-$($case.name)"; status = $actual })
     }
+    $orderedPayload = [ordered]@{
+        runtime = [ordered]@{ manifest_status = "current"; managed_files = [ordered]@{ status = "current" } }
+        bridge = [ordered]@{ status = "not-configured" }
+        project = [ordered]@{ status = "current"; reason = "in-sync" }
+    }
+    Assert-StatusCondition -Condition ((Get-RecommendedNextAction -Payload $orderedPayload) -ceq "none") -Message "Ordered runtime payload did not use the recommended action contract."
+    $evidence.Add([ordered]@{ scenario = "recommended-action-ordered-payload"; status = "none" })
     foreach ($missingPayload in @(
         [pscustomobject]@{},
         [pscustomobject]@{ runtime = [pscustomobject]@{} },
@@ -893,6 +949,91 @@ function Invoke-RuntimeStatusFixtureChecks {
     $notRequested = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime)
     Assert-StatusCondition -Condition ([string]$notRequested.project.status -eq "unknown" -and [string]$notRequested.project.reason -eq "not-requested") -Message "Omitted ProjectDir did not remain not-requested."
     $evidence.Add([ordered]@{ scenario = "project-not-requested"; status = [string]$notRequested.project.status })
+
+    $managedCopyCurrent = New-ManagedCopyProjectFixture -Name "current"
+    $managedCopyProjectBefore = @(Get-ProjectFixtureTreeState $managedCopyCurrent.project.root)
+    $managedCopyRuntimeBefore = @(Get-StatusTreeState -RuntimeRoot $managedCopyCurrent.runtime)
+    $managedCopyCurrentPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyCurrent.runtime -ProjectRoot $managedCopyCurrent.project.root)
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyCurrentPayload.project.status -eq "current" -and
+        [string]$managedCopyCurrentPayload.project.reason -eq "in-sync" -and
+        [string]$managedCopyCurrentPayload.recommended_next_action -eq "none"
+    ) -Message "Trusted managed copy with a matching legacy Git lock did not report current."
+    Assert-StatusCondition -Condition (
+        (@($managedCopyProjectBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $managedCopyCurrent.project.root) -join "`n") -and
+        (@($managedCopyRuntimeBefore) -join "`n") -ceq (@(Get-StatusTreeState -RuntimeRoot $managedCopyCurrent.runtime) -join "`n")
+    ) -Message "Managed-copy project status modified project or runtime files."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-legacy-current"; status = [string]$managedCopyCurrentPayload.project.status })
+
+    $managedCopyDrift = New-ManagedCopyProjectFixture -Name "template-drift"
+    $managedCopyDrift.project.lock.template_tree_hash_sha256 = "0" * 64
+    Write-StatusText -Path (Join-PathParts $managedCopyDrift.project.root ".agents" "hub.lock.json") -Text ($managedCopyDrift.project.lock | ConvertTo-Json)
+    $managedCopyDriftPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyDrift.runtime -ProjectRoot $managedCopyDrift.project.root)
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyDriftPayload.project.status -eq "optional-refresh" -and
+        [string]$managedCopyDriftPayload.project.reason -eq "template-baseline-drift" -and
+        [string]$managedCopyDriftPayload.recommended_next_action -eq "refresh-project-templates"
+    ) -Message "Trusted managed copy with template drift did not report optional-refresh."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-legacy-template-drift"; status = [string]$managedCopyDriftPayload.project.status })
+
+    $managedCopyFresh = New-ManagedCopyProjectFixture -Name "fresh-copy-lock" -LockKind "copy"
+    $managedCopyFreshPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyFresh.runtime -ProjectRoot $managedCopyFresh.project.root)
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyFreshPayload.project.status -eq "current" -and
+        [string]$managedCopyFreshPayload.project.reason -eq "in-sync" -and
+        [string]$managedCopyFreshPayload.recommended_next_action -eq "none"
+    ) -Message "Fresh copy lock behavior regressed."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-fresh-lock-current"; status = [string]$managedCopyFreshPayload.project.status })
+
+    $managedCopySimilar = New-ManagedCopyProjectFixture -Name "similar-path"
+    $similarHub = Join-PathParts $managedCopySimilar.runtime "knowledge-hub-copy"
+    Copy-Item -LiteralPath $managedCopySimilar.hub -Destination $similarHub -Recurse
+    $managedCopySimilar.project.lock.hub_dir = $similarHub
+    Write-StatusText -Path (Join-PathParts $managedCopySimilar.project.root ".agents" "hub.lock.json") -Text ($managedCopySimilar.project.lock | ConvertTo-Json)
+    $managedCopySimilarPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopySimilar.runtime -ProjectRoot $managedCopySimilar.project.root)
+    Assert-StatusCondition -Condition ([string]$managedCopySimilarPayload.project.status -eq "unknown" -and [string]$managedCopySimilarPayload.project.reason -eq "hub-not-git") -Message "Similar managed Hub path was trusted without an exact match."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-similar-path-rejected"; status = [string]$managedCopySimilarPayload.project.status })
+
+    foreach ($manifestCase in @(
+            @{ name = "schema"; mutate = { param($manifest) $manifest.schema_version = 1 } },
+            @{ name = "strategy"; mutate = { param($manifest) $manifest.install_strategy = "dev-link" } },
+            @{ name = "missing-item"; mutate = { param($manifest) $manifest.items = @() } }
+        )) {
+        $fixture = New-ManagedCopyProjectFixture -Name ("manifest-{0}" -f $manifestCase.name)
+        & $manifestCase.mutate $fixture.manifest
+        Write-StatusManifest -RuntimeRoot $fixture.runtime -Value $fixture.manifest
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $fixture.runtime -ProjectRoot $fixture.project.root)
+        Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "hub-not-git") -Message "Untrusted managed-copy manifest case $($manifestCase.name) bypassed hub-not-git."
+        $evidence.Add([ordered]@{ scenario = "project-managed-copy-manifest-$($manifestCase.name)-rejected"; status = [string]$payload.project.status })
+    }
+
+    $managedCopyModified = New-ManagedCopyProjectFixture -Name "managed-modified"
+    Write-StatusText -Path $managedCopyModified.first_managed_file -Text "modified managed template"
+    $managedCopyModifiedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyModified.runtime -ProjectRoot $managedCopyModified.project.root)
+    Assert-StatusCondition -Condition ([string]$managedCopyModifiedPayload.project.status -eq "unknown" -and [string]$managedCopyModifiedPayload.project.reason -eq "hub-not-git") -Message "Modified managed Hub file bypassed hub-not-git."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-modified-rejected"; status = [string]$managedCopyModifiedPayload.project.status })
+
+    $managedCopyMissing = New-ManagedCopyProjectFixture -Name "managed-missing"
+    Remove-Item -LiteralPath $managedCopyMissing.first_managed_file
+    $managedCopyMissingPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyMissing.runtime -ProjectRoot $managedCopyMissing.project.root)
+    Assert-StatusCondition -Condition ([string]$managedCopyMissingPayload.project.status -eq "unknown" -and [string]$managedCopyMissingPayload.project.reason -eq "hub-not-git") -Message "Missing managed Hub file bypassed hub-not-git."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-missing-rejected"; status = [string]$managedCopyMissingPayload.project.status })
+
+    $managedCopyHashInvalid = New-ManagedCopyProjectFixture -Name "managed-hash-invalid"
+    $managedCopyHashInvalid.manifest.items[0].files[0].installed_sha256 = "not-a-trusted-hash"
+    Write-StatusManifest -RuntimeRoot $managedCopyHashInvalid.runtime -Value $managedCopyHashInvalid.manifest
+    $managedCopyHashInvalidPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyHashInvalid.runtime -ProjectRoot $managedCopyHashInvalid.project.root)
+    Assert-StatusCondition -Condition ([string]$managedCopyHashInvalidPayload.project.status -eq "unknown" -and [string]$managedCopyHashInvalidPayload.project.reason -eq "hub-not-git") -Message "Invalid managed Hub hash bypassed hub-not-git."
+    $evidence.Add([ordered]@{ scenario = "project-managed-copy-invalid-hash-rejected"; status = [string]$managedCopyHashInvalidPayload.project.status })
+
+    $managedCopyPlain = New-ManagedCopyProjectFixture -Name "plain-non-git"
+    $plainHub = Join-PathParts $fixtureRoot "plain-non-git-hub"
+    Copy-Item -LiteralPath $managedCopyPlain.hub -Destination $plainHub -Recurse
+    $managedCopyPlain.project.lock.hub_dir = $plainHub
+    Write-StatusText -Path (Join-PathParts $managedCopyPlain.project.root ".agents" "hub.lock.json") -Text ($managedCopyPlain.project.lock | ConvertTo-Json)
+    $managedCopyPlainPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $managedCopyPlain.runtime -ProjectRoot $managedCopyPlain.project.root)
+    Assert-StatusCondition -Condition ([string]$managedCopyPlainPayload.project.status -eq "unknown" -and [string]$managedCopyPlainPayload.project.reason -eq "hub-not-git") -Message "Plain non-Git Hub with legacy Git provenance stopped failing closed."
+    $evidence.Add([ordered]@{ scenario = "project-plain-non-git-legacy-rejected"; status = [string]$managedCopyPlainPayload.project.status })
 
     $currentProject = New-ProjectStatusFixture -Name "current"
     $projectBefore = @(Get-ProjectFixtureTreeState $currentProject.root)
