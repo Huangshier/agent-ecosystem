@@ -91,6 +91,31 @@ memory-scoped workflows, not ordinary bulk edits.
   says not to preserve it, such as "do not keep old project memory" or "reset
   to the latest templates".
 
+## Global Experience Discovery
+Use global experience as an optional, on-demand lookup layer for reusable
+cross-project workflow problems involving toolchains, host environments,
+shells, builds, caches, ports, permissions, path handling, environment
+variables, or similar recurring surfaces. Do not preload it or assume that an
+index is available on every host.
+
+When the lookup applies:
+
+1. Read the configured global experience index if it exists.
+2. Match observed error text, tool names, and symptoms against entry
+   `keywords` first, then `title`.
+3. Read only the matched entries and apply a recorded prevention rule only when
+   it fits the current context.
+4. If the index is missing or no entry matches, fail soft and continue with
+   project-local diagnosis.
+
+Do not trigger global lookup by default for issues that clearly depend on the
+current repository's business logic, hardware wiring, protocol implementation,
+or module design.
+
+Keep project experience in the project by default. Route reviewed
+cross-project candidates through the existing intake / triage workflow; never
+promote them automatically.
+
 ## Project Commands
 Use documented project commands before inventing new ones. Discovery order:
 
