@@ -68,7 +68,7 @@ Default behavior:
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
 - Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
-- Install the shared `Global Experience Use` guidance from the hub template so projects know when to search the global experience index and when to keep lessons local.
+- Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
 - Install the declarative `.claude/guardrails/` template reliability contract
   for Claude Code projects. This is not a security sandbox, permission

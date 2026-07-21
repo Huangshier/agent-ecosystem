@@ -47,6 +47,7 @@ try {
             [Parameter(Mandatory = $true)][string]$Language,
             [Parameter(Mandatory = $true)][string]$ExpectedMarker,
             [Parameter(Mandatory = $true)][string]$ExpectedRootContractToken,
+            [Parameter(Mandatory = $true)][string]$ExpectedGlobalExperienceHeading,
             [Parameter(Mandatory = $true)][string]$ExpectedContextToken,
             [Parameter(Mandatory = $true)][string]$ExpectedCommandToken,
             [Parameter(Mandatory = $true)][string]$ExpectedSpecToken
@@ -99,6 +100,15 @@ try {
             }
         }
 
+        $rootGuideText = Get-Content -LiteralPath (Join-PathParts $languageProjectDir "AGENTS.md") -Raw
+        $agentGuideText = Get-Content -LiteralPath (Join-PathParts $languageProjectDir ".agents" "AGENTS.md") -Raw
+        if (-not $rootGuideText.Contains($ExpectedGlobalExperienceHeading)) {
+            $missing.Add("AGENTS.md missing global experience discovery contract")
+        }
+        if ($agentGuideText.Contains($ExpectedGlobalExperienceHeading)) {
+            $missing.Add(".agents/AGENTS.md must not duplicate the global experience discovery contract")
+        }
+
         if ($missing.Count -gt 0) {
             throw ("Language bootstrap failed for {0}: {1}" -f $Language, ($missing.ToArray() -join "; "))
         }
@@ -108,6 +118,10 @@ try {
             project = $languageProjectDir
             checked_files = @($requiredMarkers.Keys)
             marker = $ExpectedMarker
+            global_experience_contract = [ordered]@{
+                root_present = $true
+                project_agent_absent = $true
+            }
         }
     }
 
@@ -272,6 +286,14 @@ try {
                     "## Write Authorization Boundaries",
                     "## Ambiguous Task Gate",
                     "## Engineering Memory Refresh, Migration, And Reset",
+                    "## Global Experience Discovery",
+                    "toolchains, host environments",
+                    '`keywords` first, then `title`',
+                    "Read only the matched entries",
+                    "If the index is missing or no entry matches, fail soft",
+                    "business logic, hardware wiring, protocol implementation",
+                    "existing intake / triage workflow; never",
+                    "promote them automatically",
                     "## Verification And Completion",
                     "## Delivery Protocol & Working Loop",
                     "## PR-Ready And Phase-Close Memory Sync Gate",
@@ -292,6 +314,7 @@ try {
                     "## On Stopping to Ask",
                     "## Write Authorization Boundaries",
                     "## Ambiguous Task Gate",
+                    "## Global Experience Discovery",
                     "## Verification And Completion",
                     "## Delivery Protocol & Working Loop",
                     "## PR-Ready And Phase-Close Memory Sync Gate",
@@ -308,6 +331,14 @@ try {
                     "## 写入授权边界",
                     "## 模糊任务入口",
                     "## 工程记忆刷新、迁移与重置",
+                    "## 全局经验发现",
+                    "toolchain、host、shell、build",
+                    '匹配条目的 `keywords`，再匹配 `title`',
+                    "只读取命中的条目",
+                    "索引缺失或无匹配时 fail-soft",
+                    "业务逻辑、硬件接线、协议实现或模块设计",
+                    "既有 intake / triage",
+                    "禁止自动 promotion",
                     "## 验证与完成",
                     "## 交付流程",
                     "## PR 就绪与阶段收尾记忆同步门禁",
@@ -328,6 +359,7 @@ try {
                     "## 何时停下来询问",
                     "## 写入授权边界",
                     "## 模糊任务入口",
+                    "## 全局经验发现",
                     "## 验证与完成",
                     "## 交付流程",
                     "## PR 就绪与阶段收尾记忆同步门禁",
@@ -363,6 +395,19 @@ try {
                     if ($nestedGuideText.Contains([string]$token)) {
                         $ownershipGuidanceErrors.Add("$templateKind/$language project-agent contains forbidden behavior-contract token: $token")
                     }
+                }
+            }
+        }
+
+        $bootstrapSkillPath = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "SKILL.md"
+        if (-not (Test-Path -LiteralPath $bootstrapSkillPath)) {
+            $ownershipGuidanceErrors.Add("missing project-bootstrap/SKILL.md")
+        }
+        else {
+            $bootstrapSkillText = [System.IO.File]::ReadAllText($bootstrapSkillPath, [System.Text.Encoding]::UTF8)
+            foreach ($token in @("Global Experience Discovery", "project-root/AGENTS.md", 'not `project-agent/AGENTS.md`')) {
+                if (-not $bootstrapSkillText.Contains([string]$token)) {
+                    $ownershipGuidanceErrors.Add("project-bootstrap/SKILL.md missing global experience installation token: $token")
                 }
             }
         }
@@ -431,6 +476,8 @@ try {
                 root_contract_authoritative = $true
                 nested_memory_guide_only = $true
                 nested_forbidden_behavior_tokens_checked = $true
+                global_experience_discovery_root_only = $true
+                bootstrap_skill_aligned = $true
             }
         }
     }
@@ -514,8 +561,8 @@ try {
     if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
         $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $script:recommendedCopyRuntime
         $autoWriteEvidence += Test-PlainBootstrapDefaultsToEnglish -RuntimeDir $script:recommendedCopyRuntime
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedRootContractToken "single authoritative project behavior contract" -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedRootContractToken "唯一权威的项目行为契约" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedRootContractToken "single authoritative project behavior contract" -ExpectedGlobalExperienceHeading "## Global Experience Discovery" -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedRootContractToken "唯一权威的项目行为契约" -ExpectedGlobalExperienceHeading "## 全局经验发现" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
         $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $script:recommendedCopyRuntime
     }
 
