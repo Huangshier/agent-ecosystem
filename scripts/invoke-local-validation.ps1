@@ -52,7 +52,7 @@ function Get-ActionInvocation {
     if ([string]$Action.script -eq "scripts/validate-targeted-change.ps1") {
         if ($script:inputParameterSet -eq "Paths") {
             $scriptArguments += "-ChangedPath"
-            # -File cannot bind multiple native command-line tokens to one array parameter reliably.
+            # -File cannot bind multiple command-line arguments to one array parameter reliably.
             $scriptArguments += (@($ChangedPath) -join ',')
         }
         else {
