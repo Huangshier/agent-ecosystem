@@ -42,6 +42,14 @@ interrupted by the caller.
 
 The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
 
+## Leaf validation ownership and routing
+
+A validation helper's risk follows its actual failure model, owner module, host dependency, and affected suite. A known leaf helper does not become validation control plane merely because its file name starts with `release-`. Known single-owner leaves are routed to the existing owner modules and suites in `change-risk-rules.json`; this keeps one public routing source and avoids a parallel owner manifest. Existing cross-module and release-candidate contracts remain explicitly Tier 3 without being treated as classifier self-protection surfaces.
+
+The control plane remains Tier 3: classifier and routing code, workflows, local validation planning, the fixed gate, evidence writing, sharding contracts, and the top-level release validator. New or unmapped helpers, fixtures, and tests also remain Tier 3 by the classifier's fail-closed fallback. Refactoring the independent self-protection oracle belongs to the next architecture phase, not this routing change.
+
+This ownership contract does not change the current Tier 3 local dual-host boundary, Hosted shard topology, main full validation, or fixed validation gate.
+
 Tier 3 sharding changes only execution placement. Repository, documentation,
 release, specification, evaluation, and governance contracts run once in the
 platform-neutral shard. Installer, runtime, bootstrap, path, link, encoding,

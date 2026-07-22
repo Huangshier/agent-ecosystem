@@ -160,15 +160,17 @@ function New-ChangeResult {
     )
     $selfProtectionPatterns = @(
         '^\.github/workflows/',
-        '^scripts/validate-(change|targeted-change|release)\.ps1$',
-        '^scripts/test-validate-change\.ps1$',
-        '^scripts/test-validation-evidence-contract\.ps1$',
+        '^scripts/(validate-(change|targeted-change|release)|invoke-local-validation)\.ps1$',
+        '^scripts/test-(validate-change|heavy-targeted-regression|local-validation-plan|release-sharding|validation-evidence-contract)\.ps1$',
         '^scripts/validation/change-risk-rules\.json$',
         '^scripts/validation/change-risk-fixtures/',
+        '^scripts/validation/local-validation-plan-contract\.ps1$',
+        '^scripts/validation/release-classifier-output-contract\.ps1$',
+        '^scripts/validation/release-classifier-output-fixtures/',
+        '^scripts/validation/release-shard-contract\.(json|ps1)$',
+        '^scripts/validation/release-test-helper\.ps1$',
         '^scripts/validation/required-validation-gate\.ps1$',
-        '^scripts/validation/write-evidence-manifest\.ps1$',
-        '^scripts/validation/release-.*\.ps1$',
-        '^scripts/validation/release-.+-fixtures/'
+        '^scripts/validation/write-evidence-manifest\.ps1$'
     )
     $hasSelfProtectionPath = @($Paths | Where-Object {
         $candidate = [string]$_
