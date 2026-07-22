@@ -16,6 +16,9 @@ foreach ($case in $cases) {
         ClassifyResult = [string]$case.classify
         QuickResult = [string]$case.quick
         TargetedResult = [string]$case.targeted
+        SelfProtectionResult = [string]$case.self_protection
+        SelfProtectionRequired = [string]$case.self_protection_required
+        WindowsPowerShellRequired = [string]$case.windows_powershell_required
         PlatformNeutralResult = [string]$case.platform_neutral
         PwshMatrixResult = [string]$case.pwsh_matrix
         WindowsPowerShellResult = [string]$case.windows_powershell
@@ -57,7 +60,7 @@ foreach ($marker in @(
 $needsMatch = [regex]::Match($job, '(?ms)^    needs:\s*\r?\n(?<body>(?:      - [^\r\n]+\r?\n)+)')
 if (-not $needsMatch.Success) { throw "validation-gate job is missing its needs list." }
 $actualNeeds = @([regex]::Matches($needsMatch.Groups['body'].Value, '(?m)^      - (?<name>[^\r\n]+)$') | ForEach-Object { $_.Groups['name'].Value })
-$expectedNeeds = @("classify", "quick-validation", "targeted-validation", "validate-platform-neutral", "validate", "validate-windows-powershell")
+    $expectedNeeds = @("classify", "quick-validation", "targeted-validation", "validation-self-protection", "validate-platform-neutral", "validate", "validate-windows-powershell")
 if (($actualNeeds -join ',') -cne ($expectedNeeds -join ',')) {
     throw "validation-gate needs must be exactly: $($expectedNeeds -join ', ')."
 }

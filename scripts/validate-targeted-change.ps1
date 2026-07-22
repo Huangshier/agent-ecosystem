@@ -5,6 +5,8 @@ param(
     [string[]]$ChangedPath = @(),
     [ValidateSet("quick", "targeted")]
     [string]$Mode = "quick",
+    [ValidateSet("current", "windows-latest", "ubuntu-latest", "macos-latest", "windows-powershell")]
+    [string]$ExecutionHost = "current",
     [string]$ScratchRoot = "",
     [switch]$Json
 )
@@ -23,7 +25,7 @@ $classification = if (@($ChangedPath).Count -gt 0) {
 } else {
     (& (Join-Path $scriptDir "validate-change.ps1") -BaseRef $BaseRef -HeadRef $HeadRef -Json | Out-String) | ConvertFrom-Json
 }
-if ([int]$classification.detected_tier -eq 3) { throw "Targeted validation cannot replace required Tier 3 full release validation." }
+& (Join-Path $scriptDir "validation/release-classifier-output-contract.ps1") -Result $classification | Out-Null
 
 $checks = New-Object 'System.Collections.Generic.List[object]'
 $telemetry = New-Object 'System.Collections.Generic.List[object]'
@@ -104,10 +106,24 @@ if ([int]$classification.detected_tier -ge 1) {
 
 if ([int]$classification.detected_tier -ge 1) {
     $modules = @($classification.affected_modules)
-    $requiredSuites = @($classification.required_suites)
+    $allRequiredSuites = @($classification.required_suites)
+    $requiredSuites = if ($ExecutionHost -ceq "current") {
+        @($allRequiredSuites)
+    }
+    elseif ($ExecutionHost -ceq "windows-powershell") {
+        @($classification.required_windows_powershell_suites)
+    }
+    else {
+        @($allRequiredSuites | Where-Object {
+            $hostProperty = $classification.suite_host_map.PSObject.Properties[[string]$_]
+            $null -ne $hostProperty -and @($hostProperty.Value) -ccontains $ExecutionHost
+        })
+    }
     $baseCheckModules = @($classification.base_check_modules)
     $executedSuites = New-Object 'System.Collections.Generic.List[string]'
-    if ($requiredSuites.Count -eq 0) { throw "Tier 1/2 classification has no reliable targeted suite; classification must escalate to Tier 3." }
+    if ($requiredSuites.Count -eq 0 -and -not [bool]$classification.run_validation_self_protection -and @($baseCheckModules).Count -eq 0) {
+        throw "Affected validation produced no suite, base check, or independent self-protection oracle."
+    }
     if ($requiredSuites -contains "knowledge-contracts") {
         . (Join-Path $scriptDir "lib/path-guard.ps1")
         . (Join-Path $scriptDir "validation/release-test-helper.ps1")
@@ -141,6 +157,12 @@ if ([int]$classification.detected_tier -ge 1) {
         if ($LASTEXITCODE -ne 0) { throw "Issue decision fixtures failed." }
         Add-Result "repository-guards" "PASS" "Repository guard fixtures passed."
         $executedSuites.Add("repository-guards")
+    }
+    if ($requiredSuites -contains "release-checkpoint") {
+        & (Join-Path $scriptDir "validate-release.ps1") -ValidationShard RepositoryCheckpointNeutral -ScratchRoot (Join-Path $ScratchRoot "release-checkpoint") -Json | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Repository checkpoint validation failed." }
+        Add-Result "release-checkpoint" "PASS" "Repository, governance, historical release, eval, and benchmark artifact checkpoint passed."
+        $executedSuites.Add("release-checkpoint")
     }
     if ($requiredSuites -contains "installer-contract") {
         . (Join-Path $scriptDir "lib/path-guard.ps1")
@@ -227,7 +249,8 @@ if ([int]$classification.detected_tier -ge 1) {
     $moduleCoverage = New-Object 'System.Collections.Generic.List[object]'
     foreach ($module in $modules) {
         $mapped = @($classification.module_suite_map.$module)
-        $actual = @($mapped | Where-Object { $executedSuites.Contains([string]$_) })
+        $hostMapped = if ($ExecutionHost -ceq "current") { @($mapped) } else { @($mapped | Where-Object { $requiredSuites -ccontains [string]$_ }) }
+        $actual = @($hostMapped | Where-Object { $executedSuites.Contains([string]$_) })
         if ($actual.Count -gt 0) {
             $moduleCoverage.Add([ordered]@{ module = $module; coverage = "targeted-suite"; mapped_suites = $mapped; executed_suites = $actual; executed_checks = @($actual); executed_check_count = $actual.Count })
             continue
@@ -237,13 +260,22 @@ if ([int]$classification.detected_tier -ge 1) {
             $moduleCoverage.Add([ordered]@{ module = $module; coverage = "base-checks"; mapped_suites = @(); executed_suites = @(); executed_checks = $baseChecks; executed_check_count = $baseChecks.Count })
             continue
         }
+        if ([string]$module -ceq "validation-routing" -and [bool]$classification.run_validation_self_protection) {
+            $moduleCoverage.Add([ordered]@{ module = $module; coverage = "independent-oracle"; mapped_suites = @(); executed_suites = @(); executed_checks = @("validation-self-protection"); executed_check_count = 1 })
+            continue
+        }
+        if ($ExecutionHost -cne "current" -and $hostMapped.Count -eq 0) {
+            $moduleCoverage.Add([ordered]@{ module = $module; coverage = "not-required-on-host"; mapped_suites = $mapped; executed_suites = @(); executed_checks = @(); executed_check_count = 0 })
+            continue
+        }
         throw "Affected runtime module '$module' executed zero actual module checks."
     }
 }
 
 $result = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     mode = $Mode
+    execution_host = $ExecutionHost
     classification = $classification
     checks = @($checks.ToArray())
     telemetry = @($telemetry.ToArray())

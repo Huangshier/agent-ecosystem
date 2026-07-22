@@ -28,13 +28,58 @@ function Add-Check {
         $script:validationCheckCheckpointMs = $elapsedMs
     }
 
-    $script:checks.Add([ordered]@{
+    $effectiveName = $Name
+    $isMergedAssertion = $false
+    if ($null -ne $script:releaseMergedCheckMap -and $script:releaseMergedCheckMap.ContainsKey($Name)) {
+        $effectiveName = [string]$script:releaseMergedCheckMap[$Name]
+        $isMergedAssertion = $true
+    }
+
+    $isMergeAuthority = $null -ne $script:releaseMergedCheckTargets -and $script:releaseMergedCheckTargets.ContainsKey($effectiveName)
+    $existingIndex = -1
+    if ($isMergedAssertion -or $isMergeAuthority) {
+        for ($index = 0; $index -lt $script:checks.Count; $index++) {
+            if ([string]$script:checks[$index]["name"] -ceq $effectiveName) {
+                $existingIndex = $index
+                break
+            }
+        }
+    }
+
+    $assertion = [ordered]@{
         name = $Name
         status = $Status
         detail = $Detail
         data = $Data
         duration_ms = [long]$durationMs
-    })
+    }
+    if ($isMergedAssertion) {
+        $script:mergedCheckEvidence.Add([object]$assertion)
+    }
+
+    if ($existingIndex -lt 0) {
+        $script:checks.Add([ordered]@{
+            name = $effectiveName
+            status = $Status
+            detail = $(if ($isMergedAssertion) { "Merged assertion '$Name': $Detail" } else { $Detail })
+            data = $(if ($isMergedAssertion) { @([object]$assertion) } else { $Data })
+            duration_ms = [long]$durationMs
+        })
+        return
+    }
+
+    # NOTE: Merged assertions retain evidence while reporting one authoritative status.
+    $current = $script:checks[$existingIndex]
+    $statusRank = @{ PASS = 0; DEFERRED = 1; WARN = 2; FAIL = 3 }
+    if ([int]$statusRank[$Status] -gt [int]$statusRank[[string]$current["status"]]) {
+        $current["status"] = $Status
+    }
+    $current["duration_ms"] = [long]$current["duration_ms"] + [long]$durationMs
+    $detailParts = @([string]$current["detail"], $(if ($isMergedAssertion) { "Merged assertion '$Name': $Detail" } else { $Detail })) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique
+    $current["detail"] = $detailParts -join " | "
+    $current["data"] = @($current["data"]) + @([object]$assertion)
 }
 
 function Test-RequiredPath {

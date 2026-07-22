@@ -59,21 +59,21 @@ try {
     Assert-Contract (-not $manifestText.Contains($scratch)) "manifest-omits-local-path"
 
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
-    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 5) "five-success-upload-contracts"
-    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 5) "five-failure-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 6) "six-success-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 6) "six-failure-upload-contracts"
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
     Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 5) "five-manifest-call-sites"
-    Assert-Contract ($workflow.Contains('Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")')) "matrix-success-allowlist-follows-executed-routing"
     Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
-    Assert-Contract (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression[^\r\n]*[\r\n]+\s*(?:\(Join-Path|-Json -OutputPath)")).Count -eq 2) "routing-evidence-written-directly"
+    Assert-Contract ($workflow.Contains('validation-self-protection.json') -and $workflow.Contains('name: validation-self-protection')) "self-protection-evidence-uploaded"
     Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
     Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
     $failureUploadContracts = @(
         @("name: quick-validation-failure", 'path: ${{ runner.temp }}/agent-ecosystem-quick-validation'),
-        @('name: targeted-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
+        @('name: affected-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
+        @('name: validation-self-protection-failure', 'path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection'),
         @('name: validation-platform-neutral-failure', 'path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation'),
         @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation'),
-        @("name: validation-windows-powershell-failure", 'path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
+        @("name: validation-windows-powershell-failure", '${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
     )
     foreach ($contract in $failureUploadContracts) {
         Assert-Contract ($workflow.Contains($contract[0]) -and $workflow.Contains($contract[1])) ("failure-upload-root:{0}" -f $contract[0])

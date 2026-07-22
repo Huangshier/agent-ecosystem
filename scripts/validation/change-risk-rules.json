@@ -1,8 +1,23 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "unknown_tier": 3,
   "empty_tier": 3,
   "base_check_modules": ["documentation"],
+  "fallback_suites": ["agent-skill-bridge", "bootstrap-safety", "hooks-runtime", "installer-contract", "knowledge-contracts", "project-context-gate", "repository-guards", "runtime-smoke", "template-consistency"],
+  "suite_hosts": {
+    "knowledge-contracts": ["ubuntu-latest"],
+    "bootstrap-safety": ["windows-latest"],
+    "agent-skill-bridge": ["windows-latest"],
+    "hooks-runtime": ["windows-latest", "ubuntu-latest", "macos-latest"],
+    "installer-contract": ["windows-latest"],
+    "runtime-smoke": ["windows-latest"],
+    "project-context-gate": ["windows-latest", "ubuntu-latest", "macos-latest"],
+    "template-consistency": ["windows-latest"],
+    "repository-guards": ["ubuntu-latest"]
+    ,"release-checkpoint": ["ubuntu-latest"]
+  },
+  "windows_powershell_suites": ["bootstrap-safety", "installer-contract", "knowledge-contracts", "runtime-smoke", "template-consistency"],
+  "self_protection_hosts": ["windows-latest"],
   "module_suites": {
     "knowledge": ["knowledge-contracts"],
     "bootstrap": ["bootstrap-safety"],
@@ -12,7 +27,9 @@
     "runtime": ["installer-contract", "runtime-smoke"],
     "context-gate": ["project-context-gate"],
     "templates": ["bootstrap-safety", "template-consistency"],
-    "repository": ["repository-guards"]
+    "repository": ["repository-guards"],
+    "release": ["release-checkpoint"],
+    "validation-routing": []
   },
   "tiers": {
     "0": {
