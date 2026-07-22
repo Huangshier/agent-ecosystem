@@ -384,6 +384,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
 
       - name: Run affected Windows PowerShell suites
