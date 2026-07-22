@@ -22,6 +22,16 @@ function Assert-ExactHosts {
     }
 }
 
+function Assert-ExactArguments {
+    param([object[]]$Actions, [string]$Script, [string[]]$Expected, [string]$Context)
+    $matching = @($Actions | Where-Object { [string]$_.script -ceq $Script })
+    foreach ($action in $matching) {
+        if ((@($action.arguments) -join ',') -cne ($Expected -join ',')) {
+            throw "$Context must pass exactly: $($Expected -join ' ')."
+        }
+    }
+}
+
 if ($null -eq $Result -or $Result -is [string] -or $Result -is [System.Array]) { throw "Classifier result must be an object." }
 $tier = Get-RequiredPropertyValue -InputObject $Result -Name "detected_tier"
 if ($tier -isnot [int] -and $tier -isnot [long]) { throw "Classifier property 'detected_tier' must be an integer." }
@@ -67,6 +77,7 @@ if (@($stageActions.iteration | Where-Object { [string]$_.script -eq "scripts/va
     throw "Iteration must never plan a release checkpoint."
 }
 Assert-ExactHosts -Actions $stageActions.release -Script "scripts/validate-release.ps1" -Expected @("pwsh", "windows-powershell") -Context "Release local validation"
+Assert-ExactArguments -Actions $stageActions.release -Script "scripts/validate-release.ps1" -Expected @("-ValidationShard", "RepositoryCheckpoint") -Context "Release local validation"
 Assert-ExactHosts -Actions $stageActions.pre_push -Script "scripts/validate-release.ps1" -Expected @() -Context "Affected pre-push validation"
 Assert-ExactHosts -Actions $stageActions.iteration -Script "scripts/validate-targeted-change.ps1" -Expected @("current") -Context "Iteration affected validation"
 $expectedPrePushAffectedHosts = @("current")

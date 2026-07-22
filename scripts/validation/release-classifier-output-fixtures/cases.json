@@ -15,6 +15,8 @@
       "required_suites": ["bootstrap-safety"],
       "required_hosts": ["windows-latest"],
       "suite_host_map": { "bootstrap-safety": ["windows-latest"] },
+      "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard", "targeted-module-checks", "affected-suite:bootstrap-safety", "affected-windows-powershell"],
+      "skipped_checks": ["quick-repository-checks", "validation-self-protection", "full-release-matrix"],
       "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
       "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
       "hosted_plan": {

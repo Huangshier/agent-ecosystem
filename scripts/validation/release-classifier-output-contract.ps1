@@ -102,6 +102,33 @@ if ([int]$Result.detected_tier -eq 3 -and $requiredSuites.Count -eq 0 -and -not 
     throw "Tier 3 must execute an affected suite or independent self-protection oracle."
 }
 
+$requiredChecksValue = Get-RequiredPropertyValue -InputObject $Result -Name "required_checks"
+$skippedChecksValue = Get-RequiredPropertyValue -InputObject $Result -Name "skipped_checks"
+if ($requiredChecksValue -is [string] -or $skippedChecksValue -is [string]) { throw "Classifier required_checks and skipped_checks must be arrays." }
+$requiredChecks = @($requiredChecksValue)
+$skippedChecks = @($skippedChecksValue)
+foreach ($field in @(@{ Name = "required_checks"; Value = $requiredChecks }, @{ Name = "skipped_checks"; Value = $skippedChecks })) {
+    if (@($field.Value | Where-Object { $_ -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0 -or @($field.Value | Sort-Object -Unique).Count -ne $field.Value.Count) {
+        throw "Classifier $($field.Name) must contain unique non-blank strings."
+    }
+}
+if (@($requiredChecks | Where-Object { $skippedChecks -ccontains [string]$_ }).Count -gt 0) { throw "Classifier required_checks and skipped_checks must be disjoint." }
+$expectedRequiredChecks = New-Object 'System.Collections.Generic.List[string]'
+$expectedSkippedChecks = New-Object 'System.Collections.Generic.List[string]'
+foreach ($check in @("change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard")) { $expectedRequiredChecks.Add($check) }
+if ([int]$Result.detected_tier -le 1) { $expectedRequiredChecks.Add("quick-repository-checks") } else { $expectedSkippedChecks.Add("quick-repository-checks") }
+if ($requiredSuites.Count -gt 0) {
+    $expectedRequiredChecks.Add("targeted-module-checks")
+    foreach ($suite in @($requiredSuites | Sort-Object -Unique)) { $expectedRequiredChecks.Add("affected-suite:$suite") }
+}
+else { $expectedSkippedChecks.Add("targeted-module-checks") }
+if ([bool]$Result.requires_windows_powershell) { $expectedRequiredChecks.Add("affected-windows-powershell") } else { $expectedSkippedChecks.Add("affected-windows-powershell") }
+if ([bool]$selfProtection) { $expectedRequiredChecks.Add("validation-self-protection") } else { $expectedSkippedChecks.Add("validation-self-protection") }
+$expectedSkippedChecks.Add("full-release-matrix")
+if (($requiredChecks -join ',') -cne (@($expectedRequiredChecks.ToArray()) -join ',') -or ($skippedChecks -join ',') -cne (@($expectedSkippedChecks.ToArray()) -join ',')) {
+    throw "Classifier required_checks/skipped_checks do not match the affected-suite, WinPS, self-protection, and PR full-skip plan."
+}
+
 $expectedCoverageSuites = @(
     "agent-skill-bridge",
     "bootstrap-safety",

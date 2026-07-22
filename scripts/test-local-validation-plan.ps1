@@ -23,6 +23,10 @@ function Assert-PlanCase {
     }
     $releaseFullHosts = @($value.local_plan.stages.release.actions | Where-Object script -eq "scripts/validate-release.ps1" | ForEach-Object host)
     if (($releaseFullHosts -join ',') -cne "pwsh,windows-powershell") { throw "$Name release plan does not preserve both PowerShell hosts." }
+    $releaseFullActions = @($value.local_plan.stages.release.actions | Where-Object script -eq "scripts/validate-release.ps1")
+    foreach ($action in $releaseFullActions) {
+        if ((@($action.arguments) -join ',') -cne "-ValidationShard,RepositoryCheckpoint") { throw "$Name release plan does not explicitly select the RepositoryCheckpoint shard." }
+    }
     $prePushHeavy = @($value.local_plan.stages.pre_push.actions | Where-Object script -eq "scripts/test-heavy-targeted-regression.ps1")
     if (($prePushHeavy.Count -gt 0) -ne $ExpectPrePushHeavy) { throw "$Name has an incorrect pre-push heavy decision." }
     $results.Add([ordered]@{ name = $Name; status = "PASS" })
@@ -64,6 +68,13 @@ $rejected = $false
 try { & $planContract -Result $missingAction | Out-Null } catch { $rejected = $true }
 if (-not $rejected) { throw "Local plan contract accepted a pre-push plan with no affected-suite action." }
 $results.Add([ordered]@{ name = "missing-action-fails-closed"; status = "PASS" })
+
+$invalidShard = Get-Classification -Path "README.md"
+$invalidShard.local_plan.stages.release.actions[1].arguments = @("-ValidationShard", "Full")
+$rejected = $false
+try { & $planContract -Result $invalidShard | Out-Null } catch { $rejected = $true }
+if (-not $rejected) { throw "Local plan contract accepted a release action without the RepositoryCheckpoint shard." }
+$results.Add([ordered]@{ name = "release-shard-fails-closed"; status = "PASS" })
 
 $summary = [ordered]@{ schema_version = 2; pass = $results.Count; fail = 0; cases = @($results.ToArray()) }
 if ($Json.IsPresent) { $summary | ConvertTo-Json -Depth 6 } else { Write-Output ("local validation plan fixtures: PASS={0} FAIL=0" -f $summary.pass) }

@@ -20,7 +20,7 @@ Pull requests are classified before expensive validation starts. The classifier 
 ./scripts/validate-change.ps1 -ChangedPath README.md,scripts/install.ps1 -Json
 ```
 
-Text and JSON report the detected tier, required checks, skipped checks, escalation reason, changed paths, affected modules, and required suites. Targeted JSON evidence records the executed suite names, counts, and per-module coverage. A skipped check means it was not required; it is never reported as passing.
+Text and JSON report the detected tier, required checks, skipped checks, escalation reason, changed paths, affected modules, and required suites. Schema 2 lists each affected suite as `affected-suite:<name>`, includes `affected-windows-powershell` and `validation-self-protection` only when their plan decisions require them, and always reports the PR-only `full-release-matrix` as skipped. Targeted JSON evidence records the executed suite names, counts, and per-module coverage. A skipped check means it was not required; it is never reported as passing.
 
 Classifier JSON also owns a schema-2 `local_plan` for `iteration`, `pre_push`,
 and `release`. Run it through the single local entrypoint:
@@ -63,7 +63,7 @@ The previous 92-check checkpoint inventory is reduced to 60 public check authori
 
 Rollback is contract-first: restore the prior `release-shard-contract.json`, validator shard routing, workflow job conditions, and gate fixtures together. Partial rollback is forbidden because classifier outputs, workflow matrices, shard coverage, and the fixed gate form one fail-closed contract.
 
-The classifier job runs only deterministic path-classification and routing-contract tests. Executable knowledge, bootstrap, bridge, installer, and mixed-path targeted regressions run through `test-heavy-targeted-regression.ps1`; the hosted workflow retains the compatible `test-validate-change.ps1 -RunTargetedRegression` spelling until a separately reviewed workflow change. Documentation modules in mixed Tier 1/2 changes are covered by diff, parse, and public-safe base checks; every affected runtime module must still execute a mapped targeted suite. Only the two existing repository guard test surfaces map to `repository-guards`; future or unmapped `scripts/test-*` paths escalate to Tier 3.
+The classifier job runs only deterministic path-classification and routing-contract tests. Executable knowledge, bootstrap, bridge, installer, and mixed-path targeted regressions run through `test-heavy-targeted-regression.ps1`; Hosted self-protection invokes `test-heavy-targeted-regression.ps1 -Json` exactly once when the classifier requires the independent oracle. Documentation modules in mixed Tier 1/2 changes are covered by diff, parse, and public-safe base checks; every affected runtime module must still execute a mapped targeted suite. Only the two existing repository guard test surfaces map to `repository-guards`; future or unmapped `scripts/test-*` paths escalate to Tier 3.
 
 ## Expected hosted cost
 
