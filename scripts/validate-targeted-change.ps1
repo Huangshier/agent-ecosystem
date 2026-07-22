@@ -145,7 +145,7 @@ if ([int]$classification.detected_tier -ge 1) {
         $executedSuites.Add("knowledge-contracts")
     }
     if ($requiredSuites -contains "hooks-runtime") {
-        & (Join-Path $scriptDir "validation/test-claude-hooks-runtime.ps1") -RepositoryRoot $repoRoot -ScratchRoot (Join-Path $ScratchRoot "hooks") -Json | Out-Null
+        & (Join-Path $scriptDir "validation/test-claude-hooks-runtime.ps1") -RepositoryRoot $repoRoot -Json | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Hooks runtime fixtures failed." }
         Add-Result "hooks-runtime" "PASS" "Executable hooks runtime fixtures passed."
         $executedSuites.Add("hooks-runtime")
