@@ -91,7 +91,13 @@ $releaseChecks = @()
 $validationShard = "not-applicable"
 if ($null -ne $releaseResult) {
     $validationShard = [string]$releaseResult.validation_shard
-    if ($validationShard -notin @("Full", "PlatformNeutral", "RuntimePlatform")) {
+    $shardContractPath = Join-Path $PSScriptRoot "release-shard-contract.json"
+    $shardContract = [System.IO.File]::ReadAllText($shardContractPath) | ConvertFrom-Json
+    $recognizedValidationShards = @(
+        @($shardContract.profiles.PSObject.Properties | ForEach-Object { [string]$_.Name }) +
+        @($shardContract.shards.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    )
+    if ($validationShard -notin $recognizedValidationShards) {
         throw "validation-result.json is missing a recognized validation_shard."
     }
     if ($Outcome -eq "success" -and [string]$releaseResult.shard_coverage.status -cne "PASS") {

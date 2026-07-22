@@ -58,6 +58,35 @@ try {
     Assert-Contract ($manifest.artifact_contract.failure.mode -ceq "full-scratch" -and [bool]$manifest.artifact_contract.failure.recursive) "failure-full-scratch"
     Assert-Contract (-not $manifestText.Contains($scratch)) "manifest-omits-local-path"
 
+    foreach ($validationShard in @("Full", "PlatformNeutral", "RuntimePlatform", "RepositoryCheckpoint", "RepositoryCheckpointNeutral", "RepositoryCheckpointRuntime")) {
+        $shardScratch = Join-Path $scratch ("recognized-shard-{0}" -f $validationShard)
+        New-Item -ItemType Directory -Force -Path $shardScratch | Out-Null
+        [ordered]@{
+            schema_version = 1
+            validation_shard = $validationShard
+            shard_coverage = [ordered]@{ status = "PASS" }
+            checks = @([ordered]@{ name = "fixture-check"; status = "PASS"; detail = "fixture"; data = $null; duration_ms = 1 })
+        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $shardScratch "validation-result.json") -Encoding UTF8
+        & $writer -ScratchRoot $shardScratch -Outcome success -CommitSha $commitSha -RunId "shard-$validationShard" -RunAttempt "1" -JobName "validate-shard" -HostIdentity "fixture-host" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+        $shardManifest = Get-Content -LiteralPath (Join-Path $shardScratch "evidence-manifest.json") -Raw | ConvertFrom-Json
+        Assert-Contract ($shardManifest.validation_shard -ceq $validationShard -and $shardManifest.executed.validation_shard -ceq $validationShard) ("recognized-validation-shard:{0}" -f $validationShard)
+    }
+
+    $unknownShardScratch = Join-Path $scratch "unknown-shard"
+    New-Item -ItemType Directory -Force -Path $unknownShardScratch | Out-Null
+    [ordered]@{
+        schema_version = 1
+        validation_shard = "FutureUnknownShard"
+        shard_coverage = [ordered]@{ status = "PASS" }
+        checks = @()
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $unknownShardScratch "validation-result.json") -Encoding UTF8
+    $unknownShardFailed = $false
+    try {
+        & $writer -ScratchRoot $unknownShardScratch -Outcome success -CommitSha $commitSha -RunId "unknown-shard" -RunAttempt "1" -JobName "validate-shard" -HostIdentity "fixture-host" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+    }
+    catch { $unknownShardFailed = $true }
+    Assert-Contract $unknownShardFailed "unknown-validation-shard-fails-closed"
+
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
     Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 6) "six-success-upload-contracts"
     Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 6) "six-failure-upload-contracts"
