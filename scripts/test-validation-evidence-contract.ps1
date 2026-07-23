@@ -18,6 +18,35 @@ function Assert-Contract([bool]$Condition, [string]$Name) {
     $checks.Add([ordered]@{ name = $Name; status = "PASS" }) | Out-Null
 }
 
+function Get-Sha256Text([string]$Text) {
+    $hash = [System.Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($hash.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Text)))).Replace("-", "").ToLowerInvariant() }
+    finally { $hash.Dispose() }
+}
+
+function Get-CanonicalEvidenceDigest([object]$Evidence) {
+    $payload = [ordered]@{}
+    foreach ($name in @(
+        "schema_version", "proof_kind", "repository", "pr_number", "base", "head", "candidate", "change",
+        "classifier", "required", "actual", "decisions", "contracts", "run", "checks", "artifact_digests"
+    )) { $payload[$name] = $Evidence.$name }
+    return Get-Sha256Text ($payload | ConvertTo-Json -Depth 20 -Compress)
+}
+
+function Assert-CanonicalArray([object]$Evidence, [string]$Section, [string]$Name, [int]$ExpectedCount, [string]$CheckName) {
+    $container = if ([string]::IsNullOrWhiteSpace($Section)) { $Evidence } else { $Evidence.$Section }
+    $property = if ($null -eq $container) { @() } else { @($container.PSObject.Properties | Where-Object { $_.Name -ceq $Name }) }
+    $value = $null
+    if ($property.Count -eq 1) { $value = $property[0].Value }
+    Assert-Contract (
+        $property.Count -eq 1 -and
+        $null -ne $value -and
+        $value -is [System.Array] -and
+        $value -isnot [string] -and
+        @($value).Count -eq $ExpectedCount
+    ) $CheckName
+}
+
 try {
     New-Item -ItemType Directory -Force -Path (Join-Path $scratch "regenerable-fixture-tree") | Out-Null
     [ordered]@{
@@ -186,12 +215,17 @@ try {
         }
         change = [ordered]@{ combined_digest = "combined-1"; paths = @("M`tREADME.md") }
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $candidateContractPath -Encoding UTF8
+    $canonicalTargetedResultPath = Join-Path $scratch "canonical-targeted-validation-result.json"
+    [ordered]@{
+        telemetry = @([ordered]@{ suite = "release-checkpoint"; case = "canonical-cardinality"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.001Z"; duration_ms = 1; unique_coverage_category = "fixture-coverage" })
+        executed_suites = @("release-checkpoint")
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $canonicalTargetedResultPath -Encoding UTF8
     $classificationPath = Join-Path $scratch "canonical-classification.json"
     [ordered]@{
-        schema_version = 2; detected_tier = 2; affected_modules = @("docs")
+        schema_version = 2; detected_tier = 2; affected_modules = @("release")
         conservative_fallback = $false; escalation_reason = ""
         base_ref = $candidateBase; head_ref = $candidateHead
-        required_suites = @("fixture-suite"); required_hosts = @("ubuntu-latest")
+        required_suites = @("release-checkpoint"); required_hosts = @("ubuntu-latest")
         requires_windows_powershell = $false; run_validation_self_protection = $false
         validation_self_protection_reason = "not-tier-3"
         control_plane = $false; self_protection_required = $false; self_protection_reason = "not-tier-3"
@@ -199,7 +233,7 @@ try {
     $fragmentRoot = Join-Path $scratch "canonical-fragments"
     $fragmentScratch = Join-Path $fragmentRoot "affected-validation-ubuntu-latest"
     New-Item -ItemType Directory -Force -Path $fragmentScratch | Out-Null
-    Copy-Item -LiteralPath (Join-Path $scratch "targeted-validation-result.json") -Destination (Join-Path $fragmentScratch "targeted-validation-result.json")
+    Copy-Item -LiteralPath $canonicalTargetedResultPath -Destination (Join-Path $fragmentScratch "targeted-validation-result.json")
     & $writer -ScratchRoot $fragmentScratch -Outcome success -CommitSha $commitSha -RunId "123" -RunAttempt "2" `
         -JobName "targeted-validation" -HostIdentity "Linux-Core-7.5" -Repository "Huangshier/agent-ecosystem" `
         -EventName pull_request -CandidateContractPath $candidateContractPath `
@@ -237,22 +271,126 @@ try {
     $canonical = Get-Content -Raw $canonicalPath | ConvertFrom-Json
     Assert-Contract ($canonical.schema_version -eq 2 -and $canonical.proof_kind -ceq "canonical-candidate-evidence") "canonical-schema"
     Assert-Contract ($canonical.candidate.sha -ceq $commitSha -and $canonical.base.sha -ceq $candidateBase -and $canonical.head.sha -ceq $candidateHead) "canonical-candidate-identity"
-    Assert-Contract (@($canonical.actual.suites) -contains "fixture-suite" -and @($canonical.actual.hosts) -contains "ubuntu-latest") "canonical-suite-host-closure"
+    Assert-Contract (@($canonical.actual.suites) -contains "release-checkpoint" -and @($canonical.actual.hosts) -contains "ubuntu-latest") "canonical-suite-host-closure"
     Assert-Contract ($canonical.checks.base_guard.job_id -ceq "301" -and $canonical.checks.identity_guard.job_id -ceq "302" -and $canonical.checks.final_gate.job_id -ceq "303") "canonical-actual-check-identities"
     Assert-Contract (
         $canonical.classifier.control_plane -is [bool] -and -not [bool]$canonical.classifier.control_plane -and
         $canonical.classifier.self_protection_required -is [bool] -and -not [bool]$canonical.classifier.self_protection_required -and
         [string]$canonical.classifier.self_protection_reason -ceq "not-tier-3"
     ) "canonical-classifier-authority"
+    Assert-CanonicalArray $canonical "classifier" "affected_modules" 1 "canonical-array-one:classifier.affected_modules"
+    Assert-CanonicalArray $canonical "required" "suites" 1 "canonical-array-one:required.suites"
+    Assert-CanonicalArray $canonical "required" "hosts" 1 "canonical-array-one:required.hosts"
+    Assert-CanonicalArray $canonical "actual" "suites" 1 "canonical-array-one:actual.suites"
+    Assert-CanonicalArray $canonical "actual" "hosts" 1 "canonical-array-one:actual.hosts"
+    Assert-CanonicalArray $canonical "" "artifact_digests" 2 "canonical-array-one:artifact_digests"
+    Assert-Contract (
+        (@($canonical.classifier.affected_modules) -join ",") -ceq "release" -and
+        (@($canonical.required.suites) -join ",") -ceq "release-checkpoint" -and
+        (@($canonical.required.hosts) -join ",") -ceq "ubuntu-latest" -and
+        (@($canonical.actual.suites) -join ",") -ceq "release-checkpoint" -and
+        (@($canonical.actual.hosts) -join ",") -ceq "ubuntu-latest"
+    ) "canonical-array-one:values"
     Assert-Contract ($canonical.canonical_evidence_digest -match '^[0-9a-f]{64}$') "canonical-digest"
+    Assert-Contract (
+        [string]$canonical.canonical_evidence_digest -ceq (Get-CanonicalEvidenceDigest $canonical)
+    ) "canonical-digest-recomputed"
     $firstCanonicalDigest = [string]$canonical.canonical_evidence_digest
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
         -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
         -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
-    $secondCanonicalDigest = [string](Get-Content -Raw $canonicalPath | ConvertFrom-Json).canonical_evidence_digest
+    $secondCanonical = Get-Content -Raw $canonicalPath | ConvertFrom-Json
+    $secondCanonicalDigest = [string]$secondCanonical.canonical_evidence_digest
     Assert-Contract ($firstCanonicalDigest -ceq $secondCanonicalDigest) "canonical-digest-deterministic"
+    Assert-Contract (
+        [string]$secondCanonicalDigest -ceq (Get-CanonicalEvidenceDigest $secondCanonical)
+    ) "canonical-digest-repeat-recomputed"
+
+    $zeroClassification = $validClassification | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $zeroClassification.affected_modules = @()
+    $zeroClassification.required_suites = @()
+    $zeroClassification.required_hosts = @()
+    $zeroCanonicalPath = Join-Path $scratch "canonical-evidence-zero.json"
+    $zeroClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
+    & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
+        -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+        -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+        -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+        -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $zeroCanonicalPath | Out-Null
+    $zeroCanonical = Get-Content -Raw $zeroCanonicalPath | ConvertFrom-Json
+    Assert-CanonicalArray $zeroCanonical "classifier" "affected_modules" 0 "canonical-array-zero:classifier.affected_modules"
+    Assert-CanonicalArray $zeroCanonical "required" "suites" 0 "canonical-array-zero:required.suites"
+    Assert-CanonicalArray $zeroCanonical "required" "hosts" 0 "canonical-array-zero:required.hosts"
+    Assert-CanonicalArray $zeroCanonical "actual" "suites" 1 "canonical-array-zero:actual.suites"
+    Assert-CanonicalArray $zeroCanonical "actual" "hosts" 1 "canonical-array-zero:actual.hosts"
+    Assert-CanonicalArray $zeroCanonical "" "artifact_digests" 2 "canonical-array-zero:artifact_digests"
+    Assert-Contract (
+        [string]$zeroCanonical.canonical_evidence_digest -ceq (Get-CanonicalEvidenceDigest $zeroCanonical)
+    ) "canonical-array-zero:digest-recomputed"
+
+    $multipleTargetedResultPath = Join-Path $scratch "canonical-multiple-targeted-validation-result.json"
+    [ordered]@{
+        telemetry = @([ordered]@{ suite = "suite-a"; case = "canonical-cardinality-multiple"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.001Z"; duration_ms = 1; unique_coverage_category = "fixture-coverage" })
+        executed_suites = @("suite-z", "suite-a", "suite-z")
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $multipleTargetedResultPath -Encoding UTF8
+    $multipleFragmentRoot = Join-Path $scratch "canonical-multiple-fragments"
+    foreach ($fragmentSpec in @(
+        [pscustomobject]@{ directory = "affected-validation-ubuntu-latest"; job = "targeted-validation-ubuntu"; host = "Linux-Core-7.5" },
+        [pscustomobject]@{ directory = "affected-validation-windows-latest"; job = "targeted-validation-windows"; host = "Windows-Core-7.5" }
+    )) {
+        $multipleFragmentScratch = Join-Path $multipleFragmentRoot $fragmentSpec.directory
+        New-Item -ItemType Directory -Force -Path $multipleFragmentScratch | Out-Null
+        Copy-Item -LiteralPath $multipleTargetedResultPath -Destination (Join-Path $multipleFragmentScratch "targeted-validation-result.json")
+        & $writer -ScratchRoot $multipleFragmentScratch -Outcome success -CommitSha $commitSha -RunId "124" -RunAttempt "2" `
+            -JobName $fragmentSpec.job -HostIdentity $fragmentSpec.host -Repository "Huangshier/agent-ecosystem" `
+            -EventName pull_request -CandidateContractPath $candidateContractPath `
+            -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json") | Out-Null
+    }
+    $multipleClassification = $validClassification | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $multipleClassification.affected_modules = @("validation-routing", "documentation", "validation-routing")
+    $multipleClassification.required_suites = @("suite-z", "suite-a", "suite-z")
+    $multipleClassification.required_hosts = @("windows-latest", "ubuntu-latest", "windows-latest")
+    $multipleClassificationPath = Join-Path $scratch "canonical-multiple-classification.json"
+    $multipleClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $multipleClassificationPath -Encoding UTF8
+    $multipleBinding = $binding | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $multipleBinding.final_gate.run_id = "124"
+    $multipleBindingPath = Join-Path $scratch "canonical-multiple-binding.json"
+    $multipleBinding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $multipleBindingPath -Encoding UTF8
+    $multipleCanonicalPath = Join-Path $scratch "canonical-evidence-multiple.json"
+    & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $multipleClassificationPath `
+        -FragmentsRoot $multipleFragmentRoot -GuardBindingPath $multipleBindingPath -Repository "Huangshier/agent-ecosystem" `
+        -RunId "124" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+        -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+        -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $multipleCanonicalPath | Out-Null
+    $multipleCanonical = Get-Content -Raw $multipleCanonicalPath | ConvertFrom-Json
+    Assert-CanonicalArray $multipleCanonical "classifier" "affected_modules" 2 "canonical-array-multiple:classifier.affected_modules"
+    Assert-CanonicalArray $multipleCanonical "required" "suites" 2 "canonical-array-multiple:required.suites"
+    Assert-CanonicalArray $multipleCanonical "required" "hosts" 2 "canonical-array-multiple:required.hosts"
+    Assert-CanonicalArray $multipleCanonical "actual" "suites" 2 "canonical-array-multiple:actual.suites"
+    Assert-CanonicalArray $multipleCanonical "actual" "hosts" 2 "canonical-array-multiple:actual.hosts"
+    Assert-CanonicalArray $multipleCanonical "" "artifact_digests" 4 "canonical-array-multiple:artifact_digests"
+    Assert-Contract (
+        (@($multipleCanonical.classifier.affected_modules) -join ",") -ceq "documentation,validation-routing" -and
+        (@($multipleCanonical.required.suites) -join ",") -ceq "suite-a,suite-z" -and
+        (@($multipleCanonical.required.hosts) -join ",") -ceq "ubuntu-latest,windows-latest" -and
+        (@($multipleCanonical.actual.suites) -join ",") -ceq "suite-a,suite-z" -and
+        (@($multipleCanonical.actual.hosts) -join ",") -ceq "ubuntu-latest,windows-latest"
+    ) "canonical-array-multiple:ordinal-deduplicated"
+    $firstMultipleDigest = [string]$multipleCanonical.canonical_evidence_digest
+    Assert-Contract ($firstMultipleDigest -ceq (Get-CanonicalEvidenceDigest $multipleCanonical)) "canonical-array-multiple:digest-recomputed"
+    & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $multipleClassificationPath `
+        -FragmentsRoot $multipleFragmentRoot -GuardBindingPath $multipleBindingPath -Repository "Huangshier/agent-ecosystem" `
+        -RunId "124" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+        -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+        -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $multipleCanonicalPath | Out-Null
+    $secondMultipleCanonical = Get-Content -Raw $multipleCanonicalPath | ConvertFrom-Json
+    Assert-Contract (
+        $firstMultipleDigest -ceq [string]$secondMultipleCanonical.canonical_evidence_digest -and
+        [string]$secondMultipleCanonical.canonical_evidence_digest -ceq (Get-CanonicalEvidenceDigest $secondMultipleCanonical)
+    ) "canonical-array-multiple:digest-deterministic"
+    $validClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
 
     $landedSha = "4444444444444444444444444444444444444444"
     $lineageInputPath = Join-Path $scratch "canonical-lineage-input.json"

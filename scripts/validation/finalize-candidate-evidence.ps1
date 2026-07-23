@@ -36,9 +36,15 @@ function Get-Sha256Text([string]$Text) {
     finally { $hash.Dispose() }
 }
 function Get-OrdinalStrings([object[]]$Values = @()) {
-    $strings = [string[]]@($Values | ForEach-Object { [string]$_ } | Where-Object { $_ })
-    [System.Array]::Sort($strings, [System.StringComparer]::Ordinal)
-    return @($strings | Select-Object -Unique)
+    $unique = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    foreach ($value in @($Values)) {
+        $text = [string]$value
+        if (-not [string]::IsNullOrWhiteSpace($text)) { [void]$unique.Add($text) }
+    }
+    [string[]]$result = @($unique)
+    [System.Array]::Sort($result, [System.StringComparer]::Ordinal)
+    # NOTE: -NoEnumerate preserves zero-, one-, and multi-element values as an array across PowerShell hosts.
+    Write-Output -NoEnumerate $result
 }
 function Convert-HostIdentity([object]$Fragment) {
     $hostIdentity = [string]$Fragment.identity.host
@@ -135,39 +141,40 @@ foreach ($name in @("base_guard", "identity_guard", "final_gate")) {
     }
 }
 
-$actualSuites = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { @($_.executed.targeted_suite_names) })
-$actualHosts = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { Convert-HostIdentity $_ })
-$requiredSuites = Get-OrdinalStrings @($classification.required_suites)
-$requiredHosts = Get-OrdinalStrings @($classification.required_hosts)
-if ([bool]$classification.requires_windows_powershell) { $requiredHosts = Get-OrdinalStrings @($requiredHosts + "windows-powershell") }
+[string[]]$actualSuites = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { @($_.executed.targeted_suite_names) })
+[string[]]$actualHosts = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { Convert-HostIdentity $_ })
+[string[]]$requiredSuites = Get-OrdinalStrings @($classification.required_suites)
+[string[]]$requiredHosts = Get-OrdinalStrings @($classification.required_hosts)
+if ([bool]$classification.requires_windows_powershell) { [string[]]$requiredHosts = Get-OrdinalStrings @($requiredHosts + "windows-powershell") }
 $missingSuites = @($requiredSuites | Where-Object { $actualSuites -cnotcontains $_ })
 $missingHosts = @($requiredHosts | Where-Object { $actualHosts -cnotcontains $_ })
 if ($missingSuites.Count -or $missingHosts.Count) { throw "Suite/host closure is incomplete: suites=$($missingSuites -join ','); hosts=$($missingHosts -join ',')." }
 $selfProtectionFragments = @($fragments.ToArray() | Where-Object { [string]$_.identity.job -ceq "validation-self-protection" })
 if ([bool]$classification.run_validation_self_protection -and $selfProtectionFragments.Count -ne 1) { throw "Self-protection closure is incomplete." }
 
-$artifactDigests = @(Get-ChildItem -LiteralPath $fragmentsRootFull -Recurse -File | Sort-Object FullName | ForEach-Object {
+[object[]]$artifactDigests = @(Get-ChildItem -LiteralPath $fragmentsRootFull -Recurse -File | Sort-Object FullName | ForEach-Object {
     [ordered]@{
         path = $_.FullName.Substring($fragmentsRootFull.Length).TrimStart([char[]]@('\', '/')).Replace("\", "/")
         sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
 })
+[string[]]$affectedModules = Get-OrdinalStrings @($classification.affected_modules)
 $payload = [ordered]@{
     schema_version = 2; proof_kind = "canonical-candidate-evidence"; repository = $Repository; pr_number = [int]$candidate.pr_number
     base = $candidate.base; head = $candidate.head; candidate = $candidate.candidate; change = $candidate.change
     classifier = [ordered]@{
         schema_version = [int]$classification.schema_version; detected_tier = [int]$classification.detected_tier
-        affected_modules = Get-OrdinalStrings @($classification.affected_modules)
+        affected_modules = @($affectedModules)
         conservative_fallback = [bool]$classifierProperties.conservative_fallback; escalation_reason = [string]$classification.escalation_reason
         control_plane = [bool]$classifierProperties.control_plane
         self_protection_required = [bool]$classifierProperties.self_protection_required
         self_protection_reason = [string]$classifierProperties.self_protection_reason
     }
     required = [ordered]@{
-        suites = $requiredSuites; hosts = $requiredHosts; windows_powershell = [bool]$classification.requires_windows_powershell
+        suites = @($requiredSuites); hosts = @($requiredHosts); windows_powershell = [bool]$classification.requires_windows_powershell
         self_protection = [bool]$classification.run_validation_self_protection
     }
-    actual = [ordered]@{ suites = $actualSuites; hosts = $actualHosts; fragment_count = $fragments.Count }
+    actual = [ordered]@{ suites = @($actualSuites); hosts = @($actualHosts); fragment_count = $fragments.Count }
     decisions = [ordered]@{
         windows_powershell = $(if ([bool]$classification.requires_windows_powershell) { "required-and-passed" } else { "not-required" })
         self_protection = $(if ([bool]$classification.run_validation_self_protection) { "required-and-passed" } else { "not-required" })
@@ -175,7 +182,7 @@ $payload = [ordered]@{
     contracts = [ordered]@{ workflow = $WorkflowIdentity; routing = $RoutingContractIdentity; gate = $GateContractIdentity }
     run = [ordered]@{ id = $RunId; attempt = $RunAttempt }
     checks = [ordered]@{ base_guard = $binding.base_guard; identity_guard = $binding.identity_guard; final_gate = $binding.final_gate }
-    artifact_digests = $artifactDigests
+    artifact_digests = @($artifactDigests)
 }
 $generated = [DateTimeOffset]::UtcNow
 $manifest = [ordered]@{
