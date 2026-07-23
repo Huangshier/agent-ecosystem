@@ -148,6 +148,70 @@ function Invoke-ClassifierOutputContractFixtures {
     return @($fixtureResults.ToArray())
 }
 
+function Invoke-PowerShellEncodingFixtures {
+    $fixtureDirectory = Join-Path $PSScriptRoot "validation/lineage-verifier-fixtures"
+    $fixtureId = [Guid]::NewGuid().ToString("N")
+    $createdPaths = New-Object 'System.Collections.Generic.List[string]'
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+
+    function Assert-EncodingPass([string]$Name, [string]$RelativePath) {
+        $scratch = Join-Path $targetedScratch ("encoding-{0}" -f $Name)
+        $raw = @(& $targetedValidator -ChangedPath $RelativePath -Mode quick -ScratchRoot $scratch -Json) -join "`n"
+        $value = $raw | ConvertFrom-Json
+        $changedFileCheck = @($value.checks | Where-Object name -ceq "changed-file-parse")
+        if ($changedFileCheck.Count -ne 1 -or [string]$changedFileCheck[0].status -cne "PASS") {
+            throw "PowerShell encoding fixture '$Name' did not pass changed-file validation."
+        }
+        $fixtureResults.Add([ordered]@{ name = $Name; status = "PASS" })
+    }
+
+    try {
+        $asciiRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-ascii.ps1"
+        $bomRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-bom.ps1"
+        $noBomRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-no-bom.ps1"
+        $asciiPath = Join-Path $repoRoot $asciiRelative
+        $bomPath = Join-Path $repoRoot $bomRelative
+        $noBomPath = Join-Path $repoRoot $noBomRelative
+        foreach ($path in @($asciiPath, $bomPath, $noBomPath)) { $createdPaths.Add($path) }
+
+        [System.IO.File]::WriteAllBytes($asciiPath, [Text.Encoding]::ASCII.GetBytes("Write-Output 'ascii fixture'`r`n"))
+        $utf8NoBom = [Text.UTF8Encoding]::new($false)
+        $utf8Bom = [Text.UTF8Encoding]::new($true)
+        $nonAsciiMarker = [string]([char]0x7F16) + [string]([char]0x7801)
+        $nonAsciiContent = "# fixture: $nonAsciiMarker`r`nWrite-Output 'non-ascii fixture'`r`n"
+        [System.IO.File]::WriteAllBytes($bomPath, [byte[]]($utf8Bom.GetPreamble() + $utf8NoBom.GetBytes($nonAsciiContent)))
+        [System.IO.File]::WriteAllBytes($noBomPath, $utf8NoBom.GetBytes($nonAsciiContent))
+
+        Assert-EncodingPass "ascii-without-bom" $asciiRelative
+        Assert-EncodingPass "non-ascii-with-bom" $bomRelative
+
+        $failure = $null
+        try {
+            & $targetedValidator -ChangedPath $noBomRelative -Mode quick -ScratchRoot (Join-Path $targetedScratch "encoding-non-ascii-no-bom") -Json | Out-Null
+        }
+        catch {
+            $failure = $_
+        }
+        $requiredMessage = "Non-ASCII PowerShell files must be UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
+        if ($null -eq $failure -or
+            -not $failure.Exception.Message.Contains($noBomRelative) -or
+            -not $failure.Exception.Message.Contains($requiredMessage)) {
+            throw "PowerShell encoding fixture 'non-ascii-without-bom' did not fail with the required path and compatibility message."
+        }
+        $fixtureResults.Add([ordered]@{ name = "non-ascii-without-bom"; status = "PASS" })
+
+        Assert-EncodingPass "current-git-stable-patch-id" "scripts/validation/git-stable-patch-id.ps1"
+        return @($fixtureResults.ToArray())
+    }
+    finally {
+        foreach ($path in $createdPaths) {
+            if (Test-Path -LiteralPath $path -PathType Leaf) {
+                Remove-Item -LiteralPath $path -Force
+            }
+        }
+    }
+}
+
 function Invoke-TargetedRegression {
     param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
     $caseScratch = Join-Path $targetedScratch $Name
@@ -286,6 +350,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $pushRoutingResults = @(Invoke-PushRoutingFixtures)
 $classifierOutputResults = @(Invoke-ClassifierOutputContractFixtures)
+$powerShellEncodingResults = @(Invoke-PowerShellEncodingFixtures)
 $classifierFixtureValues = Get-Content -Raw (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") | ConvertFrom-Json
 $invalidClassifier = $classifierFixtureValues[0].result
 $invalidClassifier.required_suites = @("future-unknown-suite")
@@ -384,7 +449,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8

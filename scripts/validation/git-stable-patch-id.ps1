@@ -1,4 +1,4 @@
-function Assert-GitCommitSha {
+﻿function Assert-GitCommitSha {
     param(
         [Parameter(Mandatory = $true)][string]$Value,
         [Parameter(Mandatory = $true)][string]$Label
