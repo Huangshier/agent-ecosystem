@@ -212,6 +212,71 @@ function Invoke-PowerShellEncodingFixtures {
     }
 }
 
+function ConvertTo-WorkflowHostArrayJson {
+    param([object[]]$Hosts)
+
+    return ConvertTo-Json -InputObject ([object[]]@($Hosts)) -Compress
+}
+
+function Invoke-WorkflowHostArrayFixtures {
+    param(
+        [string]$Workflow,
+        [object]$FallbackClassification
+    )
+
+    $requiredSerializer = '$requiredHostsJson = ConvertTo-Json -InputObject ([object[]]@($result.required_hosts)) -Compress'
+    $requiredOutput = '"required_hosts_json=$requiredHostsJson" >> $env:GITHUB_OUTPUT'
+    if (-not $Workflow.Contains($requiredSerializer) -or -not $Workflow.Contains($requiredOutput)) {
+        throw "Workflow required_hosts_json output must use explicit -InputObject array serialization."
+    }
+    if ($Workflow.Contains('"required_hosts_json=$(@($result.required_hosts) | ConvertTo-Json -Compress)"')) {
+        throw "Workflow still uses pipeline serialization for required_hosts_json."
+    }
+
+    $matrixConsumers = @([regex]::Matches($Workflow, 'fromJSON\(needs\.classify\.outputs\.([A-Za-z0-9_]+)') | ForEach-Object { $_.Groups[1].Value })
+    if ($matrixConsumers.Count -ne 1 -or $matrixConsumers[0] -cne "required_hosts_json") {
+        throw "Workflow matrix JSON consumers changed unexpectedly."
+    }
+    if ($Workflow -notmatch 'os:\s*\$\{\{\s*fromJSON\(needs\.classify\.outputs\.required_hosts_json') {
+        throw "Affected validation matrix must consume required_hosts_json through fromJSON()."
+    }
+
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+    $cases = @(
+        [ordered]@{ name = "zero-hosts"; hosts = @(); expected = "[]" },
+        [ordered]@{ name = "one-host"; hosts = @("windows-latest"); expected = '["windows-latest"]' },
+        [ordered]@{ name = "multiple-hosts"; hosts = @("macos-latest", "ubuntu-latest", "windows-latest"); expected = '["macos-latest","ubuntu-latest","windows-latest"]' }
+    )
+    foreach ($case in $cases) {
+        $json = ConvertTo-WorkflowHostArrayJson -Hosts @($case.hosts)
+        if ($json -cne [string]$case.expected -or -not $json.StartsWith("[") -or -not $json.EndsWith("]")) {
+            throw "Workflow host array fixture '$($case.name)' produced '$json', expected '$($case.expected)'."
+        }
+        $roundTrip = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($hostValue in (ConvertFrom-Json -InputObject $json)) {
+            $roundTrip.Add($hostValue)
+        }
+        if (($roundTrip.ToArray() -join ",") -cne (@($case.hosts) -join ",")) {
+            throw "Workflow host array fixture '$($case.name)' did not preserve ordinal values."
+        }
+        $fixtureResults.Add([ordered]@{ name = [string]$case.name; json = $json; status = "PASS" })
+    }
+
+    $fallbackHosts = @($FallbackClassification.required_hosts)
+    $fallbackJson = ConvertTo-WorkflowHostArrayJson -Hosts $fallbackHosts
+    $fallbackRoundTrip = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($hostValue in (ConvertFrom-Json -InputObject $fallbackJson)) {
+        $fallbackRoundTrip.Add($hostValue)
+    }
+    if ($fallbackHosts.Count -ne 3 -or -not $fallbackJson.StartsWith("[") -or -not $fallbackJson.EndsWith("]") -or
+        ($fallbackRoundTrip.ToArray() -join ",") -cne ($fallbackHosts -join ",")) {
+        throw "Unknown classifier fallback hosts did not remain a three-host JSON array."
+    }
+    $fixtureResults.Add([ordered]@{ name = "unknown-fallback-three-hosts"; json = $fallbackJson; status = "PASS" })
+    $fixtureResults.Add([ordered]@{ name = "fromjson-array-consumer"; status = "PASS" })
+    return @($fixtureResults.ToArray())
+}
+
 function Invoke-TargetedRegression {
     param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
     $caseScratch = Join-Path $targetedScratch $Name
@@ -421,6 +486,7 @@ if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.conserva
     -not [bool]$unmappedTest.run_heavy_targeted_regression) {
     throw "Unmapped future test path did not fail closed to Tier 3 full routing."
 }
+$workflowHostArrayResults = @(Invoke-WorkflowHostArrayFixtures -Workflow $workflow -FallbackClassification $unmappedTest)
 
 $targetedResults = @()
 if ($RunTargetedRegression.IsPresent) {
@@ -449,7 +515,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
