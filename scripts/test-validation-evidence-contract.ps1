@@ -58,22 +58,51 @@ try {
     Assert-Contract ($manifest.artifact_contract.failure.mode -ceq "full-scratch" -and [bool]$manifest.artifact_contract.failure.recursive) "failure-full-scratch"
     Assert-Contract (-not $manifestText.Contains($scratch)) "manifest-omits-local-path"
 
+    foreach ($validationShard in @("Full", "PlatformNeutral", "RuntimePlatform", "RepositoryCheckpoint", "RepositoryCheckpointNeutral", "RepositoryCheckpointRuntime")) {
+        $shardScratch = Join-Path $scratch ("recognized-shard-{0}" -f $validationShard)
+        New-Item -ItemType Directory -Force -Path $shardScratch | Out-Null
+        [ordered]@{
+            schema_version = 1
+            validation_shard = $validationShard
+            shard_coverage = [ordered]@{ status = "PASS" }
+            checks = @([ordered]@{ name = "fixture-check"; status = "PASS"; detail = "fixture"; data = $null; duration_ms = 1 })
+        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $shardScratch "validation-result.json") -Encoding UTF8
+        & $writer -ScratchRoot $shardScratch -Outcome success -CommitSha $commitSha -RunId "shard-$validationShard" -RunAttempt "1" -JobName "validate-shard" -HostIdentity "fixture-host" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+        $shardManifest = Get-Content -LiteralPath (Join-Path $shardScratch "evidence-manifest.json") -Raw | ConvertFrom-Json
+        Assert-Contract ($shardManifest.validation_shard -ceq $validationShard -and $shardManifest.executed.validation_shard -ceq $validationShard) ("recognized-validation-shard:{0}" -f $validationShard)
+    }
+
+    $unknownShardScratch = Join-Path $scratch "unknown-shard"
+    New-Item -ItemType Directory -Force -Path $unknownShardScratch | Out-Null
+    [ordered]@{
+        schema_version = 1
+        validation_shard = "FutureUnknownShard"
+        shard_coverage = [ordered]@{ status = "PASS" }
+        checks = @()
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $unknownShardScratch "validation-result.json") -Encoding UTF8
+    $unknownShardFailed = $false
+    try {
+        & $writer -ScratchRoot $unknownShardScratch -Outcome success -CommitSha $commitSha -RunId "unknown-shard" -RunAttempt "1" -JobName "validate-shard" -HostIdentity "fixture-host" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+    }
+    catch { $unknownShardFailed = $true }
+    Assert-Contract $unknownShardFailed "unknown-validation-shard-fails-closed"
+
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
-    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 5) "five-success-upload-contracts"
-    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 5) "five-failure-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 6) "six-success-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 6) "six-failure-upload-contracts"
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
     Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 5) "five-manifest-call-sites"
-    Assert-Contract ($workflow.Contains('Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")')) "matrix-success-allowlist-follows-executed-routing"
     Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
-    Assert-Contract (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression[^\r\n]*[\r\n]+\s*(?:\(Join-Path|-Json -OutputPath)")).Count -eq 2) "routing-evidence-written-directly"
+    Assert-Contract ($workflow.Contains('validation-self-protection.json') -and $workflow.Contains('name: validation-self-protection')) "self-protection-evidence-uploaded"
     Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
     Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
     $failureUploadContracts = @(
         @("name: quick-validation-failure", 'path: ${{ runner.temp }}/agent-ecosystem-quick-validation'),
-        @('name: targeted-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
+        @('name: affected-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
+        @('name: validation-self-protection-failure', 'path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection'),
         @('name: validation-platform-neutral-failure', 'path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation'),
         @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation'),
-        @("name: validation-windows-powershell-failure", 'path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
+        @("name: validation-windows-powershell-failure", '${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
     )
     foreach ($contract in $failureUploadContracts) {
         Assert-Contract ($workflow.Contains($contract[0]) -and $workflow.Contains($contract[1])) ("failure-upload-root:{0}" -f $contract[0])

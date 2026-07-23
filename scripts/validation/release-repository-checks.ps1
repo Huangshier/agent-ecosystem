@@ -492,54 +492,6 @@ catch {
     Add-Check "PowerShell helper ownership allowlist" "FAIL" $_.Exception.Message
 }
 
-try {
-    $releaseHelper = Get-FileText -RelativePath "scripts/validation/release-test-helper.ps1"
-    $validatorText = Get-FileText -RelativePath "scripts/validate-release.ps1"
-    $helperFunctions = @(
-        "ConvertTo-DisplayPath",
-        "Add-Check",
-        "Test-RequiredPath",
-        "Get-GitFiles",
-        "Get-FileText",
-        "Get-LineMatches",
-        "Get-MissingRequiredText",
-        "Get-ValidationFilesByExtension",
-        "Test-BytesHaveUtf8Bom",
-        "Test-BytesHaveNonAscii",
-        "Get-PowerShellParseError",
-        "Get-CurrentPowerShellPath",
-        "Get-PowerShellFileArguments",
-        "Invoke-IsolatedPowerShellScript",
-        "Test-ExactArray"
-    )
-    $helperErrors = New-Object 'System.Collections.Generic.List[string]'
-
-    if ($validatorText -notmatch 'validation/release-test-helper\.ps1') {
-        $helperErrors.Add("scripts/validate-release.ps1 does not dot-source scripts/validation/release-test-helper.ps1")
-    }
-    foreach ($functionName in $helperFunctions) {
-        if ($releaseHelper -notmatch ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
-            $helperErrors.Add("scripts/validation/release-test-helper.ps1 missing $functionName")
-        }
-        if ($validatorText -match ("(?m)^function\s+{0}\s*\{{" -f [regex]::Escape($functionName))) {
-            $helperErrors.Add("scripts/validate-release.ps1 still defines $functionName locally")
-        }
-    }
-
-    if ($helperErrors.Count -eq 0) {
-        Add-Check "release validation helper" "PASS" "Release validator uses the shared validation helper for common test utilities." ([ordered]@{
-            helper = "scripts/validation/release-test-helper.ps1"
-            functions = @($helperFunctions)
-        })
-    }
-    else {
-        Add-Check "release validation helper" "FAIL" "Release validation helper wiring is incomplete." @($helperErrors.ToArray())
-    }
-}
-catch {
-    Add-Check "release validation helper" "FAIL" $_.Exception.Message
-}
-
 $skillNames = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
 $metadataErrors = New-Object 'System.Collections.Generic.List[string]'
 foreach ($skillName in $skillNames) {

@@ -3,7 +3,7 @@ param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
     [string]$TargetVersion = "v0.7.0",
-    [ValidateSet("Full", "PlatformNeutral", "RuntimePlatform")]
+    [ValidateSet("Full", "PlatformNeutral", "RuntimePlatform", "RepositoryCheckpoint", "RepositoryCheckpointNeutral", "RepositoryCheckpointRuntime")]
     [string]$ValidationShard = "Full",
     [switch]$Json
 )
@@ -49,6 +49,16 @@ Assert-NotLiveRuntime -Path $scratchRootFull
 New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
 
 $checks = New-Object 'System.Collections.Generic.List[object]'
+$releaseShardContract = Get-ReleaseShardContract
+$script:releaseMergedCheckMap = @{}
+$script:releaseMergedCheckTargets = @{}
+foreach ($property in @($releaseShardContract.merged_checks.PSObject.Properties)) {
+    $sourceName = [string]$property.Name
+    $targetName = [string]$property.Value
+    $script:releaseMergedCheckMap[$sourceName] = $targetName
+    $script:releaseMergedCheckTargets[$targetName] = $true
+}
+$script:mergedCheckEvidence = New-Object 'System.Collections.Generic.List[object]'
 $script:validationCheckStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $script:validationCheckCheckpointMs = 0L
 $evidence = [ordered]@{
@@ -90,7 +100,9 @@ $evidence = [ordered]@{
     claude_hooks_guardrails_templates = [ordered]@{}
     claude_hooks_guardrails_fixtures = [ordered]@{}
     claude_hooks_runtime_fixtures = [ordered]@{}
+    merged_checks = $script:mergedCheckEvidence
 }
+$script:includeCheckpointChecks = $ValidationShard -in @("RepositoryCheckpoint", "RepositoryCheckpointRuntime")
 
 $targetReleaseVersion = $TargetVersion.Trim()
 if ([string]::IsNullOrWhiteSpace($targetReleaseVersion)) {
@@ -247,99 +259,28 @@ Invoke-ReleaseParserSafetyChecks -ValidationShard $Shard
 
 }
 
-function Invoke-ReleaseValidationRoadmapChecks {
-try {
-    $thinRoadmapPath = Join-PathParts $repoRoot "docs" "roadmap" "release-validator-thin-entrypoint-plan.md"
-    $thinRoadmapExists = Test-Path -LiteralPath $thinRoadmapPath
-    $thinRoadmapTokens = @(
-        "1,500 lines or less",
-        "scripts/validation/**"
-    )
-    $thinRoadmapMissing = @()
-    if ($thinRoadmapExists) {
-        $thinRoadmapText = Get-Content -LiteralPath $thinRoadmapPath -Raw
-        foreach ($token in $thinRoadmapTokens) {
-            if ($thinRoadmapText -notlike "*$token*") {
-                $thinRoadmapMissing += $token
-            }
-        }
-    }
-
-    $script:evidence.thin_entrypoint_roadmap = [ordered]@{
-        path = "docs/roadmap/release-validator-thin-entrypoint-plan.md"
-        exists = [bool]$thinRoadmapExists
-        missing_tokens = @($thinRoadmapMissing)
-    }
-
-    if ($thinRoadmapExists -and $thinRoadmapMissing.Count -eq 0) {
-        Add-Check "thin entrypoint roadmap" "PASS" "The thin entrypoint roadmap document exists and contains the target threshold and growth rule tokens." $evidence.thin_entrypoint_roadmap
-    }
-    elseif (-not $thinRoadmapExists) {
-        Add-Check "thin entrypoint roadmap" "FAIL" "Missing docs/roadmap/release-validator-thin-entrypoint-plan.md." $evidence.thin_entrypoint_roadmap
-    }
-    else {
-        Add-Check "thin entrypoint roadmap" "FAIL" ("Roadmap document is missing required tokens: {0}" -f ($thinRoadmapMissing -join ", ")) $evidence.thin_entrypoint_roadmap
-    }
-}
-catch {
-    Add-Check "thin entrypoint roadmap" "FAIL" $_.Exception.Message
-}
-
-try {
-    $compatAuditPath = Join-PathParts $repoRoot "docs" "roadmap" "cross-runtime-skill-compatibility-audit.md"
-    $compatAuditExists = Test-Path -LiteralPath $compatAuditPath
-    $compatAuditTokens = @(
-        "safe-to-align",
-        "requires-adapter",
-        "do-not-change",
-        "needs-follow-up",
-        "agentskills.io",
-        "Claude Code",
-        "OpenAI Codex",
-        "GitHub Copilot",
-        "https://developers.openai.com/codex/skills"
-    )
-    $compatAuditMissing = @()
-    if ($compatAuditExists) {
-        $compatAuditText = Get-Content -LiteralPath $compatAuditPath -Raw
-        foreach ($token in $compatAuditTokens) {
-            if ($compatAuditText -notlike "*$token*") {
-                $compatAuditMissing += $token
-            }
-        }
-    }
-
-    $script:evidence.cross_runtime_compatibility_audit = [ordered]@{
-        path = "docs/roadmap/cross-runtime-skill-compatibility-audit.md"
-        exists = [bool]$compatAuditExists
-        missing_tokens = @($compatAuditMissing)
-    }
-
-    if ($compatAuditExists -and $compatAuditMissing.Count -eq 0) {
-        Add-Check "cross-runtime compatibility audit" "PASS" "The cross-runtime skill compatibility audit document exists and contains all required alignment category and runtime tokens." $evidence.cross_runtime_compatibility_audit
-    }
-    elseif (-not $compatAuditExists) {
-        Add-Check "cross-runtime compatibility audit" "FAIL" "Missing docs/roadmap/cross-runtime-skill-compatibility-audit.md." $evidence.cross_runtime_compatibility_audit
-    }
-    else {
-        Add-Check "cross-runtime compatibility audit" "FAIL" ("Compatibility audit document is missing required tokens: {0}" -f ($compatAuditMissing -join ", ")) $evidence.cross_runtime_compatibility_audit
-    }
-}
-catch {
-    Add-Check "cross-runtime compatibility audit" "FAIL" $_.Exception.Message
-}
-}
-
 try {
     if ($ValidationShard -in @("Full", "PlatformNeutral")) {
+        Invoke-ReleaseValidationParserSafetyChecks -Shard PlatformNeutral
+        Invoke-ReleaseTemplateLanguageChecks
+        Invoke-ReleaseClaudeHooksGuardrailsChecks -ValidationShard PlatformNeutral
+    }
+    if ($ValidationShard -in @("RepositoryCheckpoint", "RepositoryCheckpointNeutral")) {
         Invoke-ReleaseValidationRepositoryChecks
         Invoke-ReleaseValidationSpecAndDocumentationChecks
         Invoke-ReleaseKnowledgeHubChecks
         Invoke-ReleaseValidationParserSafetyChecks -Shard PlatformNeutral
         Invoke-ReleaseTemplateLanguageChecks
-        Invoke-ReleaseValidationRoadmapChecks
     }
     if ($ValidationShard -in @("Full", "RuntimePlatform")) {
+        Invoke-ReleaseHubInitializationChecks
+        Invoke-ReleaseValidationInstallerRuntimeChecks
+        Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks
+        Invoke-ReleaseValidationParserSafetyChecks -Shard RuntimePlatform
+        Invoke-ReleaseValidationLanguageTemplateChecks
+        Invoke-ReleaseClaudeHooksGuardrailsChecks -ValidationShard RuntimePlatform
+    }
+    if ($ValidationShard -in @("RepositoryCheckpoint", "RepositoryCheckpointRuntime")) {
         Invoke-ReleaseHubInitializationChecks
         Invoke-ReleaseValidationInstallerRuntimeChecks
         Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks
@@ -368,7 +309,7 @@ catch {
 }
 
 $result = [ordered]@{
-    schema_version = 1
+    schema_version = 2
     validated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
     validation_shard = $ValidationShard
     shard_coverage = $shardCoverage

@@ -45,7 +45,12 @@ function New-LocalValidationSkip {
 }
 
 function New-LocalValidationPlan {
-    param([int]$Tier, [bool]$RunHeavyTargeted, [string]$HeavyTargetedReason)
+    param(
+        [int]$Tier,
+        [bool]$RunSelfProtection,
+        [string]$SelfProtectionReason,
+        [bool]$RequiresWindowsPowerShell
+    )
 
     $lightweight = New-LocalValidationAction `
         -Id "classifier-contracts" `
@@ -66,55 +71,48 @@ function New-LocalValidationPlan {
     $iterationActions = New-Object 'System.Collections.Generic.List[object]'
     $iterationSkips = New-Object 'System.Collections.Generic.List[object]'
     $iterationActions.Add($lightweight)
-    if ($Tier -lt 3) {
-        $iterationActions.Add($targeted)
-        $iterationSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Tier 0-2 iteration uses affected checks instead of full validation."))
+    $iterationActions.Add($targeted)
+    if ($RunSelfProtection) {
+        $iterationActions.Add((New-LocalValidationAction -Id "validation-self-protection" -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName "current" -Suite "validation-self-protection" -Reason $SelfProtectionReason))
     }
     else {
-        $iterationSkips.Add((New-LocalValidationSkip -Id "affected-change-validation" -Reason "Tier 3 cannot be represented by targeted validation."))
-        $iterationSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason "Iteration never runs heavy targeted regression; defer it to pre-push."))
-        $iterationSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Iteration never runs full validation; defer it to pre-push."))
+        $iterationSkips.Add((New-LocalValidationSkip -Id "validation-self-protection" -Reason $SelfProtectionReason))
     }
+    $iterationSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Iteration runs affected suites and independent oracles, not a release checkpoint."))
 
     $prePushActions = New-Object 'System.Collections.Generic.List[object]'
     $prePushSkips = New-Object 'System.Collections.Generic.List[object]'
     $prePushActions.Add($lightweight)
-    if ($Tier -lt 3) {
-        $prePushActions.Add($targeted)
-        $prePushSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Tier 0-2 pre-push validation is satisfied by affected checks."))
+    $prePushActions.Add($targeted)
+    if ($RequiresWindowsPowerShell) {
+        $prePushActions.Add((New-LocalValidationAction -Id "affected-change-validation-windows-powershell" -Script "scripts/validate-targeted-change.ps1" -Arguments @("-Mode", $targetedMode, "-ExecutionHost", "windows-powershell") -HostName "windows-powershell" -Suite "affected-windows-powershell-oracle" -Reason "The affected suite set contains PowerShell 5.1 compatibility semantics."))
     }
     else {
-        $prePushSkips.Add((New-LocalValidationSkip -Id "affected-change-validation" -Reason "Tier 3 requires the complete validator."))
-        if ($RunHeavyTargeted) {
-            foreach ($hostName in @("pwsh", "windows-powershell")) {
-                $prePushActions.Add((New-LocalValidationAction -Id ("heavy-targeted-regression-{0}" -f $hostName) -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName $hostName -Suite "heavy-targeted-regression" -Reason $HeavyTargetedReason))
-            }
-        }
-        else {
-            $prePushSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason $HeavyTargetedReason))
-        }
-        foreach ($hostName in @("pwsh", "windows-powershell")) {
-            $prePushActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @() -HostName $hostName -Suite "full-release-validation" -Reason "Tier 3 pre-push preserves the complete dual-host local boundary."))
-        }
+        $prePushSkips.Add((New-LocalValidationSkip -Id "affected-windows-powershell-oracle" -Reason "No affected suite requires Windows PowerShell 5.1 semantics."))
     }
+    if ($RunSelfProtection) {
+        $prePushActions.Add((New-LocalValidationAction -Id "validation-self-protection" -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName "current" -Suite "validation-self-protection" -Reason $SelfProtectionReason))
+    }
+    else {
+        $prePushSkips.Add((New-LocalValidationSkip -Id "validation-self-protection" -Reason $SelfProtectionReason))
+    }
+    $prePushSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Pre-push is satisfied by affected suites, the necessary WinPS oracle, and independent self-protection."))
 
     $releaseActions = New-Object 'System.Collections.Generic.List[object]'
     $releaseSkips = New-Object 'System.Collections.Generic.List[object]'
     $releaseActions.Add($lightweight)
-    if ($Tier -eq 3 -and $RunHeavyTargeted) {
-        foreach ($hostName in @("pwsh", "windows-powershell")) {
-            $releaseActions.Add((New-LocalValidationAction -Id ("heavy-targeted-regression-{0}" -f $hostName) -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName $hostName -Suite "heavy-targeted-regression" -Reason $HeavyTargetedReason))
-        }
+    if ($RunSelfProtection) {
+        $releaseActions.Add((New-LocalValidationAction -Id "validation-self-protection" -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName "pwsh" -Suite "validation-self-protection" -Reason $SelfProtectionReason))
     }
     else {
-        $releaseSkips.Add((New-LocalValidationSkip -Id "heavy-targeted-regression" -Reason $(if ($Tier -eq 3) { $HeavyTargetedReason } else { "Heavy targeted regression is a Tier 3 self-protection check." })))
+        $releaseSkips.Add((New-LocalValidationSkip -Id "validation-self-protection" -Reason $SelfProtectionReason))
     }
     foreach ($hostName in @("pwsh", "windows-powershell")) {
-        $releaseActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @() -HostName $hostName -Suite "full-release-validation" -Reason "Release validation always preserves the complete dual-host local boundary."))
+        $releaseActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @("-ValidationShard", "RepositoryCheckpoint") -HostName $hostName -Suite "full-release-validation" -Reason "Release validation always preserves the complete dual-host repository checkpoint boundary."))
     }
 
     return [ordered]@{
-        schema_version = 1
+        schema_version = 2
         stages = [ordered]@{
             iteration = [ordered]@{ actions = @($iterationActions.ToArray()); skipped = @($iterationSkips.ToArray()) }
             pre_push = [ordered]@{ actions = @($prePushActions.ToArray()); skipped = @($prePushSkips.ToArray()) }
@@ -125,12 +123,11 @@ function New-LocalValidationPlan {
 
 function New-ConservativeResult {
     param([string]$Reason, [string[]]$Paths = @(), [string]$Base = "", [string]$Head = "")
-    return New-ChangeResult -Tier 3 -Paths $Paths -Reasons @($Reason) -Modules @("validation-routing") -Base $Base -Head $Head
+    return New-ChangeResult -Tier 3 -Paths $Paths -Reasons @($Reason) -Modules @("unknown") -Base $Base -Head $Head -ConservativeFallback
 }
 
 function New-ChangeResult {
-    param([int]$Tier, [string[]]$Paths, [string[]]$Reasons, [string[]]$Modules, [string]$Base = "", [string]$Head = "")
-    $tierContract = $config.tiers.PSObject.Properties[[string]$Tier].Value
+    param([int]$Tier, [string[]]$Paths, [string[]]$Reasons, [string[]]$Modules, [string]$Base = "", [string]$Head = "", [switch]$ConservativeFallback)
     $moduleSuiteMap = [ordered]@{}
     $requiredSuites = New-Object 'System.Collections.Generic.List[string]'
     foreach ($module in @($Modules | Sort-Object -Unique)) {
@@ -138,6 +135,10 @@ function New-ChangeResult {
         $suites = if ($null -eq $property) { @() } else { @($property.Value) }
         $moduleSuiteMap[[string]$module] = @($suites)
         foreach ($suite in $suites) { $requiredSuites.Add([string]$suite) }
+    }
+    if ($ConservativeFallback.IsPresent -or @($Modules | Where-Object { [string]$_ -match '^(unknown|unsupported-)' }).Count -gt 0) {
+        foreach ($suite in @($config.fallback_suites)) { $requiredSuites.Add([string]$suite) }
+        foreach ($module in @($Modules | Sort-Object -Unique)) { $moduleSuiteMap[[string]$module] = @($config.fallback_suites) }
     }
     $heavyTargetedRequiredSuites = @(
         "agent-skill-bridge",
@@ -162,6 +163,7 @@ function New-ChangeResult {
         '^\.github/workflows/',
         '^scripts/(validate-(change|targeted-change|release)|invoke-local-validation)\.ps1$',
         '^scripts/test-(validate-change|heavy-targeted-regression|local-validation-plan|release-sharding|validation-evidence-contract)\.ps1$',
+        '^scripts/test-required-validation-gate\.ps1$',
         '^scripts/validation/change-risk-rules\.json$',
         '^scripts/validation/change-risk-fixtures/',
         '^scripts/validation/local-validation-plan-contract\.ps1$',
@@ -170,6 +172,7 @@ function New-ChangeResult {
         '^scripts/validation/release-shard-contract\.(json|ps1)$',
         '^scripts/validation/release-test-helper\.ps1$',
         '^scripts/validation/required-validation-gate\.ps1$',
+        '^scripts/validation/required-validation-gate-fixtures/',
         '^scripts/validation/write-evidence-manifest\.ps1$'
     )
     $hasSelfProtectionPath = @($Paths | Where-Object {
@@ -177,44 +180,91 @@ function New-ChangeResult {
         @($selfProtectionPatterns | Where-Object { $candidate -match $_ }).Count -gt 0
     }).Count -gt 0
     $hasAmbiguousModule = @($Modules | Where-Object {
-        [string]$_ -match '^(unknown|unsupported-|validation-routing)'
+        [string]$_ -match '^(unknown|unsupported-)'
     }).Count -gt 0
-    $runHeavyTargeted = $false
-    $heavyTargetedReason = "not-tier-3"
-    if ($Tier -eq 3) {
-        if ($coverageDifference.Count -gt 0) {
-            $runHeavyTargeted = $true
-            $heavyTargetedReason = "full-coverage-unproven"
+    $runSelfProtection = $hasSelfProtectionPath -or $hasAmbiguousModule -or $coverageDifference.Count -gt 0
+    $selfProtectionReason = if ($coverageDifference.Count -gt 0) {
+        "full-coverage-unproven"
+    } elseif ($hasAmbiguousModule) {
+        "unknown-or-ambiguous-input"
+    } elseif ($hasSelfProtectionPath) {
+        "self-protection-control-surface"
+    } elseif ($Tier -lt 3) {
+        "not-tier-3"
+    } else {
+        "no-control-plane-change"
+    }
+    $suiteHostMap = [ordered]@{}
+    $requiredHosts = New-Object 'System.Collections.Generic.List[string]'
+    $requiresWindowsPowerShell = $false
+    $requiredWindowsPowerShellSuites = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($suite in @($requiredSuites.ToArray() | Sort-Object -Unique)) {
+        $hostProperty = $config.suite_hosts.PSObject.Properties[[string]$suite]
+        if ($null -eq $hostProperty -or @($hostProperty.Value).Count -eq 0) {
+            $runSelfProtection = $true
+            $selfProtectionReason = "unknown-suite-host-dependency"
+            foreach ($hostName in @("windows-latest", "ubuntu-latest", "macos-latest")) { $requiredHosts.Add($hostName) }
+            $suiteHostMap[[string]$suite] = @("windows-latest", "ubuntu-latest", "macos-latest")
+        } else {
+            $suiteHostMap[[string]$suite] = @($hostProperty.Value)
+            foreach ($hostName in @($hostProperty.Value)) { $requiredHosts.Add([string]$hostName) }
         }
-        elseif ($hasSelfProtectionPath) {
-            $runHeavyTargeted = $true
-            $heavyTargetedReason = "self-protection-control-surface"
-        }
-        elseif ($hasAmbiguousModule) {
-            $runHeavyTargeted = $true
-            $heavyTargetedReason = "unknown-or-ambiguous-input"
-        }
-        else {
-            $heavyTargetedReason = "tier-3-full-covers-required-suites"
+        if (@($config.windows_powershell_suites) -contains [string]$suite) {
+            $requiresWindowsPowerShell = $true
+            $requiredWindowsPowerShellSuites.Add([string]$suite)
         }
     }
-    $localPlan = New-LocalValidationPlan -Tier $Tier -RunHeavyTargeted $runHeavyTargeted -HeavyTargetedReason $heavyTargetedReason
+    if ($runSelfProtection) {
+        foreach ($hostName in @($config.self_protection_hosts)) { $requiredHosts.Add([string]$hostName) }
+    }
+    $localPlan = New-LocalValidationPlan -Tier $Tier -RunSelfProtection $runSelfProtection -SelfProtectionReason $selfProtectionReason -RequiresWindowsPowerShell $requiresWindowsPowerShell
+    $requiredChecks = New-Object 'System.Collections.Generic.List[string]'
+    $skippedChecks = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($check in @("change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard")) {
+        $requiredChecks.Add($check)
+    }
+    if ($Tier -le 1) { $requiredChecks.Add("quick-repository-checks") } else { $skippedChecks.Add("quick-repository-checks") }
+    $sortedRequiredSuites = @($requiredSuites.ToArray() | Sort-Object -Unique)
+    if ($sortedRequiredSuites.Count -gt 0) {
+        $requiredChecks.Add("targeted-module-checks")
+        foreach ($suite in $sortedRequiredSuites) { $requiredChecks.Add("affected-suite:$suite") }
+    }
+    else {
+        $skippedChecks.Add("targeted-module-checks")
+    }
+    if ($requiresWindowsPowerShell) { $requiredChecks.Add("affected-windows-powershell") } else { $skippedChecks.Add("affected-windows-powershell") }
+    if ($runSelfProtection) { $requiredChecks.Add("validation-self-protection") } else { $skippedChecks.Add("validation-self-protection") }
+    $skippedChecks.Add("full-release-matrix")
+    $hostedPlan = [ordered]@{
+        validation_jobs = @("classify") + $(if ($Tier -le 1) { @("quick-validation") } else { @("affected-validation") }) + $(if ($runSelfProtection) { @("validation-self-protection") } else { @() })
+        full_validator_calls = 0
+        platform_neutral_validator_calls = 0
+        runtime_platform_validator_calls = 0
+        targeted_os_jobs = @($requiredHosts.ToArray() | Sort-Object -Unique).Count
+    }
     return [ordered]@{
-        schema_version = 1
+        schema_version = 2
         detected_tier = $Tier
         base_ref = $Base
         head_ref = $Head
         changed_paths = @($Paths | Sort-Object -Unique)
         affected_modules = @($Modules | Sort-Object -Unique)
         base_check_modules = @($Modules | Where-Object { @($config.base_check_modules) -contains [string]$_ } | Sort-Object -Unique)
-        required_suites = @($requiredSuites.ToArray() | Sort-Object -Unique)
+        required_suites = $sortedRequiredSuites
         module_suite_map = $moduleSuiteMap
-        required_checks = @($tierContract.required_checks)
-        skipped_checks = @($tierContract.skipped_checks)
-        hosted_plan = $tierContract.hosted_plan
+        required_hosts = @($requiredHosts.ToArray() | Sort-Object -Unique)
+        suite_host_map = $suiteHostMap
+        requires_windows_powershell = [bool]$requiresWindowsPowerShell
+        required_windows_powershell_suites = @($requiredWindowsPowerShellSuites.ToArray() | Sort-Object -Unique)
+        run_validation_self_protection = [bool]$runSelfProtection
+        validation_self_protection_reason = $selfProtectionReason
+        conservative_fallback = [bool]($ConservativeFallback.IsPresent -or $hasAmbiguousModule)
+        required_checks = @($requiredChecks.ToArray())
+        skipped_checks = @($skippedChecks.ToArray())
+        hosted_plan = $hostedPlan
         local_plan = $localPlan
-        run_heavy_targeted_regression = [bool]$runHeavyTargeted
-        heavy_targeted_reason = $heavyTargetedReason
+        run_heavy_targeted_regression = [bool]$runSelfProtection
+        heavy_targeted_reason = $selfProtectionReason
         heavy_targeted_required_suites = $heavyTargetedRequiredSuites
         full_validator_coverage_suites = $fullValidatorCoverageSuites
         escalation_reason = (@($Reasons | Sort-Object -Unique) -join "; ")

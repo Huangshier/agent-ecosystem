@@ -6,13 +6,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
 
 permissions:
   contents: read
   actions: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,6 +24,11 @@ jobs:
     outputs:
       tier: ${{ steps.risk.outputs.tier }}
       modules: ${{ steps.risk.outputs.modules }}
+      required_suites: ${{ steps.risk.outputs.required_suites }}
+      required_hosts_json: ${{ steps.risk.outputs.required_hosts_json }}
+      requires_windows_powershell: ${{ steps.risk.outputs.requires_windows_powershell }}
+      run_validation_self_protection: ${{ steps.risk.outputs.run_validation_self_protection }}
+      validation_self_protection_reason: ${{ steps.risk.outputs.validation_self_protection_reason }}
       base: ${{ steps.risk.outputs.base }}
       head: ${{ steps.risk.outputs.head }}
       run_heavy_targeted_regression: ${{ steps.risk.outputs.run_heavy_targeted_regression }}
@@ -79,6 +86,11 @@ jobs:
           $result = ./scripts/validation/release-classifier-output-contract.ps1 -Result $result
           "tier=$($result.detected_tier)" >> $env:GITHUB_OUTPUT
           "modules=$(@($result.affected_modules) -join ',')" >> $env:GITHUB_OUTPUT
+          "required_suites=$(@($result.required_suites) -join ',')" >> $env:GITHUB_OUTPUT
+          "required_hosts_json=$(@($result.required_hosts) | ConvertTo-Json -Compress)" >> $env:GITHUB_OUTPUT
+          "requires_windows_powershell=$(([bool]$result.requires_windows_powershell).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "run_validation_self_protection=$(([bool]$result.run_validation_self_protection).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "validation_self_protection_reason=$($result.validation_self_protection_reason)" >> $env:GITHUB_OUTPUT
           "base=$($result.base_ref)" >> $env:GITHUB_OUTPUT
           "head=$($result.head_ref)" >> $env:GITHUB_OUTPUT
           "run_heavy_targeted_regression=$(([bool]$result.run_heavy_targeted_regression).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
@@ -97,7 +109,7 @@ jobs:
   quick-validation:
     name: quick validation
     needs: classify
-    if: (github.event_name == 'pull_request' || github.event_name == 'push') && (needs.classify.outputs.tier == '0' || needs.classify.outputs.tier == '1')
+    if: github.event_name == 'pull_request' && (needs.classify.outputs.tier == '0' || needs.classify.outputs.tier == '1')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -149,14 +161,14 @@ jobs:
           if-no-files-found: error
 
   targeted-validation:
-    name: targeted Tier 2 (${{ matrix.os }})
+    name: affected validation (${{ matrix.os }})
     needs: classify
-    if: (github.event_name == 'pull_request' || github.event_name == 'push') && needs.classify.outputs.tier == '2'
+    if: always() && github.event_name == 'pull_request' && (needs.classify.result != 'success' || needs.classify.outputs.tier == '2' || needs.classify.outputs.tier == '3')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(needs.classify.outputs.required_hosts_json || '["windows-latest","ubuntu-latest","macos-latest"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -170,8 +182,9 @@ jobs:
           ./scripts/validate-targeted-change.ps1 `
             -BaseRef "${{ needs.classify.outputs.base }}" `
             -HeadRef "${{ needs.classify.outputs.head }}" `
-            -Mode targeted `
-            -ScratchRoot $scratch `
+             -Mode targeted `
+             -ExecutionHost "${{ matrix.os }}" `
+             -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
       - name: Write targeted validation evidence manifest
         if: always()
@@ -193,7 +206,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: targeted-validation-${{ matrix.os }}
+          name: affected-validation-${{ matrix.os }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/targeted-validation-result.json
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/evidence-manifest.json
@@ -202,14 +215,47 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: targeted-validation-${{ matrix.os }}-failure
+          name: affected-validation-${{ matrix.os }}-failure
           path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
+          if-no-files-found: error
+
+  validation-self-protection:
+    name: validation self-protection
+    needs: classify
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'push') && (needs.classify.result != 'success' || needs.classify.outputs.run_validation_self_protection != 'false')
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Run independent validation mutation oracle
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-validation-self-protection"
+          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+          ./scripts/test-heavy-targeted-regression.ps1 -Json |
+            Tee-Object -FilePath (Join-Path $scratch "validation-self-protection.json")
+      - name: Upload self-protection success evidence
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-self-protection
+          path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection/validation-self-protection.json
+          if-no-files-found: error
+      - name: Upload self-protection failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-self-protection-failure
+          path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection
           if-no-files-found: error
 
   validate-platform-neutral:
     name: validate platform-neutral contracts
     needs: classify
-    if: always() && github.event_name != 'workflow_dispatch' && (needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
 
     steps:
@@ -223,8 +269,9 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-platform-neutral-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+          $shard = if ("${{ github.event_name }}" -eq "push") { "PlatformNeutral" } else { "RepositoryCheckpointNeutral" }
           ./scripts/validate-release.ps1 `
-            -ValidationShard PlatformNeutral `
+            -ValidationShard $shard `
             -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
@@ -264,7 +311,7 @@ jobs:
   validate:
     name: validate pwsh (${{ matrix.os }})
     needs: classify
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -280,21 +327,12 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.validation_sha }}
 
-      - name: Run Tier 3 targeted routing regressions
-        if: (needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')) && matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
-          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          ./scripts/test-validate-change.ps1 -RunTargetedRegression -Json -OutputPath `
-            (Join-Path $scratch "change-routing-tests.json")
-
       - name: Run release validator
         shell: pwsh
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $shard = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "Full" } else { "RuntimePlatform" }
+          $shard = if ("${{ github.event_name }}" -eq "push") { "RuntimePlatform" } else { "RepositoryCheckpointRuntime" }
           ./scripts/validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
@@ -305,17 +343,9 @@ jobs:
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          $isWindowsJob = "${{ matrix.os }}" -eq "windows-latest"
           $heavyStatus = "not-applicable"
-          $heavyReason = "non-windows-full-job"
-          if ($isWindowsJob) {
-            $heavyStatus = if ("${{ needs.classify.result }}" -ne "success" -or "${{ needs.classify.outputs.run_heavy_targeted_regression }}" -ne "false") { "executed" } else { "skipped" }
-            $heavyReason = if ("${{ needs.classify.result }}" -ne "success") { "classifier-failure" } else { "${{ needs.classify.outputs.heavy_targeted_reason }}" }
-          }
+          $heavyReason = "independent-self-protection-job"
           $successAllowlist = @("validation-result.json", "evidence-manifest.json")
-          if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
-            $successAllowlist = @("change-routing-tests.json") + $successAllowlist
-          }
           ./scripts/validation/write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
@@ -333,7 +363,6 @@ jobs:
         with:
           name: validation-pwsh-${{ matrix.os }}
           path: |
-            ${{ runner.temp }}/agent-ecosystem-release-validation/change-routing-tests.json
             ${{ runner.temp }}/agent-ecosystem-release-validation/validation-result.json
             ${{ runner.temp }}/agent-ecosystem-release-validation/evidence-manifest.json
           if-no-files-found: error
@@ -348,30 +377,34 @@ jobs:
   validate-windows-powershell:
     name: validate Windows PowerShell 5.1
     needs: classify
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.classify.result != 'success' || needs.classify.outputs.tier == '3')
+    if: always() && ((github.event_name == 'pull_request' && (needs.classify.result != 'success' || needs.classify.outputs.requires_windows_powershell != 'false')) || github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
 
-      - name: Run Tier 3 targeted routing regressions
-        if: needs.classify.result != 'success' || (needs.classify.outputs.tier == '3' && needs.classify.outputs.run_heavy_targeted_regression != 'false')
+      - name: Run affected Windows PowerShell suites
+        if: github.event_name == 'pull_request'
         shell: powershell
         run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-affected-validation-windows-powershell"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-validate-change.ps1 -RunTargetedRegression `
-            -Json -OutputPath (Join-Path $scratch "change-routing-tests.json")
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-targeted-change.ps1 `
+            -BaseRef "${{ needs.classify.outputs.base }}" -HeadRef "${{ needs.classify.outputs.head }}" `
+            -Mode targeted -ExecutionHost windows-powershell -ScratchRoot $scratch -Json |
+            Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
       - name: Run release validator
+        if: github.event_name != 'pull_request'
         shell: powershell
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $shard = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "Full" } else { "RuntimePlatform" }
+          $shard = if ("${{ github.event_name }}" -eq "push") { "RuntimePlatform" } else { "RepositoryCheckpointRuntime" }
           powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
@@ -379,15 +412,12 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
+          $scratch = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "agent-ecosystem-affected-validation-windows-powershell" } else { Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell" }
           $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
           $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          $heavyStatus = if ("${{ needs.classify.result }}" -ne "success" -or "${{ needs.classify.outputs.run_heavy_targeted_regression }}" -ne "false") { "executed" } else { "skipped" }
-          $heavyReason = if ("${{ needs.classify.result }}" -ne "success") { "classifier-failure" } else { "${{ needs.classify.outputs.heavy_targeted_reason }}" }
-          $successAllowlist = @("validation-result.json", "evidence-manifest.json")
-          if (Test-Path -LiteralPath (Join-Path $scratch "change-routing-tests.json")) {
-            $successAllowlist = @("change-routing-tests.json") + $successAllowlist
-          }
+          $heavyStatus = "not-applicable"
+          $heavyReason = "independent-self-protection-job"
+          $successAllowlist = if ("${{ github.event_name }}" -eq "pull_request") { @("targeted-validation-result.json", "evidence-manifest.json") } else { @("validation-result.json", "evidence-manifest.json") }
           .\scripts\validation\write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
@@ -405,7 +435,8 @@ jobs:
         with:
           name: validation-windows-powershell
           path: |
-            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/change-routing-tests.json
+            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/targeted-validation-result.json
+            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/evidence-manifest.json
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-result.json
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/evidence-manifest.json
           if-no-files-found: error
@@ -414,7 +445,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: validation-windows-powershell-failure
-          path: ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell
+            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
           if-no-files-found: error
 
   validation-gate:
@@ -424,6 +457,7 @@ jobs:
       - classify
       - quick-validation
       - targeted-validation
+      - validation-self-protection
       - validate-platform-neutral
       - validate
       - validate-windows-powershell
@@ -442,6 +476,9 @@ jobs:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           QUICK_RESULT: ${{ needs.quick-validation.result }}
           TARGETED_RESULT: ${{ needs.targeted-validation.result }}
+          SELF_PROTECTION_RESULT: ${{ needs.validation-self-protection.result }}
+          SELF_PROTECTION_REQUIRED: ${{ needs.classify.outputs.run_validation_self_protection }}
+          WINDOWS_POWERSHELL_REQUIRED: ${{ needs.classify.outputs.requires_windows_powershell }}
           PLATFORM_NEUTRAL_RESULT: ${{ needs.validate-platform-neutral.result }}
           PWSH_MATRIX_RESULT: ${{ needs.validate.result }}
           WINDOWS_POWERSHELL_RESULT: ${{ needs.validate-windows-powershell.result }}
@@ -452,6 +489,9 @@ jobs:
             -ClassifyResult $env:CLASSIFY_RESULT `
             -QuickResult $env:QUICK_RESULT `
             -TargetedResult $env:TARGETED_RESULT `
+            -SelfProtectionResult $env:SELF_PROTECTION_RESULT `
+            -SelfProtectionRequired $env:SELF_PROTECTION_REQUIRED `
+            -WindowsPowerShellRequired $env:WINDOWS_POWERSHELL_REQUIRED `
             -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
             -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT

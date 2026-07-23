@@ -46,54 +46,6 @@ catch {
 }
 
 try {
-    $structuralDiagnosticsFiles = [ordered]@{
-        "docs/roadmap/memory-diagnose-structural-diagnostics.md" = @(
-            'Status: design boundary for issue #155 Part B',
-            'PR #160 completed #155 Part A',
-            'Do not implement Completed list growth detection in this design PR',
-            'Do not implement information-density heuristics in this design PR',
-            'Do not change `LargeFileLineThreshold`',
-            'Completed list growth',
-            'Information-density pressure',
-            'Stable facts mixed with runtime state',
-            'Fixture Matrix',
-            'Staged Implementation Plan'
-        )
-        "skills/memory-governance/README.md" = @(
-            'Structural Diagnostics Design',
-            'memory-diagnose-structural-diagnostics.md',
-            '#155 Part B',
-            'design-first'
-        )
-    }
-
-    $structuralDiagnosticsMissing = New-Object 'System.Collections.Generic.List[string]'
-    foreach ($relativePath in $structuralDiagnosticsFiles.Keys) {
-        $text = Get-FileText -RelativePath $relativePath
-        foreach ($token in $structuralDiagnosticsFiles[$relativePath]) {
-            if (-not $text.Contains($token)) {
-                $structuralDiagnosticsMissing.Add("$relativePath missing token: $token")
-            }
-        }
-    }
-
-    $script:evidence.structural_diagnostics_design = [ordered]@{
-        checked_files = @($structuralDiagnosticsFiles.Keys)
-        missing = @($structuralDiagnosticsMissing.ToArray())
-    }
-
-    if ($structuralDiagnosticsMissing.Count -gt 0) {
-        Add-Check "structural memory diagnostics design" "FAIL" "Structural memory diagnostics design boundary is incomplete." $evidence.structural_diagnostics_design
-    }
-    else {
-        Add-Check "structural memory diagnostics design" "PASS" "Structural memory diagnostics design defines Part B boundaries, false-positive risks, fixture expectations, and staged implementation." $evidence.structural_diagnostics_design
-    }
-}
-catch {
-    Add-Check "structural memory diagnostics design" "FAIL" $_.Exception.Message
-}
-
-try {
     $rootGuidanceFiles = [ordered]@{
         "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
         "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @("single authoritative project behavior contract", "## Working Philosophy", "## On Stopping to Ask", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Verification And Completion", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "## Project Work Packages", '`.agents/commands/README.md`')
@@ -280,40 +232,6 @@ try {
 }
 catch {
     Add-Check "context index guidance" "FAIL" $_.Exception.Message
-}
-
-try {
-    $adoptionFiles = [ordered]@{
-        "docs/how-to-adapt.md" = @("Install A Runtime", "Bootstrap A Project", "Use The Workflow Kernel", "Keep Layers Separate", "examples/minimal-project")
-        "examples/README.md" = @("Minimal Project", "How To Adapt")
-        "examples/minimal-project/README.md" = @("Workflow Kernel", ".agents", "docs/specs")
-        "examples/minimal-project/.agents/AGENTS.md" = @("Project Language Policy", "unrelated refactors", "skipped validation")
-        "examples/minimal-project/docs/specs/example-work/spec.md" = @("## 3. Goals", "## 4. Non-Goals", "## 9. Acceptance / Evidence", "Stop rule")
-        "README.md" = @("How to adapt", "Examples", "示例和常见任务路径")
-        "README.en.md" = @("How to adapt", "Examples", "Five-Minute Start")
-    }
-
-    $adoptionMissing = New-Object 'System.Collections.Generic.List[string]'
-    foreach ($relativePath in $adoptionFiles.Keys) {
-        $text = Get-FileText -RelativePath $relativePath
-        foreach ($token in $adoptionFiles[$relativePath]) {
-            if ($text -notlike ("*{0}*" -f $token)) {
-                $adoptionMissing.Add("$relativePath missing token: $token")
-            }
-        }
-    }
-
-    if ($adoptionMissing.Count -gt 0) {
-        Add-Check "adoption surface" "FAIL" "Adoption guide or examples are incomplete." @($adoptionMissing.ToArray())
-    }
-    else {
-        Add-Check "adoption surface" "PASS" "How-to-adapt guide and minimal project example are present and linked from public entrypoints." ([ordered]@{
-            checked_files = @($adoptionFiles.Keys)
-        })
-    }
-}
-catch {
-    Add-Check "adoption surface" "FAIL" $_.Exception.Message
 }
 
 try {

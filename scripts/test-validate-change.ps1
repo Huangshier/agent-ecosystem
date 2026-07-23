@@ -202,6 +202,7 @@ foreach ($case in @($cases)) {
         @(& $validator -ChangedPath @($case.paths) -Json) -join "`n"
     }
     $value = $raw | ConvertFrom-Json
+    & $classifierOutputContract -Result $value | Out-Null
     if ([int]$value.detected_tier -ne [int]$case.tier) { throw "Case '$($case.name)' expected Tier $($case.tier), got Tier $($value.detected_tier)." }
     if ($null -ne $case.full_validator_calls -and [int]$value.hosted_plan.full_validator_calls -ne [int]$case.full_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted full-validator call count." }
     if ($null -ne $case.platform_neutral_validator_calls -and [int]$value.hosted_plan.platform_neutral_validator_calls -ne [int]$case.platform_neutral_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted platform-neutral call count." }
@@ -222,6 +223,17 @@ foreach ($case in @($cases)) {
     }
     if ($null -ne $case.heavy_targeted_reason -and [string]$value.heavy_targeted_reason -cne [string]$case.heavy_targeted_reason) {
         throw "Case '$($case.name)' has an incorrect heavy targeted reason."
+    }
+    if ($null -ne $case.conservative_fallback -and [bool]$value.conservative_fallback -ne [bool]$case.conservative_fallback) {
+        throw "Case '$($case.name)' has an incorrect conservative fallback decision."
+    }
+    if ($null -ne $case.validation_self_protection_reason -and [string]$value.validation_self_protection_reason -cne [string]$case.validation_self_protection_reason) {
+        throw "Case '$($case.name)' has an incorrect validation self-protection reason."
+    }
+    foreach ($field in @("required_checks", "skipped_checks")) {
+        if ($null -ne $case.$field -and (@($value.$field) -join ',') -cne (@($case.$field) -join ',')) {
+            throw "Case '$($case.name)' has an incorrect $field contract."
+        }
     }
     if ((@($value.heavy_targeted_required_suites) -join ',') -cne (@($value.full_validator_coverage_suites) -join ',')) {
         throw "Case '$($case.name)' does not prove full coverage for the heavy targeted suite set."
@@ -261,9 +273,25 @@ if ($LASTEXITCODE -ne 0) {
 
 $pushRoutingResults = @(Invoke-PushRoutingFixtures)
 $classifierOutputResults = @(Invoke-ClassifierOutputContractFixtures)
+$classifierFixtureValues = Get-Content -Raw (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") | ConvertFrom-Json
+$invalidClassifier = $classifierFixtureValues[0].result
+$invalidClassifier.required_suites = @("future-unknown-suite")
+$invalidClassifier.suite_host_map = [pscustomobject]@{ "future-unknown-suite" = @("windows-latest") }
+$invalidClassifier.required_hosts = @("windows-latest")
+$rejected = $false
+try { & $classifierOutputContract -Result $invalidClassifier | Out-Null } catch { $rejected = $true }
+if (-not $rejected) { throw "Classifier output contract accepted an unknown suite." }
+$classifierOutputResults += [ordered]@{ name = "unknown-suite-fails-closed"; status = "PASS" }
+
+$invalidHostClassifier = (& $validator -ChangedPath "scripts/install.ps1" -Json | Out-String) | ConvertFrom-Json
+$invalidHostClassifier.suite_host_map.'installer-contract' = @("future-host")
+$rejected = $false
+try { & $classifierOutputContract -Result $invalidHostClassifier | Out-Null } catch { $rejected = $true }
+if (-not $rejected) { throw "Classifier output contract accepted an unknown host dependency." }
+$classifierOutputResults += [ordered]@{ name = "unknown-host-dependency-fails-closed"; status = "PASS" }
 $localPlanRaw = @(& $localPlanValidator -Json) -join "`n"
 $localPlanResult = $localPlanRaw | ConvertFrom-Json
-if ([int]$localPlanResult.fail -ne 0 -or [int]$localPlanResult.pass -lt 8) { throw "Local validation plan fixtures returned incomplete evidence." }
+if ([int]$localPlanResult.fail -ne 0 -or [int]$localPlanResult.pass -lt 9) { throw "Local validation plan fixtures returned incomplete evidence." }
 
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/release-validation.yml") -Raw
 $workflowMarkers = @(
@@ -275,8 +303,9 @@ $workflowMarkers = @(
     "github.event.forced",
     "needs.classify.outputs.base",
     "needs.classify.outputs.head",
-    "needs.classify.outputs.run_heavy_targeted_regression",
-    "needs.classify.outputs.heavy_targeted_reason",
+    "needs.classify.outputs.required_hosts_json",
+    "needs.classify.outputs.requires_windows_powershell",
+    "needs.classify.outputs.run_validation_self_protection",
     "release-classifier-output-contract.ps1 -Result `$result",
     "needs.classify.result != 'success'",
     "./scripts/validate-targeted-change.ps1",
@@ -294,12 +323,14 @@ foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/"
     if ($workflow.Contains($duplicatedRuleToken)) { throw "Workflow duplicates a path-routing rule: $duplicatedRuleToken" }
 }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
-if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -RunTargetedRegression")).Count -ne 2) { throw "Tier 3/full validation jobs must run targeted regressions under both PowerShell hosts." }
-if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier base boundary." }
-if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and targeted jobs must both reuse the classifier head boundary." }
-if (@([regex]::Matches($workflow, "outputs\.run_heavy_targeted_regression != 'false'")).Count -ne 2) { throw "Both Windows heavy targeted steps must use the fail-closed classifier decision." }
-if (@([regex]::Matches($workflow, 'classifier-failure')).Count -ne 2) { throw "Both Windows evidence manifests must record classifier-failure execution." }
-if (@([regex]::Matches($workflow, "matrix\.os == 'windows-latest'")).Count -ne 1) { throw "PowerShell 7 targeted regressions must run once on the Windows full-validation job." }
+if (@([regex]::Matches($workflow, "test-heavy-targeted-regression\.ps1 -Json")).Count -ne 1) { throw "Hosted control-plane changes must run one independent self-protection oracle." }
+if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier base boundary." }
+if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
+if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
+if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
+if (-not $workflow.Contains('group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}') -or -not $workflow.Contains("cancel-in-progress: true")) {
+    throw "Hosted concurrency must isolate events while preserving same-event, same-ref cancellation."
+}
 
 $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unsupported.detected_tier -ne 3 -or -not [bool]$unsupported.run_heavy_targeted_regression) { throw "Runtime skill without a reliable targeted suite did not fail closed to Tier 3 heavy execution." }

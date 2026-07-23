@@ -829,6 +829,7 @@ catch {
     Add-Check "body-level memory language audit" "FAIL" $_.Exception.Message
 }
 
+if ($script:includeCheckpointChecks) {
 try {
     $benchmarkScript = Join-PathParts $repoRoot "scripts" "benchmark-context-gate.ps1"
     $benchmarkScratch = Join-PathParts $scratchRootFull "context-gate-benchmark"
@@ -902,6 +903,7 @@ try {
 }
 catch {
     Add-Check "validation scratch retention pruning" "FAIL" $_.Exception.Message
+}
 }
 
 }

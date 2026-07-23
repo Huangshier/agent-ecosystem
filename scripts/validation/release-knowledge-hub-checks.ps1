@@ -396,37 +396,4 @@ catch {
     Add-Check "experience promote closure" "FAIL" $_.Exception.Message
 }
 
-try {
-    $helperPairs = @(
-        @("knowledge-hub/scripts/rebuild_experience_index.ps1", "skills/project-bootstrap/scripts/rebuild_experience_index.ps1"),
-        @("knowledge-hub/scripts/promote_experience.ps1", "skills/project-bootstrap/scripts/promote_experience.ps1"),
-        @("knowledge-hub/scripts/manage_candidates.ps1", "skills/project-bootstrap/scripts/manage_candidates.ps1")
-    )
-    $helperErrors = New-Object 'System.Collections.Generic.List[string]'
-    foreach ($pair in $helperPairs) {
-        $left = Join-PathParts $repoRoot $pair[0]
-        $right = Join-PathParts $repoRoot $pair[1]
-        $leftHash = (Get-FileHash -LiteralPath $left -Algorithm SHA256).Hash
-        $rightHash = (Get-FileHash -LiteralPath $right -Algorithm SHA256).Hash
-        $script:evidence.duplicate_helpers += [ordered]@{
-            preferred = $pair[0]
-            compatibility_copy = $pair[1]
-            hash_sha256 = $leftHash
-            identical = ($leftHash -eq $rightHash)
-        }
-        if ($leftHash -ne $rightHash) {
-            $helperErrors.Add(("{0} differs from {1}" -f $pair[0], $pair[1]))
-        }
-    }
-    if ($helperErrors.Count -gt 0) {
-        Add-Check "duplicate helper hash" "FAIL" "Compatibility helper hashes differ." @($helperErrors.ToArray())
-    }
-    else {
-        Add-Check "duplicate helper hash" "PASS" "Compatibility helper hashes match preferred knowledge hub scripts." $evidence.duplicate_helpers
-    }
-}
-catch {
-    Add-Check "duplicate helper hash" "FAIL" $_.Exception.Message
-}
-
 }

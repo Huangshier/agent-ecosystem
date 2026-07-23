@@ -3,16 +3,27 @@
     "name": "valid-skip-decision",
     "valid": true,
     "result": {
-      "detected_tier": 3,
+      "schema_version": 2,
+      "detected_tier": 2,
       "run_heavy_targeted_regression": false,
-      "heavy_targeted_reason": "tier-3-full-covers-required-suites",
+      "heavy_targeted_reason": "not-tier-3",
+      "run_validation_self_protection": false,
+      "validation_self_protection_reason": "not-tier-3",
+      "requires_windows_powershell": true,
+      "required_windows_powershell_suites": ["bootstrap-safety"],
+      "conservative_fallback": false,
+      "required_suites": ["bootstrap-safety"],
+      "required_hosts": ["windows-latest"],
+      "suite_host_map": { "bootstrap-safety": ["windows-latest"] },
+      "required_checks": ["change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard", "targeted-module-checks", "affected-suite:bootstrap-safety", "affected-windows-powershell"],
+      "skipped_checks": ["quick-repository-checks", "validation-self-protection", "full-release-matrix"],
       "heavy_targeted_required_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
       "full_validator_coverage_suites": ["agent-skill-bridge", "bootstrap-safety", "installer-contract", "knowledge-contracts", "project-context-gate", "runtime-smoke"],
       "hosted_plan": {
         "full_validator_calls": 0,
-        "platform_neutral_validator_calls": 1,
-        "runtime_platform_validator_calls": 4,
-        "targeted_os_jobs": 0
+        "platform_neutral_validator_calls": 0,
+        "runtime_platform_validator_calls": 0,
+        "targeted_os_jobs": 1
       }
     }
   },
