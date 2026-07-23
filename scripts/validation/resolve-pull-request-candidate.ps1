@@ -15,6 +15,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "git-stable-patch-id.ps1")
 
 function Assert-CommitSha([string]$Value, [string]$Label) {
     if ($Value -notmatch '^[0-9a-fA-F]{40}$') { throw "$Label must be a 40-character Git commit ID." }
@@ -55,32 +56,6 @@ function Get-Sha256Text([string]$Text) {
 function Get-NormalizedDiff([string]$From, [string]$To) {
     return (@(Invoke-Git diff --no-ext-diff --binary --full-index --no-renames $From $To | ForEach-Object { [string]$_ }) -join "`n") + "`n"
 }
-function Get-StablePatchId([string]$Commit) {
-    $parents = @(Get-Parents -Commit $Commit)
-    if ($parents.Count -ne 1) { throw "Replayed proof requires a linear head sequence; '$Commit' has $($parents.Count) parents." }
-    # NOTE: OS 原生管道在两个 Git 进程间传递字节，绕过 PowerShell 的文本编码层。
-    $pipeline = "git diff --no-ext-diff --binary --full-index --no-renames $($parents[0]) $Commit | git patch-id --stable"
-    $previousPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        if ($env:OS -ceq "Windows_NT") {
-            $patchLines = @(& cmd.exe /d /s /c $pipeline 2>&1)
-        }
-        else {
-            $patchLines = @(& /bin/sh -c $pipeline 2>&1)
-        }
-        $patchExitCode = $LASTEXITCODE
-    }
-    finally { $ErrorActionPreference = $previousPreference }
-    $patchOutput = (@($patchLines | ForEach-Object { [string]$_ }) -join "`n").Trim()
-    if ($patchExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($patchOutput)) {
-        throw "git patch-id --stable failed for '$Commit': $patchOutput"
-    }
-    $parts = $patchOutput.Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
-    if ($parts.Count -lt 1 -or $parts[0] -notmatch '^[0-9a-fA-F]{40}$') { throw "git patch-id returned malformed output." }
-    return $parts[0].ToLowerInvariant()
-}
-
 Assert-CommitSha $BaseSha "BaseSha"
 Assert-CommitSha $HeadSha "HeadSha"
 Assert-RefName $BaseRef "BaseRef"
@@ -127,7 +102,15 @@ try {
     Assert-CommitSha $mergeBase "head merge base"
     $headSequence = @(Invoke-Git rev-list --reverse --topo-order $headShaNormalized --not $baseShaNormalized | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() })
     if ($headSequence.Count -eq 0) { throw "PR head has no commits outside the exact base." }
-    $orderedChangeDigests = @($headSequence | ForEach-Object { Get-StablePatchId $_ })
+    $orderedChangeDigests = @(
+        foreach ($commit in $headSequence) {
+            $parents = @(Get-Parents -Commit $commit)
+            if ($parents.Count -ne 1) {
+                throw "Replayed proof requires a linear head sequence; '$commit' has $($parents.Count) parents."
+            }
+            Get-GitStablePatchId -Parent $parents[0] -Commit $commit
+        }
+    )
     $contract = [ordered]@{
         schema_version = 1
         repository = $Repository

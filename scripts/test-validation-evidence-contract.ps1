@@ -7,6 +7,7 @@ $writer = Join-Path $PSScriptRoot "validation/write-evidence-manifest.ps1"
 $finalizer = Join-Path $PSScriptRoot "validation/finalize-candidate-evidence.ps1"
 $candidateFixture = Join-Path $PSScriptRoot "test-exact-candidate-contract.ps1"
 $lineageFixtureScript = Join-Path $PSScriptRoot "test-lineage-verifier.ps1"
+$lineageVerifier = Join-Path $PSScriptRoot "validation/lineage-verifier.ps1"
 $workflowPath = Join-Path $repoRoot ".github/workflows/release-validation.yml"
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-evidence-contract-{0}" -f [Guid]::NewGuid().ToString("N"))
 $commitSha = "0123456789abcdef0123456789abcdef01234567"
@@ -192,6 +193,8 @@ try {
         base_ref = $candidateBase; head_ref = $candidateHead
         required_suites = @("fixture-suite"); required_hosts = @("ubuntu-latest")
         requires_windows_powershell = $false; run_validation_self_protection = $false
+        validation_self_protection_reason = "not-tier-3"
+        control_plane = $false; self_protection_required = $false; self_protection_reason = "not-tier-3"
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
     $fragmentRoot = Join-Path $scratch "canonical-fragments"
     $fragmentScratch = Join-Path $fragmentRoot "affected-validation-ubuntu-latest"
@@ -210,6 +213,22 @@ try {
     }
     $binding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $bindingPath -Encoding UTF8
     $canonicalPath = Join-Path $scratch "canonical-evidence.json"
+    $validClassification = Get-Content -Raw $classificationPath | ConvertFrom-Json
+    $unknownReasonClassification = $validClassification | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $unknownReasonClassification.validation_self_protection_reason = "future-self-protection-reason"
+    $unknownReasonClassification.self_protection_reason = "future-self-protection-reason"
+    $unknownReasonClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
+    $unknownReasonFailed = $false
+    try {
+        & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
+            -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+            -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+            -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+            -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
+    }
+    catch { $unknownReasonFailed = $true }
+    Assert-Contract $unknownReasonFailed "canonical-classifier-unknown-reason-fails-closed"
+    $validClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
         -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
         -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
@@ -220,6 +239,11 @@ try {
     Assert-Contract ($canonical.candidate.sha -ceq $commitSha -and $canonical.base.sha -ceq $candidateBase -and $canonical.head.sha -ceq $candidateHead) "canonical-candidate-identity"
     Assert-Contract (@($canonical.actual.suites) -contains "fixture-suite" -and @($canonical.actual.hosts) -contains "ubuntu-latest") "canonical-suite-host-closure"
     Assert-Contract ($canonical.checks.base_guard.job_id -ceq "301" -and $canonical.checks.identity_guard.job_id -ceq "302" -and $canonical.checks.final_gate.job_id -ceq "303") "canonical-actual-check-identities"
+    Assert-Contract (
+        $canonical.classifier.control_plane -is [bool] -and -not [bool]$canonical.classifier.control_plane -and
+        $canonical.classifier.self_protection_required -is [bool] -and -not [bool]$canonical.classifier.self_protection_required -and
+        [string]$canonical.classifier.self_protection_reason -ceq "not-tier-3"
+    ) "canonical-classifier-authority"
     Assert-Contract ($canonical.canonical_evidence_digest -match '^[0-9a-f]{64}$') "canonical-digest"
     $firstCanonicalDigest = [string]$canonical.canonical_evidence_digest
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
@@ -229,6 +253,46 @@ try {
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
     $secondCanonicalDigest = [string](Get-Content -Raw $canonicalPath | ConvertFrom-Json).canonical_evidence_digest
     Assert-Contract ($firstCanonicalDigest -ceq $secondCanonicalDigest) "canonical-digest-deterministic"
+
+    $landedSha = "4444444444444444444444444444444444444444"
+    $lineageInputPath = Join-Path $scratch "canonical-lineage-input.json"
+    $lineageOutputPath = Join-Path $scratch "canonical-lineage-output.json"
+    [ordered]@{
+        schema_version = 1; repository = "Huangshier/agent-ecosystem"; before = $candidateBase; sha = $landedSha
+        forced = $false; range_complete = $true
+        commits = @([ordered]@{
+            sha = $landedSha; tree = [string]$canonical.candidate.tree; parents = @($candidateBase); associated_prs = @(77)
+            combined_change_digest = "combined-1"; ordered_change_digest = "patch-1"
+        })
+        proofs = @([ordered]@{
+            pr_number = 77; pr_base_sha = $candidateBase; pr_head_sha = $candidateHead; evidence = $canonical
+        })
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $lineageInputPath -Encoding UTF8
+    & $lineageVerifier -InputPath $lineageInputPath -OutputPath $lineageOutputPath | Out-Null
+    $canonicalLineage = Get-Content -Raw $lineageOutputPath | ConvertFrom-Json
+    Assert-Contract ($canonicalLineage.decision -ceq "proven") "canonical-classifier-lineage-proven"
+
+    $tamperedCanonical = $canonical | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $tamperedCanonical.classifier.control_plane = $true
+    $tamperedLineageInputPath = Join-Path $scratch "canonical-lineage-tampered-input.json"
+    $tamperedLineageOutputPath = Join-Path $scratch "canonical-lineage-tampered-output.json"
+    [ordered]@{
+        schema_version = 1; repository = "Huangshier/agent-ecosystem"; before = $candidateBase; sha = $landedSha
+        forced = $false; range_complete = $true
+        commits = @([ordered]@{
+            sha = $landedSha; tree = [string]$canonical.candidate.tree; parents = @($candidateBase); associated_prs = @(77)
+            combined_change_digest = "combined-1"; ordered_change_digest = "patch-1"
+        })
+        proofs = @([ordered]@{
+            pr_number = 77; pr_base_sha = $candidateBase; pr_head_sha = $candidateHead; evidence = $tamperedCanonical
+        })
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $tamperedLineageInputPath -Encoding UTF8
+    & $lineageVerifier -InputPath $tamperedLineageInputPath -OutputPath $tamperedLineageOutputPath | Out-Null
+    $tamperedLineage = Get-Content -Raw $tamperedLineageOutputPath | ConvertFrom-Json
+    Assert-Contract (
+        $tamperedLineage.decision -ceq "full-fallback" -and
+        @($tamperedLineage.fallback_reasons) -contains "evidence-digest-mismatch"
+    ) "canonical-classifier-tamper-fails-closed"
 
     $binding.base_guard.run_attempt = "1"
     $binding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $bindingPath -Encoding UTF8
@@ -245,13 +309,26 @@ try {
 
     $candidateResult = & $candidateFixture -Json | ConvertFrom-Json
     Assert-Contract ([int]($candidateResult.fail) -eq 0 -and [int]($candidateResult.pass) -ge 4) "exact-candidate-fixtures"
+    Assert-Contract (
+        @($candidateResult.cases | Where-Object {
+            [string]$_.name -ceq "real-git-digest-parity" -and
+            [string]$_.status -ceq "PASS" -and
+            (@($_.candidate_ordered_change_digests) -join ",") -ceq (@($_.rebase_landed_ordered_change_digests) -join ",") -and
+            [string]$_.candidate_combined_digest -ceq [string]$_.squash_combined_digest
+        }).Count -eq 1
+    ) "exact-candidate-real-git-parity"
     if ($PSVersionTable.PSEdition -ceq "Desktop") {
         # NOTE: lineage matrix 的执行 oracle 是 PowerShell 7；WinPS 在此只校验同一矩阵和入口完整存在。
         Assert-Contract ([System.IO.File]::Exists((Join-Path $PSScriptRoot "validation/lineage-verifier-fixtures/cases.json")) -and [System.IO.File]::Exists((Join-Path $PSScriptRoot "test-lineage-verifier.ps1"))) "lineage-proof-fixture-surface"
     }
     else {
         $lineageResult = & $lineageFixtureScript -Json | ConvertFrom-Json
-        Assert-Contract ([int]($lineageResult.fail) -eq 0 -and [int]($lineageResult.pass) -ge 40) "lineage-proof-fixtures"
+        Assert-Contract (
+            [int]($lineageResult.fail) -eq 0 -and
+            [int]($lineageResult.state_machine_matrix.pass) -eq 40 -and
+            [int]($lineageResult.state_machine_matrix.cases) -eq 40 -and
+            @($lineageResult.classifier_authority).Count -ge 7
+        ) "lineage-proof-fixtures"
     }
     $nodeCheck = & node -e "const h=require('./.github/scripts/resolve-validation-check-bindings.js'); if(h.requireExactSingle([1],'x')!==1) process.exit(1); for(const v of [[],[1,2]]){let failed=false;try{h.requireExactSingle(v,'x')}catch{failed=true}if(!failed)process.exit(2)}"
     Assert-Contract ($LASTEXITCODE -eq 0) "guard-binding-exact-single-contract"

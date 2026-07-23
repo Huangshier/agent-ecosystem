@@ -37,6 +37,6 @@
   { "name": "suite-closure-incomplete", "template": "single", "mutation": "suite-closure", "decision": "full-fallback" },
   { "name": "host-closure-incomplete", "template": "single", "mutation": "host-closure", "decision": "full-fallback" },
   { "name": "classifier-exception-fallback", "template": "single", "mutation": "classifier-fallback", "decision": "full-fallback" },
-  { "name": "control-plane-change", "template": "single", "mutation": "control-plane", "decision": "full-fallback" },
+  { "name": "classifier-control-plane", "template": "single", "mutation": "control-plane", "decision": "full-fallback" },
   { "name": "mixed-proven-unproven-range", "template": "multi-pr", "mutation": "second-proof-missing", "decision": "full-fallback" }
 ]

@@ -18,6 +18,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "git-stable-patch-id.ps1")
 
 function Read-JsonFile([string]$Path) {
     $full = [System.IO.Path]::GetFullPath($Path)
@@ -45,6 +46,21 @@ function Get-CanonicalDigestPayload([object]$Evidence) {
         $payload[$name] = $Evidence.$name
     }
     return $payload
+}
+function Get-RequiredClassifierBoolean([object]$Classifier, [string]$Name) {
+    $properties = @($Classifier.PSObject.Properties | Where-Object { $_.Name -ceq $Name })
+    if ($properties.Count -ne 1 -or $properties[0].Value -isnot [bool]) {
+        throw "Classifier authority field '$Name' must be an actual Boolean."
+    }
+    return [bool]$properties[0].Value
+}
+function Get-RequiredClassifierString([object]$Classifier, [string]$Name) {
+    $properties = @($Classifier.PSObject.Properties | Where-Object { $_.Name -ceq $Name })
+    if ($properties.Count -ne 1 -or $properties[0].Value -isnot [string] -or
+        [string]::IsNullOrWhiteSpace([string]$properties[0].Value)) {
+        throw "Classifier authority field '$Name' must be a non-blank string."
+    }
+    return [string]$properties[0].Value
 }
 function Test-Evidence([object]$Evidence, [System.Collections.Generic.List[string]]$Reasons, [int]$PrNumber) {
     try {
@@ -74,7 +90,32 @@ function Test-Evidence([object]$Evidence, [System.Collections.Generic.List[strin
         $missingSuites = @($Evidence.required.suites | Where-Object { @($Evidence.actual.suites) -cnotcontains [string]$_ })
         $missingHosts = @($Evidence.required.hosts | Where-Object { @($Evidence.actual.hosts) -cnotcontains [string]$_ })
         if ($missingSuites.Count -or $missingHosts.Count) { Add-Fallback $Reasons "suite-host-closure-incomplete"; return $false }
-        if ([bool]$Evidence.classifier.conservative_fallback) { Add-Fallback $Reasons "classifier-fallback"; return $false }
+        $controlPlane = Get-RequiredClassifierBoolean $Evidence.classifier "control_plane"
+        $selfProtectionRequired = Get-RequiredClassifierBoolean $Evidence.classifier "self_protection_required"
+        $conservativeFallback = Get-RequiredClassifierBoolean $Evidence.classifier "conservative_fallback"
+        $selfProtectionReason = Get-RequiredClassifierString $Evidence.classifier "self_protection_reason"
+        if (@(
+            "full-coverage-unproven",
+            "unknown-or-ambiguous-input",
+            "self-protection-control-surface",
+            "not-tier-3",
+            "no-control-plane-change"
+        ) -cnotcontains $selfProtectionReason) {
+            throw "Classifier authority self-protection reason is unknown."
+        }
+        if ($selfProtectionRequired -ne [bool]$Evidence.required.self_protection) {
+            Add-Fallback $Reasons "classifier-authority-inconsistent"; return $false
+        }
+        $expectedSelfProtectionDecision = if ($selfProtectionRequired) { "required-and-passed" } else { "not-required" }
+        if ([string]$Evidence.decisions.self_protection -cne $expectedSelfProtectionDecision) {
+            Add-Fallback $Reasons "classifier-authority-inconsistent"; return $false
+        }
+        if ($controlPlane -and -not $selfProtectionRequired) {
+            Add-Fallback $Reasons "classifier-authority-inconsistent"; return $false
+        }
+        if ($controlPlane) { Add-Fallback $Reasons "classifier-control-plane"; return $false }
+        if ($selfProtectionRequired) { Add-Fallback $Reasons "classifier-self-protection-required"; return $false }
+        if ($conservativeFallback) { Add-Fallback $Reasons "classifier-fallback"; return $false }
         return $true
     }
     catch {
@@ -91,15 +132,6 @@ function Invoke-Git {
 }
 function Get-NormalizedDiff([string]$From, [string]$To) {
     return (@(Invoke-Git diff --no-ext-diff --binary --full-index --no-renames $From $To | ForEach-Object { [string]$_ }) -join "`n") + "`n"
-}
-function Get-StablePatchId([string]$Commit) {
-    $parentsLine = [string](@(Invoke-Git show -s --format=%P $Commit)[0])
-    $parents = @($parentsLine.Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries))
-    if ($parents.Count -ne 1) { return "" }
-    $diff = Get-NormalizedDiff $parents[0] $Commit
-    $output = @($diff | & git patch-id --stable 2>&1)
-    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1) { throw "git patch-id failed for '$Commit'." }
-    return ([string]$output[0]).Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[0].ToLowerInvariant()
 }
 function Invoke-GitHubRest([string]$Uri) {
     $headers = @{
@@ -150,7 +182,7 @@ function Get-LiveInput {
                 parents = $parents
                 associated_prs = $associations
                 combined_change_digest = $(if ($parents.Count) { Get-Sha256Text (Get-NormalizedDiff $parents[0] $commitSha) } else { "" })
-                ordered_change_digest = Get-StablePatchId $commitSha
+                ordered_change_digest = $(if ($parents.Count -eq 1) { Get-GitStablePatchId -Parent $parents[0] -Commit $commitSha } else { "" })
             })
         }
     }
@@ -291,11 +323,6 @@ while ($index -lt $commits.Count -and $reasons.Count -eq 0) {
     }
     else {
         Add-Fallback $reasons "ambiguous-proof-class"; break
-    }
-    if (@($evidence.change.paths | Where-Object {
-        [string]$_ -match '(?i)(^|[\t ])(?:\.github/workflows/|\.github/scripts/resolve-validation-check-bindings\.js|scripts/validation/|scripts/test-(?:validation-evidence-contract|required-validation-gate|release-sharding|heavy-targeted-regression|validate-change|local-validation-plan)\.ps1)'
-    }).Count -gt 0) {
-        Add-Fallback $reasons "control-plane-change"; break
     }
     $groupsOutput.Add([ordered]@{
         pr_number = $prNumber

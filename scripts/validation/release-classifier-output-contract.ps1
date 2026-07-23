@@ -6,6 +6,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$knownSelfProtectionReasons = @(
+    "full-coverage-unproven",
+    "unknown-or-ambiguous-input",
+    "self-protection-control-surface",
+    "not-tier-3",
+    "no-control-plane-change"
+)
 
 function Get-RequiredPropertyValue {
     param(
@@ -54,8 +61,8 @@ if ($decision -isnot [bool]) {
 }
 
 $reason = Get-RequiredPropertyValue -InputObject $Result -Name "heavy_targeted_reason"
-if ($reason -isnot [string] -or [string]::IsNullOrWhiteSpace($reason)) {
-    throw "Classifier property 'heavy_targeted_reason' must be a non-blank string."
+if ($reason -isnot [string] -or [string]::IsNullOrWhiteSpace($reason) -or $knownSelfProtectionReasons -cnotcontains $reason) {
+    throw "Classifier property 'heavy_targeted_reason' must be a known self-protection reason."
 }
 
 $selfProtection = Get-RequiredPropertyValue -InputObject $Result -Name "run_validation_self_protection"
@@ -63,8 +70,25 @@ if ($selfProtection -isnot [bool] -or [bool]$selfProtection -ne [bool]$decision)
     throw "Classifier self-protection decision must be Boolean and match the compatibility heavy-targeted decision."
 }
 $selfProtectionReason = Get-RequiredPropertyValue -InputObject $Result -Name "validation_self_protection_reason"
-if ($selfProtectionReason -isnot [string] -or [string]::IsNullOrWhiteSpace($selfProtectionReason) -or $selfProtectionReason -cne $reason) {
-    throw "Classifier self-protection reason must be non-blank and match the compatibility reason."
+if ($selfProtectionReason -isnot [string] -or [string]::IsNullOrWhiteSpace($selfProtectionReason) -or
+    $knownSelfProtectionReasons -cnotcontains $selfProtectionReason -or $selfProtectionReason -cne $reason) {
+    throw "Classifier self-protection reason must be known and match the compatibility reason."
+}
+$controlPlane = Get-RequiredPropertyValue -InputObject $Result -Name "control_plane"
+if ($controlPlane -isnot [bool]) {
+    throw "Classifier property 'control_plane' must be an actual Boolean."
+}
+$explicitSelfProtection = Get-RequiredPropertyValue -InputObject $Result -Name "self_protection_required"
+if ($explicitSelfProtection -isnot [bool] -or [bool]$explicitSelfProtection -ne [bool]$selfProtection) {
+    throw "Classifier property 'self_protection_required' must be Boolean and match the compatibility decision."
+}
+$explicitSelfProtectionReason = Get-RequiredPropertyValue -InputObject $Result -Name "self_protection_reason"
+if ($explicitSelfProtectionReason -isnot [string] -or [string]::IsNullOrWhiteSpace($explicitSelfProtectionReason) -or
+    $knownSelfProtectionReasons -cnotcontains $explicitSelfProtectionReason -or $explicitSelfProtectionReason -cne $selfProtectionReason) {
+    throw "Classifier property 'self_protection_reason' must be known and match the compatibility reason."
+}
+if ([bool]$controlPlane -and -not [bool]$selfProtection) {
+    throw "A classifier control-plane owner must require self-protection."
 }
 foreach ($booleanName in @("requires_windows_powershell", "conservative_fallback")) {
     if ((Get-RequiredPropertyValue -InputObject $Result -Name $booleanName) -isnot [bool]) {

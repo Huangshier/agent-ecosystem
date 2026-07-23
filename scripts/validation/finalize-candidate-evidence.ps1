@@ -16,6 +16,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$knownSelfProtectionReasons = @(
+    "full-coverage-unproven",
+    "unknown-or-ambiguous-input",
+    "self-protection-control-surface",
+    "not-tier-3",
+    "no-control-plane-change"
+)
 
 function Read-JsonFile([string]$Path, [string]$Label) {
     $full = [System.IO.Path]::GetFullPath($Path)
@@ -57,6 +64,35 @@ if ([int]$classification.schema_version -ne 2) { throw "Classifier schema/versio
 if ([string]$classification.base_ref -cne [string]$candidate.base.sha -or
     [string]$classification.head_ref -cne [string]$candidate.head.sha) {
     throw "Classifier base/head boundary does not match the exact candidate contract."
+}
+$classifierProperties = [ordered]@{}
+foreach ($name in @(
+    "conservative_fallback",
+    "run_validation_self_protection",
+    "validation_self_protection_reason",
+    "control_plane",
+    "self_protection_required",
+    "self_protection_reason"
+)) {
+    $property = @($classification.PSObject.Properties | Where-Object { $_.Name -ceq $name })
+    if ($property.Count -ne 1) { throw "Classifier is missing required authority field '$name'." }
+    $classifierProperties[$name] = $property[0].Value
+}
+foreach ($name in @("conservative_fallback", "run_validation_self_protection", "control_plane", "self_protection_required")) {
+    if ($classifierProperties[$name] -isnot [bool]) { throw "Classifier authority field '$name' must be Boolean." }
+}
+foreach ($name in @("validation_self_protection_reason", "self_protection_reason")) {
+    if ($classifierProperties[$name] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$classifierProperties[$name]) -or
+        $knownSelfProtectionReasons -cnotcontains [string]$classifierProperties[$name]) {
+        throw "Classifier authority field '$name' must be a known self-protection reason."
+    }
+}
+if ([bool]$classifierProperties.self_protection_required -ne [bool]$classifierProperties.run_validation_self_protection -or
+    [string]$classifierProperties.self_protection_reason -cne [string]$classifierProperties.validation_self_protection_reason) {
+    throw "Classifier authority fields disagree with the compatibility self-protection contract."
+}
+if ([bool]$classifierProperties.control_plane -and -not [bool]$classifierProperties.self_protection_required) {
+    throw "Classifier control-plane ownership must require self-protection."
 }
 if ([int]$binding.schema_version -ne 1) { throw "Guard binding schema/version is invalid." }
 
@@ -122,7 +158,10 @@ $payload = [ordered]@{
     classifier = [ordered]@{
         schema_version = [int]$classification.schema_version; detected_tier = [int]$classification.detected_tier
         affected_modules = Get-OrdinalStrings @($classification.affected_modules)
-        conservative_fallback = [bool]$classification.conservative_fallback; escalation_reason = [string]$classification.escalation_reason
+        conservative_fallback = [bool]$classifierProperties.conservative_fallback; escalation_reason = [string]$classification.escalation_reason
+        control_plane = [bool]$classifierProperties.control_plane
+        self_protection_required = [bool]$classifierProperties.self_protection_required
+        self_protection_reason = [string]$classifierProperties.self_protection_reason
     }
     required = [ordered]@{
         suites = $requiredSuites; hosts = $requiredHosts; windows_powershell = [bool]$classification.requires_windows_powershell

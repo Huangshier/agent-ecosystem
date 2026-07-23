@@ -44,6 +44,7 @@ function New-Evidence([int]$Pr, [string]$Base, [string]$Head, [string]$Tree, [st
         change = [pscustomobject][ordered]@{ combined_digest = $Combined; paths = @("M`tREADME.md") }
         classifier = [pscustomobject][ordered]@{
             schema_version = 2; detected_tier = 2; affected_modules = @("docs"); conservative_fallback = $false; escalation_reason = ""
+            control_plane = $false; self_protection_required = $false; self_protection_reason = "not-tier-3"
         }
         required = [pscustomobject][ordered]@{
             suites = @("documentation-contract"); hosts = @("ubuntu-latest"); windows_powershell = $false; self_protection = $false
@@ -66,6 +67,15 @@ function New-Evidence([int]$Pr, [string]$Base, [string]$Head, [string]$Tree, [st
     }
     Set-EvidenceDigest $evidence
     return $evidence
+}
+function Set-ClassifierControlPlane([object]$Evidence) {
+    $Evidence.classifier.control_plane = $true
+    $Evidence.classifier.self_protection_required = $true
+    $Evidence.classifier.self_protection_reason = "self-protection-control-surface"
+    $Evidence.required.self_protection = $true
+    $Evidence.required.hosts = @("ubuntu-latest", "windows-latest")
+    $Evidence.actual.hosts = @("ubuntu-latest", "windows-latest")
+    $Evidence.decisions.self_protection = "required-and-passed"
 }
 function New-Proof([int]$Pr, [object]$Evidence) {
     return [pscustomobject][ordered]@{
@@ -196,22 +206,54 @@ function Apply-Mutation([object]$Fixture, [string]$Mutation) {
         "suite-closure" { $e.actual.suites = @() }
         "host-closure" { $e.actual.hosts = @() }
         "classifier-fallback" { $e.classifier.conservative_fallback = $true }
-        "control-plane" { $e.change.paths = @("M`t.github/workflows/release-validation.yml") }
+        "control-plane" {
+            # NOTE: 状态机 fixture 仅提供 classifier 已判定的 authority，不让 lineage 再按路径推导。
+            $e.change.paths = @("M`t.github/workflows/release-validation.yml")
+            Set-ClassifierControlPlane $e
+        }
         "second-proof-missing" { $Fixture.proofs = @($Fixture.proofs | Select-Object -First 1) }
         default { throw "Unknown mutation '$Mutation'." }
     }
     foreach ($p in @($Fixture.proofs)) { Set-EvidenceDigest $p.evidence }
 }
+function Invoke-ClassifierAuthorityFixture {
+    param(
+        [string]$Name,
+        [scriptblock]$Mutation,
+        [string]$ExpectedReason,
+        [switch]$SkipDigestRefresh
+    )
+
+    $fixtureInput = New-LineageFixtureInput "single"
+    & $Mutation $fixtureInput
+    if (-not $SkipDigestRefresh.IsPresent) {
+        foreach ($proof in @($fixtureInput.proofs)) { Set-EvidenceDigest $proof.evidence }
+    }
+    $inputPath = Join-Path $scratch "$Name-input.json"
+    $outputPath = Join-Path $scratch "$Name-observation.json"
+    $fixtureInput | ConvertTo-Json -Depth 25 | Set-Content -LiteralPath $inputPath -Encoding UTF8
+    & $verifier -InputPath $inputPath -OutputPath $outputPath | Out-Null
+    $observation = Get-Content -Raw $outputPath | ConvertFrom-Json
+    if ([string]$observation.decision -cne "full-fallback") {
+        throw "Classifier authority fixture '$Name' must fail closed."
+    }
+    if ($ExpectedReason -and @($observation.fallback_reasons) -cnotcontains $ExpectedReason) {
+        throw "Classifier authority fixture '$Name' did not record '$ExpectedReason'."
+    }
+    return [ordered]@{ name = $Name; decision = [string]$observation.decision; status = "PASS" }
+}
 
 [System.IO.Directory]::CreateDirectory($scratch) | Out-Null
 try {
-    # NOTE: 显式数组类型保持 fixture 顺序，确保同一输入矩阵产生确定输出。
+    # NOTE: 40-case JSON matrix 只覆盖 lineage 判定状态机；真实 Git 输入与 digest parity
+    # 由 test-exact-candidate-contract.ps1 的双宿主 bare-remote fixture 覆盖。
     $matrixText = [System.IO.File]::ReadAllText($casesPath)
     [object[]]$matrixRecords = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject $matrixText
     if ($null -eq $matrixRecords -or $matrixRecords.Length -eq 0) {
         throw "Lineage fixture matrix is empty."
     }
     $results = New-Object 'System.Collections.Generic.List[object]'
+    $authorityResults = New-Object 'System.Collections.Generic.List[object]'
     $singleCommitSemantics = @{}
     for ($fixtureIndex = 0; $fixtureIndex -lt $matrixRecords.Length; $fixtureIndex++) {
         $fixtureRecord = $matrixRecords[$fixtureIndex]
@@ -250,7 +292,54 @@ try {
     if ($squashSemantics -cne $rebaseSemantics) {
         throw "Single-commit squash and rebase fixtures must produce identical observable proof semantics."
     }
-    $summary = [ordered]@{ schema_version = 1; pass = $results.Count; fail = 0; cases = @($results.ToArray()) }
+    foreach ($path in @(
+        "scripts/test-exact-candidate-contract.ps1",
+        "scripts/test-lineage-verifier.ps1",
+        "scripts/validation/lineage-verifier-fixtures/cases.json"
+    )) {
+        $pathForFixture = $path
+        $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name ("classifier-control-plane-{0}" -f ($pathForFixture -replace '[^A-Za-z0-9]+', '-').Trim('-')) -ExpectedReason "classifier-control-plane" -Mutation {
+            param($fixture)
+            $evidence = @($fixture.proofs)[0].evidence
+            $evidence.change.paths = @("M`t$pathForFixture")
+            Set-ClassifierControlPlane $evidence
+        })) | Out-Null
+    }
+    $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name "classifier-authority-missing" -ExpectedReason "evidence-contract-invalid" -Mutation {
+        param($fixture)
+        @($fixture.proofs)[0].evidence.classifier.PSObject.Properties.Remove("control_plane")
+    })) | Out-Null
+    $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name "classifier-authority-unknown" -ExpectedReason "evidence-contract-invalid" -Mutation {
+        param($fixture)
+        @($fixture.proofs)[0].evidence.classifier.control_plane = "unknown"
+    })) | Out-Null
+    $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name "classifier-authority-unknown-reason" -ExpectedReason "evidence-contract-invalid" -Mutation {
+        param($fixture)
+        @($fixture.proofs)[0].evidence.classifier.self_protection_reason = "future-self-protection-reason"
+    })) | Out-Null
+    $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name "classifier-authority-inconsistent" -ExpectedReason "classifier-authority-inconsistent" -Mutation {
+        param($fixture)
+        $evidence = @($fixture.proofs)[0].evidence
+        $evidence.classifier.self_protection_required = $true
+        $evidence.classifier.self_protection_reason = "self-protection-control-surface"
+    })) | Out-Null
+    $authorityResults.Add((Invoke-ClassifierAuthorityFixture -Name "classifier-field-digest-tamper" -ExpectedReason "evidence-digest-mismatch" -SkipDigestRefresh -Mutation {
+        param($fixture)
+        @($fixture.proofs)[0].evidence.classifier.control_plane = $true
+    })) | Out-Null
+    $verifierSource = [System.IO.File]::ReadAllText($verifier)
+    $forbiddenPathDerivedFallback = '"control-plane-' + 'change"'
+    if ($verifierSource.Contains($forbiddenPathDerivedFallback) -or $verifierSource.Contains("change.paths |")) {
+        throw "Lineage verifier retains a path-derived control-plane authority."
+    }
+    $summary = [ordered]@{
+        schema_version = 1
+        pass = $results.Count + $authorityResults.Count
+        fail = 0
+        cases = @($results.ToArray())
+        state_machine_matrix = [ordered]@{ pass = $results.Count; cases = $matrixRecords.Length; status = "PASS" }
+        classifier_authority = @($authorityResults.ToArray())
+    }
     if ($Json) { $summary | ConvertTo-Json -Depth 5 } else { Write-Output "lineage verifier fixtures: PASS=$($results.Count) FAIL=0" }
 }
 finally {
