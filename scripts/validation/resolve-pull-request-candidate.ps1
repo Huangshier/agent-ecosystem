@@ -58,48 +58,23 @@ function Get-NormalizedDiff([string]$From, [string]$To) {
 function Get-StablePatchId([string]$Commit) {
     $parents = @(Get-Parents -Commit $Commit)
     if ($parents.Count -ne 1) { throw "Replayed proof requires a linear head sequence; '$Commit' has $($parents.Count) parents." }
-    # NOTE: 直接传递 Git stdout 原始字节，避免 Windows PowerShell 文本管道改变 patch 输入编码。
-    $diffStart = New-Object System.Diagnostics.ProcessStartInfo
-    $diffStart.FileName = "git"
-    $diffStart.Arguments = "diff --no-ext-diff --binary --full-index --no-renames $($parents[0]) $Commit"
-    $diffStart.WorkingDirectory = (Get-Location).ProviderPath
-    $diffStart.UseShellExecute = $false
-    $diffStart.CreateNoWindow = $true
-    $diffStart.RedirectStandardOutput = $true
-    $diffStart.RedirectStandardError = $true
-    $diffProcess = New-Object System.Diagnostics.Process
-    $diffProcess.StartInfo = $diffStart
-    [void]$diffProcess.Start()
-    $diffBytes = New-Object System.IO.MemoryStream
-    $diffProcess.StandardOutput.BaseStream.CopyTo($diffBytes)
-    $diffError = $diffProcess.StandardError.ReadToEnd()
-    $diffProcess.WaitForExit()
-    if ($diffProcess.ExitCode -ne 0) { throw "git diff failed for '$Commit': $diffError" }
-
-    $patchStart = New-Object System.Diagnostics.ProcessStartInfo
-    $patchStart.FileName = "git"
-    $patchStart.Arguments = "patch-id --stable"
-    $patchStart.WorkingDirectory = (Get-Location).ProviderPath
-    $patchStart.UseShellExecute = $false
-    $patchStart.CreateNoWindow = $true
-    $patchStart.RedirectStandardInput = $true
-    $patchStart.RedirectStandardOutput = $true
-    $patchStart.RedirectStandardError = $true
-    $patchProcess = New-Object System.Diagnostics.Process
-    $patchProcess.StartInfo = $patchStart
-    [void]$patchProcess.Start()
-    $diffBytes.Position = 0
-    $diffBytes.CopyTo($patchProcess.StandardInput.BaseStream)
-    $patchProcess.StandardInput.Close()
-    $patchOutput = $patchProcess.StandardOutput.ReadToEnd().Trim()
-    $patchError = $patchProcess.StandardError.ReadToEnd()
-    $patchProcess.WaitForExit()
-    $patchExitCode = $patchProcess.ExitCode
-    $diffBytes.Dispose()
-    $diffProcess.Dispose()
-    $patchProcess.Dispose()
+    # NOTE: OS 原生管道在两个 Git 进程间传递字节，绕过 PowerShell 的文本编码层。
+    $pipeline = "git diff --no-ext-diff --binary --full-index --no-renames $($parents[0]) $Commit | git patch-id --stable"
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        if ($env:OS -ceq "Windows_NT") {
+            $patchLines = @(& cmd.exe /d /s /c $pipeline 2>&1)
+        }
+        else {
+            $patchLines = @(& /bin/sh -c $pipeline 2>&1)
+        }
+        $patchExitCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    $patchOutput = (@($patchLines | ForEach-Object { [string]$_ }) -join "`n").Trim()
     if ($patchExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($patchOutput)) {
-        throw "git patch-id --stable failed for '$Commit': $patchError"
+        throw "git patch-id --stable failed for '$Commit': $patchOutput"
     }
     $parts = $patchOutput.Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
     if ($parts.Count -lt 1 -or $parts[0] -notmatch '^[0-9a-fA-F]{40}$') { throw "git patch-id returned malformed output." }
