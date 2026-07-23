@@ -127,6 +127,9 @@ try {
     }
 
     $secretPattern = '(?i)\b(secret|password|api[_ -]?key|credential|credentials|cookie|cookies|token|tokens|private key|private keys)\b'
+    $allowedSecretReferences = @{
+        ".github/workflows/release-validation.yml" = '^\s*LINEAGE_GITHUB_AUTH:\s+\$\{\{\s*github\.token\s*\}\}\s*$'
+    }
     $allowedSecretPaths = @(
         "AGENTS.md",
         "README.en.md",
@@ -179,7 +182,9 @@ try {
     foreach ($file in $gitFiles) {
         foreach ($match in @(Get-LineMatches -RelativePath $file -Pattern $secretPattern)) {
             $keywordMatches.Add([object]$match)
-            if ($file -notin $allowedSecretPaths) {
+            $isExactAllowedReference = $allowedSecretReferences.ContainsKey($file) -and
+                [string]$match.text -match $allowedSecretReferences[$file]
+            if ($file -notin $allowedSecretPaths -and -not $isExactAllowedReference) {
                 $unexpectedKeywordMatches.Add([object]$match)
             }
         }
