@@ -1,4 +1,5 @@
 name: Release validation
+run-name: "${{ github.event_name == 'pull_request' && format('Release validation #{0} {1} {2}', github.event.pull_request.number, github.event.action, github.event.pull_request.head.sha) || format('Release validation {0} {1}', github.event_name, github.sha) }}"
 
 on:
   pull_request:
@@ -12,7 +13,6 @@ on:
 permissions:
   contents: read
   actions: write
-  checks: read
   pull-requests: read
 
 env:
@@ -127,7 +127,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: change-risk-classification
+          name: ${{ github.event_name == 'pull_request' && format('change-risk-classification-attempt-{0}', github.run_attempt) || 'change-risk-classification' }}
           path: |
             ${{ runner.temp }}/change-routing-tests.json
             ${{ runner.temp }}/change-classification.json
@@ -193,7 +193,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: quick-validation
+          name: quick-validation-attempt-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-quick-validation/targeted-validation-result.json
             ${{ runner.temp }}/agent-ecosystem-quick-validation/evidence-manifest.json
@@ -202,7 +202,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: quick-validation-failure
+          name: quick-validation-failure-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/agent-ecosystem-quick-validation
           if-no-files-found: error
 
@@ -270,7 +270,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: affected-validation-${{ matrix.os }}
+          name: affected-validation-${{ matrix.os }}-attempt-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/targeted-validation-result.json
             ${{ runner.temp }}/agent-ecosystem-targeted-validation/evidence-manifest.json
@@ -279,7 +279,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: affected-validation-${{ matrix.os }}-failure
+          name: affected-validation-${{ matrix.os }}-failure-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
           if-no-files-found: error
 
@@ -341,7 +341,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: validation-self-protection
+          name: ${{ github.event_name == 'pull_request' && format('validation-self-protection-attempt-{0}', github.run_attempt) || 'validation-self-protection' }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-validation-self-protection/validation-self-protection.json
             ${{ runner.temp }}/agent-ecosystem-validation-self-protection/evidence-manifest.json
@@ -350,7 +350,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: validation-self-protection-failure
+          name: ${{ github.event_name == 'pull_request' && format('validation-self-protection-failure-attempt-{0}', github.run_attempt) || 'validation-self-protection-failure' }}
           path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection
           if-no-files-found: error
 
@@ -555,7 +555,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: validation-windows-powershell
+          name: ${{ github.event_name == 'pull_request' && format('validation-windows-powershell-attempt-{0}', github.run_attempt) || 'validation-windows-powershell' }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/targeted-validation-result.json
             ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/evidence-manifest.json
@@ -566,7 +566,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: validation-windows-powershell-failure
+          name: ${{ github.event_name == 'pull_request' && format('validation-windows-powershell-failure-attempt-{0}', github.run_attempt) || 'validation-windows-powershell-failure' }}
           path: |
             ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell
             ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
@@ -635,6 +635,33 @@ jobs:
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
             -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT
 
+      - name: Write current-generation final gate evidence
+        if: success() && github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $outputRoot = Join-Path $env:RUNNER_TEMP "final-validation-gate"
+          New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
+          [ordered]@{
+            schema_version = 1
+            proof_kind = "final-validation-gate"
+            repository = "${{ github.repository }}"
+            pr_number = [int]$env:PR_NUMBER
+            head_sha = "${{ github.event.pull_request.head.sha }}"
+            run_id = "${{ github.run_id }}"
+            run_attempt = "${{ github.run_attempt }}"
+            job = "validation-gate"
+            check_name = "validation gate"
+            conclusion = "success"
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputRoot "final-gate.json") -Encoding UTF8
+
+      - name: Upload current-generation final gate evidence
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: final-validation-gate-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/final-validation-gate/final-gate.json
+          if-no-files-found: error
+
   canonical-candidate-evidence:
     name: canonical candidate evidence
     needs:
@@ -669,20 +696,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: ${{ runner.temp }}/candidate-fragments
-
-      - name: Resolve exact guard and final gate identities
-        uses: actions/github-script@v8
-        env:
-          BINDING_OUTPUT_PATH: ${{ runner.temp }}/guard-gate-binding.json
-        with:
-          script: |
-            const resolver = require("./.github/scripts/resolve-validation-check-bindings.js");
-            await resolver.run({
-              github,
-              context,
-              core,
-              outputPath: process.env.BINDING_OUTPUT_PATH,
-            });
+          pattern: '*-attempt-${{ github.run_attempt }}'
 
       - name: Finalize canonical candidate evidence
         shell: pwsh
@@ -691,9 +705,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
           ./scripts/validation/finalize-candidate-evidence.ps1 `
             -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
-            -ClassificationPath (Join-Path $env:RUNNER_TEMP "candidate-fragments/change-risk-classification/change-classification.json") `
+            -ClassificationPath (Join-Path $env:RUNNER_TEMP "candidate-fragments/change-risk-classification-attempt-${{ github.run_attempt }}/change-classification.json") `
             -FragmentsRoot (Join-Path $env:RUNNER_TEMP "candidate-fragments") `
-            -GuardBindingPath (Join-Path $env:RUNNER_TEMP "guard-gate-binding.json") `
+            -FinalGatePath (Join-Path $env:RUNNER_TEMP "candidate-fragments/final-validation-gate-attempt-${{ github.run_attempt }}/final-gate.json") `
             -Repository "${{ github.repository }}" `
             -RunId "${{ github.run_id }}" `
             -RunAttempt "${{ github.run_attempt }}" `
@@ -719,7 +733,7 @@ jobs:
       - name: Upload canonical candidate evidence
         uses: actions/upload-artifact@v7
         with:
-          name: canonical-candidate-evidence-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: canonical-candidate-evidence-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/canonical-candidate-evidence/evidence-manifest.json
           if-no-files-found: error
           retention-days: 30

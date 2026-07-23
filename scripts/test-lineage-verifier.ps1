@@ -17,21 +17,14 @@ function Set-EvidenceDigest([object]$Evidence) {
     $payload = [ordered]@{}
     foreach ($name in @(
         "schema_version", "proof_kind", "repository", "pr_number", "base", "head", "candidate", "change",
-        "classifier", "required", "actual", "decisions", "contracts", "run", "checks", "artifact_digests"
+        "classifier", "required", "actual", "decisions", "contracts", "generation", "checks", "artifact_digests"
     )) { $payload[$name] = $Evidence.$name }
     $Evidence.canonical_evidence_digest = Get-Sha256Text ($payload | ConvertTo-Json -Depth 20 -Compress)
     return
 }
 function New-Evidence([int]$Pr, [string]$Base, [string]$Head, [string]$Tree, [string[]]$Sequence, [string[]]$Digests, [string]$Combined) {
-    $check = {
-        param([string]$Run, [string]$Job)
-        return [pscustomobject][ordered]@{
-            run_id = $Run; run_attempt = "1"; job_id = $Job; check_name = $Job; conclusion = "success"
-            head_sha = $Head; pr_number = $Pr
-        }
-    }
     $evidence = [pscustomobject][ordered]@{
-        schema_version = 2; proof_kind = "canonical-candidate-evidence"; generated_at_utc = "2026-07-23T00:00:00Z"
+        schema_version = 3; proof_kind = "canonical-candidate-evidence"; generated_at_utc = "2026-07-23T00:00:00Z"
         freshness = [pscustomobject][ordered]@{ status = "fresh"; expires_at_utc = "2099-01-01T00:00:00Z"; retention_hours = 72 }
         repository = "Huangshier/agent-ecosystem"; pr_number = $Pr
         base = [pscustomobject][ordered]@{ ref = "main"; sha = $Base }
@@ -56,11 +49,15 @@ function New-Evidence([int]$Pr, [string]$Base, [string]$Head, [string]$Tree, [st
             routing = "scripts/validation/change-risk-rules.json"
             gate = "scripts/validation/required-validation-gate.ps1"
         }
-        run = [pscustomobject][ordered]@{ id = "1001"; attempt = "1" }
+        generation = [pscustomobject][ordered]@{
+            repository = "Huangshier/agent-ecosystem"; pr_number = $Pr; run_id = "1001"; run_attempt = "1"
+        }
         checks = [pscustomobject][ordered]@{
-            base_guard = & $check "2001" "3001"
-            identity_guard = & $check "2002" "3002"
-            final_gate = & $check "1001" "3003"
+            final_gate = [pscustomobject][ordered]@{
+                schema_version = 1; proof_kind = "final-validation-gate"; repository = "Huangshier/agent-ecosystem"
+                pr_number = $Pr; head_sha = $Head; run_id = "1001"; run_attempt = "1"
+                job = "validation-gate"; check_name = "validation gate"; conclusion = "success"
+            }
         }
         artifact_digests = @([pscustomobject][ordered]@{ path = "fragment/evidence-manifest.json"; sha256 = New-Hex "1" 64 })
         canonical_evidence_digest = ""
@@ -193,15 +190,15 @@ function Apply-Mutation([object]$Fixture, [string]$Mutation) {
         "extra-digest" { @($Fixture.commits)[-1].ordered_change_digest = "patch-extra" }
         "missing-artifact" { $e.artifact_digests = @() }
         "expired" { $e.freshness.expires_at_utc = "2020-01-01T00:00:00Z" }
-        "mixed-attempt" { $e.checks.base_guard.run_attempt = "2" }
+        "mixed-attempt" { $e.checks.final_gate.run_attempt = "2" }
         "workflow-identity" { $e.contracts.workflow = "wrong" }
         "routing-identity" { $e.contracts.routing = "wrong" }
         "gate-identity" { $e.contracts.gate = "wrong" }
-        "base-guard-missing" { $e.checks.base_guard.job_id = "" }
-        "base-guard-fail" { $e.checks.base_guard.conclusion = "failure" }
-        "identity-guard-missing" { $e.checks.identity_guard.job_id = "" }
-        "identity-guard-fail" { $e.checks.identity_guard.conclusion = "failure" }
-        "final-gate-missing" { $e.checks.final_gate.job_id = "" }
+        "generation-repository-mismatch" { $e.generation.repository = "wrong/repository" }
+        "generation-pr-mismatch" { $e.generation.pr_number = 999 }
+        "generation-run-mismatch" { $e.generation.run_id = "9999" }
+        "generation-attempt-mismatch" { $e.generation.run_attempt = "2" }
+        "final-gate-missing" { $e.checks.final_gate.job = "" }
         "final-gate-fail" { $e.checks.final_gate.conclusion = "failure" }
         "suite-closure" { $e.actual.suites = @() }
         "host-closure" { $e.actual.hosts = @() }
@@ -215,6 +212,63 @@ function Apply-Mutation([object]$Fixture, [string]$Mutation) {
         default { throw "Unknown mutation '$Mutation'." }
     }
     foreach ($p in @($Fixture.proofs)) { Set-EvidenceDigest $p.evidence }
+}
+function Invoke-GenerationResolutionFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][object[]]$Runs,
+        [Parameter(Mandatory = $true)][object[]]$Artifacts,
+        [Parameter(Mandatory = $true)][string]$ExpectedDecision,
+        [string]$ExpectedReason = ""
+    )
+    $fixtureInput = New-LineageFixtureInput "single"
+    $fixtureInput | Add-Member -NotePropertyName generation_fixture -NotePropertyValue ([pscustomobject][ordered]@{
+        pr_number = 1
+        base_sha = New-Hex "a"
+        head_sha = New-Hex "b"
+        merged_at = "2026-07-24T00:00:00Z"
+        runs = $Runs
+        artifacts = $Artifacts
+    })
+    $inputPath = Join-Path $scratch "$Name-input.json"
+    $outputPath = Join-Path $scratch "$Name-observation.json"
+    $fixtureInput | ConvertTo-Json -Depth 25 | Set-Content -LiteralPath $inputPath -Encoding UTF8
+    & $verifier -InputPath $inputPath -OutputPath $outputPath | Out-Null
+    $observation = Get-Content -Raw $outputPath | ConvertFrom-Json
+    if ([string]$observation.decision -cne $ExpectedDecision) {
+        throw "Generation fixture '$Name' expected '$ExpectedDecision', got '$($observation.decision)'."
+    }
+    if ($ExpectedReason -and @($observation.fallback_reasons) -notcontains $ExpectedReason) {
+        throw "Generation fixture '$Name' did not record '$ExpectedReason'."
+    }
+    return [ordered]@{ name = $Name; decision = [string]$observation.decision; status = "PASS" }
+}
+function New-ReleaseRun(
+    [string]$Id,
+    [string]$CreatedAt,
+    [string]$Head,
+    [string]$Attempt,
+    [string]$Conclusion = "success"
+) {
+    return [pscustomobject][ordered]@{
+        id = $Id
+        created_at = $CreatedAt
+        event = "pull_request"
+        head_sha = $Head
+        run_attempt = $Attempt
+        status = "completed"
+        conclusion = $Conclusion
+        display_title = "Release validation #1 synchronize $Head"
+        pull_requests = @([pscustomobject]@{ number = 1 })
+    }
+}
+function New-GenerationArtifact([object]$Evidence, [string]$RunId, [string]$Attempt, [string]$Head) {
+    return [pscustomobject][ordered]@{
+        name = "canonical-candidate-evidence-pr-1-$Head-run-$RunId-attempt-$Attempt"
+        expired = $false
+        workflow_run = [pscustomobject][ordered]@{ id = $RunId; head_sha = $Head }
+        evidence = $Evidence
+    }
 }
 function Invoke-ClassifierAuthorityFixture {
     param(
@@ -254,6 +308,7 @@ try {
     }
     $results = New-Object 'System.Collections.Generic.List[object]'
     $authorityResults = New-Object 'System.Collections.Generic.List[object]'
+    $generationResults = New-Object 'System.Collections.Generic.List[object]'
     $singleCommitSemantics = @{}
     for ($fixtureIndex = 0; $fixtureIndex -lt $matrixRecords.Length; $fixtureIndex++) {
         $fixtureRecord = $matrixRecords[$fixtureIndex]
@@ -292,6 +347,68 @@ try {
     if ($squashSemantics -cne $rebaseSemantics) {
         throw "Single-commit squash and rebase fixtures must produce identical observable proof semantics."
     }
+    $generationHead = New-Hex "b"
+    $generationBase = New-Hex "a"
+    $generationTree = New-Hex "d"
+    $oldRun = New-ReleaseRun -Id "1001" -CreatedAt "2026-07-23T10:00:00Z" -Head $generationHead -Attempt "2"
+    $latestRun = New-ReleaseRun -Id "1002" -CreatedAt "2026-07-23T11:00:00Z" -Head $generationHead -Attempt "1"
+    $latestEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $latestEvidence.generation.run_id = "1002"
+    $latestEvidence.checks.final_gate.run_id = "1002"
+    Set-EvidenceDigest $latestEvidence
+    $oldEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $generationResults.Add((Invoke-GenerationResolutionFixture -Name "latest-run-same-head-fresh-generation" `
+        -Runs @($oldRun, $latestRun) `
+        -Artifacts @(
+            (New-GenerationArtifact -Evidence $oldEvidence -RunId "1001" -Attempt "2" -Head $generationHead),
+            (New-GenerationArtifact -Evidence $latestEvidence -RunId "1002" -Attempt "1" -Head $generationHead)
+        ) -ExpectedDecision "proven")) | Out-Null
+
+    $rerunAllRun = New-ReleaseRun -Id "2001" -CreatedAt "2026-07-23T12:00:00Z" -Head $generationHead -Attempt "2"
+    $rerunAllEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $rerunAllEvidence.generation.run_id = "2001"
+    $rerunAllEvidence.generation.run_attempt = "2"
+    $rerunAllEvidence.checks.final_gate.run_id = "2001"
+    $rerunAllEvidence.checks.final_gate.run_attempt = "2"
+    Set-EvidenceDigest $rerunAllEvidence
+    $generationResults.Add((Invoke-GenerationResolutionFixture -Name "rerun-all-latest-attempt-complete" `
+        -Runs @($rerunAllRun) `
+        -Artifacts @((New-GenerationArtifact -Evidence $rerunAllEvidence -RunId "2001" -Attempt "2" -Head $generationHead)) `
+        -ExpectedDecision "proven")) | Out-Null
+
+    $rerunFailedRun = New-ReleaseRun -Id "3001" -CreatedAt "2026-07-23T13:00:00Z" -Head $generationHead -Attempt "2"
+    $rerunFailedEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $rerunFailedEvidence.generation.run_id = "3001"
+    $rerunFailedEvidence.checks.final_gate.run_id = "3001"
+    Set-EvidenceDigest $rerunFailedEvidence
+    $generationResults.Add((Invoke-GenerationResolutionFixture -Name "rerun-failed-no-current-canonical" `
+        -Runs @($rerunFailedRun) `
+        -Artifacts @((New-GenerationArtifact -Evidence $rerunFailedEvidence -RunId "3001" -Attempt "1" -Head $generationHead)) `
+        -ExpectedDecision "full-fallback" -ExpectedReason "missing-latest-generation-evidence")) | Out-Null
+
+    $mixedEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $mixedEvidence.generation.run_id = "4001"
+    $mixedEvidence.checks.final_gate.run_id = "4001"
+    Set-EvidenceDigest $mixedEvidence
+    $mixedRun = New-ReleaseRun -Id "4001" -CreatedAt "2026-07-23T14:00:00Z" -Head $generationHead -Attempt "2"
+    $generationResults.Add((Invoke-GenerationResolutionFixture -Name "mixed-generation-rejected" `
+        -Runs @($mixedRun) `
+        -Artifacts @((New-GenerationArtifact -Evidence $mixedEvidence -RunId "4001" -Attempt "2" -Head $generationHead)) `
+        -ExpectedDecision "full-fallback" -ExpectedReason "candidate-evidence-run-mismatch")) | Out-Null
+
+    $newerFailedRun = New-ReleaseRun -Id "5002" -CreatedAt "2026-07-23T16:00:00Z" -Head $generationHead -Attempt "1" -Conclusion "failure"
+    $olderSuccessfulRun = New-ReleaseRun -Id "5001" -CreatedAt "2026-07-23T15:00:00Z" -Head $generationHead -Attempt "3"
+    $olderSuccessfulEvidence = New-Evidence 1 $generationBase $generationHead $generationTree @($generationHead) @("patch-1") "combined-1"
+    $olderSuccessfulEvidence.generation.run_id = "5001"
+    $olderSuccessfulEvidence.generation.run_attempt = "3"
+    $olderSuccessfulEvidence.checks.final_gate.run_id = "5001"
+    $olderSuccessfulEvidence.checks.final_gate.run_attempt = "3"
+    Set-EvidenceDigest $olderSuccessfulEvidence
+    $generationResults.Add((Invoke-GenerationResolutionFixture -Name "stale-success-generation-not-used" `
+        -Runs @($olderSuccessfulRun, $newerFailedRun) `
+        -Artifacts @((New-GenerationArtifact -Evidence $olderSuccessfulEvidence -RunId "5001" -Attempt "3" -Head $generationHead)) `
+        -ExpectedDecision "full-fallback" -ExpectedReason "latest-generation-not-successful")) | Out-Null
+
     foreach ($path in @(
         "scripts/test-exact-candidate-contract.ps1",
         "scripts/test-lineage-verifier.ps1",
@@ -334,11 +451,12 @@ try {
     }
     $summary = [ordered]@{
         schema_version = 1
-        pass = $results.Count + $authorityResults.Count
+        pass = $results.Count + $authorityResults.Count + $generationResults.Count
         fail = 0
         cases = @($results.ToArray())
         state_machine_matrix = [ordered]@{ pass = $results.Count; cases = $matrixRecords.Length; status = "PASS" }
         classifier_authority = @($authorityResults.ToArray())
+        generation_resolution = @($generationResults.ToArray())
     }
     if ($Json) { $summary | ConvertTo-Json -Depth 5 } else { Write-Output "lineage verifier fixtures: PASS=$($results.Count) FAIL=0" }
 }

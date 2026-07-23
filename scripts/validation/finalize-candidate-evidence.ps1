@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$CandidateContractPath,
     [Parameter(Mandatory = $true)][string]$ClassificationPath,
     [Parameter(Mandatory = $true)][string]$FragmentsRoot,
-    [Parameter(Mandatory = $true)][string]$GuardBindingPath,
+    [Parameter(Mandatory = $true)][string]$FinalGatePath,
     [Parameter(Mandatory = $true)][string]$Repository,
     [Parameter(Mandatory = $true)][string]$RunId,
     [Parameter(Mandatory = $true)][string]$RunAttempt,
@@ -62,9 +62,14 @@ if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or -not $RunId -o
 }
 $candidate = Read-JsonFile $CandidateContractPath "Candidate contract"
 $classification = Read-JsonFile $ClassificationPath "Classification"
-$binding = Read-JsonFile $GuardBindingPath "Guard binding"
+$finalGate = Read-JsonFile $FinalGatePath "Final gate"
 $fragmentsRootFull = [System.IO.Path]::GetFullPath($FragmentsRoot)
 if (-not [System.IO.Directory]::Exists($fragmentsRootFull)) { throw "FragmentsRoot does not exist." }
+$finalGateFull = [System.IO.Path]::GetFullPath($FinalGatePath)
+$fragmentsPrefix = $fragmentsRootFull.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+if (-not $finalGateFull.StartsWith($fragmentsPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Final gate must belong to the downloaded current-generation artifact closure."
+}
 if ([int]$candidate.schema_version -ne 1 -or [string]$candidate.repository -cne $Repository) { throw "Candidate contract is invalid." }
 if ([int]$classification.schema_version -ne 2) { throw "Classifier schema/version is invalid." }
 if ([string]$classification.base_ref -cne [string]$candidate.base.sha -or
@@ -100,7 +105,9 @@ if ([bool]$classifierProperties.self_protection_required -ne [bool]$classifierPr
 if ([bool]$classifierProperties.control_plane -and -not [bool]$classifierProperties.self_protection_required) {
     throw "Classifier control-plane ownership must require self-protection."
 }
-if ([int]$binding.schema_version -ne 1) { throw "Guard binding schema/version is invalid." }
+if ([int]$finalGate.schema_version -ne 1 -or [string]$finalGate.proof_kind -cne "final-validation-gate") {
+    throw "Final gate schema/version is invalid."
+}
 
 $fragmentFiles = @(Get-ChildItem -LiteralPath $fragmentsRootFull -Recurse -File -Filter "evidence-manifest.json" | Sort-Object FullName)
 if ($fragmentFiles.Count -eq 0) { throw "Canonical evidence requires validation fragments." }
@@ -127,18 +134,11 @@ foreach ($file in $fragmentFiles) {
     }
     $fragments.Add($fragment)
 }
-foreach ($name in @("base_guard", "identity_guard", "final_gate")) {
-    $entry = $binding.$name
-    if ($null -eq $entry -or -not [string]$entry.run_id -or -not [string]$entry.job_id -or [string]$entry.conclusion -cne "success") {
-        throw "Binding '$name' lacks an actual successful run/job identity."
-    }
-    if ([string]$entry.run_attempt -cne $RunAttempt) { throw "Binding '$name' uses a mixed run attempt." }
-}
-if ([string]$binding.final_gate.run_id -cne $RunId) { throw "Final gate belongs to another run." }
-foreach ($name in @("base_guard", "identity_guard", "final_gate")) {
-    if ([string]$binding.$name.head_sha -cne [string]$candidate.head.sha -or [int]$binding.$name.pr_number -ne [int]$candidate.pr_number) {
-        throw "Binding '$name' does not match PR/head identity."
-    }
+if ([string]$finalGate.repository -cne $Repository -or [int]$finalGate.pr_number -ne [int]$candidate.pr_number -or
+    [string]$finalGate.head_sha -cne [string]$candidate.head.sha -or [string]$finalGate.run_id -cne $RunId -or
+    [string]$finalGate.run_attempt -cne $RunAttempt -or [string]$finalGate.job -cne "validation-gate" -or
+    [string]$finalGate.check_name -cne "validation gate" -or [string]$finalGate.conclusion -cne "success") {
+    throw "Final gate does not match the current repository, candidate, run, attempt, or successful job identity."
 }
 
 [string[]]$actualSuites = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { @($_.executed.targeted_suite_names) })
@@ -160,7 +160,7 @@ if ([bool]$classification.run_validation_self_protection -and $selfProtectionFra
 })
 [string[]]$affectedModules = Get-OrdinalStrings @($classification.affected_modules)
 $payload = [ordered]@{
-    schema_version = 2; proof_kind = "canonical-candidate-evidence"; repository = $Repository; pr_number = [int]$candidate.pr_number
+    schema_version = 3; proof_kind = "canonical-candidate-evidence"; repository = $Repository; pr_number = [int]$candidate.pr_number
     base = $candidate.base; head = $candidate.head; candidate = $candidate.candidate; change = $candidate.change
     classifier = [ordered]@{
         schema_version = [int]$classification.schema_version; detected_tier = [int]$classification.detected_tier
@@ -180,13 +180,15 @@ $payload = [ordered]@{
         self_protection = $(if ([bool]$classification.run_validation_self_protection) { "required-and-passed" } else { "not-required" })
     }
     contracts = [ordered]@{ workflow = $WorkflowIdentity; routing = $RoutingContractIdentity; gate = $GateContractIdentity }
-    run = [ordered]@{ id = $RunId; attempt = $RunAttempt }
-    checks = [ordered]@{ base_guard = $binding.base_guard; identity_guard = $binding.identity_guard; final_gate = $binding.final_gate }
+    generation = [ordered]@{
+        repository = $Repository; pr_number = [int]$candidate.pr_number; run_id = $RunId; run_attempt = $RunAttempt
+    }
+    checks = [ordered]@{ final_gate = $finalGate }
     artifact_digests = @($artifactDigests)
 }
 $generated = [DateTimeOffset]::UtcNow
 $manifest = [ordered]@{
-    schema_version = 2; proof_kind = "canonical-candidate-evidence"; generated_at_utc = $generated.ToString("o")
+    schema_version = 3; proof_kind = "canonical-candidate-evidence"; generated_at_utc = $generated.ToString("o")
     freshness = [ordered]@{ status = "fresh"; expires_at_utc = $generated.AddHours($FreshnessHours).ToString("o"); retention_hours = $FreshnessHours }
 }
 foreach ($key in $payload.Keys | Where-Object { $_ -notin @("schema_version", "proof_kind") }) { $manifest[$key] = $payload[$key] }
