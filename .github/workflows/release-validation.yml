@@ -113,7 +113,8 @@ jobs:
           "tier=$($result.detected_tier)" >> $env:GITHUB_OUTPUT
           "modules=$(@($result.affected_modules) -join ',')" >> $env:GITHUB_OUTPUT
           "required_suites=$(@($result.required_suites) -join ',')" >> $env:GITHUB_OUTPUT
-          "required_hosts_json=$(@($result.required_hosts) | ConvertTo-Json -Compress)" >> $env:GITHUB_OUTPUT
+          $requiredHostsJson = ConvertTo-Json -InputObject ([object[]]@($result.required_hosts)) -Compress
+          "required_hosts_json=$requiredHostsJson" >> $env:GITHUB_OUTPUT
           "requires_windows_powershell=$(([bool]$result.requires_windows_powershell).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "run_validation_self_protection=$(([bool]$result.run_validation_self_protection).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "validation_self_protection_reason=$($result.validation_self_protection_reason)" >> $env:GITHUB_OUTPUT
