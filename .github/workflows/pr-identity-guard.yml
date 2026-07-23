@@ -1,4 +1,5 @@
 name: PR identity guard
+run-name: PR identity guard #${{ github.event.pull_request.number }} ${{ github.event.action }} ${{ github.event.pull_request.head.sha }}
 
 on:
   pull_request:

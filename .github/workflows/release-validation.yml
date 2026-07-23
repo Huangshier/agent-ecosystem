@@ -12,10 +12,19 @@ on:
 permissions:
   contents: read
   actions: write
+  checks: read
+  pull-requests: read
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+  PR_BASE_REF: ${{ github.event.pull_request.base.ref || '' }}
+  PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+  PR_HEAD_REF: ${{ github.event.pull_request.head.ref || '' }}
+  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'push' && github.run_id || github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   classify:
@@ -34,27 +43,44 @@ jobs:
       run_heavy_targeted_regression: ${{ steps.risk.outputs.run_heavy_targeted_regression }}
       heavy_targeted_reason: ${{ steps.risk.outputs.heavy_targeted_reason }}
       validation_sha: ${{ steps.target.outputs.sha }}
+      candidate_tree: ${{ steps.target.outputs.tree }}
+      candidate_parents_json: ${{ steps.target.outputs.parents_json }}
     steps:
-      - name: Resolve validation SHA
+      - name: Checkout resolver bootstrap context
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve exact validation candidate
         id: target
         shell: pwsh
         run: |
-          $sha = if ("${{ github.event_name }}" -eq "pull_request") {
-            "${{ github.event.pull_request.head.sha }}"
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            $contractPath = Join-Path $env:RUNNER_TEMP "candidate-contract.json"
+            ./scripts/validation/resolve-pull-request-candidate.ps1 `
+              -Repository "${{ github.repository }}" `
+              -PullRequestNumber ([int]$env:PR_NUMBER) `
+              -BaseRef $env:PR_BASE_REF `
+              -BaseSha $env:PR_BASE_SHA `
+              -HeadRef $env:PR_HEAD_REF `
+              -HeadSha $env:PR_HEAD_SHA `
+              -OutputPath $contractPath
+            $candidate = Get-Content -Raw $contractPath | ConvertFrom-Json
+            $sha = [string]$candidate.candidate.sha
+            "tree=$($candidate.candidate.tree)" >> $env:GITHUB_OUTPUT
+            "parents_json=$(@($candidate.candidate.ordered_parents) | ConvertTo-Json -Compress)" >> $env:GITHUB_OUTPUT
           }
           else {
-            "${{ github.sha }}"
+            $sha = "${{ github.sha }}"
+            "tree=" >> $env:GITHUB_OUTPUT
+            "parents_json=[]" >> $env:GITHUB_OUTPUT
           }
           if ($sha -notmatch '^[0-9a-fA-F]{40}$') {
             throw "Validation SHA must be a 40-character commit ID."
           }
           "sha=$($sha.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ steps.target.outputs.sha }}
+          git checkout --detach $sha
 
       - name: Classify change risk and test routing contract
         id: risk
@@ -64,8 +90,8 @@ jobs:
             Tee-Object -FilePath "$env:RUNNER_TEMP/change-routing-tests.json"
           if ("${{ github.event_name }}" -eq "pull_request") {
             $result = ./scripts/validate-change.ps1 `
-              -BaseRef "origin/${{ github.base_ref }}" `
-              -HeadRef HEAD `
+              -BaseRef $env:PR_BASE_SHA `
+              -HeadRef $env:PR_HEAD_SHA `
               -Json | ConvertFrom-Json
           }
           elseif ("${{ github.event_name }}" -eq "push") {
@@ -104,6 +130,7 @@ jobs:
           path: |
             ${{ runner.temp }}/change-routing-tests.json
             ${{ runner.temp }}/change-classification.json
+            ${{ runner.temp }}/candidate-contract.json
           if-no-files-found: error
 
   quick-validation:
@@ -117,6 +144,21 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Verify exact candidate identity
+        shell: pwsh
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          ./scripts/validation/resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
       - name: Run quick checks
         shell: pwsh
         run: |
@@ -142,6 +184,9 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -Repository "${{ github.repository }}" `
+            -EventName "${{ github.event_name }}" `
+            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
             -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
       - name: Upload quick validation success evidence
         if: success()
@@ -175,6 +220,21 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Verify exact candidate identity
+        shell: pwsh
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          ./scripts/validation/resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
       - name: Run affected-module checks
         shell: pwsh
         run: |
@@ -201,6 +261,9 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -Repository "${{ github.repository }}" `
+            -EventName "${{ github.event_name }}" `
+            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
             -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
       - name: Upload targeted validation success evidence
         if: success()
@@ -230,6 +293,22 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Verify exact candidate identity
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          ./scripts/validation/resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
       - name: Run independent validation mutation oracle
         shell: pwsh
         run: |
@@ -237,12 +316,34 @@ jobs:
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
           ./scripts/test-heavy-targeted-regression.ps1 -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-self-protection.json")
+      - name: Write self-protection evidence manifest
+        if: always()
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-validation-self-protection"
+          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
+          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
+          $candidatePath = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "candidate-contract.json" } else { "" }
+          ./scripts/validation/write-evidence-manifest.ps1 `
+            -ScratchRoot $scratch `
+            -Outcome $outcome `
+            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -JobName "${{ github.job }}" `
+            -HostIdentity $hostIdentity `
+            -Repository "${{ github.repository }}" `
+            -EventName "${{ github.event_name }}" `
+            -CandidateContractPath $candidatePath `
+            -SuccessAllowlist @("validation-self-protection.json", "evidence-manifest.json")
       - name: Upload self-protection success evidence
         if: success()
         uses: actions/upload-artifact@v7
         with:
           name: validation-self-protection
-          path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection/validation-self-protection.json
+          path: |
+            ${{ runner.temp }}/agent-ecosystem-validation-self-protection/validation-self-protection.json
+            ${{ runner.temp }}/agent-ecosystem-validation-self-protection/evidence-manifest.json
           if-no-files-found: error
       - name: Upload self-protection failure evidence
         if: failure()
@@ -386,6 +487,22 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Verify exact candidate identity
+        if: github.event_name == 'pull_request'
+        shell: powershell
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          .\scripts\validation\resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
 
       - name: Run affected Windows PowerShell suites
         if: github.event_name == 'pull_request'
@@ -418,6 +535,7 @@ jobs:
           $heavyStatus = "not-applicable"
           $heavyReason = "independent-self-protection-job"
           $successAllowlist = if ("${{ github.event_name }}" -eq "pull_request") { @("targeted-validation-result.json", "evidence-manifest.json") } else { @("validation-result.json", "evidence-manifest.json") }
+          $candidatePath = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "candidate-contract.json" } else { "" }
           .\scripts\validation\write-evidence-manifest.ps1 `
             -ScratchRoot $scratch `
             -Outcome $outcome `
@@ -426,6 +544,9 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -Repository "${{ github.repository }}" `
+            -EventName "${{ github.event_name }}" `
+            -CandidateContractPath $candidatePath `
             -HeavyTargetedStatus $heavyStatus `
             -HeavyTargetedReason $heavyReason `
             -SuccessAllowlist $successAllowlist
@@ -466,7 +587,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           ref: ${{ needs.classify.outputs.validation_sha }}
+      - name: Verify exact candidate identity
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          ./scripts/validation/resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
 
       - name: Evaluate required validation contract
         shell: pwsh
@@ -495,3 +633,147 @@ jobs:
             -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
             -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT
+
+  canonical-candidate-evidence:
+    name: canonical candidate evidence
+    needs:
+      - classify
+      - validation-gate
+    if: always() && github.event_name == 'pull_request' && needs.classify.result == 'success' && needs.validation-gate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.classify.outputs.validation_sha }}
+
+      - name: Verify final candidate identity
+        shell: pwsh
+        run: |
+          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
+          ./scripts/validation/resolve-pull-request-candidate.ps1 `
+            -Repository "${{ github.repository }}" `
+            -PullRequestNumber ([int]$env:PR_NUMBER) `
+            -BaseRef $env:PR_BASE_REF `
+            -BaseSha $env:PR_BASE_SHA `
+            -HeadRef $env:PR_HEAD_REF `
+            -HeadSha $env:PR_HEAD_SHA `
+            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
+            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
+            -ExpectedCandidateParents $expectedParents `
+            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
+
+      - name: Download current-run evidence fragments
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/candidate-fragments
+
+      - name: Resolve exact guard and final gate identities
+        uses: actions/github-script@v8
+        env:
+          BINDING_OUTPUT_PATH: ${{ runner.temp }}/guard-gate-binding.json
+        with:
+          script: |
+            const resolver = require("./.github/scripts/resolve-validation-check-bindings.js");
+            await resolver.run({
+              github,
+              context,
+              core,
+              outputPath: process.env.BINDING_OUTPUT_PATH,
+            });
+
+      - name: Finalize canonical candidate evidence
+        shell: pwsh
+        run: |
+          $outputRoot = Join-Path $env:RUNNER_TEMP "canonical-candidate-evidence"
+          New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
+          ./scripts/validation/finalize-candidate-evidence.ps1 `
+            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
+            -ClassificationPath (Join-Path $env:RUNNER_TEMP "candidate-fragments/change-risk-classification/change-classification.json") `
+            -FragmentsRoot (Join-Path $env:RUNNER_TEMP "candidate-fragments") `
+            -GuardBindingPath (Join-Path $env:RUNNER_TEMP "guard-gate-binding.json") `
+            -Repository "${{ github.repository }}" `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}" `
+            -WorkflowIdentity ".github/workflows/release-validation.yml" `
+            -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+            -GateContractIdentity "scripts/validation/required-validation-gate.ps1" `
+            -OutputPath (Join-Path $outputRoot "evidence-manifest.json")
+
+      - name: Summarize canonical identity
+        shell: pwsh
+        run: |
+          $evidence = Get-Content -Raw (Join-Path $env:RUNNER_TEMP "canonical-candidate-evidence/evidence-manifest.json") | ConvertFrom-Json
+          @(
+            "### Canonical candidate evidence"
+            ""
+            "- candidate: ``$($evidence.candidate.sha)``"
+            "- tree: ``$($evidence.candidate.tree)``"
+            "- ordered parents: ``$(@($evidence.candidate.ordered_parents) -join ', ')``"
+            "- base/head: ``$($evidence.base.sha)`` / ``$($evidence.head.sha)``"
+            "- digest: ``$($evidence.canonical_evidence_digest)``"
+          ) >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload canonical candidate evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: canonical-candidate-evidence-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/canonical-candidate-evidence/evidence-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  main-lineage-shadow:
+    name: main lineage shadow
+    needs: classify
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pushed main range
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Evaluate full first-parent lineage
+        shell: pwsh
+        env:
+          LINEAGE_GITHUB_AUTH: ${{ github.token }}
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "main-lineage-shadow"
+          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+          $forced = [System.Convert]::ToBoolean("${{ github.event.forced }}")
+          ./scripts/validation/lineage-verifier.ps1 `
+            -Repository "${{ github.repository }}" `
+            -Before "${{ github.event.before }}" `
+            -Sha "${{ github.sha }}" `
+            -GitHubToken $env:LINEAGE_GITHUB_AUTH `
+            -Forced:$forced `
+            -ScratchRoot (Join-Path $scratch "downloads") `
+            -OutputPath (Join-Path $scratch "lineage-observation.json") `
+            -RunId "${{ github.run_id }}" `
+            -RunAttempt "${{ github.run_attempt }}"
+
+      - name: Summarize shadow observation
+        if: always()
+        shell: pwsh
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP "main-lineage-shadow/lineage-observation.json"
+          if (-not (Test-Path $path)) { throw "Lineage evaluator did not produce an observation." }
+          $observation = Get-Content -Raw $path | ConvertFrom-Json
+          @(
+            "### Main lineage shadow"
+            ""
+            "- decision: **$($observation.decision)**"
+            "- range: ``$($observation.before)..$($observation.sha)``"
+            "- commits: $(@($observation.first_parent_range).Count)"
+            "- fallback reasons: $(@($observation.fallback_reasons) -join ', ')"
+          ) >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload lineage observation
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-lineage-shadow-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/main-lineage-shadow/lineage-observation.json
+          if-no-files-found: error

@@ -127,7 +127,16 @@ function New-ConservativeResult {
 }
 
 function New-ChangeResult {
-    param([int]$Tier, [string[]]$Paths, [string[]]$Reasons, [string[]]$Modules, [string]$Base = "", [string]$Head = "", [switch]$ConservativeFallback)
+    param(
+        [int]$Tier,
+        [string[]]$Paths,
+        [string[]]$Reasons,
+        [string[]]$Modules,
+        [string]$Base = "",
+        [string]$Head = "",
+        [switch]$ConservativeFallback,
+        [switch]$ControlPlane
+    )
     $moduleSuiteMap = [ordered]@{}
     $requiredSuites = New-Object 'System.Collections.Generic.List[string]'
     foreach ($module in @($Modules | Sort-Object -Unique)) {
@@ -159,26 +168,7 @@ function New-ChangeResult {
     $coverageDifference = @(
         Compare-Object -ReferenceObject $heavyTargetedRequiredSuites -DifferenceObject $fullValidatorCoverageSuites
     )
-    $selfProtectionPatterns = @(
-        '^\.github/workflows/',
-        '^scripts/(validate-(change|targeted-change|release)|invoke-local-validation)\.ps1$',
-        '^scripts/test-(validate-change|heavy-targeted-regression|local-validation-plan|release-sharding|validation-evidence-contract)\.ps1$',
-        '^scripts/test-required-validation-gate\.ps1$',
-        '^scripts/validation/change-risk-rules\.json$',
-        '^scripts/validation/change-risk-fixtures/',
-        '^scripts/validation/local-validation-plan-contract\.ps1$',
-        '^scripts/validation/release-classifier-output-contract\.ps1$',
-        '^scripts/validation/release-classifier-output-fixtures/',
-        '^scripts/validation/release-shard-contract\.(json|ps1)$',
-        '^scripts/validation/release-test-helper\.ps1$',
-        '^scripts/validation/required-validation-gate\.ps1$',
-        '^scripts/validation/required-validation-gate-fixtures/',
-        '^scripts/validation/write-evidence-manifest\.ps1$'
-    )
-    $hasSelfProtectionPath = @($Paths | Where-Object {
-        $candidate = [string]$_
-        @($selfProtectionPatterns | Where-Object { $candidate -match $_ }).Count -gt 0
-    }).Count -gt 0
+    $hasSelfProtectionPath = $ControlPlane.IsPresent
     $hasAmbiguousModule = @($Modules | Where-Object {
         [string]$_ -match '^(unknown|unsupported-)'
     }).Count -gt 0
@@ -258,6 +248,9 @@ function New-ChangeResult {
         required_windows_powershell_suites = @($requiredWindowsPowerShellSuites.ToArray() | Sort-Object -Unique)
         run_validation_self_protection = [bool]$runSelfProtection
         validation_self_protection_reason = $selfProtectionReason
+        control_plane = [bool]$ControlPlane.IsPresent
+        self_protection_required = [bool]$runSelfProtection
+        self_protection_reason = $selfProtectionReason
         conservative_fallback = [bool]($ConservativeFallback.IsPresent -or $hasAmbiguousModule)
         required_checks = @($requiredChecks.ToArray())
         skipped_checks = @($skippedChecks.ToArray())
@@ -333,6 +326,7 @@ try {
         $maxTier = -1
         $reasons = New-Object 'System.Collections.Generic.List[string]'
         $modules = New-Object 'System.Collections.Generic.List[string]'
+        $hasControlPlane = $false
         foreach ($path in $normalized) {
             $matched = $false
             foreach ($rule in @($config.rules)) {
@@ -342,6 +336,13 @@ try {
                     if ($tier -gt $maxTier) { $maxTier = $tier }
                     $reasons.Add("$path matched $($rule.id) (Tier $tier)")
                     foreach ($module in @($rule.modules)) { $modules.Add([string]$module) }
+                    $controlPlaneProperty = @($rule.PSObject.Properties | Where-Object { $_.Name -ceq "control_plane" })
+                    if ($controlPlaneProperty.Count -eq 1) {
+                        if ($controlPlaneProperty[0].Value -isnot [bool]) {
+                            throw "Routing rule '$($rule.id)' has an invalid control_plane marker."
+                        }
+                        if ([bool]$controlPlaneProperty[0].Value) { $hasControlPlane = $true }
+                    }
                     break
                 }
             }
@@ -351,7 +352,7 @@ try {
                 $reasons.Add("$path is unknown; conservatively escalated to Tier $($config.unknown_tier)")
             }
         }
-        $result = New-ChangeResult -Tier $maxTier -Paths $normalized -Reasons @($reasons.ToArray()) -Modules @($modules.ToArray()) -Base $normalizedBase -Head $normalizedHead
+        $result = New-ChangeResult -Tier $maxTier -Paths $normalized -Reasons @($reasons.ToArray()) -Modules @($modules.ToArray()) -Base $normalizedBase -Head $normalizedHead -ControlPlane:$hasControlPlane
     }
 } catch {
     $result = New-ConservativeResult -Reason ("Classification input could not be resolved: {0}" -f $_.Exception.Message)

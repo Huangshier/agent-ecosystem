@@ -119,13 +119,24 @@ validator with PowerShell 7+ (`pwsh`) on:
 It also runs the validator on `windows-latest` with Windows PowerShell 5.1
 (`shell: powershell`) to keep the Windows bare-machine path covered.
 
-The workflow uses GitHub Actions concurrency keyed by workflow and branch. New
-pushes to the same pull request branch cancel older in-progress validation runs,
-so review focuses on the latest commit without weakening coverage.
+The workflow uses event-aware GitHub Actions concurrency. New pull-request,
+scheduled, and manually dispatched runs may cancel an older same-event,
+same-ref run, while every `push` to `main` has a unique concurrency identity
+and must finish observing its complete `before..sha` range.
 
-Each job uploads the validator scratch directory as evidence. Treat CI failures
-as release blockers unless the maintainer explicitly records a platform-specific
-deferral for a pre-release calibration run.
+Successful validation jobs upload explicit evidence allowlists, while failed
+jobs preserve their complete scratch directory for diagnosis. Pull-request
+runs also finalize one canonical candidate-evidence artifact after the fixed
+gate succeeds. It binds the exact merge candidate, classifier closure,
+artifacts, and actual base guard, identity guard, and final gate run/job
+identities.
+
+Every `main` push runs a lineage shadow over the complete first-parent range.
+The shadow reports only `proven` or conservative `full-fallback`; neither
+decision controls or skips the unconditional product-runtime full validation.
+Treat evaluator failures and other CI failures as release blockers unless the
+maintainer explicitly records a platform-specific deferral for a pre-release
+calibration run.
 
 Validation-sensitive text files are LF-normalized by `.gitattributes` so
 content hashes in the experience registry are stable on hosted Windows, Ubuntu,

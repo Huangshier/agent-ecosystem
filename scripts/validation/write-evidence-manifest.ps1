@@ -7,6 +7,12 @@ param(
     [Parameter(Mandatory = $true)][string]$RunAttempt,
     [Parameter(Mandatory = $true)][string]$JobName,
     [Parameter(Mandatory = $true)][string]$HostIdentity,
+    [string]$Repository = "Huangshier/agent-ecosystem",
+    [ValidateSet("pull_request", "push", "workflow_dispatch", "schedule", "fixture")][string]$EventName = "fixture",
+    [string]$WorkflowIdentity = ".github/workflows/release-validation.yml",
+    [string]$RoutingContractIdentity = "scripts/validation/change-risk-rules.json",
+    [string]$GateContractIdentity = "scripts/validation/required-validation-gate.ps1",
+    [string]$CandidateContractPath = "",
     [ValidateSet("executed", "skipped", "not-applicable")][string]$HeavyTargetedStatus = "not-applicable",
     [string]$HeavyTargetedReason = "not-applicable",
     [Parameter(Mandatory = $true)][string[]]$SuccessAllowlist,
@@ -25,6 +31,26 @@ if ($CommitSha -notmatch '^[0-9a-fA-F]{40}$') {
 if ([string]::IsNullOrWhiteSpace($RunId) -or [string]::IsNullOrWhiteSpace($RunAttempt) -or
     [string]::IsNullOrWhiteSpace($JobName) -or [string]::IsNullOrWhiteSpace($HostIdentity)) {
     throw "Run, job, and host identity fields must be non-empty."
+}
+if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
+    [string]::IsNullOrWhiteSpace($WorkflowIdentity) -or
+    [string]::IsNullOrWhiteSpace($RoutingContractIdentity) -or
+    [string]::IsNullOrWhiteSpace($GateContractIdentity)) {
+    throw "Repository and contract identity fields must be valid and non-empty."
+}
+$candidateContract = $null
+if ($CandidateContractPath) {
+    $candidateContractFull = [System.IO.Path]::GetFullPath($CandidateContractPath)
+    if (-not [System.IO.File]::Exists($candidateContractFull)) { throw "CandidateContractPath does not exist." }
+    $candidateContract = [System.IO.File]::ReadAllText($candidateContractFull) | ConvertFrom-Json
+    if ([int]$candidateContract.schema_version -ne 1 -or
+        [string]$candidateContract.repository -cne $Repository -or
+        [string]$candidateContract.candidate.sha -cne $CommitSha.ToLowerInvariant()) {
+        throw "Candidate contract does not match the repository or validated commit."
+    }
+}
+elseif ($EventName -ceq "pull_request") {
+    throw "Pull request evidence requires an exact candidate contract."
 }
 
 $normalizedAllowlist = New-Object 'System.Collections.Generic.List[string]'
@@ -113,8 +139,17 @@ if ($null -ne $releaseResult) {
 }
 
 $targetedTelemetry = @()
+$targetedSuiteNames = @()
 if ($null -ne $targetedResult) {
     $targetedTelemetry = @($targetedResult.telemetry)
+    $targetedSuiteNames = @(
+        if (@($targetedResult.executed_suites).Count -gt 0) {
+            @($targetedResult.executed_suites)
+        }
+        else {
+            @($targetedTelemetry | ForEach-Object { [string]$_.suite })
+        }
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique
 }
 
 $routingRegressions = @()
@@ -142,9 +177,23 @@ $availableTopLevelFiles = @(
     @(Get-ChildItem -LiteralPath $scratchRootFull -File | ForEach-Object { $_.Name }) + @("evidence-manifest.json") |
         Sort-Object -Unique
 )
+$artifactDigests = @(
+    $normalizedAllowlist.ToArray() |
+        Where-Object { $_ -cne "evidence-manifest.json" } |
+        Sort-Object |
+        ForEach-Object {
+            $path = Join-Path $scratchRootFull $_
+            if ([System.IO.File]::Exists($path)) {
+                [ordered]@{ file = [string]$_; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+            }
+        }
+)
 $manifest = [ordered]@{
-    schema_version = 1
+    schema_version = 2
+    proof_kind = "validation-fragment"
     generated_at_utc = [DateTimeOffset]::UtcNow.ToString("o")
+    repository = $Repository
+    event_name = $EventName
     identity = [ordered]@{
         commit_sha = $CommitSha.ToLowerInvariant()
         run_id = $RunId
@@ -152,6 +201,12 @@ $manifest = [ordered]@{
         job = $JobName
         host = $HostIdentity
     }
+    contracts = [ordered]@{
+        workflow = $WorkflowIdentity
+        routing = $RoutingContractIdentity
+        gate = $GateContractIdentity
+    }
+    candidate = $candidateContract
     outcome = $Outcome
     validation_shard = $validationShard
     heavy_targeted = [ordered]@{
@@ -162,6 +217,7 @@ $manifest = [ordered]@{
     executed = [ordered]@{
         release_checks = $releaseChecks
         validation_shard = $validationShard
+        targeted_suite_names = @($targetedSuiteNames)
         targeted_suites = $targetedTelemetry
         routing_regressions = $routingRegressions
         coverage_categories = @($coverageCategories.ToArray())
@@ -178,6 +234,7 @@ $manifest = [ordered]@{
         }
     }
     available_top_level_files = $availableTopLevelFiles
+    artifact_digests = $artifactDigests
 }
 
 $manifestPath = Join-Path $scratchRootFull "evidence-manifest.json"

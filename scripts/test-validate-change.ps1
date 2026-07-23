@@ -218,6 +218,11 @@ foreach ($case in @($cases)) {
         $expectedSuites = @($case.required_suites | Sort-Object)
         if (($actualSuites -join ',') -cne ($expectedSuites -join ',')) { throw "Case '$($case.name)' has incorrect required suites." }
     }
+    if ($null -ne $case.required_hosts) {
+        $actualHosts = @($value.required_hosts | Sort-Object)
+        $expectedHosts = @($case.required_hosts | Sort-Object)
+        if (($actualHosts -join ',') -cne ($expectedHosts -join ',')) { throw "Case '$($case.name)' has incorrect required hosts." }
+    }
     if ($null -ne $case.run_heavy_targeted_regression -and [bool]$value.run_heavy_targeted_regression -ne [bool]$case.run_heavy_targeted_regression) {
         throw "Case '$($case.name)' has an incorrect heavy targeted decision."
     }
@@ -229,6 +234,14 @@ foreach ($case in @($cases)) {
     }
     if ($null -ne $case.validation_self_protection_reason -and [string]$value.validation_self_protection_reason -cne [string]$case.validation_self_protection_reason) {
         throw "Case '$($case.name)' has an incorrect validation self-protection reason."
+    }
+    foreach ($field in @("run_validation_self_protection", "control_plane", "self_protection_required")) {
+        if ($null -ne $case.$field -and [bool]$value.$field -ne [bool]$case.$field) {
+            throw "Case '$($case.name)' has an incorrect $field decision."
+        }
+    }
+    if ($null -ne $case.self_protection_reason -and [string]$value.self_protection_reason -cne [string]$case.self_protection_reason) {
+        throw "Case '$($case.name)' has an incorrect explicit self-protection reason."
     }
     foreach ($field in @("required_checks", "skipped_checks")) {
         if ($null -ne $case.$field -and (@($value.$field) -join ',') -cne (@($case.$field) -join ',')) {
@@ -328,14 +341,21 @@ if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.ba
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
 if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
 if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
-if (-not $workflow.Contains('group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}') -or -not $workflow.Contains("cancel-in-progress: true")) {
-    throw "Hosted concurrency must isolate events while preserving same-event, same-ref cancellation."
+if (-not $workflow.Contains("github.event_name == 'push' && github.run_id") -or
+    -not $workflow.Contains('cancel-in-progress: ${{ github.event_name != ''push'' }}')) {
+    throw "Hosted concurrency must preserve every push range while retaining cancellation for non-push events."
 }
 
 $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unsupported.detected_tier -ne 3 -or -not [bool]$unsupported.run_heavy_targeted_regression) { throw "Runtime skill without a reliable targeted suite did not fail closed to Tier 3 heavy execution." }
 $unmappedTest = (& $validator -ChangedPath "scripts/test-future-runtime.ps1" -Json | Out-String) | ConvertFrom-Json
-if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.run_heavy_targeted_regression) { throw "Unmapped future test path did not fail closed to Tier 3 heavy execution." }
+if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.conservative_fallback -or
+    @($unmappedTest.required_suites).Count -ne 9 -or @($unmappedTest.required_hosts).Count -ne 3 -or
+    -not [bool]$unmappedTest.run_validation_self_protection -or -not [bool]$unmappedTest.self_protection_required -or
+    [bool]$unmappedTest.control_plane -or [string]$unmappedTest.self_protection_reason -cne "unknown-or-ambiguous-input" -or
+    -not [bool]$unmappedTest.run_heavy_targeted_regression) {
+    throw "Unmapped future test path did not fail closed to Tier 3 full routing."
+}
 
 $targetedResults = @()
 if ($RunTargetedRegression.IsPresent) {
