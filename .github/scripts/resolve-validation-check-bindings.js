@@ -20,9 +20,10 @@ async function waitForRun({ github, owner, repo, runId, timeoutMs = 600000 }) {
 }
 
 async function waitForExactGuardRun({
-  github, owner, repo, workflowPath, expectedTitle, headSha, prNumber, runAttempt, timeoutMs = 600000,
+  github, owner, repo, workflowPath, expectedTitles, headSha, prNumber, runAttempt, timeoutMs = 600000,
 }) {
   const deadline = Date.now() + timeoutMs;
+  const acceptedTitles = new Set(expectedTitles);
   while (true) {
     const listed = await github.rest.actions.listWorkflowRuns({
       owner, repo, workflow_id: workflowPath, event: "pull_request", head_sha: headSha, per_page: 100,
@@ -31,7 +32,7 @@ async function waitForExactGuardRun({
       (run) =>
         run.event === "pull_request" &&
         run.head_sha === headSha &&
-        run.display_title === expectedTitle &&
+        acceptedTitles.has(run.display_title) &&
         Number(run.run_attempt) === Number(runAttempt) &&
         Array.isArray(run.pull_requests) &&
         run.pull_requests.some((pr) => Number(pr.number) === Number(prNumber)),
@@ -47,9 +48,9 @@ async function waitForExactGuardRun({
   }
 }
 
-async function resolveGuard({ github, owner, repo, workflowPath, expectedTitle, headSha, prNumber, runAttempt }) {
+async function resolveGuard({ github, owner, repo, workflowPath, expectedTitles, headSha, prNumber, runAttempt }) {
   const selected = await waitForExactGuardRun({
-    github, owner, repo, workflowPath, expectedTitle, headSha, prNumber, runAttempt,
+    github, owner, repo, workflowPath, expectedTitles, headSha, prNumber, runAttempt,
   });
   const completed = await waitForRun({ github, owner, repo, runId: selected.id });
   if (completed.conclusion !== "success") throw new Error(`Guard run ${completed.id} concluded ${completed.conclusion}.`);
@@ -98,11 +99,15 @@ async function run({ github, context, core, outputPath }) {
   const action = context.payload.action;
   const baseGuard = await resolveGuard({
     github, owner, repo, workflowPath: ".github/workflows/pr-base-guard.yml",
-    expectedTitle: `PR base guard #${prNumber} ${action} ${headSha}`, headSha, prNumber, runAttempt,
+    // NOTE: 静态标题只用于本次工作流变更尚未进入默认分支的引导期；
+    // 同一 head/PR/attempt 若存在多个旧式运行，唯一性检查仍会失败关闭。
+    expectedTitles: [`PR base guard #${prNumber} ${action} ${headSha}`, "PR base guard"],
+    headSha, prNumber, runAttempt,
   });
   const identityGuard = await resolveGuard({
     github, owner, repo, workflowPath: ".github/workflows/pr-identity-guard.yml",
-    expectedTitle: `PR identity guard #${prNumber} ${action} ${headSha}`, headSha, prNumber, runAttempt,
+    expectedTitles: [`PR identity guard #${prNumber} ${action} ${headSha}`, "PR identity guard"],
+    headSha, prNumber, runAttempt,
   });
   const finalGate = await resolveFinalGate({
     github, owner, repo, runId: Number(process.env.GITHUB_RUN_ID), runAttempt, headSha, prNumber,
