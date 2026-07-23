@@ -27,7 +27,8 @@ try {
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $scratch "validation-result.json") -Encoding UTF8
     '{"output":"fixture"}' | Set-Content -LiteralPath (Join-Path $scratch "validation-output.json") -Encoding UTF8
     [ordered]@{
-        telemetry = @([ordered]@{ suite = "fixture-suite"; case = "fixture-case"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.001Z"; duration_ms = 1; unique_coverage_category = "fixture-coverage" })
+        telemetry = @([ordered]@{ suite = "fixture-telemetry-alias"; case = "fixture-case"; host = "fixture-host"; started_at_utc = "2026-01-01T00:00:00Z"; completed_at_utc = "2026-01-01T00:00:00.001Z"; duration_ms = 1; unique_coverage_category = "fixture-coverage" })
+        executed_suites = @("fixture-suite")
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $scratch "targeted-validation-result.json") -Encoding UTF8
     [ordered]@{
         targeted_regression_executed = $true
@@ -57,7 +58,7 @@ try {
     Assert-Contract ($manifest.identity.run_id -ceq "123" -and $manifest.identity.run_attempt -ceq "2" -and $manifest.identity.job -ceq "validate" -and $manifest.identity.host -ceq "Windows-Core-7.5") "run-job-host-identity"
     Assert-Contract ($manifest.validation_shard -ceq "RuntimePlatform" -and $manifest.executed.validation_shard -ceq "RuntimePlatform" -and @($manifest.executed.coverage_categories) -contains "release-validator:runtime-platform") "release-shard-evidence"
     Assert-Contract (@($manifest.executed.release_checks).Count -eq 1 -and [long]$manifest.executed.release_checks[0].duration_ms -eq 7) "release-duration"
-    Assert-Contract (@($manifest.executed.targeted_suites).Count -eq 1 -and @($manifest.executed.routing_regressions).Count -eq 1) "executed-coverage"
+    Assert-Contract (@($manifest.executed.targeted_suites).Count -eq 1 -and @($manifest.executed.targeted_suite_names) -contains "fixture-suite" -and @($manifest.executed.routing_regressions).Count -eq 1) "executed-coverage"
     Assert-Contract ($manifest.heavy_targeted.status -ceq "executed" -and $manifest.heavy_targeted.reason -ceq "self-protection-control-surface" -and @($manifest.heavy_targeted.actual_unique_coverage).Count -eq 1) "heavy-targeted-executed-evidence"
     Assert-Contract (@($manifest.artifact_contract.success.files) -notcontains "regenerable-fixture-tree/payload.txt") "success-excludes-regenerable-tree"
     Assert-Contract ($manifest.artifact_contract.failure.mode -ceq "full-scratch" -and [bool]$manifest.artifact_contract.failure.recursive) "failure-full-scratch"

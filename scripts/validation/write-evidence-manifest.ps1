@@ -139,8 +139,17 @@ if ($null -ne $releaseResult) {
 }
 
 $targetedTelemetry = @()
+$targetedSuiteNames = @()
 if ($null -ne $targetedResult) {
     $targetedTelemetry = @($targetedResult.telemetry)
+    $targetedSuiteNames = @(
+        if (@($targetedResult.executed_suites).Count -gt 0) {
+            @($targetedResult.executed_suites)
+        }
+        else {
+            @($targetedTelemetry | ForEach-Object { [string]$_.suite })
+        }
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Sort-Object -Unique
 }
 
 $routingRegressions = @()
@@ -208,6 +217,7 @@ $manifest = [ordered]@{
     executed = [ordered]@{
         release_checks = $releaseChecks
         validation_shard = $validationShard
+        targeted_suite_names = @($targetedSuiteNames)
         targeted_suites = $targetedTelemetry
         routing_regressions = $routingRegressions
         coverage_categories = @($coverageCategories.ToArray())

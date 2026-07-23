@@ -99,7 +99,7 @@ foreach ($name in @("base_guard", "identity_guard", "final_gate")) {
     }
 }
 
-$actualSuites = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { @($_.executed.targeted_suites | ForEach-Object { [string]$_.suite }) })
+$actualSuites = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { @($_.executed.targeted_suite_names) })
 $actualHosts = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { Convert-HostIdentity $_ })
 $requiredSuites = Get-OrdinalStrings @($classification.required_suites)
 $requiredHosts = Get-OrdinalStrings @($classification.required_hosts)
