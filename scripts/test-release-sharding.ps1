@@ -96,8 +96,8 @@ foreach ($marker in @(
 )) {
     Assert-Fixture ($workflow.Contains($marker)) ("workflow-marker:{0}" -f $marker)
 }
-Assert-Fixture (@([regex]::Matches($workflow, 'ref: \$\{\{ needs\.classify\.outputs\.validation_sha \}\}')).Count -eq 7) "downstream-checkouts-bind-validation-sha"
-Assert-Fixture (@([regex]::Matches($workflow, 'CommitSha "\$\{\{ needs\.classify\.outputs\.validation_sha \}\}"')).Count -eq 5) "evidence-binds-validation-sha"
+Assert-Fixture (@([regex]::Matches($workflow, 'ref: \$\{\{ needs\.classify\.outputs\.validation_sha \}\}')).Count -eq 8) "downstream-checkouts-bind-validation-sha"
+Assert-Fixture (@([regex]::Matches($workflow, 'CommitSha "\$\{\{ needs\.classify\.outputs\.validation_sha \}\}"')).Count -eq 6) "evidence-binds-validation-sha"
 Assert-Fixture (-not $workflow.Contains('-CommitSha "${{ github.sha }}"')) "no-event-sha-evidence-fallback"
 Assert-Fixture (@([regex]::Matches($workflow, '\$shard = if \("\$\{\{ github\.event_name \}\}" -eq "push"\)')).Count -eq 3) "main-product-full-checkpoint-routing"
 

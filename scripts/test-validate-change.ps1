@@ -328,8 +328,9 @@ if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.ba
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
 if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
 if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
-if (-not $workflow.Contains('group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}') -or -not $workflow.Contains("cancel-in-progress: true")) {
-    throw "Hosted concurrency must isolate events while preserving same-event, same-ref cancellation."
+if (-not $workflow.Contains("github.event_name == 'push' && github.run_id") -or
+    -not $workflow.Contains('cancel-in-progress: ${{ github.event_name != ''push'' }}')) {
+    throw "Hosted concurrency must preserve every push range while retaining cancellation for non-push events."
 }
 
 $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json | Out-String) | ConvertFrom-Json
