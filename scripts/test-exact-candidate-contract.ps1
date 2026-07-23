@@ -122,6 +122,14 @@ try {
     $candidate = [string](@(Invoke-Git $author rev-parse HEAD)[0]).Trim().ToLowerInvariant()
     Invoke-Git $author push origin "HEAD:refs/pull/1/merge" | Out-Null
 
+    Invoke-Git $author checkout -B empty-feature $head | Out-Null
+    Invoke-Git $author commit --allow-empty -m "empty evidence nonce" | Out-Null
+    $emptyHead = [string](@(Invoke-Git $author rev-parse HEAD)[0]).Trim().ToLowerInvariant()
+    Invoke-Git $author push origin "HEAD:refs/pull/2/head" | Out-Null
+    Invoke-Git $author checkout -B empty-candidate $base | Out-Null
+    Invoke-Git $author merge --no-ff empty-feature -m "synthetic empty candidate" | Out-Null
+    Invoke-Git $author push origin "HEAD:refs/pull/2/merge" | Out-Null
+
     Invoke-Git $scratch clone $remote $consumer | Out-Null
     $output = Join-Path $scratch "candidate-contract.json"
     Push-Location $consumer
@@ -138,6 +146,14 @@ try {
         throw "Exact candidate fixture did not bind candidate/base/head identity."
     }
     $results.Add([ordered]@{ name = "exact-candidate"; status = "PASS" }) | Out-Null
+    Assert-Fails {
+        Push-Location $consumer
+        try {
+            & $resolver -Repository "fixture/repository" -PullRequestNumber 2 -BaseRef main -BaseSha $base `
+                -HeadRef empty-feature -HeadSha $emptyHead -OutputPath (Join-Path $scratch "empty-commit.json")
+        }
+        finally { Pop-Location }
+    } "empty-commit-rejected"
 
     Invoke-Git $author checkout -B squash-landing $base | Out-Null
     Invoke-Git $author merge --squash feature | Out-Null
@@ -201,7 +217,7 @@ try {
     Assert-Fails {
         Push-Location $consumer
         try {
-            & $resolver -Repository "fixture/repository" -PullRequestNumber 2 -BaseRef main -BaseSha $base `
+            & $resolver -Repository "fixture/repository" -PullRequestNumber 3 -BaseRef main -BaseSha $base `
                 -HeadRef feature -HeadSha $head -OutputPath (Join-Path $scratch "missing.json")
         }
         finally { Pop-Location }

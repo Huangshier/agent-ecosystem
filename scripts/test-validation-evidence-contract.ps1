@@ -28,7 +28,7 @@ function Get-CanonicalEvidenceDigest([object]$Evidence) {
     $payload = [ordered]@{}
     foreach ($name in @(
         "schema_version", "proof_kind", "repository", "pr_number", "base", "head", "candidate", "change",
-        "classifier", "required", "actual", "decisions", "contracts", "run", "checks", "artifact_digests"
+        "classifier", "required", "actual", "decisions", "contracts", "generation", "checks", "artifact_digests"
     )) { $payload[$name] = $Evidence.$name }
     return Get-Sha256Text ($payload | ConvertTo-Json -Depth 20 -Compress)
 }
@@ -124,21 +124,21 @@ try {
     Assert-Contract $unknownShardFailed "unknown-validation-shard-fails-closed"
 
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
-    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 6) "six-success-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 8) "eight-success-upload-contracts"
     Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 6) "six-failure-upload-contracts"
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
     Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 6) "six-manifest-call-sites"
     Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
-    Assert-Contract ($workflow.Contains('validation-self-protection.json') -and $workflow.Contains('name: validation-self-protection')) "self-protection-evidence-uploaded"
+    Assert-Contract ($workflow.Contains('validation-self-protection.json') -and $workflow.Contains('validation-self-protection-attempt-{0}')) "self-protection-evidence-uploaded"
     Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
     Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
     $failureUploadContracts = @(
         @("name: quick-validation-failure", 'path: ${{ runner.temp }}/agent-ecosystem-quick-validation'),
         @('name: affected-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
-        @('name: validation-self-protection-failure', 'path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection'),
+        @('validation-self-protection-failure-attempt-{0}', 'path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection'),
         @('name: validation-platform-neutral-failure', 'path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation'),
         @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation'),
-        @("name: validation-windows-powershell-failure", '${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
+        @("validation-windows-powershell-failure-attempt-{0}", '${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
     )
     foreach ($contract in $failureUploadContracts) {
         Assert-Contract ($workflow.Contains($contract[0]) -and $workflow.Contains($contract[1])) ("failure-upload-root:{0}" -f $contract[0])
@@ -238,14 +238,22 @@ try {
         -JobName "targeted-validation" -HostIdentity "Linux-Core-7.5" -Repository "Huangshier/agent-ecosystem" `
         -EventName pull_request -CandidateContractPath $candidateContractPath `
         -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json") | Out-Null
-    $bindingPath = Join-Path $scratch "guard-gate-binding.json"
-    $binding = [ordered]@{
+    $finalGateDirectory = Join-Path $fragmentRoot "final-validation-gate-attempt-2"
+    New-Item -ItemType Directory -Force -Path $finalGateDirectory | Out-Null
+    $finalGatePath = Join-Path $finalGateDirectory "final-gate.json"
+    $finalGate = [ordered]@{
         schema_version = 1
-        base_guard = [ordered]@{ run_id = "201"; run_attempt = "2"; job_id = "301"; check_name = "base"; conclusion = "success"; head_sha = $candidateHead; pr_number = 77 }
-        identity_guard = [ordered]@{ run_id = "202"; run_attempt = "2"; job_id = "302"; check_name = "identity"; conclusion = "success"; head_sha = $candidateHead; pr_number = 77 }
-        final_gate = [ordered]@{ run_id = "123"; run_attempt = "2"; job_id = "303"; check_name = "validation gate"; conclusion = "success"; head_sha = $candidateHead; pr_number = 77 }
+        proof_kind = "final-validation-gate"
+        repository = "Huangshier/agent-ecosystem"
+        pr_number = 77
+        head_sha = $candidateHead
+        run_id = "123"
+        run_attempt = "2"
+        job = "validation-gate"
+        check_name = "validation gate"
+        conclusion = "success"
     }
-    $binding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $bindingPath -Encoding UTF8
+    $finalGate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $finalGatePath -Encoding UTF8
     $canonicalPath = Join-Path $scratch "canonical-evidence.json"
     $validClassification = Get-Content -Raw $classificationPath | ConvertFrom-Json
     $unknownReasonClassification = $validClassification | ConvertTo-Json -Depth 8 | ConvertFrom-Json
@@ -255,7 +263,7 @@ try {
     $unknownReasonFailed = $false
     try {
         & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
-            -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+            -FragmentsRoot $fragmentRoot -FinalGatePath $finalGatePath -Repository "Huangshier/agent-ecosystem" `
             -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
             -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
             -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
@@ -264,15 +272,24 @@ try {
     Assert-Contract $unknownReasonFailed "canonical-classifier-unknown-reason-fails-closed"
     $validClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
-        -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+        -FragmentsRoot $fragmentRoot -FinalGatePath $finalGatePath -Repository "Huangshier/agent-ecosystem" `
         -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
     $canonical = Get-Content -Raw $canonicalPath | ConvertFrom-Json
-    Assert-Contract ($canonical.schema_version -eq 2 -and $canonical.proof_kind -ceq "canonical-candidate-evidence") "canonical-schema"
+    Assert-Contract ($canonical.schema_version -eq 3 -and $canonical.proof_kind -ceq "canonical-candidate-evidence") "canonical-schema"
     Assert-Contract ($canonical.candidate.sha -ceq $commitSha -and $canonical.base.sha -ceq $candidateBase -and $canonical.head.sha -ceq $candidateHead) "canonical-candidate-identity"
+    Assert-Contract (
+        $canonical.generation.repository -ceq "Huangshier/agent-ecosystem" -and
+        [int]$canonical.generation.pr_number -eq 77 -and
+        $canonical.generation.run_id -ceq "123" -and
+        $canonical.generation.run_attempt -ceq "2"
+    ) "canonical-generation-identity"
     Assert-Contract (@($canonical.actual.suites) -contains "release-checkpoint" -and @($canonical.actual.hosts) -contains "ubuntu-latest") "canonical-suite-host-closure"
-    Assert-Contract ($canonical.checks.base_guard.job_id -ceq "301" -and $canonical.checks.identity_guard.job_id -ceq "302" -and $canonical.checks.final_gate.job_id -ceq "303") "canonical-actual-check-identities"
+    Assert-Contract (
+        $canonical.checks.PSObject.Properties.Name -join "," -ceq "final_gate" -and
+        $canonical.checks.final_gate.job -ceq "validation-gate"
+    ) "canonical-final-gate-only"
     Assert-Contract (
         $canonical.classifier.control_plane -is [bool] -and -not [bool]$canonical.classifier.control_plane -and
         $canonical.classifier.self_protection_required -is [bool] -and -not [bool]$canonical.classifier.self_protection_required -and
@@ -283,7 +300,7 @@ try {
     Assert-CanonicalArray $canonical "required" "hosts" 1 "canonical-array-one:required.hosts"
     Assert-CanonicalArray $canonical "actual" "suites" 1 "canonical-array-one:actual.suites"
     Assert-CanonicalArray $canonical "actual" "hosts" 1 "canonical-array-one:actual.hosts"
-    Assert-CanonicalArray $canonical "" "artifact_digests" 2 "canonical-array-one:artifact_digests"
+    Assert-CanonicalArray $canonical "" "artifact_digests" 3 "canonical-array-one:artifact_digests"
     Assert-Contract (
         (@($canonical.classifier.affected_modules) -join ",") -ceq "release" -and
         (@($canonical.required.suites) -join ",") -ceq "release-checkpoint" -and
@@ -297,7 +314,7 @@ try {
     ) "canonical-digest-recomputed"
     $firstCanonicalDigest = [string]$canonical.canonical_evidence_digest
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
-        -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+        -FragmentsRoot $fragmentRoot -FinalGatePath $finalGatePath -Repository "Huangshier/agent-ecosystem" `
         -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
@@ -315,7 +332,7 @@ try {
     $zeroCanonicalPath = Join-Path $scratch "canonical-evidence-zero.json"
     $zeroClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
-        -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+        -FragmentsRoot $fragmentRoot -FinalGatePath $finalGatePath -Repository "Huangshier/agent-ecosystem" `
         -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $zeroCanonicalPath | Out-Null
@@ -325,7 +342,7 @@ try {
     Assert-CanonicalArray $zeroCanonical "required" "hosts" 0 "canonical-array-zero:required.hosts"
     Assert-CanonicalArray $zeroCanonical "actual" "suites" 1 "canonical-array-zero:actual.suites"
     Assert-CanonicalArray $zeroCanonical "actual" "hosts" 1 "canonical-array-zero:actual.hosts"
-    Assert-CanonicalArray $zeroCanonical "" "artifact_digests" 2 "canonical-array-zero:artifact_digests"
+    Assert-CanonicalArray $zeroCanonical "" "artifact_digests" 3 "canonical-array-zero:artifact_digests"
     Assert-Contract (
         [string]$zeroCanonical.canonical_evidence_digest -ceq (Get-CanonicalEvidenceDigest $zeroCanonical)
     ) "canonical-array-zero:digest-recomputed"
@@ -354,13 +371,15 @@ try {
     $multipleClassification.required_hosts = @("windows-latest", "ubuntu-latest", "windows-latest")
     $multipleClassificationPath = Join-Path $scratch "canonical-multiple-classification.json"
     $multipleClassification | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $multipleClassificationPath -Encoding UTF8
-    $multipleBinding = $binding | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-    $multipleBinding.final_gate.run_id = "124"
-    $multipleBindingPath = Join-Path $scratch "canonical-multiple-binding.json"
-    $multipleBinding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $multipleBindingPath -Encoding UTF8
+    $multipleFinalGate = $finalGate | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $multipleFinalGate.run_id = "124"
+    $multipleFinalGateDirectory = Join-Path $multipleFragmentRoot "final-validation-gate-attempt-2"
+    New-Item -ItemType Directory -Force -Path $multipleFinalGateDirectory | Out-Null
+    $multipleFinalGatePath = Join-Path $multipleFinalGateDirectory "final-gate.json"
+    $multipleFinalGate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $multipleFinalGatePath -Encoding UTF8
     $multipleCanonicalPath = Join-Path $scratch "canonical-evidence-multiple.json"
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $multipleClassificationPath `
-        -FragmentsRoot $multipleFragmentRoot -GuardBindingPath $multipleBindingPath -Repository "Huangshier/agent-ecosystem" `
+        -FragmentsRoot $multipleFragmentRoot -FinalGatePath $multipleFinalGatePath -Repository "Huangshier/agent-ecosystem" `
         -RunId "124" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $multipleCanonicalPath | Out-Null
@@ -370,7 +389,7 @@ try {
     Assert-CanonicalArray $multipleCanonical "required" "hosts" 2 "canonical-array-multiple:required.hosts"
     Assert-CanonicalArray $multipleCanonical "actual" "suites" 2 "canonical-array-multiple:actual.suites"
     Assert-CanonicalArray $multipleCanonical "actual" "hosts" 2 "canonical-array-multiple:actual.hosts"
-    Assert-CanonicalArray $multipleCanonical "" "artifact_digests" 4 "canonical-array-multiple:artifact_digests"
+    Assert-CanonicalArray $multipleCanonical "" "artifact_digests" 5 "canonical-array-multiple:artifact_digests"
     Assert-Contract (
         (@($multipleCanonical.classifier.affected_modules) -join ",") -ceq "documentation,validation-routing" -and
         (@($multipleCanonical.required.suites) -join ",") -ceq "suite-a,suite-z" -and
@@ -381,7 +400,7 @@ try {
     $firstMultipleDigest = [string]$multipleCanonical.canonical_evidence_digest
     Assert-Contract ($firstMultipleDigest -ceq (Get-CanonicalEvidenceDigest $multipleCanonical)) "canonical-array-multiple:digest-recomputed"
     & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $multipleClassificationPath `
-        -FragmentsRoot $multipleFragmentRoot -GuardBindingPath $multipleBindingPath -Repository "Huangshier/agent-ecosystem" `
+        -FragmentsRoot $multipleFragmentRoot -FinalGatePath $multipleFinalGatePath -Repository "Huangshier/agent-ecosystem" `
         -RunId "124" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
         -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
         -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $multipleCanonicalPath | Out-Null
@@ -432,18 +451,65 @@ try {
         @($tamperedLineage.fallback_reasons) -contains "evidence-digest-mismatch"
     ) "canonical-classifier-tamper-fails-closed"
 
-    $binding.base_guard.run_attempt = "1"
-    $binding | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $bindingPath -Encoding UTF8
+    $finalGate.run_attempt = "1"
+    $finalGate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $finalGatePath -Encoding UTF8
     $mixedAttemptFailed = $false
     try {
         & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
-            -FragmentsRoot $fragmentRoot -GuardBindingPath $bindingPath -Repository "Huangshier/agent-ecosystem" `
+            -FragmentsRoot $fragmentRoot -FinalGatePath $finalGatePath -Repository "Huangshier/agent-ecosystem" `
             -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
             -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
             -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
     }
     catch { $mixedAttemptFailed = $true }
     Assert-Contract $mixedAttemptFailed "canonical-mixed-attempt-fails-closed"
+
+    $partialAttemptRoot = Join-Path $scratch "canonical-partial-attempt"
+    $partialGateDirectory = Join-Path $partialAttemptRoot "final-validation-gate-attempt-2"
+    New-Item -ItemType Directory -Force -Path $partialGateDirectory | Out-Null
+    $partialGatePath = Join-Path $partialGateDirectory "final-gate.json"
+    $partialGate = $finalGate | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $partialGate.run_attempt = "2"
+    $partialGate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $partialGatePath -Encoding UTF8
+    $rerunFailedRejected = $false
+    try {
+        & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
+            -FragmentsRoot $partialAttemptRoot -FinalGatePath $partialGatePath -Repository "Huangshier/agent-ecosystem" `
+            -RunId "123" -RunAttempt "2" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+            -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+            -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $canonicalPath | Out-Null
+    }
+    catch { $rerunFailedRejected = $true }
+    Assert-Contract $rerunFailedRejected "rerun-failed-incomplete-generation-rejected"
+
+    $rerunAllRoot = Join-Path $scratch "canonical-rerun-all-attempt-3"
+    $rerunAllFragment = Join-Path $rerunAllRoot "affected-validation-ubuntu-latest-attempt-3"
+    New-Item -ItemType Directory -Force -Path $rerunAllFragment | Out-Null
+    Copy-Item -LiteralPath $canonicalTargetedResultPath -Destination (Join-Path $rerunAllFragment "targeted-validation-result.json")
+    & $writer -ScratchRoot $rerunAllFragment -Outcome success -CommitSha $commitSha -RunId "123" -RunAttempt "3" `
+        -JobName "targeted-validation" -HostIdentity "Linux-Core-7.5" -Repository "Huangshier/agent-ecosystem" `
+        -EventName pull_request -CandidateContractPath $candidateContractPath `
+        -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json") | Out-Null
+    $rerunAllGateDirectory = Join-Path $rerunAllRoot "final-validation-gate-attempt-3"
+    New-Item -ItemType Directory -Force -Path $rerunAllGateDirectory | Out-Null
+    $rerunAllGatePath = Join-Path $rerunAllGateDirectory "final-gate.json"
+    $rerunAllGate = $partialGate | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $rerunAllGate.run_attempt = "3"
+    $rerunAllGate | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $rerunAllGatePath -Encoding UTF8
+    $rerunAllCanonicalPath = Join-Path $scratch "canonical-rerun-all-attempt-3.json"
+    & $finalizer -CandidateContractPath $candidateContractPath -ClassificationPath $classificationPath `
+        -FragmentsRoot $rerunAllRoot -FinalGatePath $rerunAllGatePath -Repository "Huangshier/agent-ecosystem" `
+        -RunId "123" -RunAttempt "3" -WorkflowIdentity ".github/workflows/release-validation.yml" `
+        -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
+        -GateContractIdentity "scripts/validation/required-validation-gate.ps1" -OutputPath $rerunAllCanonicalPath | Out-Null
+    $rerunAllCanonical = Get-Content -Raw $rerunAllCanonicalPath | ConvertFrom-Json
+    Assert-Contract (
+        $rerunAllCanonical.candidate.sha -ceq $canonical.candidate.sha -and
+        $rerunAllCanonical.candidate.tree -ceq $canonical.candidate.tree -and
+        $rerunAllCanonical.generation.run_id -ceq "123" -and
+        $rerunAllCanonical.generation.run_attempt -ceq "3" -and
+        @($rerunAllCanonical.artifact_digests | Where-Object { [string]$_.path -match 'attempt-2' }).Count -eq 0
+    ) "rerun-all-complete-fresh-generation"
 
     $candidateResult = & $candidateFixture -Json | ConvertFrom-Json
     Assert-Contract ([int]($candidateResult.fail) -eq 0 -and [int]($candidateResult.pass) -ge 4) "exact-candidate-fixtures"
@@ -465,19 +531,51 @@ try {
             [int]($lineageResult.fail) -eq 0 -and
             [int]($lineageResult.state_machine_matrix.pass) -eq 40 -and
             [int]($lineageResult.state_machine_matrix.cases) -eq 40 -and
-            @($lineageResult.classifier_authority).Count -ge 7
+            @($lineageResult.classifier_authority).Count -ge 7 -and
+            @($lineageResult.generation_resolution).Count -ge 5
         ) "lineage-proof-fixtures"
     }
-    $nodeCheck = & node -e "const h=require('./.github/scripts/resolve-validation-check-bindings.js'); if(h.requireExactSingle([1],'x')!==1) process.exit(1); for(const v of [[],[1,2]]){let failed=false;try{h.requireExactSingle(v,'x')}catch{failed=true}if(!failed)process.exit(2)}"
-    Assert-Contract ($LASTEXITCODE -eq 0) "guard-binding-exact-single-contract"
+    Assert-Contract (-not [System.IO.File]::Exists((Join-Path $repoRoot ".github/scripts/resolve-validation-check-bindings.js"))) "guard-resolver-deleted"
     Assert-Contract ($workflow.Contains("github.event_name == 'push' && github.run_id") -and $workflow.Contains("cancel-in-progress: `${{ github.event_name != 'push' }}")) "push-concurrency-independent"
     Assert-Contract (@([regex]::Matches($workflow, "resolve-pull-request-candidate\.ps1")).Count -eq 7 -and @([regex]::Matches($workflow, "ExpectedCandidateSha")).Count -eq 6) "all-pr-validation-jobs-reverify-candidate"
     Assert-Contract ($workflow.Contains("-BaseRef `$env:PR_BASE_SHA") -and $workflow.Contains("-HeadRef `$env:PR_HEAD_SHA")) "classifier-uses-exact-base-head"
-    Assert-Contract ($workflow.Contains("name: canonical-candidate-evidence-pr-") -and $workflow.Contains("name: main lineage shadow")) "canonical-and-shadow-entrypoints"
+    Assert-Contract (
+        $workflow.Contains("run-name: `"`${{ github.event_name == 'pull_request'") -and
+        $workflow.Contains("Release validation #{0} {1} {2}") -and
+        $workflow.Contains("name: canonical-candidate-evidence-pr-") -and
+        $workflow.Contains("-run-`${{ github.run_id }}-attempt-`${{ github.run_attempt }}") -and
+        $workflow.Contains("pattern: '*-attempt-`${{ github.run_attempt }}'")
+    ) "generation-bound-workflow-entrypoints"
+    Assert-Contract (
+        $workflow.Contains("if: always() && github.event_name == 'pull_request'") -and
+        $workflow.Contains("name: main lineage shadow")
+    ) "workflow-dispatch-does-not-produce-pr-canonical"
+    $canonicalJob = [regex]::Match($workflow, '(?ms)^  canonical-candidate-evidence:\s*\r?\n(?<body>.*?)(?=^  [a-zA-Z0-9_-]+:\s*\r?$|\z)').Groups['body'].Value
+    Assert-Contract (
+        -not $canonicalJob.Contains("guard") -and
+        -not $canonicalJob.Contains("actions/github-script") -and
+        $canonicalJob.Contains("-FinalGatePath")
+    ) "duplicate-guards-independent-from-canonical"
+    $triggerBlock = [regex]::Match($workflow, '(?ms)^on:\s*\r?\n(?<body>.*?)(?=^permissions:)').Groups['body'].Value
+    Assert-Contract (
+        -not $triggerBlock.Contains("edited") -and
+        -not $triggerBlock.Contains("ready_for_review")
+    ) "pr-metadata-actions-do-not-create-release-generation"
     foreach ($guardWorkflowName in @("pr-base-guard.yml", "pr-identity-guard.yml")) {
         $guardWorkflow = [System.IO.File]::ReadAllText((Join-Path $repoRoot ".github/workflows/$guardWorkflowName"))
-        Assert-Contract ($guardWorkflow.Contains("run-name:") -and $guardWorkflow.Contains('${{ github.event.pull_request.head.sha }}')) ("guard-run-identity:{0}" -f $guardWorkflowName)
+        Assert-Contract (
+            $guardWorkflow.Contains("- edited") -and
+            $guardWorkflow.Contains("- ready_for_review")
+        ) ("guard-metadata-independence:{0}" -f $guardWorkflowName)
     }
+    $lineageSource = [System.IO.File]::ReadAllText($lineageVerifier)
+    Assert-Contract (
+        $lineageSource.Contains("Select-LatestReleaseRun") -and
+        $lineageSource.Contains("missing-latest-generation-evidence") -and
+        -not $lineageSource.Contains("base_guard") -and
+        -not $lineageSource.Contains("identity_guard") -and
+        -not $lineageSource.Contains('"Release validation"')
+    ) "latest-generation-only-no-bootstrap-compatibility"
     $parserSafety = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "validation/release-parser-safety-checks.ps1"))
     $standardAuthReference = 'LINEAGE_GITHUB_AUTH: ${{ github.' + 'to' + 'ken }}'
     Assert-Contract (

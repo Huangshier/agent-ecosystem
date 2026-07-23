@@ -40,7 +40,7 @@ function Get-CanonicalDigestPayload([object]$Evidence) {
     $payload = [ordered]@{}
     foreach ($name in @(
         "schema_version", "proof_kind", "repository", "pr_number", "base", "head", "candidate", "change",
-        "classifier", "required", "actual", "decisions", "contracts", "run", "checks", "artifact_digests"
+        "classifier", "required", "actual", "decisions", "contracts", "generation", "checks", "artifact_digests"
     )) {
         if ($Evidence.PSObject.Properties.Name -notcontains $name) { throw "Canonical evidence is missing '$name'." }
         $payload[$name] = $Evidence.$name
@@ -64,10 +64,15 @@ function Get-RequiredClassifierString([object]$Classifier, [string]$Name) {
 }
 function Test-Evidence([object]$Evidence, [System.Collections.Generic.List[string]]$Reasons, [int]$PrNumber) {
     try {
-        if ([int]$Evidence.schema_version -ne 2 -or [string]$Evidence.proof_kind -cne "canonical-candidate-evidence") {
+        if ([int]$Evidence.schema_version -ne 3 -or [string]$Evidence.proof_kind -cne "canonical-candidate-evidence") {
             Add-Fallback $Reasons "evidence-schema-invalid"; return $false
         }
         if ([int]$Evidence.pr_number -ne $PrNumber) { Add-Fallback $Reasons "evidence-pr-mismatch"; return $false }
+        if ([string]$Evidence.generation.repository -cne [string]$Evidence.repository -or
+            [int]$Evidence.generation.pr_number -ne $PrNumber -or -not [string]$Evidence.generation.run_id -or
+            -not [string]$Evidence.generation.run_attempt) {
+            Add-Fallback $Reasons "generation-identity-invalid"; return $false
+        }
         if ([string]$Evidence.freshness.status -cne "fresh" -or [DateTimeOffset]::Parse([string]$Evidence.freshness.expires_at_utc) -le [DateTimeOffset]::UtcNow) {
             Add-Fallback $Reasons "evidence-expired"; return $false
         }
@@ -79,14 +84,15 @@ function Test-Evidence([object]$Evidence, [System.Collections.Generic.List[strin
         }
         if ([string]$Evidence.contracts.workflow -cne $WorkflowIdentity -or [string]$Evidence.contracts.routing -cne $RoutingContractIdentity -or
             [string]$Evidence.contracts.gate -cne $GateContractIdentity) { Add-Fallback $Reasons "contract-identity-mismatch"; return $false }
-        foreach ($name in @("base_guard", "identity_guard", "final_gate")) {
-            $check = $Evidence.checks.$name
-            if ($null -eq $check -or -not [string]$check.run_id -or -not [string]$check.job_id -or [string]$check.conclusion -cne "success" -or
-                [string]$check.run_attempt -cne [string]$Evidence.run.attempt) {
-                Add-Fallback $Reasons "$($name.Replace('_','-'))-identity-invalid"; return $false
-            }
+        $finalGate = $Evidence.checks.final_gate
+        if ($null -eq $finalGate -or [string]$finalGate.repository -cne [string]$Evidence.repository -or
+            [int]$finalGate.pr_number -ne $PrNumber -or [string]$finalGate.head_sha -cne [string]$Evidence.head.sha -or
+            [string]$finalGate.run_id -cne [string]$Evidence.generation.run_id -or
+            [string]$finalGate.run_attempt -cne [string]$Evidence.generation.run_attempt -or
+            [string]$finalGate.job -cne "validation-gate" -or [string]$finalGate.check_name -cne "validation gate" -or
+            [string]$finalGate.conclusion -cne "success") {
+            Add-Fallback $Reasons "final-gate-identity-invalid"; return $false
         }
-        if ([string]$Evidence.checks.final_gate.run_id -cne [string]$Evidence.run.id) { Add-Fallback $Reasons "final-gate-run-mismatch"; return $false }
         $missingSuites = @($Evidence.required.suites | Where-Object { @($Evidence.actual.suites) -cnotcontains [string]$_ })
         $missingHosts = @($Evidence.required.hosts | Where-Object { @($Evidence.actual.hosts) -cnotcontains [string]$_ })
         if ($missingSuites.Count -or $missingHosts.Count) { Add-Fallback $Reasons "suite-host-closure-incomplete"; return $false }
@@ -142,6 +148,101 @@ function Invoke-GitHubRest([string]$Uri) {
     }
     return Invoke-RestMethod -Method Get -Uri $Uri -Headers $headers
 }
+function Select-LatestReleaseRun(
+    [object[]]$Runs,
+    [int]$PrNumber,
+    [string]$HeadSha,
+    [DateTimeOffset]$MergedAt,
+    [System.Collections.Generic.List[string]]$Reasons
+) {
+    $escapedHead = [regex]::Escape($HeadSha)
+    $escapedPr = [regex]::Escape([string]$PrNumber)
+    $titlePattern = "^Release validation #$escapedPr [a-z_]+ $escapedHead$"
+    $eligible = @($Runs | Where-Object {
+        $run = $_
+        $createdAt = [DateTimeOffset]::MinValue
+        $createdValid = [DateTimeOffset]::TryParse([string]$run.created_at, [ref]$createdAt)
+        $associatedPrs = @($run.pull_requests | ForEach-Object { [int]$_.number })
+        $associationValid = $associatedPrs.Count -eq 0 -or $associatedPrs -contains $PrNumber
+        $createdValid -and $createdAt -le $MergedAt -and [string]$run.event -ceq "pull_request" -and
+            [string]$run.head_sha -ceq $HeadSha -and $associationValid -and
+            [string]$run.display_title -cmatch $titlePattern
+    } | Sort-Object @{ Expression = { [DateTimeOffset]::Parse([string]$_.created_at) }; Descending = $true },
+        @{ Expression = { [long]$_.id }; Descending = $true })
+    if ($eligible.Count -eq 0) {
+        Add-Fallback $Reasons "missing-release-generation"
+        return $null
+    }
+    $latest = $eligible[0]
+    if ([string]$latest.status -cne "completed" -or [string]$latest.conclusion -cne "success" -or
+        -not [string]$latest.run_attempt) {
+        Add-Fallback $Reasons "latest-generation-not-successful"
+        return $null
+    }
+    return $latest
+}
+function Select-ExactCanonicalArtifact(
+    [object[]]$Artifacts,
+    [string]$ExpectedName,
+    [string]$RunId,
+    [string]$HeadSha,
+    [string]$NotAfterUtc = "",
+    [System.Collections.Generic.List[string]]$Reasons
+) {
+    $eligible = @($Artifacts | Where-Object {
+        $artifactCreatedAt = [DateTimeOffset]::MinValue
+        $timeValid = [string]::IsNullOrWhiteSpace($NotAfterUtc) -or
+            ([DateTimeOffset]::TryParse([string]$_.created_at, [ref]$artifactCreatedAt) -and
+                $artifactCreatedAt -le [DateTimeOffset]::Parse($NotAfterUtc))
+        [string]$_.name -ceq $ExpectedName -and -not [bool]$_.expired -and
+            $timeValid -and
+            ($null -eq $_.workflow_run -or
+                ([string]$_.workflow_run.id -ceq $RunId -and [string]$_.workflow_run.head_sha -ceq $HeadSha))
+    })
+    if ($eligible.Count -ne 1) {
+        Add-Fallback $Reasons $(if ($eligible.Count -eq 0) { "missing-latest-generation-evidence" } else { "ambiguous-latest-generation-evidence" })
+        return $null
+    }
+    return $eligible[0]
+}
+function Resolve-FixtureGeneration([object]$LineageInput) {
+    if ($LineageInput.PSObject.Properties.Name -notcontains "generation_fixture") { return $LineageInput }
+    $fixture = $LineageInput.generation_fixture
+    $fixtureReasons = New-Object 'System.Collections.Generic.List[string]'
+    $LineageInput.proofs = @()
+    $latest = Select-LatestReleaseRun -Runs @($fixture.runs) -PrNumber ([int]$fixture.pr_number) `
+        -HeadSha ([string]$fixture.head_sha) -MergedAt ([DateTimeOffset]::Parse([string]$fixture.merged_at)) -Reasons $fixtureReasons
+    if ($null -ne $latest) {
+        $artifactName = "canonical-candidate-evidence-pr-$([int]$fixture.pr_number)-$([string]$fixture.head_sha)-run-$([string]$latest.id)-attempt-$([string]$latest.run_attempt)"
+        $artifact = Select-ExactCanonicalArtifact -Artifacts @($fixture.artifacts) -ExpectedName $artifactName `
+            -RunId ([string]$latest.id) -HeadSha ([string]$fixture.head_sha) -Reasons $fixtureReasons
+        if ($null -ne $artifact -and $artifact.PSObject.Properties.Name -contains "evidence") {
+            if ([string]$artifact.evidence.generation.run_id -cne [string]$latest.id -or
+                [string]$artifact.evidence.generation.run_attempt -cne [string]$latest.run_attempt) {
+                Add-Fallback $fixtureReasons "candidate-evidence-run-mismatch"
+            }
+            else {
+                $LineageInput.proofs = @([pscustomobject][ordered]@{
+                    pr_number = [int]$fixture.pr_number
+                    pr_base_sha = [string]$fixture.base_sha
+                    pr_head_sha = [string]$fixture.head_sha
+                    evidence = $artifact.evidence
+                })
+            }
+        }
+        elseif ($null -ne $artifact) {
+            Add-Fallback $fixtureReasons "candidate-evidence-artifact-invalid"
+        }
+    }
+    $combinedReasons = @(@($LineageInput.preflight_fallback_reasons) + @($fixtureReasons.ToArray()))
+    if ($LineageInput.PSObject.Properties.Name -contains "preflight_fallback_reasons") {
+        $LineageInput.preflight_fallback_reasons = $combinedReasons
+    }
+    else {
+        $LineageInput | Add-Member -NotePropertyName preflight_fallback_reasons -NotePropertyValue $combinedReasons
+    }
+    return $LineageInput
+}
 function Get-LiveInput {
     if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw "Repository must use owner/name form." }
     $beforeNormalized = $Before.ToLowerInvariant()
@@ -192,15 +293,18 @@ function Get-LiveInput {
         try {
             $pr = Invoke-GitHubRest "https://api.github.com/repos/$Repository/pulls/$prNumber"
             if (-not [bool]$pr.merged -or -not [string]$pr.merged_at) { $fallback.Add("associated-pr-not-merged"); continue }
-            $artifactName = "canonical-candidate-evidence-pr-$prNumber-$([string]$pr.head.sha)"
+            $headSha = ([string]$pr.head.sha).ToLowerInvariant()
+            $workflowId = [Uri]::EscapeDataString("release-validation.yml")
+            $runsResult = Invoke-GitHubRest "https://api.github.com/repos/$Repository/actions/workflows/$workflowId/runs?event=pull_request&head_sha=$headSha&per_page=100"
+            $latest = Select-LatestReleaseRun -Runs @($runsResult.workflow_runs) -PrNumber $prNumber -HeadSha $headSha `
+                -MergedAt ([DateTimeOffset]::Parse([string]$pr.merged_at)) -Reasons $fallback
+            if ($null -eq $latest) { continue }
+            $artifactName = "canonical-candidate-evidence-pr-$prNumber-$headSha-run-$([string]$latest.id)-attempt-$([string]$latest.run_attempt)"
             $encodedName = [Uri]::EscapeDataString($artifactName)
-            $artifactResult = Invoke-GitHubRest "https://api.github.com/repos/$Repository/actions/artifacts?name=$encodedName&per_page=100"
-            $eligible = @($artifactResult.artifacts | Where-Object {
-                -not [bool]$_.expired -and $_.workflow_run -and [string]$_.workflow_run.head_sha -ceq [string]$pr.head.sha -and
-                [DateTimeOffset]::Parse([string]$_.created_at) -le [DateTimeOffset]::Parse([string]$pr.merged_at)
-            } | Sort-Object @{ Expression = { [DateTimeOffset]::Parse([string]$_.created_at) }; Descending = $true }, @{ Expression = { [long]$_.id }; Descending = $true })
-            if ($eligible.Count -eq 0) { $fallback.Add("missing-candidate-evidence"); continue }
-            $artifact = $eligible[0]
+            $artifactResult = Invoke-GitHubRest "https://api.github.com/repos/$Repository/actions/runs/$([string]$latest.id)/artifacts?name=$encodedName&per_page=100"
+            $artifact = Select-ExactCanonicalArtifact -Artifacts @($artifactResult.artifacts) -ExpectedName $artifactName `
+                -RunId ([string]$latest.id) -HeadSha $headSha -NotAfterUtc ([string]$pr.merged_at) -Reasons $fallback
+            if ($null -eq $artifact) { continue }
             $zipPath = Join-Path $ScratchRoot "evidence-$prNumber.zip"
             $extractPath = Join-Path $ScratchRoot "evidence-$prNumber"
             $headers = @{
@@ -213,7 +317,9 @@ function Get-LiveInput {
             $manifestFiles = @(Get-ChildItem -LiteralPath $extractPath -Recurse -File -Filter "evidence-manifest.json")
             if ($manifestFiles.Count -ne 1) { $fallback.Add("candidate-evidence-artifact-invalid"); continue }
             $evidence = Read-JsonFile $manifestFiles[0].FullName
-            if ([string]$evidence.run.id -cne [string]$artifact.workflow_run.id -or [string]$evidence.head.sha -cne [string]$pr.head.sha) {
+            if ([string]$evidence.generation.run_id -cne [string]$latest.id -or
+                [string]$evidence.generation.run_attempt -cne [string]$latest.run_attempt -or
+                [string]$evidence.head.sha -cne $headSha) {
                 $fallback.Add("candidate-evidence-run-mismatch"); continue
             }
             $proofs.Add([ordered]@{
@@ -234,7 +340,7 @@ function Get-LiveInput {
     }
 }
 
-$input = if ($PSCmdlet.ParameterSetName -ceq "Live") { Get-LiveInput } else { Read-JsonFile $InputPath }
+$input = if ($PSCmdlet.ParameterSetName -ceq "Live") { Get-LiveInput } else { Resolve-FixtureGeneration (Read-JsonFile $InputPath) }
 $reasons = New-Object 'System.Collections.Generic.List[string]'
 $groupsOutput = New-Object 'System.Collections.Generic.List[object]'
 if ([int]$input.schema_version -ne 1) { throw "Unsupported lineage input schema." }
@@ -331,7 +437,7 @@ while ($index -lt $commits.Count -and $reasons.Count -eq 0) {
         actual_merge_method = $actualMethod
         compatible_merge_methods = $compatible
         candidate_evidence_digest = [string]$evidence.canonical_evidence_digest
-        guard_gate_identities = $evidence.checks
+        final_gate_identity = $evidence.checks.final_gate
     })
 }
 

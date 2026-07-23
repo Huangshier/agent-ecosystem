@@ -85,6 +85,6 @@ The classifier adds one auditable job. Pull requests run only real affected suit
 - Every Tier 1 or Tier 2 affected module must execute at least one mapped suite. Zero module checks fail validation; classification or parsing alone cannot produce a targeted PASS.
 - Renames classify both the old and new path; deletions classify the deleted path.
 - `main` pushes run the product-runtime full profile and bind evidence to the pushed SHA. Weekly schedules and manual dispatches run the repository checkpoint profile.
-- Pull-request classification uses the exact event base/head diff, while every selected validation job checks out and re-verifies `refs/pull/<number>/merge`. Candidate evidence binds the merge-ref commit, tree, ordered parents, base/head identities, run attempt, and actual guard/gate identities; it never falls back to head-only validation.
+- Pull-request classification uses the exact event base/head diff, while every selected validation job checks out and re-verifies `refs/pull/<number>/merge`. Candidate evidence binds the merge-ref commit, tree, ordered parents, base/head identities, latest Release run generation, and current-generation final gate; base and identity guards remain independent of the canonical producer closure.
 - Push jobs use the pushed SHA. Candidate evidence and push observations are never reused across identities or attempts.
-- Base and identity guards remain independent required workflow surfaces.
+- Base and identity guards remain independent fail-closed workflow surfaces.
