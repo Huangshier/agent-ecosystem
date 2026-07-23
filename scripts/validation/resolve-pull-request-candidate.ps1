@@ -58,10 +58,50 @@ function Get-NormalizedDiff([string]$From, [string]$To) {
 function Get-StablePatchId([string]$Commit) {
     $parents = @(Get-Parents -Commit $Commit)
     if ($parents.Count -ne 1) { throw "Replayed proof requires a linear head sequence; '$Commit' has $($parents.Count) parents." }
-    $diff = Get-NormalizedDiff -From $parents[0] -To $Commit
-    $patchOutput = @($diff | & git patch-id --stable 2>&1)
-    if ($LASTEXITCODE -ne 0 -or $patchOutput.Count -ne 1) { throw "git patch-id --stable failed for '$Commit'." }
-    $parts = ([string]$patchOutput[0]).Trim().Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
+    # NOTE: 直接传递 Git stdout 原始字节，避免 Windows PowerShell 文本管道改变 patch 输入编码。
+    $diffStart = New-Object System.Diagnostics.ProcessStartInfo
+    $diffStart.FileName = "git"
+    $diffStart.Arguments = "diff --no-ext-diff --binary --full-index --no-renames $($parents[0]) $Commit"
+    $diffStart.WorkingDirectory = (Get-Location).ProviderPath
+    $diffStart.UseShellExecute = $false
+    $diffStart.CreateNoWindow = $true
+    $diffStart.RedirectStandardOutput = $true
+    $diffStart.RedirectStandardError = $true
+    $diffProcess = New-Object System.Diagnostics.Process
+    $diffProcess.StartInfo = $diffStart
+    [void]$diffProcess.Start()
+    $diffBytes = New-Object System.IO.MemoryStream
+    $diffProcess.StandardOutput.BaseStream.CopyTo($diffBytes)
+    $diffError = $diffProcess.StandardError.ReadToEnd()
+    $diffProcess.WaitForExit()
+    if ($diffProcess.ExitCode -ne 0) { throw "git diff failed for '$Commit': $diffError" }
+
+    $patchStart = New-Object System.Diagnostics.ProcessStartInfo
+    $patchStart.FileName = "git"
+    $patchStart.Arguments = "patch-id --stable"
+    $patchStart.WorkingDirectory = (Get-Location).ProviderPath
+    $patchStart.UseShellExecute = $false
+    $patchStart.CreateNoWindow = $true
+    $patchStart.RedirectStandardInput = $true
+    $patchStart.RedirectStandardOutput = $true
+    $patchStart.RedirectStandardError = $true
+    $patchProcess = New-Object System.Diagnostics.Process
+    $patchProcess.StartInfo = $patchStart
+    [void]$patchProcess.Start()
+    $diffBytes.Position = 0
+    $diffBytes.CopyTo($patchProcess.StandardInput.BaseStream)
+    $patchProcess.StandardInput.Close()
+    $patchOutput = $patchProcess.StandardOutput.ReadToEnd().Trim()
+    $patchError = $patchProcess.StandardError.ReadToEnd()
+    $patchProcess.WaitForExit()
+    $patchExitCode = $patchProcess.ExitCode
+    $diffBytes.Dispose()
+    $diffProcess.Dispose()
+    $patchProcess.Dispose()
+    if ($patchExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($patchOutput)) {
+        throw "git patch-id --stable failed for '$Commit': $patchError"
+    }
+    $parts = $patchOutput.Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
     if ($parts.Count -lt 1 -or $parts[0] -notmatch '^[0-9a-fA-F]{40}$') { throw "git patch-id returned malformed output." }
     return $parts[0].ToLowerInvariant()
 }

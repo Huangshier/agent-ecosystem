@@ -46,7 +46,10 @@ try {
     Invoke-Git $author checkout -b feature | Out-Null
     Add-Content -LiteralPath (Join-Path $author "fixture.txt") -Value "feature"
     Invoke-Git $author add fixture.txt | Out-Null
-    Invoke-Git $author commit -m "feature" | Out-Null
+    Invoke-Git $author commit -m "feature one" | Out-Null
+    Add-Content -LiteralPath (Join-Path $author "fixture.txt") -Value "feature two"
+    Invoke-Git $author add fixture.txt | Out-Null
+    Invoke-Git $author commit -m "feature two" | Out-Null
     $head = [string](@(Invoke-Git $author rev-parse HEAD)[0]).Trim().ToLowerInvariant()
     Invoke-Git $author push origin "HEAD:refs/pull/1/head" | Out-Null
     Invoke-Git $author checkout main | Out-Null
@@ -65,7 +68,8 @@ try {
     $contract = Get-Content -Raw $output | ConvertFrom-Json
     if ([string]$contract.candidate.sha -cne $candidate -or
         (@($contract.candidate.ordered_parents) -join ",") -cne "$base,$head" -or
-        [string]$contract.candidate.source -cne "refs/pull/1/merge") {
+        [string]$contract.candidate.source -cne "refs/pull/1/merge" -or
+        @($contract.head.commit_sequence).Count -ne 2 -or @($contract.head.ordered_change_digests).Count -ne 2) {
         throw "Exact candidate fixture did not bind candidate/base/head identity."
     }
     $results.Add([ordered]@{ name = "exact-candidate"; status = "PASS" }) | Out-Null
