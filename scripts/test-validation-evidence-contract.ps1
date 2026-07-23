@@ -262,6 +262,13 @@ try {
         $guardWorkflow = [System.IO.File]::ReadAllText((Join-Path $repoRoot ".github/workflows/$guardWorkflowName"))
         Assert-Contract ($guardWorkflow.Contains("run-name:") -and $guardWorkflow.Contains('${{ github.event.pull_request.head.sha }}')) ("guard-run-identity:{0}" -f $guardWorkflowName)
     }
+    $parserSafety = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "validation/release-parser-safety-checks.ps1"))
+    $standardAuthReference = 'LINEAGE_GITHUB_AUTH: ${{ github.' + 'to' + 'ken }}'
+    Assert-Contract (
+        $workflow.Contains($standardAuthReference) -and
+        $parserSafety.Contains('".github/workflows/release-validation.yml" = ''^\s*LINEAGE_GITHUB_AUTH:') -and
+        -not $parserSafety.Contains('"scripts/validation/release-parser-safety-checks.ps1",`r`n        ".github/workflows/release-validation.yml"')
+    ) "standard-github-auth-reference-is-line-scoped"
 
     $result = [ordered]@{ schema_version = 1; pass = $checks.Count; fail = 0; checks = @($checks.ToArray()) }
     if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 6 } else { Write-Output ("validation evidence contract fixtures: PASS={0} FAIL=0" -f $result.pass) }
