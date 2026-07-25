@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RuntimeDir = (Join-Path $HOME ".agents"),
     [string]$ProjectDir = "",
@@ -73,6 +73,11 @@ function New-RuntimePayload {
                 diagnostic_warning_count = 0
                 finding_codes = @()
             }
+            # NOTE: #278 新增三事实增量字段，与 project.status/reason/baseline 并列但不互相覆盖。
+            # 旧 schema-1 消费方忽略这些字段时，仍获得与当前契约兼容的 project.status/reason/baseline 结果。
+            snapshot_consistency = "unknown"
+            source_provenance = "unknown"
+            remote_latest = "not-checked"
         }
         findings = @()
     }
@@ -112,6 +117,10 @@ function Reset-ProjectUnavailable {
     $Payload.project.memory.refresh_finding_count = 0
     $Payload.project.memory.diagnostic_warning_count = 0
     $Payload.project.memory.finding_codes = @()
+    # NOTE: #278 三事实在 baseline helper 不可用时保持 unknown/unknown/not-checked。
+    $Payload.project.snapshot_consistency = "unknown"
+    $Payload.project.source_provenance = "unknown"
+    $Payload.project.remote_latest = "not-checked"
 }
 
 function Reset-ProjectMemoryUnavailable {
@@ -123,6 +132,7 @@ function Reset-ProjectMemoryUnavailable {
     $Payload.project.memory.refresh_finding_count = 0
     $Payload.project.memory.diagnostic_warning_count = 0
     $Payload.project.memory.finding_codes = @()
+    # NOTE: #278 memory helper 不可用不影响已从 checker 读取的三事实；但若 baseline helper 也失败，三事实已被 Reset-ProjectUnavailable 重置。
 }
 
 function Get-ValidatedMemoryFindingCodes {
@@ -186,6 +196,25 @@ function Set-ProjectStatus {
         return
     }
     if ($null -ne $lockLanguage) { $Payload.project.project_language = [string]$lockLanguage }
+
+    # NOTE: #278 从 checker 读取三个增量事实并填充到 project payload；三事实独立传递，不互相覆盖。
+    # 严格限制允许值，缺失或非法值保持默认 unknown/unknown/not-checked（fail-closed）。
+    $allowedSnapshotConsistency = @("current", "drift", "unknown")
+    $allowedSourceProvenance = @("verified", "limited", "unknown")
+    $allowedRemoteLatest = @("not-checked")
+    $scProperty = $lockResult.PSObject.Properties["snapshot_consistency"]
+    $spProperty = $lockResult.PSObject.Properties["source_provenance"]
+    $rlProperty = $lockResult.PSObject.Properties["remote_latest"]
+    if ($null -ne $scProperty -and $scProperty.Value -is [string] -and $allowedSnapshotConsistency -contains $scProperty.Value) {
+        $Payload.project.snapshot_consistency = [string]$scProperty.Value
+    }
+    if ($null -ne $spProperty -and $spProperty.Value -is [string] -and $allowedSourceProvenance -contains $spProperty.Value) {
+        $Payload.project.source_provenance = [string]$spProperty.Value
+    }
+    if ($null -ne $rlProperty -and $rlProperty.Value -is [string] -and $allowedRemoteLatest -contains $rlProperty.Value) {
+        $Payload.project.remote_latest = [string]$rlProperty.Value
+    }
+
     if ($lockStatus -eq "in-sync") {
         $Payload.project.baseline.status = "current"
         $Payload.project.baseline.reason = "hub-lock-in-sync"
@@ -976,6 +1005,10 @@ function Write-RuntimeStatusText {
     Write-Output "Project reason: $([string]$Payload.project.reason)"
     Write-Output "Project language: $(if ($null -eq $Payload.project.project_language) { 'unknown' } else { [string]$Payload.project.project_language })"
     Write-Output "Project baseline: $([string]$Payload.project.baseline.status)"
+    # NOTE: #278 新增三事实显示行，与 checker text / JSON 保持一致语义。
+    Write-Output "Snapshot consistency: $([string]$Payload.project.snapshot_consistency)"
+    Write-Output "Source provenance: $([string]$Payload.project.source_provenance)"
+    Write-Output "Remote latest: $([string]$Payload.project.remote_latest)"
     Write-Output "Project memory: $([string]$Payload.project.memory.status)"
     Write-Output "Migration findings: $([int]$Payload.project.memory.migration_finding_count)"
     Write-Output "Refresh findings: $([int]$Payload.project.memory.refresh_finding_count)"
