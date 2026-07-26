@@ -115,9 +115,28 @@ try {
     $lock | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $lockPath -Encoding UTF8
 
     Add-Content -LiteralPath (Join-PathParts $hubFixture "templates" "languages" "en" "project-root" "AGENTS.md") -Value "`nrelease validation drift marker"
-    $dirtyEvidence = Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "drift"
+    # NOTE: #278 后 dirty hub 的总体 status 为 unknown（schema-1 兼容），snapshot_consistency 独立报告 drift。
+    # 旧断言 ExpectedStatus "drift" 只验证了 template hash drift，未覆盖三事实分离；
+    # 新断言同时验证总体 unknown、snapshot drift、provenance limited、remote not-checked，
+    # 确保真实 template hash drift 没有丢失，且 dirty diagnostic 行仍存在。
+    $dirtyEvidence = Assert-HubLockNegativeCase -Name "dirty-hub-drift" -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture) -ExpectedStatus "unknown"
     $dirtyRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture)
     if (@($dirtyRun.output | Where-Object { $_ -match '^- hub_dirty:' }).Count -eq 0) { throw "hub.lock dirty text omitted the detailed dirty diagnostic." }
+    if (@($dirtyRun.output | Where-Object { $_ -match '^Snapshot consistency:\s+drift$' }).Count -eq 0) { throw "hub.lock dirty text did not report snapshot consistency drift." }
+    if (@($dirtyRun.output | Where-Object { $_ -match '^Source provenance:\s+limited$' }).Count -eq 0) { throw "hub.lock dirty text did not report source provenance limited." }
+    if (@($dirtyRun.output | Where-Object { $_ -match '^Remote latest:\s+not-checked$' }).Count -eq 0) { throw "hub.lock dirty text did not report remote latest not-checked." }
+    $dirtyJson = Invoke-IsolatedPowerShellScript -ScriptPath $checkHubLockScript -Arguments @("-ProjectDir", $projectFixture, "-HubDir", $hubFixture, "-Json")
+    $dirtyPayload = (@($dirtyJson.output) -join "`n") | ConvertFrom-Json
+    $dirtyResult = $dirtyPayload.results[0]
+    if ($dirtyJson.exit_code -ne 0 -or
+        [string]$dirtyResult.status -ne "unknown" -or
+        [string]$dirtyResult.reason -ne "current-hub-dirty" -or
+        (@($dirtyResult.reason_codes) -contains "current-hub-dirty") -eq $false -or
+        [string]$dirtyResult.snapshot_consistency -ne "drift" -or
+        [string]$dirtyResult.source_provenance -ne "limited" -or
+        [string]$dirtyResult.remote_latest -ne "not-checked") {
+        throw "hub.lock dirty-hub-drift JSON did not report unknown/current-hub-dirty/drift/limited/not-checked."
+    }
     $negativeEvidence.Add($dirtyEvidence)
 
     Add-Check "hub.lock drift check" "PASS" "Git-backed temporary hub lock check reported in_sync." ([ordered]@{
