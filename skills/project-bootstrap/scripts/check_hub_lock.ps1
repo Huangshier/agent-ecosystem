@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string[]]$ProjectDir = @((Get-Location).Path),
     [string]$HubDir = "",
     [string]$RuntimeDir = "",
@@ -56,12 +56,94 @@ function Get-TemplateTreeHash {
 
 function New-HubLockFacts {
     param([string]$Project)
+    # NOTE: snapshot_consistency / source_provenance / remote_latest 是 #278 新增的三个互不覆盖的增量事实。
+    # snapshot_consistency 仅依据本机 template hash 与 lock 是否一致；source_provenance 仅依据 Git metadata 或 trusted managed copy；
+    # remote_latest 离线固定 not-checked，不访问网络，也不依据本机 hash 推断。
+    # provenance_kind 为内部字段，不进入 JSON 输出，仅用于 source_provenance 判定。
     return [ordered]@{
         status = "unknown"; reason = "internal-error"; reason_codes = @("internal-error"); project_language = $null
         project_path = $Project; lock_path = ""; locked_hub_dir = ""; locked_hub_remote = ""; locked_hub_branch = ""
         locked_hub_commit = ""; locked_hub_dirty = $null; resolved_hub_dir = ""; current_hub_remote = ""
         current_hub_branch = ""; current_hub_commit = ""; current_hub_dirty = $null; current_template_hash = ""
         locked_template_hash = ""; differences = @()
+        snapshot_consistency = "unknown"; source_provenance = "unknown"; remote_latest = "not-checked"
+        provenance_kind = "none"
+    }
+}
+
+function Set-HubLockFacts {
+    param([System.Collections.IDictionary]$Facts)
+    # NOTE: remote_latest 离线固定 not-checked；不依据本机 hash、commit 或 manifest 推断 remote。
+    $Facts.remote_latest = "not-checked"
+
+    # 判断 template hash 是否已计算且与 lock 一致；hash 未计算时 snapshot 一律保持 unknown（current-hub-dirty 等场景例外，由下方分支处理）。
+    $hashComputed = -not [string]::IsNullOrWhiteSpace($Facts.current_template_hash) -and
+        -not [string]::IsNullOrWhiteSpace($Facts.locked_template_hash)
+    $hashMatch = $hashComputed -and $Facts.current_template_hash -ceq $Facts.locked_template_hash
+
+    switch ($Facts.status) {
+        "in-sync" {
+            $Facts.snapshot_consistency = "current"
+            switch ($Facts.provenance_kind) {
+                "git" { $Facts.source_provenance = "verified" }
+                "managed-copy" { $Facts.source_provenance = "verified" }
+                "plain" { $Facts.source_provenance = "limited" }
+                default { $Facts.source_provenance = "unknown" }
+            }
+        }
+        "drift" {
+            $hasTemplateDrift = $Facts.reason_codes -contains "template-tree-drift" -or
+                $Facts.reason_codes -contains "template-hash-missing"
+            $hasCommitDrift = $Facts.reason_codes -contains "hub-commit-drift"
+
+            # snapshot_consistency 仅由 template hash 决定；commit drift 但 hash 一致时仍为 current。
+            if ($hasTemplateDrift) {
+                $Facts.snapshot_consistency = "drift"
+            } elseif ($hasCommitDrift -and $hashComputed -and $hashMatch) {
+                $Facts.snapshot_consistency = "current"
+            } else {
+                $Facts.snapshot_consistency = "drift"
+            }
+
+            # source_provenance 由 Git metadata 决定；commit drift 一律为 limited。
+            if ($hasCommitDrift) {
+                $Facts.source_provenance = "limited"
+            } else {
+                switch ($Facts.provenance_kind) {
+                    "git" { $Facts.source_provenance = "verified" }
+                    "managed-copy" { $Facts.source_provenance = "verified" }
+                    "plain" { $Facts.source_provenance = "limited" }
+                    default { $Facts.source_provenance = "unknown" }
+                }
+            }
+        }
+        "unknown" {
+            # NOTE: #289 三事实映射必须依据完整 reason_codes，不能只看主 reason。
+            # 多个 provenance 异常可同时存在（如 locked-hub-dirty + hub-remote-drift），
+            # 主 reason 只取 $unknownCodes[0] 的插入顺序，会漏判更高安全优先级的 locked-hub-dirty。
+            # ! locked-hub-dirty 表示 lock 创建时 Hub 已 dirty，lock 记录的 template hash 不是可信 baseline，
+            #   因此只要 reason_codes 命中它，snapshot 一律保持 unknown，优先级高于任何可计算 hash 的弱结论，
+            #   且不受主 reason 顺序影响。
+            if ($Facts.reason_codes -contains "locked-hub-dirty") {
+                $Facts.snapshot_consistency = "unknown"
+                $Facts.source_provenance = "limited"
+            } elseif (
+                $Facts.reason_codes -contains "current-hub-dirty" -or
+                $Facts.reason_codes -contains "hub-remote-drift" -or
+                $Facts.reason_codes -contains "hub-branch-drift"
+            ) {
+                # limited provenance 不得覆盖已独立证明的 snapshot consistency；hash 已计算时按 hash 报告 current/drift。
+                $Facts.source_provenance = "limited"
+                if ($hashComputed) {
+                    $Facts.snapshot_consistency = if ($hashMatch) { "current" } else { "drift" }
+                } else {
+                    $Facts.snapshot_consistency = "unknown"
+                }
+            } else {
+                $Facts.snapshot_consistency = "unknown"
+                $Facts.source_provenance = "unknown"
+            }
+        }
     }
 }
 
@@ -70,6 +152,8 @@ function Set-HubLockOutcome {
     $Facts.status = $Status
     $Facts.reason = $Reason
     $Facts.reason_codes = @($ReasonCodes | Sort-Object -Unique)
+    # NOTE: 每次状态变更后同步三事实，确保 text / JSON / status provider 对三事实使用一致语义。
+    Set-HubLockFacts $Facts
     return $Facts
 }
 
@@ -134,6 +218,8 @@ function Get-HubLockFacts {
         if ($hasLockedGitMetadata -and -not $trustedManagedCopy) {
             return Set-HubLockOutcome $facts "unknown" "hub-not-git" @("hub-not-git")
         }
+        # NOTE: #278 provenance_kind 区分 trusted managed copy 与 plain non-Git fresh lock，仅用于 source_provenance 判定。
+        $facts.provenance_kind = if ($trustedManagedCopy) { "managed-copy" } else { "plain" }
         if ($facts.locked_hub_dirty) {
             return Set-HubLockOutcome $facts "unknown" "locked-hub-dirty" @("locked-hub-dirty")
         }
@@ -160,6 +246,8 @@ function Get-HubLockFacts {
     if (-not $remote.success -or -not $branch.success -or -not $commit.success -or -not $dirty.success) {
         return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved")
     }
+    # NOTE: #278 provenance_kind = "git" 用于 source_provenance 判定（Git Hub 的 remote/branch/commit 可验证）。
+    $facts.provenance_kind = "git"
     $facts.current_hub_remote = $remote.value
     $facts.current_hub_branch = $branch.value
     $facts.current_hub_commit = $commit.value
@@ -181,7 +269,13 @@ function Get-HubLockFacts {
     if ($facts.current_hub_dirty) {
         $unknownCodes += "current-hub-dirty"; $facts.differences += "hub_dirty: current hub has uncommitted changes; commit or discard them before treating the lock as reproducible"
     }
-    if ($unknownCodes.Count -gt 0) { return Set-HubLockOutcome $facts "unknown" $unknownCodes[0] $unknownCodes }
+    if ($unknownCodes.Count -gt 0) {
+        # NOTE: #278 修复 #280 发现的 dirty 短路问题：source provenance 受限时仍独立计算 template hash，
+        # 让 snapshot_consistency 能报告 current/drift；status/reason 保持 unknown 以兼容 schema-1 消费方。
+        try { $facts.current_template_hash = Get-TemplateTreeHash $facts.resolved_hub_dir $facts.project_language }
+        catch { return Set-HubLockOutcome $facts "unknown" $unknownCodes[0] $unknownCodes }
+        return Set-HubLockOutcome $facts "unknown" $unknownCodes[0] $unknownCodes
+    }
 
     try { $facts.current_template_hash = Get-TemplateTreeHash $facts.resolved_hub_dir $facts.project_language }
     catch { return Set-HubLockOutcome $facts "unknown" "metadata-unresolved" @("metadata-unresolved") }
@@ -218,13 +312,27 @@ function Write-HubLockText {
     Write-Output ("Template language: {0}" -f $Facts.project_language)
     Write-Output ("Current template hash: {0}" -f $Facts.current_template_hash)
     Write-Output ("Locked template hash: {0}" -f $Facts.locked_template_hash)
-    $textStatus = switch ($Facts.reason) {
-        "missing-lock" { "missing_lock" }
-        "invalid-hub-dir" { "invalid_hub_dir" }
-        "hub-not-git" { "hub_not_git" }
-        default { if ($Facts.status -eq "in-sync") { "in_sync" } else { "drift" } }
+    # NOTE: #278 修正 #280 发现的 text projection 缺陷：不再把所有未单列的 unknown reason 显示为 drift。
+    # 旧实现：default { if ($Facts.status -eq "in-sync") { "in_sync" } else { "drift" } } 会把 unknown/current-hub-dirty 显示成 drift。
+    # 新实现：基于 status 判定，unknown 一律显示 unknown，只有真实 drift 才显示 drift。
+    $textStatus = switch ($Facts.status) {
+        "in-sync" { "in_sync" }
+        "drift" { "drift" }
+        "unknown" {
+            switch ($Facts.reason) {
+                "missing-lock" { "missing_lock" }
+                "invalid-hub-dir" { "invalid_hub_dir" }
+                "hub-not-git" { "hub_not_git" }
+                default { "unknown" }
+            }
+        }
+        default { "unknown" }
     }
     Write-Output ("Status: {0}" -f $textStatus)
+    # NOTE: #278 新增三事实显示行，与 JSON 输出保持一致语义。
+    Write-Output ("Snapshot consistency: {0}" -f $Facts.snapshot_consistency)
+    Write-Output ("Source provenance: {0}" -f $Facts.source_provenance)
+    Write-Output ("Remote latest: {0}" -f $Facts.remote_latest)
     foreach ($difference in $Facts.differences) { Write-Output ("- {0}" -f $difference) }
     Write-Output ""
 }
@@ -236,7 +344,12 @@ $facts = @($ProjectDir | ForEach-Object {
 
 if ($Json.IsPresent) {
     $results = @($facts | ForEach-Object {
-        [ordered]@{ status = $_.status; reason = $_.reason; project_language = $_.project_language; reason_codes = @($_.reason_codes) }
+        [ordered]@{
+            status = $_.status; reason = $_.reason; project_language = $_.project_language; reason_codes = @($_.reason_codes)
+            snapshot_consistency = $_.snapshot_consistency
+            source_provenance = $_.source_provenance
+            remote_latest = $_.remote_latest
+        }
     })
     [ordered]@{ schema_version = 1; results = $results } | ConvertTo-Json -Depth 6
     $global:LASTEXITCODE = 0

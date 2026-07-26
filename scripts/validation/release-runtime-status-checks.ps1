@@ -1,4 +1,4 @@
-function Invoke-RuntimeStatusFixtureChecks {
+﻿function Invoke-RuntimeStatusFixtureChecks {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
         [Parameter(Mandatory = $true)][string]$ScratchRoot
@@ -959,6 +959,12 @@ function Invoke-RuntimeStatusFixtureChecks {
         [string]$managedCopyCurrentPayload.project.reason -eq "in-sync" -and
         [string]$managedCopyCurrentPayload.recommended_next_action -eq "none"
     ) -Message "Trusted managed copy with a matching legacy Git lock did not report current."
+    # NOTE: #278 三事实 assertion — trusted managed copy: snapshot current, provenance verified, remote not-checked。
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyCurrentPayload.project.snapshot_consistency -eq "current" -and
+        [string]$managedCopyCurrentPayload.project.source_provenance -eq "verified" -and
+        [string]$managedCopyCurrentPayload.project.remote_latest -eq "not-checked"
+    ) -Message "Trusted managed copy did not report snapshot current / provenance verified / remote not-checked."
     Assert-StatusCondition -Condition (
         (@($managedCopyProjectBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $managedCopyCurrent.project.root) -join "`n") -and
         (@($managedCopyRuntimeBefore) -join "`n") -ceq (@(Get-StatusTreeState -RuntimeRoot $managedCopyCurrent.runtime) -join "`n")
@@ -974,6 +980,12 @@ function Invoke-RuntimeStatusFixtureChecks {
         [string]$managedCopyDriftPayload.project.reason -eq "template-baseline-drift" -and
         [string]$managedCopyDriftPayload.recommended_next_action -eq "refresh-project-templates"
     ) -Message "Trusted managed copy with template drift did not report optional-refresh."
+    # NOTE: #278 三事实 assertion — trusted managed copy template drift: snapshot drift, provenance verified, remote not-checked。
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyDriftPayload.project.snapshot_consistency -eq "drift" -and
+        [string]$managedCopyDriftPayload.project.source_provenance -eq "verified" -and
+        [string]$managedCopyDriftPayload.project.remote_latest -eq "not-checked"
+    ) -Message "Trusted managed copy template drift did not report snapshot drift / provenance verified / remote not-checked."
     $evidence.Add([ordered]@{ scenario = "project-managed-copy-legacy-template-drift"; status = [string]$managedCopyDriftPayload.project.status })
 
     $managedCopyFresh = New-ManagedCopyProjectFixture -Name "fresh-copy-lock" -LockKind "copy"
@@ -983,6 +995,12 @@ function Invoke-RuntimeStatusFixtureChecks {
         [string]$managedCopyFreshPayload.project.reason -eq "in-sync" -and
         [string]$managedCopyFreshPayload.recommended_next_action -eq "none"
     ) -Message "Fresh copy lock behavior regressed."
+    # NOTE: #278 三事实 assertion — trusted managed copy (fresh copy lock): snapshot current, provenance verified (manifest schema 2 + SHA-256 match), remote not-checked。
+    Assert-StatusCondition -Condition (
+        [string]$managedCopyFreshPayload.project.snapshot_consistency -eq "current" -and
+        [string]$managedCopyFreshPayload.project.source_provenance -eq "verified" -and
+        [string]$managedCopyFreshPayload.project.remote_latest -eq "not-checked"
+    ) -Message "Fresh copy lock did not report snapshot current / provenance verified / remote not-checked."
     $evidence.Add([ordered]@{ scenario = "project-managed-copy-fresh-lock-current"; status = [string]$managedCopyFreshPayload.project.status })
 
     $managedCopySimilar = New-ManagedCopyProjectFixture -Name "similar-path"
@@ -1041,11 +1059,76 @@ function Invoke-RuntimeStatusFixtureChecks {
     $currentProjectText = @((Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $currentProject.root).output) -join "`n"
     $currentProjectPayload = $currentProjectText | ConvertFrom-Json
     Assert-StatusCondition -Condition ([string]$currentProjectPayload.project.status -eq "current" -and [string]$currentProjectPayload.project.project_language -eq "en") -Message "Clean project baseline and memory did not report current."
+    # NOTE: #278 三事实 assertion — clean Git Hub: snapshot current, provenance verified, remote not-checked。
+    Assert-StatusCondition -Condition ([string]$currentProjectPayload.project.snapshot_consistency -eq "current" -and [string]$currentProjectPayload.project.source_provenance -eq "verified" -and [string]$currentProjectPayload.project.remote_latest -eq "not-checked") -Message "Clean Git Hub did not report snapshot current / provenance verified / remote not-checked."
     Assert-StatusCondition -Condition ((@($projectBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $currentProject.root) -join "`n") -and (@($hubBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState $currentProject.hub) -join "`n")) -Message "Project status modified project or hub files."
     foreach ($privateValue in @($currentProject.root, $currentProject.hub, "https://example.invalid/hub.git", [Environment]::UserName, [string]$currentProject.lock.hub_commit, [string]$currentProject.lock.template_tree_hash_sha256)) {
         Assert-StatusCondition -Condition (-not $currentProjectText.Contains($privateValue)) -Message "Project JSON leaked private helper data."
     }
     $evidence.Add([ordered]@{ scenario = "project-current-read-only-public-safe"; status = [string]$currentProjectPayload.project.status })
+
+    # NOTE: #280 证据转入 #278 — repository dirty 但 template subtree hash 一致时：
+    # snapshot_consistency 独立报告 current；source_provenance 因 dirty 报告 limited；
+    # status/reason 保持 unknown/current-hub-dirty 以兼容 schema-1 消费方；remote_latest 固定 not-checked。
+    $dirtyHubProject = New-ProjectStatusFixture -Name "git-hub-dirty"
+    Write-StatusText -Path (Join-PathParts $dirtyHubProject.hub "sibling-dirty-marker.txt") -Text "non-template sibling file"
+    $dirtyHubPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $dirtyHubProject.root)
+    Assert-StatusCondition -Condition ([string]$dirtyHubPayload.project.status -eq "unknown" -and [string]$dirtyHubPayload.project.reason -eq "current-hub-dirty") -Message "Dirty Git Hub did not keep schema-1 unknown/current-hub-dirty for compatibility."
+    Assert-StatusCondition -Condition ([string]$dirtyHubPayload.project.snapshot_consistency -eq "current" -and [string]$dirtyHubPayload.project.source_provenance -eq "limited" -and [string]$dirtyHubPayload.project.remote_latest -eq "not-checked") -Message "Dirty Git Hub with matching template hash did not report snapshot current / provenance limited / remote not-checked."
+    $evidence.Add([ordered]@{ scenario = "project-git-hub-dirty-snapshot-current"; status = [string]$dirtyHubPayload.project.status })
+
+    # NOTE: #278 text / JSON 一致性检查 — checker text、checker JSON、status JSON、status text 对三事实使用一致语义。
+    $checkerScript = Join-Path $repoRoot "skills/project-bootstrap/scripts/check_hub_lock.ps1"
+    $checkerJsonRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkerScript -Arguments @("-ProjectDir", $dirtyHubProject.root, "-Json")
+    $checkerTextRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkerScript -Arguments @("-ProjectDir", $dirtyHubProject.root)
+    $checkerJson = (@($checkerJsonRun.output) -join "`n") | ConvertFrom-Json
+    $checkerResult = $checkerJson.results[0]
+    $checkerTextOutput = @($checkerTextRun.output) -join "`n"
+    Assert-StatusCondition -Condition ([string]$checkerResult.snapshot_consistency -eq "current" -and [string]$checkerResult.source_provenance -eq "limited" -and [string]$checkerResult.remote_latest -eq "not-checked") -Message "Checker JSON did not report three facts consistently for dirty Git Hub."
+    Assert-StatusCondition -Condition ($checkerTextOutput -match "Snapshot consistency: current" -and $checkerTextOutput -match "Source provenance: limited" -and $checkerTextOutput -match "Remote latest: not-checked") -Message "Checker text did not display three facts consistently for dirty Git Hub."
+    Assert-StatusCondition -Condition ($checkerTextOutput -match "Status: unknown") -Message "Checker text still projected unknown/current-hub-dirty as drift (#280 regression)."
+    # NOTE: status text 也必须显示三事实，与 status JSON 一致。
+    $statusTextOutput = @((Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $dirtyHubProject.root -Text).output) -join "`n"
+    Assert-StatusCondition -Condition ($statusTextOutput -match "Snapshot consistency: current" -and $statusTextOutput -match "Source provenance: limited" -and $statusTextOutput -match "Remote latest: not-checked") -Message "Status text did not display three facts consistently for dirty Git Hub."
+    $evidence.Add([ordered]@{ scenario = "project-git-hub-dirty-text-json-consistency"; status = [string]$checkerResult.snapshot_consistency })
+    # NOTE: #289 组合 provenance 异常回归 — locked-hub-dirty 与 remote/branch drift 同时存在时，
+    # lock 记录的 template hash 是从 dirty Hub 生成的，不是可信 snapshot baseline；
+    # 即使当前 template hash 恰好与 dirty lock hash 相同，snapshot 也必须 fail-closed 为 unknown。
+    # 三事实映射依据完整 reason_codes（locked-hub-dirty 优先），不受主 reason 插入顺序影响。
+    # source_provenance = limited，remote_latest = not-checked，schema-1 status/reason 保持兼容。
+    # 控制场景 remote-drift-only（无 locked-hub-dirty、hash 可验证）证明 snapshot 仍按设计报告 current。
+    $combinedProvenanceCases = @(
+        @{ name = "project-locked-dirty-remote-drift-fail-closed"; expectedReason = "hub-remote-drift"; snapshot = "unknown"; mutate = { param($lock) $lock.hub_dirty = $true; $lock.hub_remote = "https://example.invalid/other-hub.git" } },
+        @{ name = "project-locked-dirty-branch-drift-fail-closed"; expectedReason = "hub-branch-drift"; snapshot = "unknown"; mutate = { param($lock) $lock.hub_dirty = $true; $lock.hub_branch = "release" } },
+        @{ name = "project-remote-drift-verifiable-snapshot-current"; expectedReason = "hub-remote-drift"; snapshot = "current"; mutate = { param($lock) $lock.hub_remote = "https://example.invalid/other-hub.git" } }
+    )
+    foreach ($combinedCase in $combinedProvenanceCases) {
+        $combinedFixture = New-ProjectStatusFixture -Name $combinedCase.name
+        & $combinedCase.mutate $combinedFixture.lock
+        Write-StatusText -Path (Join-PathParts $combinedFixture.root ".agents" "hub.lock.json") -Text ($combinedFixture.lock | ConvertTo-Json)
+
+        # status JSON：schema-1 status/reason 兼容 + 三事实
+        $combinedStatusPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $combinedFixture.root)
+        Assert-StatusCondition -Condition ([string]$combinedStatusPayload.project.status -eq "unknown" -and [string]$combinedStatusPayload.project.reason -eq $combinedCase.expectedReason) -Message "Combined case $($combinedCase.name) did not keep schema-1 unknown/$($combinedCase.expectedReason)."
+        Assert-StatusCondition -Condition ([string]$combinedStatusPayload.project.snapshot_consistency -eq $combinedCase.snapshot -and [string]$combinedStatusPayload.project.source_provenance -eq "limited" -and [string]$combinedStatusPayload.project.remote_latest -eq "not-checked") -Message "Combined case $($combinedCase.name) status JSON did not report snapshot $($combinedCase.snapshot) / provenance limited / remote not-checked."
+
+        # checker JSON：三事实 + status/reason 与 status provider 一致
+        $combinedCheckerJsonRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkerScript -Arguments @("-ProjectDir", $combinedFixture.root, "-Json")
+        $combinedCheckerResult = ((@($combinedCheckerJsonRun.output) -join "`n") | ConvertFrom-Json).results[0]
+        Assert-StatusCondition -Condition ([string]$combinedCheckerResult.snapshot_consistency -eq $combinedCase.snapshot -and [string]$combinedCheckerResult.source_provenance -eq "limited" -and [string]$combinedCheckerResult.remote_latest -eq "not-checked") -Message "Combined case $($combinedCase.name) checker JSON did not report three facts consistently."
+        Assert-StatusCondition -Condition ([string]$combinedCheckerResult.status -eq "unknown" -and [string]$combinedCheckerResult.reason -eq $combinedCase.expectedReason -and (@($combinedCheckerResult.reason_codes) -contains "locked-hub-dirty") -eq ($combinedCase.snapshot -eq "unknown")) -Message "Combined case $($combinedCase.name) checker JSON status/reason/reason_codes drifted."
+
+        # checker text 与 checker JSON 三事实一致
+        $combinedCheckerTextRun = Invoke-IsolatedPowerShellScript -ScriptPath $checkerScript -Arguments @("-ProjectDir", $combinedFixture.root)
+        $combinedCheckerText = @($combinedCheckerTextRun.output) -join "`n"
+        Assert-StatusCondition -Condition ($combinedCheckerText -match ("Snapshot consistency: {0}" -f $combinedCase.snapshot) -and $combinedCheckerText -match "Source provenance: limited" -and $combinedCheckerText -match "Remote latest: not-checked") -Message "Combined case $($combinedCase.name) checker text did not display three facts consistently."
+
+        # status text 与 status JSON 三事实一致
+        $combinedStatusText = @((Invoke-Status -RuntimeRoot $validRuntime -ProjectRoot $combinedFixture.root -Text).output) -join "`n"
+        Assert-StatusCondition -Condition ($combinedStatusText -match ("Snapshot consistency: {0}" -f $combinedCase.snapshot) -and $combinedStatusText -match "Source provenance: limited" -and $combinedStatusText -match "Remote latest: not-checked") -Message "Combined case $($combinedCase.name) status text did not display three facts consistently."
+
+        $evidence.Add([ordered]@{ scenario = $combinedCase.name; status = [string]$combinedCheckerResult.snapshot_consistency })
+    }
 
     $legacyProject = New-ProjectStatusFixture -Name "legacy"
     $legacyProject.lock.Remove("template_tree_hash_sha256")
@@ -1133,6 +1216,8 @@ function Invoke-RuntimeStatusFixtureChecks {
             if (-not $textMode) {
                 $payload = $output | ConvertFrom-Json
                 Assert-StatusCondition -Condition ([string]$payload.project.status -eq "unknown" -and [string]$payload.project.reason -eq "baseline-helper-unavailable" -and $null -eq $payload.project.project_language -and [string]$payload.project.baseline.status -eq "unknown" -and [string]$payload.project.baseline.reason -eq "helper-unavailable" -and [string]$payload.project.memory.status -eq "unknown" -and [int]$payload.project.memory.migration_finding_count -eq 0 -and [int]$payload.project.memory.refresh_finding_count -eq 0 -and [int]$payload.project.memory.diagnostic_warning_count -eq 0 -and @($payload.project.memory.finding_codes).Count -eq 0) -Message "Malformed lock helper $($case.name) returned the wrong fallback."
+                # NOTE: #278 fail-closed 时三事实必须重置为 unknown/unknown/not-checked。
+                Assert-StatusCondition -Condition ([string]$payload.project.snapshot_consistency -eq "unknown" -and [string]$payload.project.source_provenance -eq "unknown" -and [string]$payload.project.remote_latest -eq "not-checked") -Message "Malformed lock helper $($case.name) did not reset three facts to unknown/unknown/not-checked."
             }
         }
         $evidence.Add([ordered]@{ scenario = "project-lock-contract-$($case.name)"; status = "unknown" })
