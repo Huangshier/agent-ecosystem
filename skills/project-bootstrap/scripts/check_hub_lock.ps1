@@ -118,25 +118,30 @@ function Set-HubLockFacts {
             }
         }
         "unknown" {
-            # NOTE: limited provenance 不得覆盖已独立证明的 snapshot consistency；dirty/remote/branch drift 时仍依据 hash 报告 current/drift。
-            switch ($Facts.reason) {
-                { $_ -in @("current-hub-dirty", "hub-remote-drift", "hub-branch-drift") } {
-                    $Facts.source_provenance = "limited"
-                    if ($hashComputed) {
-                        $Facts.snapshot_consistency = if ($hashMatch) { "current" } else { "drift" }
-                    } else {
-                        $Facts.snapshot_consistency = "unknown"
-                    }
-                }
-                "locked-hub-dirty" {
-                    # lock 创建时 hub dirty，lock 记录的 hash 不可信，snapshot 保持 unknown。
+            # NOTE: #289 三事实映射必须依据完整 reason_codes，不能只看主 reason。
+            # 多个 provenance 异常可同时存在（如 locked-hub-dirty + hub-remote-drift），
+            # 主 reason 只取 $unknownCodes[0] 的插入顺序，会漏判更高安全优先级的 locked-hub-dirty。
+            # ! locked-hub-dirty 表示 lock 创建时 Hub 已 dirty，lock 记录的 template hash 不是可信 baseline，
+            #   因此只要 reason_codes 命中它，snapshot 一律保持 unknown，优先级高于任何可计算 hash 的弱结论，
+            #   且不受主 reason 顺序影响。
+            if ($Facts.reason_codes -contains "locked-hub-dirty") {
+                $Facts.snapshot_consistency = "unknown"
+                $Facts.source_provenance = "limited"
+            } elseif (
+                $Facts.reason_codes -contains "current-hub-dirty" -or
+                $Facts.reason_codes -contains "hub-remote-drift" -or
+                $Facts.reason_codes -contains "hub-branch-drift"
+            ) {
+                # limited provenance 不得覆盖已独立证明的 snapshot consistency；hash 已计算时按 hash 报告 current/drift。
+                $Facts.source_provenance = "limited"
+                if ($hashComputed) {
+                    $Facts.snapshot_consistency = if ($hashMatch) { "current" } else { "drift" }
+                } else {
                     $Facts.snapshot_consistency = "unknown"
-                    $Facts.source_provenance = "limited"
                 }
-                default {
-                    $Facts.snapshot_consistency = "unknown"
-                    $Facts.source_provenance = "unknown"
-                }
+            } else {
+                $Facts.snapshot_consistency = "unknown"
+                $Facts.source_provenance = "unknown"
             }
         }
     }
