@@ -1,10 +1,11 @@
-param(
+﻿param(
     [string]$ProjectRoot = (Get-Location).Path,
     [ValidateSet("start", "phase", "resume")]
     [string]$Gate = "start",
     [switch]$Json,
     [switch]$Brief,
-    [switch]$IncludeTemplates
+    [switch]$IncludeTemplates,
+    [string]$Query = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -583,6 +584,25 @@ function Write-ContextBrief {
     }
     $lines.Add("") | Out-Null
 
+    $hasQueryMatch = ($Payload -is [System.Collections.IDictionary]) -and $Payload.Contains("matched_context_entries")
+    if ($hasQueryMatch) {
+        $lines.Add("Context metadata matches (matched, not loaded):") | Out-Null
+        $lines.Add(("- query: {0}" -f [string]$Payload["query"])) | Out-Null
+        $entryList = @($Payload["matched_context_entries"])
+        if ($entryList.Count -eq 0) {
+            $lines.Add("- (no matches)") | Out-Null
+        } else {
+            foreach ($entry in $entryList) {
+                $lines.Add(("- {0} [fields: {1}; terms: {2}]" -f $entry.path, ($entry.matched_fields -join ", "), ($entry.matched_terms -join ", "))) | Out-Null
+            }
+        }
+        if ($Payload.Contains("match_reason_codes") -and @($Payload["match_reason_codes"]).Count -gt 0) {
+            $lines.Add(("- reasons: {0}" -f (@($Payload["match_reason_codes"]) -join ", "))) | Out-Null
+        }
+        $lines.Add("- Matched entries are metadata hits only; they have not been loaded, applied, or authorized.") | Out-Null
+        $lines.Add("") | Out-Null
+    }
+
     $lines.Add("Warnings / boundary notes:") | Out-Null
     if ($warningList.Count -eq 0) {
         $lines.Add("- (no warnings)") | Out-Null
@@ -628,6 +648,371 @@ function Get-ContextDiscoveryFiles {
             $_.Name -ne "case_template.md"
         }
     )
+}
+
+# Get-QueryTerms: 按空白切分 Query，ordinal-ignore-case 去重，保留首次写法。
+function Get-QueryTerms {
+    param([string]$RawQuery)
+
+    $terms = New-Object 'System.Collections.Generic.List[string]'
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($token in @($RawQuery -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if ($seen.Add($token)) {
+            $terms.Add($token)
+        }
+    }
+    return @($terms.ToArray())
+}
+
+# Test-SafeRelativeContextPath: 验证相对路径安全（无 ..、非绝对、不逃逸 context root）。
+function Test-SafeRelativeContextPath {
+    param([string]$RelativePath)
+
+    if ([string]::IsNullOrWhiteSpace($RelativePath)) { return $false }
+    if ([System.IO.Path]::IsPathRooted($RelativePath)) { return $false }
+    $normalized = $RelativePath -replace '\\', '/'
+    $segments = @($normalized -split '/' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($segments.Count -eq 0) { return $false }
+    foreach ($segment in $segments) {
+        if ($segment -eq "." -or $segment -eq "..") { return $false }
+    }
+    return $true
+}
+
+# Read-ContextEntryMetadata: 流式读取条目文件的 metadata 区域（Summary / Keywords）。
+# 遇到后续非 metadata heading 时停止，不读取正文。
+function Read-ContextEntryMetadata {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $result = [ordered]@{ summary = ""; keywords = "" }
+    try {
+        $reader = [System.IO.StreamReader]::new($FilePath, [System.Text.Encoding]::UTF8, $true)
+    } catch {
+        return $result
+    }
+    try {
+        $currentSection = ""
+        $summaryLines = New-Object 'System.Collections.Generic.List[string]'
+        $keywordsLines = New-Object 'System.Collections.Generic.List[string]'
+        $metadataHeadings = @("summary", "keywords")
+        while ($null -ne ($line = $reader.ReadLine())) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^##\s+(.+)$') {
+                $heading = $Matches[1].Trim()
+                $headingLower = $heading.ToLowerInvariant()
+                if ($headingLower -in $metadataHeadings) {
+                    $currentSection = $headingLower
+                    continue
+                }
+                # 遇到非 metadata heading，metadata 区域结束
+                break
+            }
+            if ($currentSection -eq "summary") {
+                $summaryLines.Add($line)
+            }
+            elseif ($currentSection -eq "keywords") {
+                $keywordsLines.Add($line)
+            }
+        }
+        $result.summary = ($summaryLines -join " ").Trim()
+        $result.keywords = ($keywordsLines -join " ").Trim()
+    } catch {
+        # fail-soft：读取异常不中断 gate
+    } finally {
+        $reader.Dispose()
+    }
+    return $result
+}
+
+# Get-IndexTableEntries: 解析 README/index 中的条目索引表（File / Summary / Keywords）。
+# 支持中文列名（文件/摘要/关键词）和英文列名。
+function Get-IndexTableEntries {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+
+    $entries = New-Object 'System.Collections.Generic.List[object]'
+    try {
+        $lines = [System.IO.File]::ReadAllLines($FilePath, [System.Text.Encoding]::UTF8)
+    } catch {
+        return @($entries.ToArray())
+    }
+
+    $headerCols = $null
+    $fileCol = -1
+    $summaryCol = -1
+    $keywordsCol = -1
+    $inTable = $false
+
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed.StartsWith("|")) {
+            if ($inTable) { break }
+            continue
+        }
+        $cells = @($trimmed -split '\|' | ForEach-Object { $_.Trim() })
+        # 去除首尾空元素（由 | 开头和结尾产生）
+        if ($cells.Count -gt 0 -and $cells[0] -eq "") { $cells = $cells[1..($cells.Count - 1)] }
+        if ($cells.Count -gt 0 -and $cells[$cells.Count - 1] -eq "") { $cells = $cells[0..($cells.Count - 2)] }
+
+        if ($null -eq $headerCols) {
+            # 检测是否为表头行
+            $lowerCells = @($cells | ForEach-Object { $_.ToLowerInvariant() })
+            $fc = [array]::IndexOf($lowerCells, "file")
+            if ($fc -lt 0) { $fc = [array]::IndexOf($lowerCells, ([regex]::Unescape('\u6587\u4ef6'))) }
+            $sc = [array]::IndexOf($lowerCells, "summary")
+            if ($sc -lt 0) { $sc = [array]::IndexOf($lowerCells, ([regex]::Unescape('\u6458\u8981'))) }
+            $kc = [array]::IndexOf($lowerCells, "keywords")
+            if ($kc -lt 0) { $kc = [array]::IndexOf($lowerCells, ([regex]::Unescape('\u5173\u952e\u8bcd'))) }
+            if ($fc -ge 0 -and ($sc -ge 0 -or $kc -ge 0)) {
+                $headerCols = $cells
+                $fileCol = $fc
+                $summaryCol = $sc
+                $keywordsCol = $kc
+                $inTable = $true
+                continue
+            }
+            continue
+        }
+
+        # 跳过分隔行（--- | --- | ---）
+        if ($trimmed -match '^\|[\s\-:|]+\|$') { continue }
+
+        if ($cells.Count -gt [Math]::Max($fileCol, [Math]::Max($summaryCol, $keywordsCol))) {
+            $fileValue = if ($fileCol -ge 0 -and $fileCol -lt $cells.Count) { $cells[$fileCol].Trim('`', ' ') } else { "" }
+            $summaryValue = if ($summaryCol -ge 0 -and $summaryCol -lt $cells.Count) { $cells[$summaryCol] } else { "" }
+            $keywordsValue = if ($keywordsCol -ge 0 -and $keywordsCol -lt $cells.Count) { $cells[$keywordsCol] } else { "" }
+            if (-not [string]::IsNullOrWhiteSpace($fileValue)) {
+                $entries.Add([ordered]@{
+                    file = $fileValue
+                    summary = $summaryValue
+                    keywords = $keywordsValue
+                })
+            }
+        }
+    }
+    return @($entries.ToArray())
+}
+
+# Find-ContextMetadataMatches: 对 .agents/context/ 执行确定性 metadata 匹配。
+# 返回 matched_context_entries 数组和 reason_codes。
+function Find-ContextMetadataMatches {
+    param(
+        [Parameter(Mandatory = $true)][string]$ContextDir,
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][string[]]$Terms
+    )
+
+    $reasonCodes = New-Object 'System.Collections.Generic.List[string]'
+    $matchMap = @{}
+
+    if (-not (Test-Path -LiteralPath $ContextDir)) {
+        $reasonCodes.Add("context-directory-missing")
+        return [ordered]@{ entries = @(); reason_codes = @($reasonCodes.ToArray()) }
+    }
+
+    $contextDirFull = [System.IO.Path]::GetFullPath($ContextDir)
+    $projectRootFull = [System.IO.Path]::GetFullPath($ProjectRoot)
+
+    # 收集所有 index/README 文件
+    $indexFiles = @()
+    try {
+        $indexFiles = @(Get-ChildItem -LiteralPath $ContextDir -Recurse -File | Where-Object {
+            $_.Name -in @("README.md", "index.md", "index.json")
+        })
+    } catch {
+        $reasonCodes.Add("context-enumeration-failed")
+        return [ordered]@{ entries = @(); reason_codes = @($reasonCodes.ToArray()) }
+    }
+
+    # 从 index 表提取 metadata
+    foreach ($indexFile in $indexFiles) {
+        if ($indexFile.Extension -ceq ".json") {
+            # JSON index：尝试解析，未知 schema 时 fail-soft
+            try {
+                $jsonContent = [System.IO.File]::ReadAllText($indexFile.FullName, [System.Text.Encoding]::UTF8)
+                $jsonPayload = $jsonContent | ConvertFrom-Json
+                if ($null -ne $jsonPayload -and $null -ne $jsonPayload.PSObject.Properties["entries"]) {
+                    foreach ($entry in @($jsonPayload.entries)) {
+                        if ($null -eq $entry) { continue }
+                        $fileProp = $entry.PSObject.Properties["file"]
+                        if ($null -eq $fileProp -or [string]::IsNullOrWhiteSpace([string]$fileProp.Value)) { continue }
+                        $relativePath = [string]$fileProp.Value
+                        if (-not (Test-SafeRelativeContextPath -RelativePath $relativePath)) {
+                            $reasonCodes.Add("unsafe-index-path-ignored")
+                            continue
+                        }
+                        $summaryText = ""
+                        $keywordsText = ""
+                        $sumProp = $entry.PSObject.Properties["summary"]
+                        $kwProp = $entry.PSObject.Properties["keywords"]
+                        if ($null -ne $sumProp) { $summaryText = [string]$sumProp.Value }
+                        if ($null -ne $kwProp) { $keywordsText = [string]$kwProp.Value }
+                        $indexDir = $indexFile.DirectoryName
+                        $entryFullPath = [System.IO.Path]::GetFullPath((Join-Path $indexDir $relativePath))
+                        $normalizedRel = $entryFullPath.Substring($projectRootFull.TrimEnd('\', '/').Length).TrimStart([char[]]"\/") -replace '\\', '/'
+                        Add-MatchCandidate -MatchMap $matchMap -NormalizedPath $normalizedRel -FullPath $entryFullPath -ContextDirFull $contextDirFull -Summary $summaryText -Keywords $keywordsText -SourceField "index" -Terms $Terms -ReasonCodes $reasonCodes
+                    }
+                } else {
+                    $reasonCodes.Add("unknown-json-index-schema")
+                }
+            } catch {
+                $reasonCodes.Add("json-index-parse-failed")
+            }
+            continue
+        }
+
+        # Markdown index 表
+        $tableEntries = Get-IndexTableEntries -FilePath $indexFile.FullName
+        foreach ($tableEntry in $tableEntries) {
+            $relativePath = [string]$tableEntry.file
+            if (-not (Test-SafeRelativeContextPath -RelativePath $relativePath)) {
+                $reasonCodes.Add("unsafe-index-path-ignored")
+                continue
+            }
+            $indexDir = $indexFile.DirectoryName
+            $entryFullPath = [System.IO.Path]::GetFullPath((Join-Path $indexDir $relativePath))
+            $normalizedRel = $entryFullPath.Substring($projectRootFull.TrimEnd('\', '/').Length).TrimStart([char[]]"\/") -replace '\\', '/'
+            Add-MatchCandidate -MatchMap $matchMap -NormalizedPath $normalizedRel -FullPath $entryFullPath -ContextDirFull $contextDirFull -Summary ([string]$tableEntry.summary) -Keywords ([string]$tableEntry.keywords) -SourceField "index" -Terms $Terms -ReasonCodes $reasonCodes
+        }
+    }
+
+    # 从条目文件前部 metadata 匹配
+    $entryFiles = @()
+    try {
+        $entryFiles = @(Get-ChildItem -LiteralPath $ContextDir -Recurse -File | Where-Object {
+            $_.Name -notin @("README.md", "index.md", "index.json", "case_template.md") -and
+            $_.Extension -in @(".md", ".txt")
+        })
+    } catch {
+        $reasonCodes.Add("context-enumeration-failed")
+    }
+
+    foreach ($entryFile in $entryFiles) {
+        $normalizedRel = $entryFile.FullName.Substring($projectRootFull.TrimEnd('\', '/').Length).TrimStart([char[]]"\/") -replace '\\', '/'
+        $metadata = Read-ContextEntryMetadata -FilePath $entryFile.FullName
+        $hasMetadata = -not [string]::IsNullOrWhiteSpace([string]$metadata.summary) -or -not [string]::IsNullOrWhiteSpace([string]$metadata.keywords)
+        if (-not $hasMetadata) {
+            continue
+        }
+        Add-MatchCandidate -MatchMap $matchMap -NormalizedPath $normalizedRel -FullPath $entryFile.FullName -ContextDirFull $contextDirFull -Summary ([string]$metadata.summary) -Keywords ([string]$metadata.keywords) -SourceField "entry" -Terms $Terms -ReasonCodes $reasonCodes
+    }
+
+    # 按规范化相对路径 ordinal 排序，确保确定性
+    $keysList = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($k in $matchMap.Keys) { $keysList.Add($k) }
+    $keysList.Sort([System.StringComparer]::Ordinal)
+    $results = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($key in $keysList) {
+        $results.Add($matchMap[$key])
+    }
+
+    if ($results.Count -eq 0) {
+        $reasonCodes.Add("no-matches")
+    }
+
+    return [ordered]@{ entries = @($results.ToArray()); reason_codes = @($reasonCodes.ToArray()) }
+}
+
+# Add-MatchCandidate: 对单个候选条目执行 term 匹配并合并到 matchMap。
+function Add-MatchCandidate {
+    param(
+        [hashtable]$MatchMap,
+        [string]$NormalizedPath,
+        [string]$FullPath,
+        [string]$ContextDirFull,
+        [string]$Summary,
+        [string]$Keywords,
+        [string]$SourceField,
+        [string[]]$Terms,
+        [System.Collections.Generic.List[string]]$ReasonCodes
+    )
+
+    # 安全检查：确保路径在 context root 内
+    try {
+        $fullResolved = [System.IO.Path]::GetFullPath($FullPath)
+        $separator = [System.IO.Path]::DirectorySeparatorChar
+        $contextPrefix = $ContextDirFull.TrimEnd([char[]]"\/") + $separator
+        $comparison = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            [System.StringComparison]::OrdinalIgnoreCase
+        } else {
+            [System.StringComparison]::Ordinal
+        }
+        if (-not $fullResolved.StartsWith($contextPrefix, $comparison)) {
+            $ReasonCodes.Add("unsafe-index-path-ignored")
+            return
+        }
+    } catch {
+        $ReasonCodes.Add("unsafe-index-path-ignored")
+        return
+    }
+
+    # 固定字段顺序：keywords, summary
+    $fieldTexts = [ordered]@{
+        keywords = $Keywords
+        summary = $Summary
+    }
+
+    $matchedFields = New-Object 'System.Collections.Generic.List[string]'
+    $matchedTerms = New-Object 'System.Collections.Generic.List[string]'
+
+    foreach ($term in $Terms) {
+        $termMatched = $false
+        foreach ($fieldName in $fieldTexts.Keys) {
+            $fieldValue = [string]$fieldTexts[$fieldName]
+            if ([string]::IsNullOrWhiteSpace($fieldValue)) { continue }
+            if ($fieldValue.IndexOf($term, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                if (-not $matchedFields.Contains($fieldName)) {
+                    $matchedFields.Add($fieldName)
+                }
+                $termMatched = $true
+            }
+        }
+        if ($termMatched -and -not $matchedTerms.Contains($term)) {
+            $matchedTerms.Add($term)
+        }
+    }
+
+    if ($matchedFields.Count -eq 0) { return }
+
+    # 合并到已有记录（同一 entry 可能由 index 和 entry metadata 同时命中）
+    if ($MatchMap.ContainsKey($NormalizedPath)) {
+        $existing = $MatchMap[$NormalizedPath]
+        foreach ($f in $matchedFields) {
+            if ($existing.matched_fields -notcontains $f) {
+                $existing.matched_fields = @($existing.matched_fields) + @($f)
+            }
+        }
+        foreach ($t in $matchedTerms) {
+            if ($existing.matched_terms -notcontains $t) {
+                $existing.matched_terms = @($existing.matched_terms) + @($t)
+            }
+        }
+        # 重新按固定顺序排列 matched_fields
+        $existing.matched_fields = @(Sort-MatchedFields -Fields $existing.matched_fields)
+        # matched_terms 按 Query 顺序（即 Terms 数组顺序）
+        $existing.matched_terms = @(Sort-MatchedTerms -Terms $existing.matched_terms -QueryOrder $Terms)
+    } else {
+        $MatchMap[$NormalizedPath] = [ordered]@{
+            path = $NormalizedPath
+            matched_fields = @(Sort-MatchedFields -Fields @($matchedFields.ToArray()))
+            matched_terms = @(Sort-MatchedTerms -Terms @($matchedTerms.ToArray()) -QueryOrder $Terms)
+        }
+    }
+}
+
+# Sort-MatchedFields: 固定字段顺序（keywords 在 summary 前）。
+function Sort-MatchedFields {
+    param([string[]]$Fields)
+    $order = @("keywords", "summary")
+    return @($order | Where-Object { $Fields -contains $_ })
+}
+
+# Sort-MatchedTerms: 按 Query 原始顺序排列 matched terms。
+function Sort-MatchedTerms {
+    param(
+        [string[]]$Terms,
+        [string[]]$QueryOrder
+    )
+    return @($QueryOrder | Where-Object { $term = $_; @($Terms | Where-Object { $_ -ieq $term }).Count -gt 0 })
 }
 
 $root = Resolve-ProjectRoot $ProjectRoot
@@ -691,6 +1076,20 @@ $payload = [ordered]@{
     warnings = $warningList
 }
 
+# Query 模式：增量匹配 .agents/context/ metadata
+$queryResult = $null
+$queryTerms = @()
+if (-not [string]::IsNullOrWhiteSpace($Query)) {
+    $queryTerms = Get-QueryTerms -RawQuery $Query
+    if ($queryTerms.Count -gt 0) {
+        $queryResult = Find-ContextMetadataMatches -ContextDir $contextDir -ProjectRoot $root -Terms $queryTerms
+        $payload.query = $Query
+        $payload.matched_context_entries = $queryResult.entries
+        $payload.match_status = if ($queryResult.entries.Count -gt 0) { "matched" } else { "no-match" }
+        $payload.match_reason_codes = $queryResult.reason_codes
+    }
+}
+
 if ($Json.IsPresent) {
     $payload | ConvertTo-Json -Depth 8
     return
@@ -720,6 +1119,23 @@ foreach ($tier in @("hot", "warm", "cold")) {
             Write-Host ("- {0} [{1}]" -f $item.path, $item.reason)
         }
     }
+    Write-Host ""
+}
+
+if ($null -ne $queryResult) {
+    Write-Host "Context metadata matches (matched, not loaded):"
+    Write-Host ("- query: {0}" -f $Query)
+    if ($queryResult.entries.Count -eq 0) {
+        Write-Host "- (no matches)"
+    } else {
+        foreach ($entry in $queryResult.entries) {
+            Write-Host ("- {0} [fields: {1}; terms: {2}]" -f $entry.path, ($entry.matched_fields -join ", "), ($entry.matched_terms -join ", "))
+        }
+    }
+    if ($queryResult.reason_codes.Count -gt 0) {
+        Write-Host ("- reasons: {0}" -f ($queryResult.reason_codes -join ", "))
+    }
+    Write-Host "- Matched entries are metadata hits only; they have not been loaded, applied, or authorized."
     Write-Host ""
 }
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "files": [
+    { "path": "AGENTS.md", "content": "# Fixture Project\n\nProject-level guidance.\n" },
+    { "path": ".agents/AGENTS.md", "content": "# Fixture Agent Guide\n\nPrimary project agent guide.\n" },
+    { "path": ".agents/process.txt", "content": "# Current state\n\nContext gate query matching fixture.\n" },
+    { "path": ".agents/plan.md", "content": "# Current plan\n\nNo active spec.\n" },
+    { "path": ".agents/context/README.md", "content": "# Context Index\n\n## Entry Index\n\n| File | Summary | Keywords |\n| --- | --- | --- |\n| `alpha-case.md` | SPI DMA configuration for CubeMX projects. | CubeMX, SPI, DMA |\n| `beta-case.md` | EXTI interrupt handling patterns. | EXTI, interrupt, GPIO |\n| `gamma-case.md` | UART baud rate calibration. | UART, baud, serial |\n| `../escape.md` | This path must be ignored. | escape, unsafe |\n| `/absolute/evil.md` | Absolute path must be ignored. | absolute, unsafe |\n" },
+    { "path": ".agents/context/alpha-case.md", "content": "# Alpha Case\n\n## Summary\n\nSPI DMA configuration for CubeMX projects with HAL drivers.\n\n## Keywords\n\nCubeMX, SPI, DMA, HAL\n\n## Body\n\nThis body contains EXTI and UART terms that must NOT trigger matches.\nThe body also mentions interrupt and GPIO and baud and serial.\n" },
+    { "path": ".agents/context/beta-case.md", "content": "# Beta Case\n\n## Summary\n\nEXTI interrupt handling patterns for STM32.\n\n## Keywords\n\nEXTI, interrupt, GPIO\n\n## Notes\n\nBody text with CubeMX mention that must not match.\n" },
+    { "path": ".agents/context/gamma-case.md", "content": "# Gamma Case\n\n## Keywords\n\nUART, baud, serial\n\n## Body\n\nThis entry has no Summary section, only Keywords.\nBody mentions SPI which must not match.\n" },
+    { "path": ".agents/context/delta-case.md", "content": "# Delta Case\n\n## Summary\n\nPower management and sleep mode configuration.\n\n## Keywords\n\npower, sleep, PWR\n\n## Details\n\nBody only mentions CubeMX here, not in metadata.\n" },
+    { "path": ".agents/context/no-metadata.md", "content": "# No Metadata Entry\n\nThis file has no Summary or Keywords headings.\nIt mentions CubeMX and SPI in the body only.\n" },
+    { "path": "scripts/status.ps1", "content": "[ordered]@{ schema_version = 1; project = [ordered]@{ status = 'current'; reason = 'in-sync'; project_language = 'en' } } | ConvertTo-Json\n" }
+  ]
+}

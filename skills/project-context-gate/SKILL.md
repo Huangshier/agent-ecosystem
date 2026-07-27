@@ -75,8 +75,39 @@ Useful flags:
 - `-Json`: emit a structured payload for automation or compact summaries.
 - `-Brief`: emit a compact, copyable agent brief for human/agent handoff.
 - `-IncludeTemplates`: include every `.agents/context/` file, including templates, for audits.
+- `-Query "<terms>"`: perform deterministic, read-only metadata matching against
+  `.agents/context/` entries. Returns `matched_context_entries` with per-entry
+  `path`, `matched_fields`, and `matched_terms`. Matching is metadata-only
+  (README/index table Summary/Keywords and entry front-matter `## Summary` /
+  `## Keywords`); entry bodies are never read. Results are ordered by normalized
+  relative path (ordinal). Matched entries have NOT been loaded, applied, or
+  authorized.
 
 All output modes include a stable `Project template status` section. JSON callers receive `project_template` with `status`, `reason`, `project_language`, `guidance`, nullable `command`, and `helper.availability` / `helper.trust`. Suggested commands are emitted only from trusted runtime helpers: `optional-refresh` may offer `bootstrap_project.ps1 -RefreshUnmodifiedTemplates` when the language is validated, while `migration-required` offers only `memory_upgrade.ps1 -Mode Analyze -Json`. Missing helpers, execution failures, malformed or incompatible payloads, and invalid fields degrade to `unknown` without failing the context inventory or exposing helper output.
+
+### Query Matching Contract
+
+When `-Query` is provided, the JSON payload gains incremental fields:
+
+- `query`: the original query string.
+- `matched_context_entries`: array of `{ path, matched_fields, matched_terms }`.
+- `match_status`: `"matched"` or `"no-match"`.
+- `match_reason_codes`: structured fail-soft reasons (e.g. `context-directory-missing`, `no-matches`, `unsafe-index-path-ignored`, `unknown-json-index-schema`).
+
+Determinism guarantees:
+
+- Query terms are split on whitespace, deduplicated ordinal-ignore-case, and preserve first casing.
+- Matching uses ordinal-ignore-case substring comparison.
+- `matched_terms` are ordered by query position; `matched_fields` use fixed order (`keywords`, `summary`).
+- Results are sorted by normalized relative path using ordinal comparison.
+- Output is identical across PowerShell 7 and Windows PowerShell 5.1.
+
+Safety and fail-soft:
+
+- Only files under `.agents/context/` are considered.
+- Index entries with absolute paths, `..` segments, or paths resolving outside the context root are ignored with `unsafe-index-path-ignored`.
+- Missing context directory, missing index, incomplete metadata, unknown JSON index schema, and no matches all degrade gracefully via `match_reason_codes`.
+- Matched entries are metadata hits only; they are never described as loaded, applied, or authorized.
 
 ### Step 2: Load Context Progressively
 Read existing files by disclosure tier:
