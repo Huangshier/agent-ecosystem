@@ -519,6 +519,37 @@ function Test-QueryMatching {
     Assert-ContextGateCondition -Condition $briefOutput.Contains("Matched entries are metadata hits only") -Message "Brief output must include disclaimer."
     $results.Add([ordered]@{ name = "text-brief-matched-section"; pass = $true })
 
+    # 场景 14：metadata 不完整时返回 context-metadata-incomplete
+    $incJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "UART"
+    $incPayload = $incJson | ConvertFrom-Json
+    Assert-ContextGateCondition -Condition (@($incPayload.match_reason_codes) -contains "context-metadata-incomplete") -Message "gamma-case (Keywords only) should trigger context-metadata-incomplete."
+    Assert-ContextGateCondition -Condition (@($incPayload.matched_context_entries).Count -ge 1) -Message "Incomplete metadata entry should still match."
+    $results.Add([ordered]@{ name = "metadata-incomplete-reason"; pass = $true })
+
+    # 场景 15：多个相同异常只输出一个 reason（去重）
+    $dedupJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "SPI UART PWR CubeMX"
+    $dedupPayload = $dedupJson | ConvertFrom-Json
+    $incompleteCount = @($dedupPayload.match_reason_codes | Where-Object { [string]$_ -ceq "context-metadata-incomplete" }).Count
+    Assert-ContextGateCondition -Condition ($incompleteCount -le 1) -Message "Duplicate reason codes must be deduplicated."
+    $unsafeCount = @($dedupPayload.match_reason_codes | Where-Object { [string]$_ -ceq "unsafe-index-path-ignored" }).Count
+    Assert-ContextGateCondition -Condition ($unsafeCount -le 1) -Message "Duplicate unsafe-index-path-ignored must be deduplicated."
+    $results.Add([ordered]@{ name = "reason-dedup"; pass = $true })
+
+    # 场景 16：reason code 顺序固定
+    $orderJson2 = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "SPI UART escape"
+    $orderPayload2 = $orderJson2 | ConvertFrom-Json
+    $codes = @($orderPayload2.match_reason_codes)
+    $canonicalOrder = @("context-directory-missing", "context-enumeration-failed", "context-index-missing", "context-metadata-incomplete", "unsafe-context-path-ignored", "unsafe-index-path-ignored", "unknown-json-index-schema", "json-index-parse-failed", "no-matches")
+    $lastIdx = -1
+    $orderValid = $true
+    foreach ($code in $codes) {
+        $idx = [array]::IndexOf($canonicalOrder, [string]$code)
+        if ($idx -le $lastIdx) { $orderValid = $false; break }
+        $lastIdx = $idx
+    }
+    Assert-ContextGateCondition -Condition $orderValid -Message "Reason codes must follow canonical fixed order."
+    $results.Add([ordered]@{ name = "reason-fixed-order"; pass = $true })
+
     return @($results.ToArray())
 }
 
@@ -732,6 +763,47 @@ if (-not [string]::IsNullOrWhiteSpace($ps51Path) -and [System.IO.Path]::GetFileN
         $crossVersionEvidence = Test-QueryMatchingCrossVersion -ScriptPath $sourceScript -ProjectRoot $queryProjectRoot -PS7Path $pwshCandidate.Source -PS51Path $ps51Path
     }
 }
+
+# 场景 17：缺 index 时 entry metadata 仍可匹配，并返回 context-index-missing
+$noIndexProject = Join-ContextGatePath $scratchRootFull "no index project"
+New-Item -ItemType Directory -Force -Path (Join-ContextGatePath $noIndexProject ".agents" "context") | Out-Null
+Set-Content -LiteralPath (Join-ContextGatePath $noIndexProject "AGENTS.md") -Value "# No Index Fixture" -Encoding UTF8
+Set-Content -LiteralPath (Join-ContextGatePath $noIndexProject ".agents" "context" "solo-entry.md") -Value "# Solo`n`n## Summary`n`nIsolated SPI flash configuration.`n`n## Keywords`n`nSPI, flash, NOR`n`n## Body`n`nBody text." -Encoding UTF8
+& git -C $noIndexProject init --quiet
+& git -C $noIndexProject config core.autocrlf false
+& git -C $noIndexProject add --all
+& git -C $noIndexProject -c user.name=ctx -c user.email=ctx@example.invalid commit --quiet -m "no-index baseline"
+$global:LASTEXITCODE = 0
+$noIndexJson = Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath $sourceScript -ProjectRoot $noIndexProject -Mode json -Query "SPI flash"
+$noIndexPayload = $noIndexJson | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (@($noIndexPayload.match_reason_codes) -contains "context-index-missing") -Message "Missing index should produce context-index-missing reason."
+Assert-ContextGateCondition -Condition ([string]$noIndexPayload.match_status -ceq "matched") -Message "Entry metadata should still match without index."
+$soloHits = @($noIndexPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/solo-entry.md" })
+Assert-ContextGateCondition -Condition ($soloHits.Count -eq 1) -Message "solo-entry.md should match via its own metadata."
+$queryMatchingResults += @([ordered]@{ name = "context-index-missing"; pass = $true })
+
+# 场景 18：context 内 junction/symlink 指向 context 外时不读取、不匹配、返回安全 reason
+$junctionProject = Join-ContextGatePath $scratchRootFull "junction project"
+$junctionContext = Join-ContextGatePath $junctionProject ".agents" "context"
+$externalTarget = Join-ContextGatePath $scratchRootFull "external context payload"
+New-Item -ItemType Directory -Force -Path $junctionContext | Out-Null
+New-Item -ItemType Directory -Force -Path $externalTarget | Out-Null
+Set-Content -LiteralPath (Join-ContextGatePath $junctionProject "AGENTS.md") -Value "# Junction Fixture" -Encoding UTF8
+Set-Content -LiteralPath (Join-ContextGatePath $externalTarget "evil-entry.md") -Value "# Evil`n`n## Summary`n`nExternal JUNCTIONSENTINEL payload.`n`n## Keywords`n`njunction, evil, external" -Encoding UTF8
+$junctionLinkType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { "Junction" } else { "SymbolicLink" }
+New-Item -ItemType $junctionLinkType -Path (Join-ContextGatePath $junctionContext "linked-dir") -Target $externalTarget -ErrorAction Stop | Out-Null
+& git -C $junctionProject init --quiet
+& git -C $junctionProject config core.autocrlf false
+& git -C $junctionProject add --all
+& git -C $junctionProject -c user.name=ctx -c user.email=ctx@example.invalid commit --quiet -m "junction baseline"
+$global:LASTEXITCODE = 0
+$junctionJson = Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath $sourceScript -ProjectRoot $junctionProject -Mode json -Query "junction evil external"
+$junctionPayload = $junctionJson | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (-not $junctionJson.Contains("JUNCTIONSENTINEL")) -Message "Junction target content must not be read or leaked."
+$evilHits = @($junctionPayload.matched_context_entries | Where-Object { [string]$_.path -like "*linked-dir*" -or [string]$_.path -like "*evil*" })
+Assert-ContextGateCondition -Condition ($evilHits.Count -eq 0) -Message "Junction-linked entry must not produce matches."
+Assert-ContextGateCondition -Condition (@($junctionPayload.match_reason_codes) -contains "unsafe-context-path-ignored") -Message "Junction path should produce unsafe-context-path-ignored reason."
+$queryMatchingResults += @([ordered]@{ name = "junction-reparse-rejected"; pass = $true })
 
 # 验证 query fixture 读写不变
 $queryAfter = Get-ContextGateProjectSnapshot -ProjectRoot $queryProjectRoot

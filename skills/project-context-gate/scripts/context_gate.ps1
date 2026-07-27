@@ -792,6 +792,46 @@ function Get-IndexTableEntries {
     return @($entries.ToArray())
 }
 
+# Test-ContextPathReparseSafe: 检查 entry 路径及 context root 以下全部祖先是否含 reparse point。
+# 拒绝 symlink、junction 或其他 reparse path，不打开文件。
+function Test-ContextPathReparseSafe {
+    param(
+        [Parameter(Mandatory = $true)][string]$EntryPath,
+        [Parameter(Mandatory = $true)][string]$ContextDirFull
+    )
+
+    try {
+        $entryFull = [System.IO.Path]::GetFullPath($EntryPath)
+        $contextFull = [System.IO.Path]::GetFullPath($ContextDirFull)
+        $separator = [System.IO.Path]::DirectorySeparatorChar
+        $contextPrefix = $contextFull.TrimEnd([char[]]"\/")
+
+        # 获取 entry 相对于 context root 的路径段
+        $comparison = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            [System.StringComparison]::OrdinalIgnoreCase
+        } else {
+            [System.StringComparison]::Ordinal
+        }
+        if (-not $entryFull.StartsWith($contextPrefix + $separator, $comparison)) { return $false }
+
+        $relativePart = $entryFull.Substring($contextPrefix.Length + 1)
+        $segments = @($relativePart -split [regex]::Escape($separator) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        if ($segments.Count -eq 0) { return $false }
+
+        # 逐级检查 context root 以下每个祖先（含 entry 本身）
+        $current = $contextFull
+        foreach ($segment in $segments) {
+            $current = Join-Path $current $segment
+            if (-not (Test-Path -LiteralPath $current)) { return $false }
+            $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 # Find-ContextMetadataMatches: 对 .agents/context/ 执行确定性 metadata 匹配。
 # 返回 matched_context_entries 数组和 reason_codes。
 function Find-ContextMetadataMatches {
@@ -821,6 +861,10 @@ function Find-ContextMetadataMatches {
     } catch {
         $reasonCodes.Add("context-enumeration-failed")
         return [ordered]@{ entries = @(); reason_codes = @($reasonCodes.ToArray()) }
+    }
+
+    if ($indexFiles.Count -eq 0) {
+        $reasonCodes.Add("context-index-missing")
     }
 
     # 从 index 表提取 metadata
@@ -875,6 +919,18 @@ function Find-ContextMetadataMatches {
         }
     }
 
+    # 检测 context 内的 reparse point 目录（junction/symlink），PS7 不跟踪但需报告
+    try {
+        $reparseDirs = @(Get-ChildItem -LiteralPath $ContextDir -Recurse -Directory -Force | Where-Object {
+            ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+        })
+        if ($reparseDirs.Count -gt 0) {
+            $reasonCodes.Add("unsafe-context-path-ignored")
+        }
+    } catch {
+        # fail-soft：枚举异常不中断
+    }
+
     # 从条目文件前部 metadata 匹配
     $entryFiles = @()
     try {
@@ -888,10 +944,22 @@ function Find-ContextMetadataMatches {
 
     foreach ($entryFile in $entryFiles) {
         $normalizedRel = $entryFile.FullName.Substring($projectRootFull.TrimEnd('\', '/').Length).TrimStart([char[]]"\/") -replace '\\', '/'
-        $metadata = Read-ContextEntryMetadata -FilePath $entryFile.FullName
-        $hasMetadata = -not [string]::IsNullOrWhiteSpace([string]$metadata.summary) -or -not [string]::IsNullOrWhiteSpace([string]$metadata.keywords)
-        if (-not $hasMetadata) {
+
+        # 物理路径安全检查：拒绝 reparse point（读取前）
+        if (-not (Test-ContextPathReparseSafe -EntryPath $entryFile.FullName -ContextDirFull $contextDirFull)) {
+            $reasonCodes.Add("unsafe-context-path-ignored")
             continue
+        }
+
+        $metadata = Read-ContextEntryMetadata -FilePath $entryFile.FullName
+        $hasSummary = -not [string]::IsNullOrWhiteSpace([string]$metadata.summary)
+        $hasKeywords = -not [string]::IsNullOrWhiteSpace([string]$metadata.keywords)
+        if (-not $hasSummary -and -not $hasKeywords) {
+            continue
+        }
+        # metadata 不完整：仅有其中一个字段
+        if ($hasSummary -xor $hasKeywords) {
+            $reasonCodes.Add("context-metadata-incomplete")
         }
         Add-MatchCandidate -MatchMap $matchMap -NormalizedPath $normalizedRel -FullPath $entryFile.FullName -ContextDirFull $contextDirFull -Summary ([string]$metadata.summary) -Keywords ([string]$metadata.keywords) -SourceField "entry" -Terms $Terms -ReasonCodes $reasonCodes
     }
@@ -909,7 +977,27 @@ function Find-ContextMetadataMatches {
         $reasonCodes.Add("no-matches")
     }
 
-    return [ordered]@{ entries = @($results.ToArray()); reason_codes = @($reasonCodes.ToArray()) }
+    # reason codes：ordinal 去重 + 固定顺序输出
+    $canonicalOrder = @(
+        "context-directory-missing",
+        "context-enumeration-failed",
+        "context-index-missing",
+        "context-metadata-incomplete",
+        "unsafe-context-path-ignored",
+        "unsafe-index-path-ignored",
+        "unknown-json-index-schema",
+        "json-index-parse-failed",
+        "no-matches"
+    )
+    $seenReasons = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    $dedupedReasons = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($code in $canonicalOrder) {
+        if ($reasonCodes.Contains($code) -and $seenReasons.Add($code)) {
+            $dedupedReasons.Add($code)
+        }
+    }
+
+    return [ordered]@{ entries = @($results.ToArray()); reason_codes = @($dedupedReasons.ToArray()) }
 }
 
 # Add-MatchCandidate: 对单个候选条目执行 term 匹配并合并到 matchMap。
@@ -926,7 +1014,15 @@ function Add-MatchCandidate {
         [System.Collections.Generic.List[string]]$ReasonCodes
     )
 
-    # 安全检查：确保路径在 context root 内
+    # 物理路径安全检查：拒绝 reparse point（读取前）
+    if (Test-Path -LiteralPath $FullPath) {
+        if (-not (Test-ContextPathReparseSafe -EntryPath $FullPath -ContextDirFull $ContextDirFull)) {
+            $ReasonCodes.Add("unsafe-context-path-ignored")
+            return
+        }
+    }
+
+    # 逻辑安全检查：确保路径在 context root 内
     try {
         $fullResolved = [System.IO.Path]::GetFullPath($FullPath)
         $separator = [System.IO.Path]::DirectorySeparatorChar
