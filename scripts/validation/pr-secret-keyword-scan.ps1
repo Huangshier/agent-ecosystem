@@ -73,7 +73,8 @@ $allowedSecretPaths = @(
     "knowledge-hub/scripts/manage_candidates.ps1",
     "skills/project-bootstrap/scripts/manage_candidates.ps1",
     "scripts/validate-release.ps1",
-    "scripts/validation/pr-secret-keyword-scan.ps1"
+    "scripts/validation/pr-secret-keyword-scan.ps1",
+    "scripts/validate-change.ps1"
 )
 
 # 获取 PR diff 中的新增行（仅 + 行，排除 +++ 文件头）

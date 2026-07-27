@@ -176,7 +176,8 @@ try {
         "knowledge-hub/scripts/manage_candidates.ps1",
         "skills/project-bootstrap/scripts/manage_candidates.ps1",
         "scripts/validate-release.ps1",
-        "scripts/validation/pr-secret-keyword-scan.ps1"
+        "scripts/validation/pr-secret-keyword-scan.ps1",
+        "scripts/validate-change.ps1"
     )
     $keywordMatches = New-Object 'System.Collections.Generic.List[object]'
     $unexpectedKeywordMatches = New-Object 'System.Collections.Generic.List[object]'
