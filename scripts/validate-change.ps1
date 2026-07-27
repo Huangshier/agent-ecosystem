@@ -1,4 +1,4 @@
-[CmdletBinding(DefaultParameterSetName = "GitDiff")]
+﻿[CmdletBinding(DefaultParameterSetName = "GitDiff")]
 param(
     [Parameter(ParameterSetName = "Paths", Mandatory = $true)]
     [Alias("Paths")]
