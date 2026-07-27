@@ -312,8 +312,10 @@ try {
         throw "Base ref is the all-zero object ID."
     }
 
-    # PR 新增行 secret keyword 轻量扫描（仅 GitDiff 模式）
-    if ($PSCmdlet.ParameterSetName -eq "GitDiff") {
+    # PR 新增行 secret keyword 轻量扫描（仅 GitDiff 模式且 refs 非空）
+    if ($PSCmdlet.ParameterSetName -eq "GitDiff" -and
+        -not [string]::IsNullOrWhiteSpace($BaseRef) -and
+        -not [string]::IsNullOrWhiteSpace($HeadRef)) {
         $scanScript = Join-Path $scriptDir "validation/pr-secret-keyword-scan.ps1"
         if (Test-Path -LiteralPath $scanScript) {
             $global:LASTEXITCODE = 0
