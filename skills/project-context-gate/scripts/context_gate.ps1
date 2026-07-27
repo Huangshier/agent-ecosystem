@@ -656,9 +656,9 @@ function Get-QueryTerms {
 
     $terms = New-Object 'System.Collections.Generic.List[string]'
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($token in @($RawQuery -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
-        if ($seen.Add($token)) {
-            $terms.Add($token)
+    foreach ($queryTerm in @($RawQuery -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+        if ($seen.Add($queryTerm)) {
+            $terms.Add($queryTerm)
         }
     }
     return @($terms.ToArray())

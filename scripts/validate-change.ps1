@@ -311,6 +311,22 @@ try {
     if ($PSCmdlet.ParameterSetName -eq "GitDiff" -and $BaseRef -match '^0+$') {
         throw "Base ref is the all-zero object ID."
     }
+
+    # PR 新增行 secret keyword 轻量扫描（仅 GitDiff 模式）
+    if ($PSCmdlet.ParameterSetName -eq "GitDiff") {
+        $scanScript = Join-Path $scriptDir "validation/pr-secret-keyword-scan.ps1"
+        if (Test-Path -LiteralPath $scanScript) {
+            $global:LASTEXITCODE = 0
+            $scanOutput = @(& $scanScript -BaseRef $BaseRef -HeadRef $HeadRef 2>&1)
+            $scanExit = $LASTEXITCODE
+            $global:LASTEXITCODE = 0
+            if ($scanExit -ne 0) {
+                $scanText = ($scanOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+                throw "PR secret keyword scan failed:$([Environment]::NewLine)$scanText"
+            }
+        }
+    }
+
     $paths = if ($PSCmdlet.ParameterSetName -eq "Paths") {
         @($ChangedPath | ForEach-Object { @(([string]$_) -split ',') })
     } else {
