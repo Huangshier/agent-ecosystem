@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$RepositoryRoot = "",
     [string]$ScratchRoot = "",
@@ -46,7 +46,8 @@ function Invoke-ContextGateProcess {
         [Parameter(Mandatory = $true)][string]$PowerShellPath,
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
-        [ValidateSet("text", "json", "brief")][string]$Mode
+        [ValidateSet("text", "json", "brief")][string]$Mode,
+        [string]$Query = ""
     )
 
     $arguments = New-Object 'System.Collections.Generic.List[string]'
@@ -62,13 +63,18 @@ function Invoke-ContextGateProcess {
     $arguments.Add($ProjectRoot)
     if ($Mode -eq "json") { $arguments.Add("-Json") }
     if ($Mode -eq "brief") { $arguments.Add("-Brief") }
+    if (-not [string]::IsNullOrWhiteSpace($Query)) {
+        $arguments.Add("-Query")
+        $arguments.Add($Query)
+    }
 
     $global:LASTEXITCODE = 0
     $output = @(& $PowerShellPath @($arguments.ToArray()) 2>&1)
     $exitCode = $LASTEXITCODE
     $global:LASTEXITCODE = 0
     if ($exitCode -ne 0) {
-        throw "Context gate $Mode invocation failed with exit code $exitCode."
+        $debugLines = ($output | Select-Object -First 5 | ForEach-Object { [string]$_ }) -join " | "
+        throw "Context gate $Mode invocation failed with exit code $exitCode. Output: $debugLines"
     }
     return ($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
 }
@@ -369,6 +375,229 @@ function Test-ProjectTemplateCase {
     return [ordered]@{ name = [string]$Case.name; status = [string]$template.status; reason = [string]$template.reason; command = $hasCommand }
 }
 
+function Test-QueryMatching {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][string]$PowerShellPath
+    )
+
+    $results = New-Object 'System.Collections.Generic.List[object]'
+
+    # 场景 1：无 Query 时不新增 query/matched 字段
+    $noQueryJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json
+    $noQueryPayload = $noQueryJson | ConvertFrom-Json
+    Assert-ContextGateCondition -Condition ($null -eq $noQueryPayload.PSObject.Properties["query"]) -Message "No-Query mode must not add a query field."
+    Assert-ContextGateCondition -Condition ($null -eq $noQueryPayload.PSObject.Properties["matched_context_entries"]) -Message "No-Query mode must not add matched_context_entries."
+    Assert-ContextGateCondition -Condition ($null -eq $noQueryPayload.PSObject.Properties["match_status"]) -Message "No-Query mode must not add match_status."
+    Assert-ContextGateCondition -Condition (-not $noQueryJson.Contains("loaded")) -Message "No-Query JSON must not contain loaded claims."
+    Assert-ContextGateCondition -Condition (-not $noQueryJson.Contains("applied")) -Message "No-Query JSON must not contain applied claims."
+    Assert-ContextGateCondition -Condition (-not $noQueryJson.Contains("authorized")) -Message "No-Query JSON must not contain authorized claims."
+    $results.Add([ordered]@{ name = "no-query-compat"; pass = $true })
+
+    # 场景 2：README Entry Index 的 Summary 命中
+    $summaryJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "baud rate calibration"
+    $summaryPayload = $summaryJson | ConvertFrom-Json
+    Assert-ContextGateCondition -Condition ([string]$summaryPayload.match_status -ceq "matched") -Message "Index Summary match should return matched status."
+    $gammaHits = @($summaryPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/gamma-case.md" })
+    Assert-ContextGateCondition -Condition ($gammaHits.Count -eq 1) -Message "Index Summary should match gamma-case.md."
+    Assert-ContextGateCondition -Condition (@($gammaHits[0].matched_terms) -contains "baud") -Message "gamma-case should match term baud."
+    $results.Add([ordered]@{ name = "index-summary-hit"; pass = $true })
+
+    # 场景 3：README Entry Index 的 Keywords 命中
+    $kwJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "CubeMX"
+    $kwPayload = $kwJson | ConvertFrom-Json
+    $alphaHits = @($kwPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/alpha-case.md" })
+    Assert-ContextGateCondition -Condition ($alphaHits.Count -eq 1) -Message "Index Keywords should match alpha-case.md for CubeMX."
+    Assert-ContextGateCondition -Condition (@($alphaHits[0].matched_fields) -contains "keywords") -Message "alpha-case CubeMX hit should include keywords field."
+    $results.Add([ordered]@{ name = "index-keywords-hit"; pass = $true })
+
+    # 场景 4：entry 前部 Summary 命中
+    $entrySumJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "sleep mode"
+    $entrySumPayload = $entrySumJson | ConvertFrom-Json
+    $deltaHits = @($entrySumPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/delta-case.md" })
+    Assert-ContextGateCondition -Condition ($deltaHits.Count -eq 1) -Message "Entry Summary should match delta-case.md for sleep."
+    Assert-ContextGateCondition -Condition (@($deltaHits[0].matched_fields) -contains "summary") -Message "delta-case sleep hit should include summary field."
+    $results.Add([ordered]@{ name = "entry-summary-hit"; pass = $true })
+
+    # 场景 5：entry 前部 Keywords 命中
+    $entryKwJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "PWR"
+    $entryKwPayload = $entryKwJson | ConvertFrom-Json
+    $deltaKwHits = @($entryKwPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/delta-case.md" })
+    Assert-ContextGateCondition -Condition ($deltaKwHits.Count -eq 1) -Message "Entry Keywords should match delta-case.md for PWR."
+    Assert-ContextGateCondition -Condition (@($deltaKwHits[0].matched_fields) -contains "keywords") -Message "delta-case PWR hit should include keywords field."
+    $results.Add([ordered]@{ name = "entry-keywords-hit"; pass = $true })
+
+    # 场景 6：同一 entry 由 index 和 entry metadata 同时命中时去重合并
+    $mergeJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "SPI DMA"
+    $mergePayload = $mergeJson | ConvertFrom-Json
+    $alphaMerge = @($mergePayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/alpha-case.md" })
+    Assert-ContextGateCondition -Condition ($alphaMerge.Count -eq 1) -Message "alpha-case must appear exactly once when hit by both index and entry metadata."
+    Assert-ContextGateCondition -Condition (@($alphaMerge[0].matched_terms) -contains "SPI") -Message "Merged alpha-case must include SPI."
+    Assert-ContextGateCondition -Condition (@($alphaMerge[0].matched_terms) -contains "DMA") -Message "Merged alpha-case must include DMA."
+    $results.Add([ordered]@{ name = "dedup-merge"; pass = $true })
+
+    # 场景 7：Query term 只存在于正文时不得命中
+    $bodyOnlyJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "interrupt GPIO"
+    $bodyOnlyPayload = $bodyOnlyJson | ConvertFrom-Json
+    # alpha-case 正文包含 interrupt 和 GPIO，但 metadata 不包含
+    $alphaBodyHits = @($bodyOnlyPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/alpha-case.md" })
+    Assert-ContextGateCondition -Condition ($alphaBodyHits.Count -eq 0) -Message "alpha-case must NOT match terms that only appear in its body."
+    # beta-case 的 metadata 包含 EXTI, interrupt, GPIO
+    $betaBodyHits = @($bodyOnlyPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/beta-case.md" })
+    Assert-ContextGateCondition -Condition ($betaBodyHits.Count -eq 1) -Message "beta-case should match interrupt/GPIO from its metadata."
+    $results.Add([ordered]@{ name = "body-only-no-match"; pass = $true })
+
+    # 场景 8：metadata 不完整时使用现有字段继续匹配
+    $incompleteJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "UART"
+    $incompletePayload = $incompleteJson | ConvertFrom-Json
+    $gammaIncomplete = @($incompletePayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/gamma-case.md" })
+    Assert-ContextGateCondition -Condition ($gammaIncomplete.Count -eq 1) -Message "gamma-case with incomplete metadata should still match via Keywords."
+    Assert-ContextGateCondition -Condition (@($gammaIncomplete[0].matched_fields) -contains "keywords") -Message "gamma-case incomplete metadata should report keywords field."
+    $results.Add([ordered]@{ name = "incomplete-metadata"; pass = $true })
+
+    # 场景 9：无匹配
+    $noMatchJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "zzzznonexistent"
+    $noMatchPayload = $noMatchJson | ConvertFrom-Json
+    Assert-ContextGateCondition -Condition ([string]$noMatchPayload.match_status -ceq "no-match") -Message "Non-matching query should return no-match status."
+    Assert-ContextGateCondition -Condition (@($noMatchPayload.matched_context_entries).Count -eq 0) -Message "Non-matching query should return empty entries."
+    Assert-ContextGateCondition -Condition (@($noMatchPayload.match_reason_codes) -contains "no-matches") -Message "Non-matching query should include no-matches reason."
+    $results.Add([ordered]@{ name = "no-match"; pass = $true })
+
+    # 场景 10：不安全 index path 被忽略
+    $unsafeJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "escape unsafe absolute"
+    $unsafePayload = $unsafeJson | ConvertFrom-Json
+    $escapeHits = @($unsafePayload.matched_context_entries | Where-Object { [string]$_.path -like "*escape*" -or [string]$_.path -like "*evil*" })
+    Assert-ContextGateCondition -Condition ($escapeHits.Count -eq 0) -Message "Unsafe index paths must not produce matches."
+    Assert-ContextGateCondition -Condition (@($unsafePayload.match_reason_codes) -contains "unsafe-index-path-ignored") -Message "Unsafe paths should produce unsafe-index-path-ignored reason."
+    $results.Add([ordered]@{ name = "unsafe-path-ignored"; pass = $true })
+
+    # 场景 11：多条目、大小写和名称顺序产生稳定结果
+    $orderJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "cubemx extI"
+    $orderPayload = $orderJson | ConvertFrom-Json
+    $paths = @($orderPayload.matched_context_entries | ForEach-Object { [string]$_.path })
+    Assert-ContextGateCondition -Condition ($paths.Count -ge 2) -Message "Multi-term query should match multiple entries."
+    # 验证 ordinal 排序：alpha < beta
+    $alphaIdx = [array]::IndexOf($paths, ".agents/context/alpha-case.md")
+    $betaIdx = [array]::IndexOf($paths, ".agents/context/beta-case.md")
+    if ($alphaIdx -ge 0 -and $betaIdx -ge 0) {
+        Assert-ContextGateCondition -Condition ($alphaIdx -lt $betaIdx) -Message "Ordinal sort must place alpha before beta."
+    }
+    # 验证大小写不敏感匹配但保留首次写法
+    $alphaOrder = @($orderPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/alpha-case.md" })
+    if ($alphaOrder.Count -eq 1) {
+        Assert-ContextGateCondition -Condition (@($alphaOrder[0].matched_terms) -contains "cubemx") -Message "Case-insensitive match must preserve original query casing."
+    }
+    $results.Add([ordered]@{ name = "deterministic-order"; pass = $true })
+
+    # 场景 12：text、JSON、Brief 均不出现 loaded、applied 或 authorized 的错误声明
+    $jsonModeOutput = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "CubeMX SPI"
+    $jsonLower = $jsonModeOutput.ToLowerInvariant()
+    Assert-ContextGateCondition -Condition (-not $jsonLower.Contains("loaded")) -Message "JSON output must not contain loaded claims."
+    Assert-ContextGateCondition -Condition (-not $jsonLower.Contains("applied")) -Message "JSON output must not contain applied claims."
+    Assert-ContextGateCondition -Condition (-not $jsonLower.Contains("authorized")) -Message "JSON output must not contain authorized claims."
+    foreach ($mode in @("text", "brief")) {
+        $modeOutput = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode $mode -Query "CubeMX SPI"
+        # 移除已知免责声明行和 section header 后检查
+        $withoutDisclaimer = ($modeOutput -split "`n" | Where-Object {
+            -not $_.Contains("Matched entries are metadata hits only") -and
+            -not $_.Contains("Context metadata matches (matched, not loaded)")
+        }) -join "`n"
+        $lowerStripped = $withoutDisclaimer.ToLowerInvariant()
+        Assert-ContextGateCondition -Condition (-not $lowerStripped.Contains("loaded")) -Message "$mode output must not claim entries are loaded outside the disclaimer."
+        Assert-ContextGateCondition -Condition (-not $lowerStripped.Contains("applied")) -Message "$mode output must not claim entries are applied outside the disclaimer."
+        Assert-ContextGateCondition -Condition (-not $lowerStripped.Contains("authorized")) -Message "$mode output must not claim entries are authorized outside the disclaimer."
+    }
+    $results.Add([ordered]@{ name = "no-false-claims"; pass = $true })
+
+    # 场景 13：text 和 Brief 包含 matched, not loaded 区域
+    $textOutput = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode text -Query "CubeMX"
+    Assert-ContextGateCondition -Condition $textOutput.Contains("Context metadata matches (matched, not loaded):") -Message "Text output must include matched section header."
+    Assert-ContextGateCondition -Condition $textOutput.Contains("Matched entries are metadata hits only") -Message "Text output must include disclaimer."
+    $briefOutput = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode brief -Query "CubeMX"
+    Assert-ContextGateCondition -Condition $briefOutput.Contains("Context metadata matches (matched, not loaded):") -Message "Brief output must include matched section header."
+    Assert-ContextGateCondition -Condition $briefOutput.Contains("Matched entries are metadata hits only") -Message "Brief output must include disclaimer."
+    $results.Add([ordered]@{ name = "text-brief-matched-section"; pass = $true })
+
+    # 场景 14：metadata 不完整时返回 context-metadata-incomplete
+    $incJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "UART"
+    $incPayload = $incJson | ConvertFrom-Json
+    Assert-ContextGateCondition -Condition (@($incPayload.match_reason_codes) -contains "context-metadata-incomplete") -Message "gamma-case (Keywords only) should trigger context-metadata-incomplete."
+    Assert-ContextGateCondition -Condition (@($incPayload.matched_context_entries).Count -ge 1) -Message "Incomplete metadata entry should still match."
+    $results.Add([ordered]@{ name = "metadata-incomplete-reason"; pass = $true })
+
+    # 场景 15：多个相同异常只输出一个 reason（去重）
+    $dedupJson = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "SPI UART PWR CubeMX"
+    $dedupPayload = $dedupJson | ConvertFrom-Json
+    $incompleteCount = @($dedupPayload.match_reason_codes | Where-Object { [string]$_ -ceq "context-metadata-incomplete" }).Count
+    Assert-ContextGateCondition -Condition ($incompleteCount -le 1) -Message "Duplicate reason codes must be deduplicated."
+    $unsafeCount = @($dedupPayload.match_reason_codes | Where-Object { [string]$_ -ceq "unsafe-index-path-ignored" }).Count
+    Assert-ContextGateCondition -Condition ($unsafeCount -le 1) -Message "Duplicate unsafe-index-path-ignored must be deduplicated."
+    $results.Add([ordered]@{ name = "reason-dedup"; pass = $true })
+
+    # 场景 16：reason code 顺序固定
+    $orderJson2 = Invoke-ContextGateProcess -PowerShellPath $PowerShellPath -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query "SPI UART escape"
+    $orderPayload2 = $orderJson2 | ConvertFrom-Json
+    $codes = @($orderPayload2.match_reason_codes)
+    $canonicalOrder = @("context-directory-missing", "context-enumeration-failed", "context-index-missing", "context-metadata-incomplete", "unsafe-context-path-ignored", "unsafe-index-path-ignored", "unknown-json-index-schema", "json-index-parse-failed", "no-matches")
+    $lastIdx = -1
+    $orderValid = $true
+    foreach ($code in $codes) {
+        $idx = [array]::IndexOf($canonicalOrder, [string]$code)
+        if ($idx -le $lastIdx) { $orderValid = $false; break }
+        $lastIdx = $idx
+    }
+    Assert-ContextGateCondition -Condition $orderValid -Message "Reason codes must follow canonical fixed order."
+    $results.Add([ordered]@{ name = "reason-fixed-order"; pass = $true })
+
+    return @($results.ToArray())
+}
+
+function Test-QueryMatchingCrossVersion {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][string]$PS7Path,
+        [Parameter(Mandatory = $true)][string]$PS51Path
+    )
+
+    $query = "CubeMX SPI DMA EXTI"
+    $ps7Json = Invoke-ContextGateProcess -PowerShellPath $PS7Path -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query $query
+    $ps51Json = Invoke-ContextGateProcess -PowerShellPath $PS51Path -ScriptPath $ScriptPath -ProjectRoot $ProjectRoot -Mode json -Query $query
+
+    $ps7Payload = $ps7Json | ConvertFrom-Json
+    $ps51Payload = $ps51Json | ConvertFrom-Json
+
+    # 比较 paths
+    $ps7Paths = @($ps7Payload.matched_context_entries | ForEach-Object { [string]$_.path })
+    $ps51Paths = @($ps51Payload.matched_context_entries | ForEach-Object { [string]$_.path })
+    Assert-ContextGateCondition -Condition (($ps7Paths -join "`n") -ceq ($ps51Paths -join "`n")) -Message "PS7 and PS5.1 must produce identical result paths in identical order."
+
+    # 比较 matched_fields 和 matched_terms
+    for ($i = 0; $i -lt $ps7Paths.Count; $i++) {
+        $ps7Entry = $ps7Payload.matched_context_entries[$i]
+        $ps51Entry = $ps51Payload.matched_context_entries[$i]
+        Assert-ContextGateCondition -Condition ((@($ps7Entry.matched_fields) -join ",") -ceq (@($ps51Entry.matched_fields) -join ",")) -Message "PS7/PS5.1 matched_fields differ for $($ps7Paths[$i])."
+        Assert-ContextGateCondition -Condition ((@($ps7Entry.matched_terms) -join ",") -ceq (@($ps51Entry.matched_terms) -join ",")) -Message "PS7/PS5.1 matched_terms differ for $($ps7Paths[$i])."
+    }
+
+    # 比较 status 和 reason_codes
+    Assert-ContextGateCondition -Condition ([string]$ps7Payload.match_status -ceq [string]$ps51Payload.match_status) -Message "PS7/PS5.1 match_status differs."
+    Assert-ContextGateCondition -Condition ((@($ps7Payload.match_reason_codes) -join ",") -ceq (@($ps51Payload.match_reason_codes) -join ",")) -Message "PS7/PS5.1 reason_codes differ."
+
+    return [ordered]@{
+        ps7_path = [System.IO.Path]::GetFileName($PS7Path)
+        ps51_path = [System.IO.Path]::GetFileName($PS51Path)
+        query = $query
+        entry_count = $ps7Paths.Count
+        paths_identical = $true
+        fields_identical = $true
+        terms_identical = $true
+        status_identical = $true
+        reason_codes_identical = $true
+    }
+}
+
 $repositoryRootFull = [System.IO.Path]::GetFullPath($RepositoryRoot)
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
     $ScratchRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-context-gate-checks-{0}" -f ([Guid]::NewGuid().ToString("N")))
@@ -510,6 +739,78 @@ Assert-ContextGateCondition -Condition (
 
 Assert-ContextGateCondition -Condition (-not (Test-Path -LiteralPath (Join-ContextGatePath $projectRoot "MALICIOUS_STATUS_EXECUTED"))) -Message "Context gate executed the target project's malicious scripts/status.ps1."
 
+# Query matching 测试
+$queryFixturePath = Join-ContextGatePath $fixtureRoot "query-matching-project.json"
+$queryProjectRoot = Join-ContextGatePath $scratchRootFull "query matching project"
+New-ContextGateFixtureProject -FixturePath $queryFixturePath -ProjectRoot $queryProjectRoot
+$queryBefore = Get-ContextGateProjectSnapshot -ProjectRoot $queryProjectRoot
+
+$queryMatchingResults = Test-QueryMatching -ScriptPath $sourceScript -ProjectRoot $queryProjectRoot -PowerShellPath $powerShellPath
+
+# Cross-version 对照（PS5.1 可用时）
+$crossVersionEvidence = $null
+$ps51Path = ""
+if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    $ps51Candidate = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    if (Test-Path -LiteralPath $ps51Candidate) { $ps51Path = $ps51Candidate }
+}
+if (-not [string]::IsNullOrWhiteSpace($ps51Path) -and [System.IO.Path]::GetFileName($powerShellPath) -ine "powershell.exe") {
+    $crossVersionEvidence = Test-QueryMatchingCrossVersion -ScriptPath $sourceScript -ProjectRoot $queryProjectRoot -PS7Path $powerShellPath -PS51Path $ps51Path
+} elseif (-not [string]::IsNullOrWhiteSpace($ps51Path) -and [System.IO.Path]::GetFileName($powerShellPath) -ieq "powershell.exe") {
+    # 当前已经是 PS5.1，尝试找 pwsh
+    $pwshCandidate = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -ne $pwshCandidate) {
+        $crossVersionEvidence = Test-QueryMatchingCrossVersion -ScriptPath $sourceScript -ProjectRoot $queryProjectRoot -PS7Path $pwshCandidate.Source -PS51Path $ps51Path
+    }
+}
+
+# 场景 17：缺 index 时 entry metadata 仍可匹配，并返回 context-index-missing
+$noIndexProject = Join-ContextGatePath $scratchRootFull "no index project"
+New-Item -ItemType Directory -Force -Path (Join-ContextGatePath $noIndexProject ".agents" "context") | Out-Null
+Set-Content -LiteralPath (Join-ContextGatePath $noIndexProject "AGENTS.md") -Value "# No Index Fixture" -Encoding UTF8
+Set-Content -LiteralPath (Join-ContextGatePath $noIndexProject ".agents" "context" "solo-entry.md") -Value "# Solo`n`n## Summary`n`nIsolated SPI flash configuration.`n`n## Keywords`n`nSPI, flash, NOR`n`n## Body`n`nBody text." -Encoding UTF8
+& git -C $noIndexProject init --quiet
+& git -C $noIndexProject config core.autocrlf false
+& git -C $noIndexProject add --all
+& git -C $noIndexProject -c user.name=ctx -c user.email=ctx@example.invalid commit --quiet -m "no-index baseline"
+$global:LASTEXITCODE = 0
+$noIndexJson = Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath $sourceScript -ProjectRoot $noIndexProject -Mode json -Query "SPI flash"
+$noIndexPayload = $noIndexJson | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (@($noIndexPayload.match_reason_codes) -contains "context-index-missing") -Message "Missing index should produce context-index-missing reason."
+Assert-ContextGateCondition -Condition ([string]$noIndexPayload.match_status -ceq "matched") -Message "Entry metadata should still match without index."
+$soloHits = @($noIndexPayload.matched_context_entries | Where-Object { [string]$_.path -eq ".agents/context/solo-entry.md" })
+Assert-ContextGateCondition -Condition ($soloHits.Count -eq 1) -Message "solo-entry.md should match via its own metadata."
+$queryMatchingResults += @([ordered]@{ name = "context-index-missing"; pass = $true })
+
+# 场景 18：context 内 junction/symlink 指向 context 外时不读取、不匹配、返回安全 reason
+$junctionProject = Join-ContextGatePath $scratchRootFull "junction project"
+$junctionContext = Join-ContextGatePath $junctionProject ".agents" "context"
+$externalTarget = Join-ContextGatePath $scratchRootFull "external context payload"
+New-Item -ItemType Directory -Force -Path $junctionContext | Out-Null
+New-Item -ItemType Directory -Force -Path $externalTarget | Out-Null
+Set-Content -LiteralPath (Join-ContextGatePath $junctionProject "AGENTS.md") -Value "# Junction Fixture" -Encoding UTF8
+Set-Content -LiteralPath (Join-ContextGatePath $externalTarget "evil-entry.md") -Value "# Evil`n`n## Summary`n`nExternal JUNCTIONSENTINEL payload.`n`n## Keywords`n`njunction, evil, external" -Encoding UTF8
+$junctionLinkType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { "Junction" } else { "SymbolicLink" }
+New-Item -ItemType $junctionLinkType -Path (Join-ContextGatePath $junctionContext "linked-dir") -Target $externalTarget -ErrorAction Stop | Out-Null
+& git -C $junctionProject init --quiet
+& git -C $junctionProject config core.autocrlf false
+& git -C $junctionProject add --all
+& git -C $junctionProject -c user.name=ctx -c user.email=ctx@example.invalid commit --quiet -m "junction baseline"
+$global:LASTEXITCODE = 0
+$junctionJson = Invoke-ContextGateProcess -PowerShellPath $powerShellPath -ScriptPath $sourceScript -ProjectRoot $junctionProject -Mode json -Query "junction evil external"
+$junctionPayload = $junctionJson | ConvertFrom-Json
+Assert-ContextGateCondition -Condition (-not $junctionJson.Contains("JUNCTIONSENTINEL")) -Message "Junction target content must not be read or leaked."
+$evilHits = @($junctionPayload.matched_context_entries | Where-Object { [string]$_.path -like "*linked-dir*" -or [string]$_.path -like "*evil*" })
+Assert-ContextGateCondition -Condition ($evilHits.Count -eq 0) -Message "Junction-linked entry must not produce matches."
+Assert-ContextGateCondition -Condition (@($junctionPayload.match_reason_codes) -contains "unsafe-context-path-ignored") -Message "Junction path should produce unsafe-context-path-ignored reason."
+$queryMatchingResults += @([ordered]@{ name = "junction-reparse-rejected"; pass = $true })
+
+# 验证 query fixture 读写不变
+$queryAfter = Get-ContextGateProjectSnapshot -ProjectRoot $queryProjectRoot
+$queryBeforeJson = $queryBefore | ConvertTo-Json -Depth 6 -Compress
+$queryAfterJson = $queryAfter | ConvertTo-Json -Depth 6 -Compress
+Assert-ContextGateCondition -Condition ($queryBeforeJson -ceq $queryAfterJson) -Message "Query matching changed fixture project files or git status."
+
 $after = Get-ContextGateProjectSnapshot -ProjectRoot $projectRoot
 $beforeJson = $before | ConvertTo-Json -Depth 6 -Compress
 $afterJson = $after | ConvertTo-Json -Depth 6 -Compress
@@ -525,12 +826,16 @@ $result = [ordered]@{
     project_template_case_count = $caseResults.Count
     untrusted_guidance_ancestor_cases = $untrustedGuidanceResults
     untrusted_guidance_ancestor_case_count = $untrustedGuidanceResults.Count
+    query_matching_cases = $queryMatchingResults
+    query_matching_case_count = $queryMatchingResults.Count
+    cross_version_evidence = $crossVersionEvidence
     unresolved_locator_fail_soft = $true
     malicious_project_helper_ignored = $true
     malformed_manifest_rejected = $true
     tampered_managed_provider_rejected = $true
     unreadable_managed_provider_fail_soft = $true
     project_read_only = $true
+    query_project_read_only = $true
 }
 if ($Json.IsPresent) { $result | ConvertTo-Json -Depth 8 }
-else { Write-Output ("project-context-gate checks: PASS ({0} layouts; {1} project template cases; read-only)" -f $results.Count, $caseResults.Count) }
+else { Write-Output ("project-context-gate checks: PASS ({0} layouts; {1} project template cases; {2} query matching cases; read-only)" -f $results.Count, $caseResults.Count, $queryMatchingResults.Count) }

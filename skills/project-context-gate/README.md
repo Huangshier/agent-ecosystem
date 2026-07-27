@@ -57,6 +57,10 @@ Optional flags:
 - `-Brief`: compact agent brief with gate type, project root, git state,
   hot/warm/cold context responsibilities, warnings, and next action.
 - `-IncludeTemplates`: include every `.agents/context/` file for audits.
+- `-Query "<terms>"`: deterministic metadata matching against `.agents/context/`
+  entries (README/index Summary/Keywords and entry front-matter). Returns
+  `matched_context_entries` in JSON; text/Brief add a "matched, not loaded"
+  section. Bodies are never read.
 
 ## Project Template Status
 
@@ -77,6 +81,14 @@ project_template
 `current` has no warning or command. `optional-refresh` warns and may provide a quoted `bootstrap_project.ps1 -RefreshUnmodifiedTemplates` command when `project_language` is validated. `migration-required` provides only the read-only `memory_upgrade.ps1 -Mode Analyze -Json` command. `unknown` requests manual inspection and never guesses a language or command.
 
 Status invocation and payload validation are fail-soft. Missing helpers, non-zero exits, malformed JSON, incompatible schemas, invalid status/reason/language values, and helper exceptions do not stop normal context inventory. Raw helper output, exceptions, stderr, findings, messages, and paths are not copied into context-gate output. Suggested commands are advisory and are never executed by the context gate.
+
+## Query Matching
+
+When `-Query` is provided, the JSON payload gains incremental fields: `query`, `matched_context_entries` (array of `{ path, matched_fields, matched_terms }`), `match_status`, and `match_reason_codes`. Without `-Query`, these fields are absent and existing output is unchanged.
+
+Matching is metadata-only: README/index table Summary/Keywords columns and entry front-matter `## Summary` / `## Keywords`. Entry bodies are never read (streaming read stops at the first non-metadata heading). Results are deterministic across PowerShell 7 and Windows PowerShell 5.1: ordinal-ignore-case matching, fixed field order, query-order terms, and ordinal path sort.
+
+Fail-soft reasons include `context-directory-missing`, `no-matches`, `unsafe-index-path-ignored`, `unknown-json-index-schema`, and `json-index-parse-failed`. Matched entries are never described as loaded, applied, or authorized.
 
 ## License
 
