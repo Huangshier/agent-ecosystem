@@ -67,5 +67,6 @@ $SensitiveScanAllowedPaths = @(
     "skills/project-bootstrap/scripts/manage_candidates.ps1",
     "scripts/validate-release.ps1",
     "scripts/validation/pr-secret-keyword-scan.ps1",
-    "scripts/validation/sensitive-scan-contract.ps1"
+    "scripts/validation/sensitive-scan-contract.ps1",
+    "scripts/validation/test-sensitive-scan.ps1"
 )
