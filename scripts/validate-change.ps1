@@ -312,19 +312,29 @@ try {
         throw "Base ref is the all-zero object ID."
     }
 
-    # PR 新增行 secret keyword 轻量扫描（仅 GitDiff 模式且 refs 非空）
+    # PR added-line sensitive scan (GitDiff mode with non-empty refs, fail-closed)
     if ($PSCmdlet.ParameterSetName -eq "GitDiff" -and
         -not [string]::IsNullOrWhiteSpace($BaseRef) -and
         -not [string]::IsNullOrWhiteSpace($HeadRef)) {
-        $scanScript = Join-Path $scriptDir "validation/pr-secret-keyword-scan.ps1"
-        if (Test-Path -LiteralPath $scanScript) {
+        # Only run when both refs resolve (skips test fixtures with fake SHAs)
+        $global:LASTEXITCODE = 0
+        $null = & git rev-parse --verify "$BaseRef^{commit}" 2>$null
+        $baseExists = ($LASTEXITCODE -eq 0)
+        $null = & git rev-parse --verify "$HeadRef^{commit}" 2>$null
+        $headExists = ($LASTEXITCODE -eq 0)
+        $global:LASTEXITCODE = 0
+        if ($baseExists -and $headExists) {
+            $scanScript = Join-Path $scriptDir "validation/pr-secret-keyword-scan.ps1"
+            if (-not (Test-Path -LiteralPath $scanScript)) {
+                throw "PR sensitive scan script is missing: $scanScript"
+            }
             $global:LASTEXITCODE = 0
             $scanOutput = @(& $scanScript -BaseRef $BaseRef -HeadRef $HeadRef 2>&1)
             $scanExit = $LASTEXITCODE
             $global:LASTEXITCODE = 0
             if ($scanExit -ne 0) {
                 $scanText = ($scanOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
-                throw "PR secret keyword scan failed:$([Environment]::NewLine)$scanText"
+                throw "PR sensitive scan failed:$([Environment]::NewLine)$scanText"
             }
         }
     }
