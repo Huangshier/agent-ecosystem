@@ -1,4 +1,4 @@
-[CmdletBinding(DefaultParameterSetName = "GitDiff")]
+﻿[CmdletBinding(DefaultParameterSetName = "GitDiff")]
 param(
     [Parameter(ParameterSetName = "Paths", Mandatory = $true)]
     [Alias("Paths")]
@@ -299,6 +299,30 @@ function Get-GitChangedPaths {
     }
 }
 
+function Invoke-ChangeSensitiveScan {
+    param([string]$Base, [string]$Head)
+
+    $scanScript = Join-Path $scriptDir "validation/pr-secret-keyword-scan.ps1"
+    if (-not (Test-Path -LiteralPath $scanScript)) {
+        throw "Sensitive scan failure: scan script is missing: $scanScript"
+    }
+    $previousLocation = Get-Location
+    try {
+        Set-Location -LiteralPath $repoRoot
+        $global:LASTEXITCODE = 0
+    $scanOutput = @(& $scanScript -BaseRef $Base -HeadRef $Head 2>&1)
+    $scanExit = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    if ($scanExit -ne 0) {
+        $scanText = ($scanOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        throw "Sensitive scan failure:$([Environment]::NewLine)$scanText"
+        }
+    }
+    finally {
+        Set-Location $previousLocation
+    }
+}
+
 if (-not (Test-Path -LiteralPath $rulesPath)) { throw "Risk rules not found: $rulesPath" }
 $config = Get-Content -LiteralPath $rulesPath -Raw | ConvertFrom-Json
 
@@ -311,12 +335,14 @@ try {
     if ($PSCmdlet.ParameterSetName -eq "GitDiff" -and $BaseRef -match '^0+$') {
         throw "Base ref is the all-zero object ID."
     }
+
     $paths = if ($PSCmdlet.ParameterSetName -eq "Paths") {
         @($ChangedPath | ForEach-Object { @(([string]$_) -split ',') })
     } else {
         $boundary = Get-GitChangedPaths -Base $BaseRef -Head $HeadRef
         $normalizedBase = [string]$boundary.base_ref
         $normalizedHead = [string]$boundary.head_ref
+        Invoke-ChangeSensitiveScan -Base $normalizedBase -Head $normalizedHead
         @($boundary.paths)
     }
     $normalized = @($paths | ForEach-Object { (([string]$_).Trim().Replace('\', '/')) -replace '^\./', '' } | Where-Object { $_ } | Sort-Object -Unique)
@@ -355,6 +381,9 @@ try {
         $result = New-ChangeResult -Tier $maxTier -Paths $normalized -Reasons @($reasons.ToArray()) -Modules @($modules.ToArray()) -Base $normalizedBase -Head $normalizedHead -ControlPlane:$hasControlPlane
     }
 } catch {
+    if ([string]$_.Exception.Message -like "Sensitive scan failure:*") {
+        throw
+    }
     $result = New-ConservativeResult -Reason ("Classification input could not be resolved: {0}" -f $_.Exception.Message)
 }
 

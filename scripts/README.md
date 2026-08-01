@@ -38,7 +38,9 @@ Executed stages checkpoint `local-validation-result.json` after every completed
 action so a caller timeout does not erase earlier evidence.
 The heavyweight classifier regression entrypoint is
 `test-heavy-targeted-regression.ps1`; `test-validate-change.ps1` remains the
-lightweight routing-contract entrypoint.
+lightweight routing-contract entrypoint. The complete 17-case sensitive scan
+fixture runs only from the heavy self-protection path when validation control
+surface paths change; the classifier still performs the real PR diff scan.
 
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).

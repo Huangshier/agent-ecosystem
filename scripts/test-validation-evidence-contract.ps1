@@ -576,12 +576,12 @@ try {
         -not $lineageSource.Contains("identity_guard") -and
         -not $lineageSource.Contains('"Release validation"')
     ) "latest-generation-only-no-bootstrap-compatibility"
-    $parserSafety = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "validation/release-parser-safety-checks.ps1"))
+    $scanContract = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot "validation/sensitive-scan-contract.ps1"))
     $standardAuthReference = 'LINEAGE_GITHUB_AUTH: ${{ github.' + 'to' + 'ken }}'
     Assert-Contract (
         $workflow.Contains($standardAuthReference) -and
-        $parserSafety.Contains('".github/workflows/release-validation.yml" = ''^\s*LINEAGE_GITHUB_AUTH:') -and
-        -not $parserSafety.Contains('"scripts/validation/release-parser-safety-checks.ps1",`r`n        ".github/workflows/release-validation.yml"')
+        $scanContract.Contains('".github/workflows/release-validation.yml" = ''^\s*LINEAGE_GITHUB_AUTH:') -and
+        -not $scanContract.Contains('"scripts/validation/release-parser-safety-checks.ps1",`r`n        ".github/workflows/release-validation.yml"')
     ) "standard-github-auth-reference-is-line-scoped"
 
     $result = [ordered]@{ schema_version = 1; pass = $checks.Count; fail = 0; checks = @($checks.ToArray()) }
