@@ -117,13 +117,55 @@ function Invoke-JsonChild {
     if ($exitCode -ne 0) {
         throw "Child validation script failed with exit ${exitCode}: $ScriptPath`n$text`n$stderr"
     }
-    try {
-        $value = $text | ConvertFrom-Json
+
+    # Targeted child checks may emit informational lines before their JSON summary.
+    # Keep the exit-code failure boundary, but parse the first complete JSON object
+    # so those diagnostics do not invalidate otherwise complete evidence.
+    for ($start = 0; $start -lt $text.Length; $start++) {
+        if ($text[$start] -ne '{') {
+            continue
+        }
+
+        $depth = 0
+        $inString = $false
+        $escaped = $false
+        for ($index = $start; $index -lt $text.Length; $index++) {
+            $character = $text[$index]
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = $false
+                }
+                elseif ($character -eq '\') {
+                    $escaped = $true
+                }
+                elseif ($character -eq '"') {
+                    $inString = $false
+                }
+                continue
+            }
+
+            if ($character -eq '"') {
+                $inString = $true
+            }
+            elseif ($character -eq '{') {
+                $depth++
+            }
+            elseif ($character -eq '}') {
+                $depth--
+                if ($depth -eq 0) {
+                    $candidate = $text.Substring($start, $index - $start + 1)
+                    try {
+                        return ($candidate | ConvertFrom-Json)
+                    }
+                    catch {
+                        break
+                    }
+                }
+            }
+        }
     }
-    catch {
-        throw "Child validation script did not produce JSON evidence: $ScriptPath`n$text"
-    }
-    return $value
+
+    throw "Child validation script did not produce JSON evidence: $ScriptPath`n$text"
 }
 
 function Get-SensitiveScanDecision {
