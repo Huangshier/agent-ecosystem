@@ -27,7 +27,7 @@ if (-not (Test-Path -LiteralPath $contractPath)) {
 
 # Compute PR diff (added lines only)
 $global:LASTEXITCODE = 0
-$diffLines = @(& git diff "$BaseRef...$HeadRef" --unified=0 --diff-filter=ACMR 2>$null)
+$diffLines = @(& git diff "$BaseRef" "$HeadRef" --unified=1 --diff-filter=ACMR 2>$null)
 if ($LASTEXITCODE -ne 0) {
     # Fail-closed: diff unavailable is a scan failure
     if ($Json.IsPresent) {
@@ -43,17 +43,25 @@ $global:LASTEXITCODE = 0
 $violations = New-Object 'System.Collections.Generic.List[object]'
 $currentFile = ""
 $currentLine = 0
+$inHunk = $false
 
 foreach ($line in $diffLines) {
-    if ($line -match '^\+\+\+ b/(.+)$') {
-        $currentFile = $Matches[1] -replace '\\', '/'
+    if ($line.StartsWith("diff --git ")) {
+        $inHunk = $false
         continue
     }
     if ($line -match '^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@') {
         $currentLine = [int]$Matches[1]
+        $inHunk = $true
         continue
     }
-    if ($line.StartsWith("+") -and -not $line.StartsWith("+++")) {
+    if (-not $inHunk) {
+        if ($line -match '^\+\+\+ b/(.*)$') {
+            $currentFile = $Matches[1] -replace '\\', '/'
+        }
+        continue
+    }
+    if ($line.StartsWith("+")) {
         $text = $line.Substring(1)
 
         # High-risk format rules: never allowed in any path
@@ -89,7 +97,7 @@ foreach ($line in $diffLines) {
         # Deleted lines do not increment line number
     }
     else {
-        # Context lines (rare with unified=0)
+        # Context lines are ignored for matching but advance the new-file line number.
         $currentLine++
     }
 }

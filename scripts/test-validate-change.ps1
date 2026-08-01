@@ -11,10 +11,36 @@ $validator = Join-Path $PSScriptRoot "validate-change.ps1"
 $cases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/change-risk-fixtures/cases.json") -Raw | ConvertFrom-Json
 $classifierOutputContract = Join-Path $PSScriptRoot "validation/release-classifier-output-contract.ps1"
 $classifierOutputCases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") -Raw | ConvertFrom-Json
+$sensitiveScanTester = Join-Path $PSScriptRoot "validation/test-sensitive-scan.ps1"
 $localPlanValidator = Join-Path $PSScriptRoot "test-local-validation-plan.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
+
+$global:LASTEXITCODE = 0
+$sensitiveScanRaw = @(& pwsh -NoProfile -File $sensitiveScanTester -Json 2>&1) -join "`n"
+$sensitiveScanExit = $LASTEXITCODE
+$global:LASTEXITCODE = 0
+if ($sensitiveScanExit -ne 0) {
+    throw "Sensitive scan classifier self-test failed with exit ${sensitiveScanExit}: $sensitiveScanRaw"
+}
+try {
+    $sensitiveScanResult = $sensitiveScanRaw | ConvertFrom-Json
+}
+catch {
+    throw "Sensitive scan classifier self-test did not produce JSON evidence: $sensitiveScanRaw"
+}
+$sensitiveScanCaseCount = @($sensitiveScanResult.cases).Count
+if ([string]$sensitiveScanResult.status -cne "PASS" -or [int]$sensitiveScanResult.fail -ne 0 -or $sensitiveScanCaseCount -lt 12) {
+    throw "Sensitive scan classifier self-test requires at least 12 passing cases; got status=$($sensitiveScanResult.status) cases=$sensitiveScanCaseCount pass=$($sensitiveScanResult.pass) fail=$($sensitiveScanResult.fail)."
+}
+$sensitiveScanSummary = [ordered]@{
+    status = [string]$sensitiveScanResult.status
+    case_count = $sensitiveScanCaseCount
+    pass = [int]$sensitiveScanResult.pass
+    fail = [int]$sensitiveScanResult.fail
+    cases = @($sensitiveScanResult.cases)
+}
 
 function Invoke-FixtureGit {
     param([string]$Root, [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -515,7 +541,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + $sensitiveScanCaseCount + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanResult.status; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
