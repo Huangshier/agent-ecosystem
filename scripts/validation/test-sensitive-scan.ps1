@@ -188,7 +188,7 @@ try {
     Move-Item -LiteralPath $integrationContract -Destination $contractIntegrationBackup
     $validatorMissingContract = Invoke-ValidatorFixture $validatorInRepo $integration $integrationBase $integrationHead
     $validatorMissingContractText = ($validatorMissingContract.raw | ForEach-Object { [string]$_ }) -join "`n"
-    Assert-ScanCase -Name "validate-change-contract-missing-fails" -Condition ($validatorMissingContract.exit_code -ne 0 -and ($validatorMissingContractText -match "contract-missing" -or $validatorMissingContractText -match "contract not found")) -Detail "Expected validate-change to fail when the contract is missing, got exit $($validatorMissingContract.exit_code): $validatorMissingContractText"
+    Assert-ScanCase -Name "validate-change-contract-missing-fails" -Condition ($validatorMissingContract.exit_code -ne 0 -and ($validatorMissingContractText -match "contract-missing" -or $validatorMissingContractText -match "contract\s+not\s+found")) -Detail "Expected validate-change to fail when the contract is missing, got exit $($validatorMissingContract.exit_code): $validatorMissingContractText"
     Move-Item -LiteralPath $contractIntegrationBackup -Destination $integrationContract
 
     # Shared contract remains the only source for scan rules.
