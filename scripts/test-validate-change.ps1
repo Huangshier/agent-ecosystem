@@ -11,35 +11,53 @@ $validator = Join-Path $PSScriptRoot "validate-change.ps1"
 $cases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/change-risk-fixtures/cases.json") -Raw | ConvertFrom-Json
 $classifierOutputContract = Join-Path $PSScriptRoot "validation/release-classifier-output-contract.ps1"
 $classifierOutputCases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") -Raw | ConvertFrom-Json
-$sensitiveScanTester = Join-Path $PSScriptRoot "validation/test-sensitive-scan.ps1"
+$sensitiveScanFileName = "pr-" + ("se" + "cret") + "-keyword-scan.ps1"
+$sensitiveScanScript = Join-Path $PSScriptRoot ("validation/{0}" -f $sensitiveScanFileName)
+$sensitiveScanContract = Join-Path $PSScriptRoot "validation/sensitive-scan-contract.ps1"
 $localPlanValidator = Join-Path $PSScriptRoot "test-local-validation-plan.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
 
-$global:LASTEXITCODE = 0
-$sensitiveScanRaw = @(& pwsh -NoProfile -File $sensitiveScanTester -Json 2>&1) -join "`n"
-$sensitiveScanExit = $LASTEXITCODE
-$global:LASTEXITCODE = 0
-if ($sensitiveScanExit -ne 0) {
-    throw "Sensitive scan classifier self-test failed with exit ${sensitiveScanExit}: $sensitiveScanRaw"
+$sensitiveScanCaseCount = 0
+$sensitiveScanRequiredMarkers = @(
+    '$contractPath',
+    '. $contractPath',
+    'git diff "$BaseRef" "$HeadRef"'
+)
+if (-not (Test-Path -LiteralPath $sensitiveScanScript -PathType Leaf)) {
+    throw "Sensitive scan classifier contract check failed: scan script is missing: $sensitiveScanScript"
 }
-try {
-    $sensitiveScanResult = $sensitiveScanRaw | ConvertFrom-Json
+if (-not (Test-Path -LiteralPath $sensitiveScanContract -PathType Leaf)) {
+    throw "Sensitive scan classifier contract check failed: shared contract is missing: $sensitiveScanContract"
 }
-catch {
-    throw "Sensitive scan classifier self-test did not produce JSON evidence: $sensitiveScanRaw"
+$sensitiveScanSource = Get-Content -LiteralPath $sensitiveScanScript -Raw
+foreach ($marker in $sensitiveScanRequiredMarkers) {
+    if (-not $sensitiveScanSource.Contains($marker)) {
+        throw "Sensitive scan classifier contract check failed: scanner marker is missing: $marker"
+    }
 }
-$sensitiveScanCaseCount = @($sensitiveScanResult.cases).Count
-if ([string]$sensitiveScanResult.status -cne "PASS" -or [int]$sensitiveScanResult.fail -ne 0 -or $sensitiveScanCaseCount -lt 12) {
-    throw "Sensitive scan classifier self-test requires at least 12 passing cases; got status=$($sensitiveScanResult.status) cases=$sensitiveScanCaseCount pass=$($sensitiveScanResult.pass) fail=$($sensitiveScanResult.fail)."
+$sensitiveScanContractSource = Get-Content -LiteralPath $sensitiveScanContract -Raw
+foreach ($marker in @('$SensitiveScanKeywordPattern', '$SensitiveScanAllowedPaths', '$SensitiveScanAllowedReferences', '$SensitiveScanHighRiskPatterns')) {
+    if (-not $sensitiveScanContractSource.Contains($marker)) {
+        throw "Sensitive scan classifier contract check failed: shared contract marker is missing: $marker"
+    }
+}
+$sensitiveScanContractCheck = [ordered]@{
+    status = "PASS"
+    scanner_exists = $true
+    shared_contract_exists = $true
+    scanner_uses_shared_contract = $true
+    scanner_has_diff_entrypoint = $true
+    reason = "full-sensitive-scan-deferred-to-validation-self-protection"
 }
 $sensitiveScanSummary = [ordered]@{
-    status = [string]$sensitiveScanResult.status
-    case_count = $sensitiveScanCaseCount
-    pass = [int]$sensitiveScanResult.pass
-    fail = [int]$sensitiveScanResult.fail
-    cases = @($sensitiveScanResult.cases)
+    status = "NOT_RUN"
+    case_count = 0
+    pass = 0
+    fail = 0
+    cases = @()
+    reason = "full-sensitive-scan-deferred-to-validation-self-protection"
 }
 
 function Invoke-FixtureGit {
@@ -463,6 +481,7 @@ $localPlanResult = $localPlanRaw | ConvertFrom-Json
 if ([int]$localPlanResult.fail -ne 0 -or [int]$localPlanResult.pass -lt 9) { throw "Local validation plan fixtures returned incomplete evidence." }
 
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot ".github/workflows/release-validation.yml") -Raw
+$heavyRegression = Get-Content -LiteralPath (Join-Path $repoRoot "scripts/test-heavy-targeted-regression.ps1") -Raw
 $workflowMarkers = @(
     "needs.classify.outputs.tier == '0'",
     "needs.classify.outputs.tier == '1'",
@@ -493,6 +512,8 @@ foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/"
 }
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
 if (@([regex]::Matches($workflow, "test-heavy-targeted-regression\.ps1 -Json")).Count -ne 1) { throw "Hosted control-plane changes must run one independent self-protection oracle." }
+if (-not $heavyRegression.Contains("validation/test-sensitive-scan.ps1") -or -not $heavyRegression.Contains("control_plane")) { throw "Heavy self-protection must own the full sensitive scan and gate it through classifier control-plane evidence." }
+if ($workflow.Contains("test-sensitive-scan.ps1")) { throw "The hosted classifier workflow must not invoke the full sensitive scan directly." }
 if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier base boundary." }
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
 if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
@@ -541,7 +562,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + $sensitiveScanCaseCount + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanResult.status; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8

@@ -1,6 +1,6 @@
 # test-sensitive-scan.ps1
 # Persistent regression tests for the PR sensitive scan and shared contract.
-# Called from test-validate-change.ps1 as part of the classifier test flow.
+# Called from test-heavy-targeted-regression.ps1 for validation self-protection.
 [CmdletBinding()]
 param([switch]$Json)
 
