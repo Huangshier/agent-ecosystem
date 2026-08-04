@@ -230,3 +230,90 @@ Result: **PASS**. The bridge remains opt-in and status-visible after upgrade.
   refresh.
 - Bridge targets were isolated client directories, not production client
   runtimes.
+
+## Rehearsal: v0.7.0 → v0.7.1 candidate
+
+**Date**: 2026-08-04
+
+**Source tag**: `v0.7.0` (commit
+`2eb63eab87def3678f67d0d2e261b63c4bc08f3c`)
+
+**Target**: `v0.7.1` publish-finalization candidate based on public `main`
+`42c6662b3e705554d21598cb7323122c382d2d10`; final candidate evidence is
+recorded by the publish-finalization PR.
+
+**Install mode**: copy
+
+**Profile**: `recommended`
+
+### Isolated runtime lifecycle
+
+1. A fresh candidate install created a schema-2 `recommended` copy runtime with
+   exact source identity and no conflicts.
+2. Runtime status reported managed-file, source-provenance, bridge, and project
+   facts without inferring remote-latest state.
+3. Uninstall preserved unknown content and removed the isolated managed runtime.
+
+Result: **PASS**. Fresh install, status, managed-file accounting, provenance, and
+uninstall remain conservative and deterministic.
+
+### Runtime upgrade and content protection
+
+1. Installed the published `v0.7.0` `recommended` profile into an isolated copy
+   runtime.
+2. Re-ran the candidate installer through the ordinary default incremental path,
+   without `-ReplaceManaged` or its deprecated compatibility alias.
+3. The clean runtime updated source-changed managed files, preserved unchanged
+   files, reported no conflicts, and produced a current schema-2 copy manifest.
+4. A separate protection case preserved unknown content and a locally modified
+   managed file, reported the managed conflict, and did not silently replace the
+   local change.
+
+Result: **PASS**. A clean `v0.7.0` copy runtime upgrades directly, while unknown
+and locally modified content remains protected by default.
+
+### Existing project memory and context metadata
+
+Two Simplified Chinese projects were created from the isolated `v0.7.0` runtime
+before the runtime upgrade. One remained unmodified; the other customized a
+project-root template before refresh.
+
+- Candidate status and the installed context gate reported the project-template
+  state through trusted managed-copy provenance.
+- The conservative `-RefreshUnmodifiedTemplates` path updated eligible old
+  templates, created backups for accepted changes, and preserved the customized
+  file hash.
+- Hub-lock inspection, memory-upgrade analysis, context gate, and memory
+  diagnosis completed without requiring forced project migration.
+- Optional `-Query` matching returned deterministic Summary / Keywords metadata
+  evidence for a known match and a fail-soft empty result for a miss. Matches did
+  not load or apply entry bodies.
+
+Result: **PASS**. Project state remains visible, conservative refresh respects
+local customization, and metadata matching stays optional and read-only.
+
+### Agent skill bridge
+
+An explicit bridge for `project-bootstrap` and `project-context-gate` completed
+with both links current and no stale, broken, conflicting, or unknown entries.
+The ordinary installer did not create an implicit client bridge.
+
+Result: **PASS**. The bridge remains opt-in and status-visible after upgrade.
+
+### Final candidate binding
+
+The publish-finalization PR records the final candidate commit and the completed
+PowerShell 7, Windows PowerShell 5.1, and hosted evidence for that head. A branch
+commit is review evidence only; the final tag target is determined by the later
+authorized merge.
+
+### Limitations
+
+- The rehearsal used the `recommended` profile on Windows; full release
+  validation separately covers every install profile, supported hosted operating
+  system, and both PowerShell runtimes.
+- The rehearsal exercised representative unmodified and customized projects. It
+  does not replace project-specific review before accepting a suggested template
+  refresh.
+- Bridge targets were isolated client directories, not production client
+  runtimes.

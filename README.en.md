@@ -4,7 +4,7 @@ English (current) | Simplified Chinese: [README.md](README.md)
 
 > A lightweight Workflow Kernel for agent-assisted software projects.
 
-Current release: `v0.7.0` (latest published release)
+Current release: `v0.7.1` (latest published release)
 
 This README describes `main`. When using a published version, follow the README
 and Release Notes from the corresponding tag.
