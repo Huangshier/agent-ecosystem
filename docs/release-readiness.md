@@ -1,6 +1,6 @@
 # Release Readiness
 
-Status: `v0.7.0` published public release.
+Status: `v0.7.1` published public release.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -34,7 +34,32 @@ and experience search correctness fixes.
 `v0.7.0` packages reliable runtime and project status, proactive project drift
 guidance, a single authoritative project behavior contract, lifecycle-oriented
 adoption docs, and risk-tiered release validation with evidence and cost
-guardrails.
+guardrails. `v0.7.1` packages the post-`v0.7.0` runtime/bootstrap/status fixes,
+restored project-template discovery guidance, deterministic context metadata
+matching, and local/hosted validation routing and evidence reliability work.
+
+## v0.7.1 Published State
+
+Current `main` includes the post-`v0.7.0` maintenance changes summarized in
+`docs/releases/v0.7.1.md`. `v0.7.1` is aligned for tag and GitHub Release
+publication from the merge commit of the `v0.7.1` publish-finalization PR.
+
+GitHub Release `v0.7.1` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.1
+
+Tag target: merge commit for the `v0.7.1` publish-finalization PR.
+
+Local release validation for this alignment passed on PowerShell 7 and Windows
+PowerShell 5.1 with `PASS=25 FAIL=0 WARN=0 DEFERRED=0`.
+
+The `v0.7.0` to current-candidate isolated rehearsal passed for fresh
+install/status/uninstall, default copy-mode runtime upgrade, managed and local
+modification protection, project state and conservative refresh boundaries,
+context metadata matching, and the explicit project-bootstrap /
+project-context-gate skill bridge. Final evidence is bound to the candidate head.
+
+Release body source: `docs/releases/v0.7.1.md`, between `RELEASE_BODY_START`
+and `RELEASE_BODY_END`.
 
 ## v0.7.0 Published State
 

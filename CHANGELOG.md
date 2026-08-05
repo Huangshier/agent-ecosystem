@@ -4,7 +4,28 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.7.0` release.
+- No unreleased public changes after the `v0.7.1` release.
+
+## v0.7.1 - 2026-08-04
+
+- Hardened runtime and bootstrap state handling: invalid explicit knowledge-hub
+  roots now fail before writes, verified managed-copy runtimes can use legacy
+  Git lock baselines safely, and status reports snapshot consistency, source
+  provenance, and remote-latest state as separate additive facts. (Issues #269,
+  #271, #278; PRs #270, #272, #289, #290)
+- Restored bilingual global-experience discovery guidance in new project
+  templates and added optional deterministic `-Query` matching over context
+  Summary / Keywords metadata without treating matches as loaded or authorized
+  content. (Issues #276, #277; PRs #281, #291)
+- Made local and hosted validation more deterministic and economical through
+  classifier-owned local plans, Tier 3 and suite/host sharding, exact
+  merge-candidate evidence, generation-atomic retries, main-lineage shadowing,
+  pre-merge PowerShell encoding checks, and a shared sensitive-keyword scan
+  contract. (Issues #273, #282, #286, #292; PRs #274, #275, #283-#285,
+  #287, #288, #293)
+- Preserved the existing installer profiles, PowerShell 5.1 support, explicit
+  agent skill bridge, public Workflow Kernel positioning, and default user
+  lifecycle while tightening failure handling and validation evidence.
 
 ## v0.7.0 - 2026-07-15
 
