@@ -451,29 +451,29 @@ Local release validation for this alignment passed with
 ## Current Quick Start
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended
 ```
 
 Safe validation form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
 Full release validation form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Machine-readable output form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
 
-Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or
-when PowerShell 7+ is already available.
+Use PowerShell 7.6 LTS with the same `pwsh -NoProfile -NonInteractive -File`
+invocation on every supported platform.
 
 ## Installer Metadata
 

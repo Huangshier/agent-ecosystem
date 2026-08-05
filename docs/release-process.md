@@ -10,7 +10,7 @@ Run the release validation gate before any push, tag, or published release.
 For publish-ready finalization, pass the version that is about to be tagged:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
@@ -18,9 +18,7 @@ the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` plus `install-report.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
 PowerShell 7.6 LTS is the required runtime for public scripts; run them with
-`pwsh -NoProfile -File` and the same script
-arguments. The Windows `-ExecutionPolicy Bypass` flag is process-scoped and
-helps when local execution policy or Mark-of-the-Web blocks downloaded scripts.
+`pwsh -NoProfile -NonInteractive -File` and the same script arguments.
 See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
 the public release line does not ship Bash or Zsh wrappers yet, and future
 wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
@@ -29,7 +27,7 @@ When a maintainer intentionally reuses a persistent scratch parent, inspect
 retention before deleting anything:
 
 ```powershell
-pwsh -NoProfile -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
+pwsh -NoProfile -NonInteractive -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
 ```
 
 The pruning helper is a dry run by default. Add `-Apply` only after reviewing

@@ -406,7 +406,7 @@ try {
     $readmeEn = Get-FileText -RelativePath "README.en.md"
     $roadmap = Get-FileText -RelativePath "docs/roadmap/evolution-plan.md"
     $shellExpectations = [ordered]@{
-        "docs/shell-strategy.md" = @("PowerShell 7.6", "pwsh -NoProfile -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
+        "docs/shell-strategy.md" = @("PowerShell 7.6", "pwsh -NoProfile -NonInteractive -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
         "docs/release-process.md" = @("Shell strategy", "Bash or Zsh wrappers", "canonical", ".ps1")
         "README.md" = @("Shell strategy")
         "README.en.md" = @("Shell strategy")

@@ -16,6 +16,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "validation/powershell-runtime-requirement.ps1")
+Assert-AgentEcosystemPowerShellRuntime
 $defaultRepoRoot = Split-Path -Parent $scriptDir
 $repoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) { $defaultRepoRoot } else { [System.IO.Path]::GetFullPath($RepositoryRoot) }
 $rulesPath = Join-Path $scriptDir "validation/change-risk-rules.json"

@@ -11,6 +11,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "validation/powershell-runtime-requirement.ps1")
+Assert-AgentEcosystemPowerShellRuntime
 $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "lib/path-guard.ps1")
 . (Join-Path $scriptDir "validation/release-test-helper.ps1")

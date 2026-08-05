@@ -6,8 +6,9 @@ maintenance entrypoints are the checked-in `.ps1` scripts.
 
 ## Current Support
 
-- Required runtime: PowerShell 7.6 LTS with `pwsh -NoProfile -File` on Windows,
-  Ubuntu, macOS, and other environments where PowerShell 7.6 is available.
+- Required runtime: PowerShell 7.6 LTS with
+  `pwsh -NoProfile -NonInteractive -File` on Windows, Ubuntu, macOS, and other
+  supported environments.
 - Windows PowerShell 5.1 is not supported and `powershell.exe` is not used by
   the public scripts.
 - CI path: `.github/workflows/release-validation.yml` runs the release validator
@@ -17,7 +18,7 @@ maintenance entrypoints are the checked-in `.ps1` scripts.
 
 No Bash or Zsh wrappers are shipped in the current public release line. Users in
 POSIX shells should install PowerShell 7.6 and call the canonical `.ps1`
-entrypoints through `pwsh -NoProfile -File`.
+entrypoints through `pwsh -NoProfile -NonInteractive -File`.
 
 Future Bash or Zsh support should be a thin compatibility layer, not a second
 implementation. A wrapper may locate `pwsh`, normalize arguments, and delegate to

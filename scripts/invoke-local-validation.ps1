@@ -18,6 +18,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "validation/powershell-runtime-requirement.ps1")
+Assert-AgentEcosystemPowerShellRuntime
 $defaultRepoRoot = Split-Path -Parent $scriptDir
 $repoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) { $defaultRepoRoot } else { [System.IO.Path]::GetFullPath($RepositoryRoot) }
 $script:inputParameterSet = $PSCmdlet.ParameterSetName
@@ -33,10 +35,7 @@ function Get-HostExecutable {
     if ($HostName -eq "current") {
         return [string](Get-Process -Id $PID).Path
     }
-    $commandName = "pwsh"
-    $command = Get-Command $commandName -ErrorAction SilentlyContinue
-    if ($null -eq $command) { return "" }
-    return [string]$command.Source
+    return Resolve-AgentEcosystemPwshExecutable
 }
 
 function Format-CommandArgument {
@@ -65,7 +64,7 @@ function Get-ActionInvocation {
     $scriptArguments += "-Json"
 
     $hostExecutable = Get-HostExecutable -HostName ([string]$Action.host)
-    $hostArguments = @("-NoProfile")
+    $hostArguments = @("-NoProfile", "-NonInteractive")
     $hostArguments += @("-File", $scriptPath)
     $hostArguments += $scriptArguments
     $displayExecutable = if ([string]::IsNullOrWhiteSpace($hostExecutable)) { "<unavailable:$($Action.host)>" } else { $hostExecutable }
@@ -110,6 +109,7 @@ $startedAt = [DateTimeOffset]::UtcNow
 $stageStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $actionResults = New-Object 'System.Collections.Generic.List[object]'
 $failed = $false
+$unavailable = $false
 $actions = @($stagePlan.actions)
 Write-ActionCheckpoint -Status "RUNNING" -StageStartedAt $startedAt -StageStopwatch $stageStopwatch -Results @() -Skipped @($stagePlan.skipped)
 for ($index = 0; $index -lt $actions.Count; $index++) {
@@ -120,7 +120,13 @@ for ($index = 0; $index -lt $actions.Count; $index++) {
     $status = "PLANNED"
     $exitCode = $null
     $outputLines = @()
-    if (-not $DryRun.IsPresent) {
+    if ($DryRun.IsPresent -and [string]::IsNullOrWhiteSpace([string]$invocation.executable)) {
+        $status = "UNAVAILABLE"
+        $exitCode = 127
+        $outputLines = @("Required host '$($action.host)' is unavailable.")
+        $unavailable = $true
+    }
+    elseif (-not $DryRun.IsPresent) {
         if ([string]::IsNullOrWhiteSpace([string]$invocation.executable)) {
             $status = "FAIL"
             $exitCode = 127
@@ -146,7 +152,7 @@ for ($index = 0; $index -lt $actions.Count; $index++) {
         completed_at_utc = $actionCompletedAt.ToString("o")
         duration_ms = [long]$actionStopwatch.ElapsedMilliseconds
         output_line_count = @($outputLines).Count
-        failure_output = $(if ($status -eq "FAIL") { @($outputLines | Select-Object -Last 20) } else { @() })
+        failure_output = $(if ($status -in @("FAIL", "UNAVAILABLE")) { @($outputLines | Select-Object -Last 20) } else { @() })
     })
     Write-ActionCheckpoint -Status $(if ($status -eq "FAIL") { "FAIL" } else { "RUNNING" }) -StageStartedAt $startedAt -StageStopwatch $stageStopwatch -Results @($actionResults.ToArray()) -Skipped @($stagePlan.skipped)
     if ($status -eq "FAIL") {
@@ -178,7 +184,7 @@ $completedAt = [DateTimeOffset]::UtcNow
 $result = [ordered]@{
     schema_version = 1
     stage = $Stage
-    status = $(if ($failed) { "FAIL" } else { "PASS" })
+    status = $(if ($failed -or $unavailable) { "FAIL" } else { "PASS" })
     dry_run = [bool]$DryRun.IsPresent
     result_path = $(if ($DryRun.IsPresent) { $null } else { $resultPath })
     classification = $classification
@@ -192,7 +198,7 @@ $result = [ordered]@{
     summary = [ordered]@{
         planned = @($actionResults | Where-Object status -eq "PLANNED").Count
         pass = @($actionResults | Where-Object status -eq "PASS").Count
-        fail = @($actionResults | Where-Object status -eq "FAIL").Count
+        fail = @($actionResults | Where-Object status -in @("FAIL", "UNAVAILABLE")).Count
         skipped = @($stagePlan.skipped).Count + @($actionResults | Where-Object status -eq "SKIPPED").Count
     }
 }
@@ -215,4 +221,4 @@ else {
     if (-not $DryRun.IsPresent) { Write-Output ("Result: {0}" -f $resultPath) }
 }
 
-if ($failed) { throw "Local validation stage '$Stage' failed." }
+if ($failed -or $unavailable) { throw "Local validation stage '$Stage' failed." }

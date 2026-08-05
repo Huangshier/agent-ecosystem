@@ -1,0 +1,23 @@
+[
+  {
+    "name": "core-7-5-rejected",
+    "edition": "Core",
+    "version": "7.5.9",
+    "accepted": false,
+    "error": "PowerShell 7.6 or later is required."
+  },
+  {
+    "name": "core-7-6-accepted",
+    "edition": "Core",
+    "version": "7.6.3",
+    "accepted": true,
+    "error": ""
+  },
+  {
+    "name": "desktop-rejected",
+    "edition": "Desktop",
+    "version": "5.1.26100.4652",
+    "accepted": false,
+    "error": "PowerShell Core edition is required."
+  }
+]

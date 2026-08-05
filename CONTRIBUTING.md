@@ -34,14 +34,12 @@ Recommended checks before proposing a change:
 
 ```powershell
 git diff --check
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
 PowerShell 7.6 LTS is the required runtime for public scripts. Use
-`pwsh -NoProfile -File` with the same script arguments on Windows, Ubuntu,
-macOS, and other environments where PowerShell 7.6 is available. The Windows
-`-ExecutionPolicy Bypass` example is process-scoped and helps when downloaded
-scripts are blocked by local policy or Mark-of-the-Web.
+`pwsh -NoProfile -NonInteractive -File` with the same script arguments on
+Windows, Ubuntu, macOS, and other supported environments.
 
 For PowerShell changes, parse scripts before committing:
 

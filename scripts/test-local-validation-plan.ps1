@@ -55,6 +55,47 @@ foreach ($action in @($prePushDryRun.actions)) {
 if ([long]$prePushDryRun.timing.duration_ms -lt 0) { throw "Pre-push stage emitted negative timing." }
 $results.Add([ordered]@{ name = "orchestrator-dry-run"; status = "PASS" })
 
+$processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$processStartInfo.FileName = [string](Get-Process -Id $PID).Path
+$processStartInfo.UseShellExecute = $false
+$processStartInfo.RedirectStandardOutput = $true
+$processStartInfo.RedirectStandardError = $true
+$escapedOrchestrator = $orchestrator.Replace("'", "''")
+$missingPwshCommand = @"
+function global:Get-Command {
+    [CmdletBinding()]
+    param([Parameter(Position = 0)][string]`$Name, [object]`$CommandType)
+    if (`$Name -ceq 'pwsh') { return `$null }
+    return Microsoft.PowerShell.Core\Get-Command @PSBoundParameters
+}
+& '$escapedOrchestrator' -Stage release -ChangedPath README.md -DryRun -Json
+"@
+$encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($missingPwshCommand))
+foreach ($argument in @("-NoProfile", "-NonInteractive", "-EncodedCommand", $encodedCommand)) {
+    [void]$processStartInfo.ArgumentList.Add([string]$argument)
+}
+$missingPwshProcess = [System.Diagnostics.Process]::Start($processStartInfo)
+$missingPwshStdout = $missingPwshProcess.StandardOutput.ReadToEnd()
+$missingPwshStderr = $missingPwshProcess.StandardError.ReadToEnd()
+$missingPwshProcess.WaitForExit()
+if ($missingPwshProcess.ExitCode -eq 0) {
+    throw "Release dry-run with missing pwsh returned a successful process exit."
+}
+$missingPwshDryRun = $missingPwshStdout | ConvertFrom-Json
+$unavailablePwshActions = @($missingPwshDryRun.actions | Where-Object {
+    $_.host -eq "pwsh" -and $_.status -eq "UNAVAILABLE" -and [int]$_.exit_code -eq 127
+})
+if ([string]$missingPwshDryRun.status -cne "FAIL" -or $unavailablePwshActions.Count -lt 1 -or [int]$missingPwshDryRun.summary.fail -lt 1) {
+    throw "Release dry-run reported missing pwsh as executable success."
+}
+if (@($missingPwshDryRun.actions | Where-Object { $_.host -eq "pwsh" -and $_.status -in @("PASS", "PLANNED") }).Count -ne 0) {
+    throw "Release dry-run left a missing pwsh action in a successful or executable state."
+}
+if ($missingPwshStderr -notmatch "Local validation stage 'release' failed\.") {
+    throw "Release dry-run with missing pwsh did not emit the stable stage failure."
+}
+$results.Add([ordered]@{ name = "missing-pwsh-fails-closed"; status = "PASS" })
+
 $invalid = Get-Classification -Path "README.md"
 $invalid.local_plan.stages.iteration.actions[0].script = "scripts/validate-release.ps1"
 $rejected = $false
