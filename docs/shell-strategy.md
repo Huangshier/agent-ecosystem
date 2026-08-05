@@ -6,21 +6,17 @@ maintenance entrypoints are the checked-in `.ps1` scripts.
 
 ## Current Support
 
-- Windows bare-machine path: Windows PowerShell 5.1 with
-  `powershell -NoProfile -ExecutionPolicy Bypass -File`.
-- Cross-platform path: PowerShell 7+ with `pwsh -NoProfile -File` on Windows,
-  Ubuntu, macOS, and other environments where PowerShell 7+ is available.
+- Required runtime: PowerShell 7.6 LTS with `pwsh -NoProfile -File` on Windows,
+  Ubuntu, macOS, and other environments where PowerShell 7.6 is available.
+- Windows PowerShell 5.1 is not supported and `powershell.exe` is not used by
+  the public scripts.
 - CI path: `.github/workflows/release-validation.yml` runs the release validator
-  with `pwsh` on Windows, Ubuntu, and macOS, plus Windows PowerShell 5.1 on
-  Windows.
-
-The same script arguments should work across both PowerShell hosts unless a
-script documents a narrower platform requirement.
+  with `pwsh` on Windows, Ubuntu, and macOS.
 
 ## Non-PowerShell Shells
 
 No Bash or Zsh wrappers are shipped in the current public release line. Users in
-POSIX shells should install PowerShell 7+ and call the canonical `.ps1`
+POSIX shells should install PowerShell 7.6 and call the canonical `.ps1`
 entrypoints through `pwsh -NoProfile -File`.
 
 Future Bash or Zsh support should be a thin compatibility layer, not a second
@@ -33,7 +29,7 @@ context discovery, release validation, or manifest cleanup logic.
 Future releases may add one of these paths:
 
 - Thin POSIX wrappers that delegate to `pwsh`.
-- Package-manager installation snippets that install PowerShell 7+ first and
+- Package-manager installation snippets that install PowerShell 7.6 first and
   then call the canonical `.ps1` scripts.
 - A small cross-platform binary only if repeated usage proves that script
   wrappers are not enough.

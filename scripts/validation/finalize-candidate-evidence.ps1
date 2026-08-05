@@ -49,7 +49,6 @@ function Get-OrdinalStrings([object[]]$Values = @()) {
 function Convert-HostIdentity([object]$Fragment) {
     $hostIdentity = [string]$Fragment.identity.host
     $job = [string]$Fragment.identity.job
-    if ($job -ceq "validate-windows-powershell") { return "windows-powershell" }
     if ($hostIdentity.StartsWith("Windows-", [System.StringComparison]::Ordinal)) { return "windows-latest" }
     if ($hostIdentity.StartsWith("Linux-", [System.StringComparison]::Ordinal)) { return "ubuntu-latest" }
     if ($hostIdentity.StartsWith("macOS-", [System.StringComparison]::Ordinal)) { return "macos-latest" }
@@ -145,7 +144,6 @@ if ([string]$finalGate.repository -cne $Repository -or [int]$finalGate.pr_number
 [string[]]$actualHosts = Get-OrdinalStrings @($fragments.ToArray() | ForEach-Object { Convert-HostIdentity $_ })
 [string[]]$requiredSuites = Get-OrdinalStrings @($classification.required_suites)
 [string[]]$requiredHosts = Get-OrdinalStrings @($classification.required_hosts)
-if ([bool]$classification.requires_windows_powershell) { [string[]]$requiredHosts = Get-OrdinalStrings @($requiredHosts + "windows-powershell") }
 $missingSuites = @($requiredSuites | Where-Object { $actualSuites -cnotcontains $_ })
 $missingHosts = @($requiredHosts | Where-Object { $actualHosts -cnotcontains $_ })
 if ($missingSuites.Count -or $missingHosts.Count) { throw "Suite/host closure is incomplete: suites=$($missingSuites -join ','); hosts=$($missingHosts -join ',')." }
@@ -171,12 +169,11 @@ $payload = [ordered]@{
         self_protection_reason = [string]$classifierProperties.self_protection_reason
     }
     required = [ordered]@{
-        suites = @($requiredSuites); hosts = @($requiredHosts); windows_powershell = [bool]$classification.requires_windows_powershell
+        suites = @($requiredSuites); hosts = @($requiredHosts)
         self_protection = [bool]$classification.run_validation_self_protection
     }
     actual = [ordered]@{ suites = @($actualSuites); hosts = @($actualHosts); fragment_count = $fragments.Count }
     decisions = [ordered]@{
-        windows_powershell = $(if ([bool]$classification.requires_windows_powershell) { "required-and-passed" } else { "not-required" })
         self_protection = $(if ([bool]$classification.run_validation_self_protection) { "required-and-passed" } else { "not-required" })
     }
     contracts = [ordered]@{ workflow = $WorkflowIdentity; routing = $RoutingContractIdentity; gate = $GateContractIdentity }

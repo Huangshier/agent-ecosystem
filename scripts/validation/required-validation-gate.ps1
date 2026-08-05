@@ -7,10 +7,8 @@ param(
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$TargetedResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$SelfProtectionResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$SelfProtectionRequired,
-    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$WindowsPowerShellRequired,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PlatformNeutralResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PwshMatrixResult,
-    [Parameter(Mandatory = $true)][AllowEmptyString()][string]$WindowsPowerShellResult,
     [switch]$Json
 )
 
@@ -26,7 +24,6 @@ $results = [ordered]@{
     self_protection = $SelfProtectionResult
     platform_neutral = $PlatformNeutralResult
     pwsh_matrix = $PwshMatrixResult
-    windows_powershell = $WindowsPowerShellResult
 }
 
 if ($knownEvents -cnotcontains $EventName) {
@@ -39,11 +36,10 @@ if ($EventName -in @("workflow_dispatch", "schedule") -and $Tier -cne "3") {
     throw "Required validation gate requires Tier '3' for checkpoint events, got '$Tier'."
 }
 $booleanValues = @("true", "false")
-if ($booleanValues -cnotcontains $SelfProtectionRequired -or $booleanValues -cnotcontains $WindowsPowerShellRequired) {
+if ($booleanValues -cnotcontains $SelfProtectionRequired) {
     throw "Required validation gate received an invalid suite/oracle routing decision."
 }
 $expectedSelfProtection = if ($SelfProtectionRequired -ceq "true" -and $EventName -in @("pull_request", "push")) { "success" } else { "skipped" }
-$expectedWindowsPowerShell = if ($EventName -ceq "pull_request") { $(if ($WindowsPowerShellRequired -ceq "true") { "success" } else { "skipped" }) } else { "success" }
 foreach ($entry in $results.GetEnumerator()) {
     if ($knownResults -cnotcontains [string]$entry.Value) {
         throw "Required validation gate received unknown result '$($entry.Value)' for '$($entry.Key)'."
@@ -53,24 +49,24 @@ foreach ($entry in $results.GetEnumerator()) {
 $expected = if ($EventName -ceq "pull_request") {
     switch ($Tier) {
         { $_ -ceq "0" -or $_ -ceq "1" } {
-            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped"; windows_powershell = $expectedWindowsPowerShell }
+            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
         "2" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped"; windows_powershell = $expectedWindowsPowerShell }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
         "3" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped"; windows_powershell = $expectedWindowsPowerShell }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
     }
 }
 elseif ($EventName -ceq "push") {
-    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "success"; pwsh_matrix = "success"; windows_powershell = "success" }
+    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "success"; pwsh_matrix = "success" }
 }
 else {
-    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = "skipped"; platform_neutral = "success"; pwsh_matrix = "success"; windows_powershell = "success" }
+    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = "skipped"; platform_neutral = "success"; pwsh_matrix = "success" }
 }
 
 $mismatches = New-Object 'System.Collections.Generic.List[string]'

@@ -90,16 +90,6 @@ if ($explicitSelfProtectionReason -isnot [string] -or [string]::IsNullOrWhiteSpa
 if ([bool]$controlPlane -and -not [bool]$selfProtection) {
     throw "A classifier control-plane owner must require self-protection."
 }
-foreach ($booleanName in @("requires_windows_powershell", "conservative_fallback")) {
-    if ((Get-RequiredPropertyValue -InputObject $Result -Name $booleanName) -isnot [bool]) {
-        throw "Classifier property '$booleanName' must be an actual Boolean."
-    }
-}
-$requiredWindowsPowerShellSuites = @(Get-RequiredPropertyValue -InputObject $Result -Name "required_windows_powershell_suites")
-if ([bool]$Result.requires_windows_powershell -ne ($requiredWindowsPowerShellSuites.Count -gt 0)) {
-    throw "Classifier WinPS decision must exactly match its WinPS suite list."
-}
-
 $requiredSuites = @(Get-RequiredPropertyValue -InputObject $Result -Name "required_suites")
 $requiredHosts = @(Get-RequiredPropertyValue -InputObject $Result -Name "required_hosts")
 $suiteHostMap = Get-RequiredPropertyValue -InputObject $Result -Name "suite_host_map"
@@ -116,10 +106,9 @@ foreach ($suite in $requiredSuites) {
         if ($knownHosts -cnotcontains [string]$hostName -or $requiredHosts -cnotcontains [string]$hostName) { throw "Classifier suite '$suite' has an invalid or missing required host '$hostName'." }
     }
 }
-foreach ($suite in $requiredWindowsPowerShellSuites) {
-    if ($requiredSuites -cnotcontains [string]$suite) { throw "Classifier WinPS suite '$suite' is not an affected suite." }
-}
-if ([bool]$Result.conservative_fallback -and ($requiredSuites.Count -eq 0 -or $requiredHosts.Count -eq 0 -or -not [bool]$selfProtection)) {
+$conservativeFallback = Get-RequiredPropertyValue -InputObject $Result -Name "conservative_fallback"
+if ($conservativeFallback -isnot [bool]) { throw "Classifier property 'conservative_fallback' must be an actual Boolean." }
+if ([bool]$conservativeFallback -and ($requiredSuites.Count -eq 0 -or $requiredHosts.Count -eq 0 -or -not [bool]$selfProtection)) {
     throw "Conservative fallback must produce non-empty suites, hosts, and an independent self-protection oracle."
 }
 if ([int]$Result.detected_tier -eq 3 -and $requiredSuites.Count -eq 0 -and -not [bool]$selfProtection) {
@@ -146,11 +135,10 @@ if ($requiredSuites.Count -gt 0) {
     foreach ($suite in @($requiredSuites | Sort-Object -Unique)) { $expectedRequiredChecks.Add("affected-suite:$suite") }
 }
 else { $expectedSkippedChecks.Add("targeted-module-checks") }
-if ([bool]$Result.requires_windows_powershell) { $expectedRequiredChecks.Add("affected-windows-powershell") } else { $expectedSkippedChecks.Add("affected-windows-powershell") }
 if ([bool]$selfProtection) { $expectedRequiredChecks.Add("validation-self-protection") } else { $expectedSkippedChecks.Add("validation-self-protection") }
 $expectedSkippedChecks.Add("full-release-matrix")
 if (($requiredChecks -join ',') -cne (@($expectedRequiredChecks.ToArray()) -join ',') -or ($skippedChecks -join ',') -cne (@($expectedSkippedChecks.ToArray()) -join ',')) {
-    throw "Classifier required_checks/skipped_checks do not match the affected-suite, WinPS, self-protection, and PR full-skip plan."
+    throw "Classifier required_checks/skipped_checks do not match the affected-suite, self-protection, and PR full-skip plan."
 }
 
 $expectedCoverageSuites = @(

@@ -2,7 +2,7 @@
 # Extracted from scripts/validate-release.ps1 Invoke-ReleaseValidationParserSafetyChecks (Phase 2).
 # Routes repository safety checks to PlatformNeutral and parser compatibility checks to RuntimePlatform.
 # Depends on: release-test-helper.ps1 (Add-Check, ConvertTo-DisplayPath, Get-GitFiles, Get-LineMatches,
-#             Get-ValidationFilesByExtension, Test-BytesHaveUtf8Bom, Test-BytesHaveNonAscii,
+#             Get-ValidationFilesByExtension, Test-BytesHaveNonAscii,
 #             Get-PowerShellParseError), path-guard.ps1 (Join-PathParts).
 # Scope: script-level $repoRoot, $script:evidence, $checks.
 
@@ -31,29 +31,34 @@ if ($ValidationShard -ceq "RuntimePlatform") {
 try {
     $encodingErrors = New-Object 'System.Collections.Generic.List[string]'
     $psFiles = @(Get-ValidationFilesByExtension -Root $repoRoot -Filter "*.ps1")
+    $utf8Strict = [System.Text.UTF8Encoding]::new($false, $true)
     foreach ($file in $psFiles) {
         $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
         if ($bytes.Length -eq 0) {
             continue
         }
 
-        $hasUtf8Bom = Test-BytesHaveUtf8Bom -Bytes $bytes
         $hasNonAscii = Test-BytesHaveNonAscii -Bytes $bytes
-
-        if ($hasNonAscii -and -not $hasUtf8Bom) {
-            $encodingErrors.Add(("{0}: contains non-ASCII bytes but is not UTF-8 with BOM" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot)))
+        if (-not $hasNonAscii) {
+            continue
+        }
+        try {
+            $utf8Strict.GetString($bytes) | Out-Null
+        }
+        catch {
+            $encodingErrors.Add(("{0}: contains non-ASCII bytes that are not valid UTF-8" -f (ConvertTo-DisplayPath -Path $file.FullName -Root $repoRoot)))
         }
     }
 
     if ($encodingErrors.Count -gt 0) {
-        Add-Check "Windows PowerShell script encoding" "FAIL" "Non-ASCII PowerShell scripts must be UTF-8 with BOM so Windows PowerShell 5.1 parses them correctly." @($encodingErrors.ToArray())
+        Add-Check "PowerShell script encoding" "FAIL" "Non-ASCII PowerShell scripts must be valid UTF-8 for the PowerShell 7.6 baseline." @($encodingErrors.ToArray())
     }
     else {
-        Add-Check "Windows PowerShell script encoding" "PASS" "Non-ASCII PowerShell scripts are UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
+        Add-Check "PowerShell script encoding" "PASS" "Non-ASCII PowerShell scripts are valid UTF-8 for the PowerShell 7.6 baseline."
     }
 }
 catch {
-    Add-Check "Windows PowerShell script encoding" "FAIL" $_.Exception.Message
+    Add-Check "PowerShell script encoding" "FAIL" $_.Exception.Message
 }
 
 try {

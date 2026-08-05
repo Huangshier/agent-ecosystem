@@ -37,11 +37,11 @@ git diff --check
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
-Windows PowerShell 5.1 is supported for public scripts. On non-Windows systems,
-or when PowerShell 7+ is already available, use `pwsh -NoProfile -File` with the
-same script arguments. The Windows `-ExecutionPolicy Bypass` example is
-process-scoped and helps when downloaded scripts are blocked by local policy or
-Mark-of-the-Web.
+PowerShell 7.6 LTS is the required runtime for public scripts. Use
+`pwsh -NoProfile -File` with the same script arguments on Windows, Ubuntu,
+macOS, and other environments where PowerShell 7.6 is available. The Windows
+`-ExecutionPolicy Bypass` example is process-scoped and helps when downloaded
+scripts are blocked by local policy or Mark-of-the-Web.
 
 For PowerShell changes, parse scripts before committing:
 

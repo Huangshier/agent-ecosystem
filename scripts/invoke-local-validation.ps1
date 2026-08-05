@@ -33,7 +33,7 @@ function Get-HostExecutable {
     if ($HostName -eq "current") {
         return [string](Get-Process -Id $PID).Path
     }
-    $commandName = if ($HostName -eq "windows-powershell") { "powershell.exe" } else { "pwsh" }
+    $commandName = "pwsh"
     $command = Get-Command $commandName -ErrorAction SilentlyContinue
     if ($null -eq $command) { return "" }
     return [string]$command.Source
@@ -66,9 +66,6 @@ function Get-ActionInvocation {
 
     $hostExecutable = Get-HostExecutable -HostName ([string]$Action.host)
     $hostArguments = @("-NoProfile")
-    if ([string]$Action.host -eq "windows-powershell") {
-        $hostArguments += @("-ExecutionPolicy", "Bypass")
-    }
     $hostArguments += @("-File", $scriptPath)
     $hostArguments += $scriptArguments
     $displayExecutable = if ([string]::IsNullOrWhiteSpace($hostExecutable)) { "<unavailable:$($Action.host)>" } else { $hostExecutable }

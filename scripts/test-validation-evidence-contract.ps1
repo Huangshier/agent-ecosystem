@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$Json)
 
 $ErrorActionPreference = "Stop"
@@ -124,11 +124,11 @@ try {
     Assert-Contract $unknownShardFailed "unknown-validation-shard-fails-closed"
 
     $workflow = Get-Content -LiteralPath $workflowPath -Raw
-    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 8) "eight-success-upload-contracts"
-    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 6) "six-failure-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: success\(\)")).Count -eq 7) "seven-success-upload-contracts"
+    Assert-Contract (@([regex]::Matches($workflow, "if: failure\(\)")).Count -eq 5) "five-failure-upload-contracts"
     Assert-Contract (-not $workflow.Contains("**/*.json")) "no-recursive-json-allowlist"
-    Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 6) "six-manifest-call-sites"
-    Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 2 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 2) "windows-heavy-decision-manifests"
+    Assert-Contract (@([regex]::Matches($workflow, "write-evidence-manifest\.ps1")).Count -eq 5) "five-manifest-call-sites"
+    Assert-Contract (@([regex]::Matches($workflow, 'HeavyTargetedStatus')).Count -eq 1 -and @([regex]::Matches($workflow, 'HeavyTargetedReason')).Count -eq 1) "heavy-decision-manifests"
     Assert-Contract ($workflow.Contains('validation-self-protection.json') -and $workflow.Contains('validation-self-protection-attempt-{0}')) "self-protection-evidence-uploaded"
     Assert-Contract (-not ([regex]::IsMatch($workflow, '(?m)^\s+\$\{\{ runner\.temp \}\}/.*validation-output\.json\s*$'))) "success-excludes-stream-capture"
     Assert-Contract (-not ([regex]::IsMatch($workflow, 'SuccessAllowlist[^\r\n]*validation-output\.json'))) "manifest-success-excludes-stream-capture"
@@ -137,8 +137,7 @@ try {
         @('name: affected-validation-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-targeted-validation'),
         @('validation-self-protection-failure-attempt-{0}', 'path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection'),
         @('name: validation-platform-neutral-failure', 'path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation'),
-        @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation'),
-        @("validation-windows-powershell-failure-attempt-{0}", '${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell')
+        @('name: validation-pwsh-${{ matrix.os }}-failure', 'path: ${{ runner.temp }}/agent-ecosystem-release-validation')
     )
     foreach ($contract in $failureUploadContracts) {
         Assert-Contract ($workflow.Contains($contract[0]) -and $workflow.Contains($contract[1])) ("failure-upload-root:{0}" -f $contract[0])
@@ -154,7 +153,7 @@ try {
         -RunId "124" `
         -RunAttempt "1" `
         -JobName "validate-failure" `
-        -HostIdentity "Windows-Desktop-5.1" `
+        -HostIdentity "Windows-Desktop-Pwsh7" `
         -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
     $failureManifest = Get-Content -LiteralPath (Join-Path $failureScratch "evidence-manifest.json") -Raw | ConvertFrom-Json
     Assert-Contract ($failureManifest.outcome -ceq "failure" -and $failureManifest.artifact_contract.failure.preserve_all_generated_files) "failure-policy-fixture"
@@ -181,7 +180,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $scratch "validation-result.json") -Destination (Join-Path $contradictionScratch "validation-result.json")
     $contradictionFailed = $false
     try {
-        & $writer -ScratchRoot $contradictionScratch -Outcome success -CommitSha $commitSha -RunId "126" -RunAttempt "1" -JobName "validate-contradiction" -HostIdentity "Windows-Desktop-5.1" -HeavyTargetedStatus executed -HeavyTargetedReason "fixture" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
+        & $writer -ScratchRoot $contradictionScratch -Outcome success -CommitSha $commitSha -RunId "126" -RunAttempt "1" -JobName "validate-contradiction" -HostIdentity "Windows-Desktop-Pwsh7" -HeavyTargetedStatus executed -HeavyTargetedReason "fixture" -SuccessAllowlist @("validation-result.json", "evidence-manifest.json") | Out-Null
     }
     catch { $contradictionFailed = $true }
     Assert-Contract $contradictionFailed "heavy-targeted-missing-evidence-fails-closed"
@@ -226,7 +225,7 @@ try {
         conservative_fallback = $false; escalation_reason = ""
         base_ref = $candidateBase; head_ref = $candidateHead
         required_suites = @("release-checkpoint"); required_hosts = @("ubuntu-latest")
-        requires_windows_powershell = $false; run_validation_self_protection = $false
+        run_validation_self_protection = $false
         validation_self_protection_reason = "not-tier-3"
         control_plane = $false; self_protection_required = $false; self_protection_reason = "not-tier-3"
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $classificationPath -Encoding UTF8
@@ -522,7 +521,7 @@ try {
         }).Count -eq 1
     ) "exact-candidate-real-git-parity"
     if ($PSVersionTable.PSEdition -ceq "Desktop") {
-        # NOTE: lineage matrix 的执行 oracle 是 PowerShell 7；WinPS 在此只校验同一矩阵和入口完整存在。
+        # NOTE: 当前基线仅支持 PowerShell 7.6（pwsh）；Desktop 分支仅在 Windows PowerShell 运行时触达，保留为防御性回退。
         Assert-Contract ([System.IO.File]::Exists((Join-Path $PSScriptRoot "validation/lineage-verifier-fixtures/cases.json")) -and [System.IO.File]::Exists((Join-Path $PSScriptRoot "test-lineage-verifier.ps1"))) "lineage-proof-fixture-surface"
     }
     else {
@@ -537,7 +536,7 @@ try {
     }
     Assert-Contract (-not [System.IO.File]::Exists((Join-Path $repoRoot ".github/scripts/resolve-validation-check-bindings.js"))) "guard-resolver-deleted"
     Assert-Contract ($workflow.Contains("github.event_name == 'push' && github.run_id") -and $workflow.Contains("cancel-in-progress: `${{ github.event_name != 'push' }}")) "push-concurrency-independent"
-    Assert-Contract (@([regex]::Matches($workflow, "resolve-pull-request-candidate\.ps1")).Count -eq 7 -and @([regex]::Matches($workflow, "ExpectedCandidateSha")).Count -eq 6) "all-pr-validation-jobs-reverify-candidate"
+    Assert-Contract (@([regex]::Matches($workflow, "resolve-pull-request-candidate\.ps1")).Count -eq 6 -and @([regex]::Matches($workflow, "ExpectedCandidateSha")).Count -eq 5) "all-pr-validation-jobs-reverify-candidate"
     Assert-Contract ($workflow.Contains("-BaseRef `$env:PR_BASE_SHA") -and $workflow.Contains("-HeadRef `$env:PR_HEAD_SHA")) "classifier-uses-exact-base-head"
     Assert-Contract (
         $workflow.Contains("run-name: `"`${{ github.event_name == 'pull_request'") -and

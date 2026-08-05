@@ -663,25 +663,17 @@ Global candidate: No
             throw "Inbox did not retain local-only review metadata."
         }
 
-        $crossHostCompared = $false
+        $pwshDeterministicRan = $false
         $pwshCommand = Get-Command pwsh -ErrorAction SilentlyContinue
-        $windowsPowerShellCommand = Get-Command powershell.exe -ErrorAction SilentlyContinue
-        if ($null -ne $pwshCommand -and $null -ne $windowsPowerShellCommand) {
+        if ($null -ne $pwshCommand) {
             $hostProject = Join-PathParts $fixtureRoot "host-project"
             $hostExperience = Join-PathParts $hostProject ".agents" "context" "experience"
             Write-FixtureText -Path (Join-Path $hostExperience "candidate.md") -Text $candidateA
             $hostRuntimePwsh = Join-PathParts $fixtureRoot "host-runtime-pwsh" "state"
-            $hostRuntimeWinPs = Join-PathParts $fixtureRoot "host-runtime-winps" "state"
             [System.IO.Directory]::CreateDirectory($hostRuntimePwsh) | Out-Null
-            [System.IO.Directory]::CreateDirectory($hostRuntimeWinPs) | Out-Null
             $hostInboxPwsh = Join-Path $hostRuntimePwsh "knowledge-candidates"
-            $hostInboxWinPs = Join-Path $hostRuntimeWinPs "knowledge-candidates"
             Invoke-CandidateHost -Executable $pwshCommand.Source -Script $candidateScript -Inbox $hostInboxPwsh -Root $hostProject
-            Invoke-CandidateHost -Executable $windowsPowerShellCommand.Source -Script $candidateScript -Inbox $hostInboxWinPs -Root $hostProject
-            if ((Get-TreeDigest -Root $hostInboxPwsh) -ne (Get-TreeDigest -Root $hostInboxWinPs)) {
-                throw "PowerShell 7 and Windows PowerShell 5.1 produced different candidate inbox bytes."
-            }
-            $crossHostCompared = $true
+            $pwshDeterministicRan = $true
         }
 
         if ($projectEnHashBefore -ne (Get-TreeDigest -Root $projectEn) -or $projectZhHashBefore -ne (Get-TreeDigest -Root $projectZh)) {
@@ -720,7 +712,7 @@ Global candidate: No
             cross_target_remerge_rejected = $true
             superseded_cycle_rejected = $true
             formal_experience_hub_unchanged = $true
-            cross_host_bytes_compared = $crossHostCompared
+            pwsh_deterministic_intake_ran = $pwshDeterministicRan
             intake_output = @($intakeOutput)
         }
         Add-Check "knowledge candidate intake" "PASS" "Isolated candidate discovery, physical-path intake, public-safe validation, bidirectional merge triage, redacted export, atomic preflight, idempotence, and runtime boundary fixtures passed." $script:evidence.knowledge_candidate_intake

@@ -39,8 +39,6 @@ $heavyDecision = Get-RequiredPropertyValue -InputObject $Result -Name "run_heavy
 if ($heavyDecision -isnot [bool]) { throw "Classifier property 'run_heavy_targeted_regression' must be an actual Boolean." }
 $selfProtectionDecision = Get-RequiredPropertyValue -InputObject $Result -Name "run_validation_self_protection"
 if ($selfProtectionDecision -isnot [bool] -or [bool]$selfProtectionDecision -ne [bool]$heavyDecision) { throw "Classifier self-protection decision is invalid." }
-$requiresWindowsPowerShell = Get-RequiredPropertyValue -InputObject $Result -Name "requires_windows_powershell"
-if ($requiresWindowsPowerShell -isnot [bool]) { throw "Classifier WinPS decision must be an actual Boolean." }
 $plan = Get-RequiredPropertyValue -InputObject $Result -Name "local_plan"
 if ($null -eq $plan -or [int](Get-RequiredPropertyValue -InputObject $plan -Name "schema_version") -ne 2) { throw "Classifier local plan must use schema version 2." }
 $stages = Get-RequiredPropertyValue -InputObject $plan -Name "stages"
@@ -63,7 +61,7 @@ foreach ($stageName in @("iteration", "pre_push", "release")) {
         Get-RequiredPropertyValue -InputObject $action -Name "arguments" | Out-Null
         if ($action.arguments -is [string]) { throw "Local stage '$stageName' action arguments must be an array." }
         if (-not $ids.Add([string]$action.id)) { throw "Local stage '$stageName' has duplicate action id '$($action.id)'." }
-        if (@("current", "pwsh", "windows-powershell") -cnotcontains [string]$action.host) { throw "Local stage '$stageName' uses unsupported host '$($action.host)'." }
+        if (@("current", "pwsh") -cnotcontains [string]$action.host) { throw "Local stage '$stageName' uses unsupported host '$($action.host)'." }
         if ([string]$action.script -notmatch '^scripts/[a-z0-9-]+\.ps1$') { throw "Local stage '$stageName' action script is outside the approved scripts boundary." }
     }
     foreach ($skip in @($stage.skipped)) {
@@ -76,12 +74,11 @@ foreach ($stageName in @("iteration", "pre_push", "release")) {
 if (@($stageActions.iteration | Where-Object { [string]$_.script -eq "scripts/validate-release.ps1" }).Count -gt 0) {
     throw "Iteration must never plan a release checkpoint."
 }
-Assert-ExactHosts -Actions $stageActions.release -Script "scripts/validate-release.ps1" -Expected @("pwsh", "windows-powershell") -Context "Release local validation"
+Assert-ExactHosts -Actions $stageActions.release -Script "scripts/validate-release.ps1" -Expected @("pwsh") -Context "Release local validation"
 Assert-ExactArguments -Actions $stageActions.release -Script "scripts/validate-release.ps1" -Expected @("-ValidationShard", "RepositoryCheckpoint") -Context "Release local validation"
 Assert-ExactHosts -Actions $stageActions.pre_push -Script "scripts/validate-release.ps1" -Expected @() -Context "Affected pre-push validation"
 Assert-ExactHosts -Actions $stageActions.iteration -Script "scripts/validate-targeted-change.ps1" -Expected @("current") -Context "Iteration affected validation"
 $expectedPrePushAffectedHosts = @("current")
-if ([bool]$requiresWindowsPowerShell) { $expectedPrePushAffectedHosts += "windows-powershell" }
 Assert-ExactHosts -Actions $stageActions.pre_push -Script "scripts/validate-targeted-change.ps1" -Expected $expectedPrePushAffectedHosts -Context "Pre-push affected validation"
 $expectedIterationOracle = if ([bool]$selfProtectionDecision) { @("current") } else { @() }
 $expectedPrePushOracle = if ([bool]$selfProtectionDecision) { @("current") } else { @() }
@@ -89,9 +86,5 @@ $expectedReleaseOracle = if ([bool]$selfProtectionDecision) { @("pwsh") } else {
 Assert-ExactHosts -Actions $stageActions.iteration -Script "scripts/test-heavy-targeted-regression.ps1" -Expected $expectedIterationOracle -Context "Iteration self-protection"
 Assert-ExactHosts -Actions $stageActions.pre_push -Script "scripts/test-heavy-targeted-regression.ps1" -Expected $expectedPrePushOracle -Context "Pre-push self-protection"
 Assert-ExactHosts -Actions $stageActions.release -Script "scripts/test-heavy-targeted-regression.ps1" -Expected $expectedReleaseOracle -Context "Release self-protection"
-$winPsTargeted = @($stageActions.pre_push | Where-Object { [string]$_.id -ceq "affected-change-validation-windows-powershell" -and [string]$_.script -ceq "scripts/validate-targeted-change.ps1" -and [string]$_.host -ceq "windows-powershell" })
-if ($winPsTargeted.Count -ne $(if ([bool]$requiresWindowsPowerShell) { 1 } else { 0 })) {
-    throw "Pre-push WinPS routing does not match the classifier suite dependency decision."
-}
 
 Write-Output $Result

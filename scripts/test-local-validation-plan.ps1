@@ -22,7 +22,7 @@ function Assert-PlanCase {
         throw "$Name iteration plan includes a release checkpoint."
     }
     $releaseFullHosts = @($value.local_plan.stages.release.actions | Where-Object script -eq "scripts/validate-release.ps1" | ForEach-Object host)
-    if (($releaseFullHosts -join ',') -cne "pwsh,windows-powershell") { throw "$Name release plan does not preserve both PowerShell hosts." }
+    if (($releaseFullHosts -join ',') -cne "pwsh") { throw "$Name release plan does not preserve the pwsh host." }
     $releaseFullActions = @($value.local_plan.stages.release.actions | Where-Object script -eq "scripts/validate-release.ps1")
     foreach ($action in $releaseFullActions) {
         if ((@($action.arguments) -join ',') -cne "-ValidationShard,RepositoryCheckpoint") { throw "$Name release plan does not explicitly select the RepositoryCheckpoint shard." }

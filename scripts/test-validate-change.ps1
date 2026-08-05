@@ -229,21 +229,7 @@ function Invoke-PowerShellEncodingFixtures {
         Assert-EncodingPass "ascii-without-bom" $asciiRelative
         Assert-EncodingPass "non-ascii-with-bom" $bomRelative
 
-        $failure = $null
-        try {
-            & $targetedValidator -ChangedPath $noBomRelative -Mode quick -ScratchRoot (Join-Path $targetedScratch "encoding-non-ascii-no-bom") -Json | Out-Null
-        }
-        catch {
-            $failure = $_
-        }
-        $requiredMessage = "Non-ASCII PowerShell files must be UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
-        if ($null -eq $failure -or
-            -not $failure.Exception.Message.Contains($noBomRelative) -or
-            -not $failure.Exception.Message.Contains($requiredMessage)) {
-            throw "PowerShell encoding fixture 'non-ascii-without-bom' did not fail with the required path and compatibility message."
-        }
-        $fixtureResults.Add([ordered]@{ name = "non-ascii-without-bom"; status = "PASS" })
-
+        Assert-EncodingPass "non-ascii-without-bom" $noBomRelative
         Assert-EncodingPass "current-git-stable-patch-id" "scripts/validation/git-stable-patch-id.ps1"
         return @($fixtureResults.ToArray())
     }
@@ -492,7 +478,6 @@ $workflowMarkers = @(
     "needs.classify.outputs.base",
     "needs.classify.outputs.head",
     "needs.classify.outputs.required_hosts_json",
-    "needs.classify.outputs.requires_windows_powershell",
     "needs.classify.outputs.run_validation_self_protection",
     "release-classifier-output-contract.ps1 -Result `$result",
     "needs.classify.result != 'success'",
@@ -506,7 +491,7 @@ if ($classifierContractIndex -lt 0 -or $firstClassifierOutputIndex -lt 0 -or $cl
     throw "Classifier schema validation must complete before the first GITHUB_OUTPUT write."
 }
 $releaseValidatorCallSites = @([regex]::Matches($workflow, "validate-release\.ps1")).Count
-if ($releaseValidatorCallSites -ne 3) { throw "Expected one platform-neutral and two runtime/full validator workflow call sites, found $releaseValidatorCallSites." }
+if ($releaseValidatorCallSites -ne 2) { throw "Expected one platform-neutral and one runtime/full validator workflow call site, found $releaseValidatorCallSites." }
 foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/", "scripts/install.ps1")) {
     if ($workflow.Contains($duplicatedRuleToken)) { throw "Workflow duplicates a path-routing rule: $duplicatedRuleToken" }
 }
@@ -514,8 +499,8 @@ if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 
 if (@([regex]::Matches($workflow, "test-heavy-targeted-regression\.ps1 -Json")).Count -ne 1) { throw "Hosted control-plane changes must run one independent self-protection oracle." }
 if (-not $heavyRegression.Contains("validation/test-sensitive-scan.ps1") -or -not $heavyRegression.Contains("control_plane")) { throw "Heavy self-protection must own the full sensitive scan and gate it through classifier control-plane evidence." }
 if ($workflow.Contains("test-sensitive-scan.ps1")) { throw "The hosted classifier workflow must not invoke the full sensitive scan directly." }
-if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier base boundary." }
-if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
+if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier base boundary." }
+if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier head boundary." }
 if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
 if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
 if (-not $workflow.Contains("github.event_name == 'push' && github.run_id") -or

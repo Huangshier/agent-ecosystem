@@ -528,7 +528,7 @@ The release validator now covers:
 - public domain-pack catalog coverage
 - duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,
   public structure, sensitive-pattern audit, and language policy templates
-- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
+- UTF-8 encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
 - project-bootstrap operating-mode coverage for safe refresh, compatibility

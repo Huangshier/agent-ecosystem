@@ -30,8 +30,8 @@ Use the classifier-owned local plan instead of manually composing validators:
 ```
 
 `iteration` never invokes the full release validator. `pre-push` runs affected
-checks for Tier 0-2 and preserves the PowerShell 7 plus Windows PowerShell 5.1
-full boundary for Tier 3. `release` always preserves that dual-host full
+checks for Tier 0-2 and preserves the pwsh 7.6 full boundary for Tier 3.
+`release` always preserves that single-host full
 boundary. `-DryRun -Json` reports each command, host, suite, reason, skipped
 action, and non-negative observational timing without executing validation.
 Executed stages checkpoint `local-validation-result.json` after every completed

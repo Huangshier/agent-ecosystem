@@ -16,7 +16,6 @@
     "repository-guards": ["ubuntu-latest"]
     ,"release-checkpoint": ["ubuntu-latest"]
   },
-  "windows_powershell_suites": ["bootstrap-safety", "installer-contract", "knowledge-contracts", "runtime-smoke", "template-consistency"],
   "self_protection_hosts": ["windows-latest"],
   "module_suites": {
     "knowledge": ["knowledge-contracts"],
