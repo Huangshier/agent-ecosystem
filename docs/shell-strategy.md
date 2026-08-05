@@ -6,19 +6,24 @@ maintenance entrypoints are the checked-in `.ps1` scripts.
 
 ## Current Support
 
-- Required runtime: PowerShell 7.6 LTS with
-  `pwsh -NoProfile -NonInteractive -File` on Windows, Ubuntu, macOS, and other
-  supported environments.
-- Windows PowerShell 5.1 is not supported and `powershell.exe` is not used by
-  the public scripts.
+- The C3.3 validation control plane and normative repository validation
+  entrypoints require PowerShell Core 7.6 or later through
+  `pwsh -NoProfile -NonInteractive -File`.
+- Those validation entrypoints do not support a `powershell.exe` fallback.
 - CI path: `.github/workflows/release-validation.yml` runs the release validator
   with `pwsh` on Windows, Ubuntu, and macOS.
+- Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
+  bridge, or legacy Skill execution contracts. Those surfaces remain
+  transitional and will be migrated or retired only in their designated later
+  slices. This transition is not a commitment to long-lived dual-host or
+  dual-semantics support.
 
 ## Non-PowerShell Shells
 
-No Bash or Zsh wrappers are shipped in the current public release line. Users in
-POSIX shells should install PowerShell 7.6 and call the canonical `.ps1`
-entrypoints through `pwsh -NoProfile -NonInteractive -File`.
+No Bash or Zsh wrappers are shipped in the current public release line. Users
+running the normative repository validation entrypoints from POSIX shells
+should install PowerShell 7.6 and invoke them through
+`pwsh -NoProfile -NonInteractive -File`.
 
 Future Bash or Zsh support should be a thin compatibility layer, not a second
 implementation. A wrapper may locate `pwsh`, normalize arguments, and delegate to

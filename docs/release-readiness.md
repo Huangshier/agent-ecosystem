@@ -472,8 +472,17 @@ Machine-readable output form:
 pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
 
-Use PowerShell 7.6 LTS with the same `pwsh -NoProfile -NonInteractive -File`
-invocation on every supported platform.
+The full and machine-readable `validate-release.ps1` forms above are normative
+repository validation entrypoints. The C3.3 validation control plane requires
+PowerShell Core 7.6 or later through
+`pwsh -NoProfile -NonInteractive -File` and does not fall back to
+`powershell.exe`.
+
+Running the installer examples through `pwsh` here does not change the current
+v0.7.1 Runtime, installer, bootstrap, bridge, or legacy Skill execution
+contracts. Those surfaces remain transitional and will be migrated or retired
+only in their designated later slices. This transition is not a commitment to
+long-lived dual-host or dual-semantics support.
 
 ## Installer Metadata
 

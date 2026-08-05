@@ -17,8 +17,16 @@ Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` plus `install-report.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
-PowerShell 7.6 LTS is the required runtime for public scripts; run them with
-`pwsh -NoProfile -NonInteractive -File` and the same script arguments.
+The C3.3 validation control plane and normative repository validation
+entrypoints, including this release validator, require PowerShell Core 7.6 or
+later through `pwsh -NoProfile -NonInteractive -File`.
+
+Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
+bridge, or legacy Skill execution contracts. Those surfaces remain
+transitional and will be migrated or retired only in their designated later
+slices. This transition is not a commitment to long-lived dual-host or
+dual-semantics support.
+
 See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
 the public release line does not ship Bash or Zsh wrappers yet, and future
 wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.

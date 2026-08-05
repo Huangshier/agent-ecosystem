@@ -37,9 +37,15 @@ git diff --check
 pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
-PowerShell 7.6 LTS is the required runtime for public scripts. Use
-`pwsh -NoProfile -NonInteractive -File` with the same script arguments on
-Windows, Ubuntu, macOS, and other supported environments.
+The C3.3 validation control plane and normative repository validation
+entrypoints require PowerShell Core 7.6 or later through
+`pwsh -NoProfile -NonInteractive -File`.
+
+Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
+bridge, or legacy Skill execution contracts. Those surfaces remain
+transitional and will be migrated or retired only in their designated later
+slices. This transition is not a commitment to long-lived dual-host or
+dual-semantics support.
 
 For PowerShell changes, parse scripts before committing:
 
