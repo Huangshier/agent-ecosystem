@@ -108,16 +108,35 @@ The validator checks:
 
 ## CI Gate
 
-The repository also runs `.github/workflows/release-validation.yml` on pushes to
-`main`, pull requests, and manual dispatch. The workflow executes the same
-validator with PowerShell 7+ (`pwsh`) on:
+The repository runs `.github/workflows/release-validation.yml` for pull
+requests, pushes to `main`, weekly schedules, and manual dispatches. These
+events use different authority profiles rather than running one universal
+hosted release matrix for every pull request.
 
-- `windows-latest`
-- `ubuntu-latest`
-- `macos-latest`
+For pull requests, the deterministic classifier selects the affected suites
+and the hosts declared by those suites. Windows PowerShell 5.1 runs only when
+an affected suite declares that dependency. Changes to validation routing or
+other validation control-plane surfaces also run an independent
+self-protection oracle. See
+[PR validation risk tiers](pr-validation-risk-tiers.md) for the authoritative
+routing and conservative fallback rules.
 
-It also runs the validator on `windows-latest` with Windows PowerShell 5.1
-(`shell: powershell`) to keep the Windows bare-machine path covered.
+The fixed `validation gate` evaluates the classifier-selected jobs and fails
+closed when classification, required execution, or evidence is incomplete.
+After that gate succeeds, the workflow finalizes one canonical
+candidate-evidence artifact. It binds the exact merge candidate, classifier
+closure, selected artifacts, and the actual base guard, identity guard, and
+final gate run/job identities. The fixed gate and canonical evidence remain the
+required merge evidence; a complete hosted release-validation matrix is not a
+per-PR hard gate.
+
+Every `main` push runs the `Full` product-runtime profile and a lineage shadow
+over the complete first-parent range. The shadow reports only `proven` or
+conservative `full-fallback`; neither decision controls or skips the
+unconditional product-runtime validation. Weekly and manually dispatched runs
+use the broader `RepositoryCheckpoint` profile for release archive,
+governance, evaluation, benchmark, historical, and other checkpoint-only
+assertions.
 
 The workflow uses event-aware GitHub Actions concurrency. New pull-request,
 scheduled, and manually dispatched runs may cancel an older same-event,
@@ -125,16 +144,8 @@ same-ref run, while every `push` to `main` has a unique concurrency identity
 and must finish observing its complete `before..sha` range.
 
 Successful validation jobs upload explicit evidence allowlists, while failed
-jobs preserve their complete scratch directory for diagnosis. Pull-request
-runs also finalize one canonical candidate-evidence artifact after the fixed
-gate succeeds. It binds the exact merge candidate, classifier closure,
-artifacts, and actual base guard, identity guard, and final gate run/job
-identities.
-
-Every `main` push runs a lineage shadow over the complete first-parent range.
-The shadow reports only `proven` or conservative `full-fallback`; neither
-decision controls or skips the unconditional product-runtime full validation.
-Treat evaluator failures and other CI failures as release blockers unless the
+jobs preserve their complete scratch directory for diagnosis. Treat evaluator
+failures and other required CI failures as release blockers unless the
 maintainer explicitly records a platform-specific deferral for a pre-release
 calibration run.
 
@@ -146,12 +157,10 @@ Deferred checks are allowed only when the capability does not exist yet. The
 release validator should report zero deferred checks for a publishable release
 unless a maintainer explicitly records a new deferral.
 
-The CI workflow is intentionally not split at this stage. Required hosted
-release validation remains a full hard gate for pull requests to `main`, and
-the workflow does not use workflow-level path filters because skipped required
-workflows can leave checks pending. Any future split must keep an always-run
-required check and update this process plus repository required-check settings
-in the same reviewed change.
+The workflow keeps an always-run fixed `validation gate` instead of relying on
+workflow-level path filters, which can leave required checks pending. Any
+future routing change must preserve a fail-closed required gate and update this
+process plus repository required-check settings in the same reviewed change.
 
 ## Public Reader Review
 
@@ -174,11 +183,12 @@ surfaces, not a separate approval process.
 
 ## Validation Tiers
 
-The required hosted release validation checks remain the hard merge gate for
-pull requests to `main`. Pull requests must also report validation evidence in
-the PR body. The tiers below guide local validation depth before opening or
-updating a PR; they do not weaken the hosted checks, and maintainers may ask for
-more validation when risk is unclear.
+The fixed hosted `validation gate` and canonical candidate evidence remain the
+fail-closed merge evidence for pull requests to `main`. The classifier chooses
+which affected suites and hosts must satisfy that gate; skipped suites are not
+reported as passing. Pull requests must also report validation evidence in the
+PR body. The tiers below guide local validation depth before opening or
+updating a PR; maintainers may ask for more validation when risk is unclear.
 
 When a change spans multiple categories, use the highest tier that applies.
 
@@ -308,11 +318,13 @@ but this is not required for `v0.5.0`.
    release notes, or release process text.
 4. Review `validation-result.json` and any public diff.
 5. Open or update a pull request when using CI for release review.
-6. Confirm the release validation workflow passes on Windows, Ubuntu, and macOS.
+6. Confirm the PR classifier-selected suites and hosts, the fixed
+   `validation gate`, and canonical candidate evidence pass for the final head.
 7. Record only public-safe release status in this repository.
 8. After maintainer authorization, complete release-finalization alignment and
-   rerun the validator with `-TargetVersion <target-version>`.
-9. Push, tag, and publish release notes only after alignment and validation pass.
+   rerun the full local gate with `-TargetVersion <target-version>`.
+9. Push, tag, and publish release notes only after the local full release gate,
+   hosted required gate, final evidence review, and maintainer approval pass.
 
 Do not publish if the validator reports a failed check. Fix the public tree or
 record the release-blocking decision in private migration state, then rerun the
