@@ -6,7 +6,7 @@ Pull requests are classified before expensive validation starts. The classifier 
 |---|---|---|
 | 0 | Metadata, PR template, ordinary documentation | Classification, quick diff/parse/public-safe checks, base guard, identity guard |
 | 1 | Knowledge and mapped non-runtime repository helpers | Tier 0 checks plus quick repository checks and real affected-module contracts |
-| 2 | Mapped bootstrap, templates, installer, bridge, and hooks surfaces | Cross-platform affected-module fixtures and runtime checks plus base and identity guards |
+| 2 | Mapped bootstrap, templates, installer, bridge, hooks, and project workspace asset surfaces | Cross-platform affected-module fixtures and runtime checks plus base and identity guards |
 | 3 | Release, schema, profile, cross-module contracts, workflows, validation routing | Real affected suites on their declared hosts; validation control-plane changes also run an independent self-protection oracle |
 
 `scripts/validation/change-risk-rules.json` is the single path-routing source. Workflows consume schema-2 `scripts/validate-change.ps1` output and do not maintain a second path table. The classifier returns affected suites, each suite's host dependencies, the required host union, and the independent self-protection decision. Unknown suites, hosts, mappings, or classifier failures fail closed.
@@ -38,7 +38,7 @@ Executed stages also checkpoint `local-validation-result.json` after each
 completed action, preserving prior evidence if a later long-running action is
 interrupted by the caller.
 
-The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
+The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Project workspace schemas, canonical asset templates, the dormant parser, and the reserved continuity and migration paths run the `workspace-assets` fixture suite on Windows, Ubuntu, and macOS. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
 
 ## Leaf validation ownership and routing
 
@@ -74,6 +74,7 @@ The baseline before risk routing was three complete validator calls for every PR
 | Ordinary docs | 3 complete validators + 2 guards | classifier + 1 quick job + 2 guards; 0 complete validators |
 | Knowledge | 3 complete validators + 2 guards | classifier + 1 quick job + 2 guards; 0 complete validators |
 | Skill or installer | 3 complete validators + 2 guards | classifier + 3 targeted OS jobs + 2 guards; 0 complete validators |
+| Project workspace assets | 3 complete validators + 2 guards | classifier + `workspace-assets` on 3 targeted OS jobs + 2 guards; 0 complete validators |
 | Release content | 3 complete validators + 2 guards | classifier + affected release-checkpoint suite on Ubuntu + 2 guards |
 | Validation routing | 3 complete validators + 2 guards | classifier + affected suites on declared hosts + 1 independent self-protection oracle + 2 guards |
 

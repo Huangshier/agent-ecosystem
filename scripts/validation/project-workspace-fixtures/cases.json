@@ -1,0 +1,245 @@
+[
+  {
+    "name": "valid-work",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "none",
+    "expected": "valid"
+  },
+  {
+    "name": "valid-context",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "none",
+    "expected": "valid"
+  },
+  {
+    "name": "valid-procedure",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "none",
+    "expected": "valid"
+  },
+  {
+    "name": "valid-spec",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "none",
+    "expected": "valid"
+  },
+  {
+    "name": "missing-required-work",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "remove:next",
+    "expected": "invalid",
+    "expected_codes": ["required-field-missing"]
+  },
+  {
+    "name": "missing-required-context",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "remove:evidence",
+    "expected": "invalid",
+    "expected_codes": ["required-field-missing"]
+  },
+  {
+    "name": "missing-required-procedure",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "remove:triggers",
+    "expected": "invalid",
+    "expected_codes": ["required-field-missing"]
+  },
+  {
+    "name": "missing-required-spec",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "remove:summary",
+    "expected": "invalid",
+    "expected_codes": ["required-field-missing"]
+  },
+  {
+    "name": "unknown-field-work",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "add:unexpected",
+    "expected": "invalid",
+    "expected_codes": ["unknown-field"]
+  },
+  {
+    "name": "unknown-field-context",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "add:unexpected",
+    "expected": "invalid",
+    "expected_codes": ["unknown-field"]
+  },
+  {
+    "name": "unknown-field-procedure",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "add:unexpected",
+    "expected": "invalid",
+    "expected_codes": ["unknown-field"]
+  },
+  {
+    "name": "unknown-field-spec",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "add:unexpected",
+    "expected": "invalid",
+    "expected_codes": ["unknown-field"]
+  },
+  {
+    "name": "invalid-enum-work",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:status=unknown",
+    "expected": "invalid",
+    "expected_codes": ["invalid-enum"]
+  },
+  {
+    "name": "invalid-enum-context",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "set:status=unknown",
+    "expected": "invalid",
+    "expected_codes": ["invalid-enum"]
+  },
+  {
+    "name": "invalid-enum-procedure",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "set:kind=unknown",
+    "expected": "invalid",
+    "expected_codes": ["invalid-enum"]
+  },
+  {
+    "name": "invalid-enum-spec",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "set:status=unknown",
+    "expected": "invalid",
+    "expected_codes": ["invalid-enum"]
+  },
+  {
+    "name": "invalid-schema-version",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:schema=agent-ecosystem/work-item/v2",
+    "expected": "invalid",
+    "expected_codes": ["invalid-schema-version"]
+  },
+  {
+    "name": "invalid-revision",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:revision=sha256:INVALID",
+    "expected": "invalid",
+    "expected_codes": ["invalid-revision"]
+  },
+  {
+    "name": "absolute-path",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "explicit-input-path",
+    "input_path": "/outside/fixture.md",
+    "expected": "invalid",
+    "expected_codes": ["unsafe-path"]
+  },
+  {
+    "name": "traversal",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "explicit-input-path",
+    "input_path": "../context/fixture-context.md",
+    "expected": "invalid",
+    "expected_codes": ["unsafe-path"]
+  },
+  {
+    "name": "root-escape",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "explicit-input-path",
+    "input_path": "../../outside/spec.md",
+    "expected": "invalid",
+    "expected_codes": ["unsafe-path"]
+  },
+  {
+    "name": "unsafe-git-worktree",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "add:unsafe-git-worktree",
+    "expected": "invalid",
+    "expected_codes": ["unsafe-path"]
+  },
+  {
+    "name": "reparse-git-worktree",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "add:reparse-git-worktree",
+    "expected": "invalid",
+    "expected_codes": ["unsafe-path"]
+  },
+  {
+    "name": "malformed-yaml",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "malformed-frontmatter",
+    "expected": "invalid",
+    "expected_codes": ["malformed-frontmatter"]
+  },
+  {
+    "name": "schema-type-mismatch",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "set:summary=42",
+    "expected": "invalid",
+    "expected_codes": ["invalid-field-type"]
+  },
+  {
+    "name": "empty-file",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "replace:empty",
+    "expected": "invalid",
+    "expected_codes": ["empty-file"]
+  },
+  {
+    "name": "duplicate-identity",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "copy-with-same-id",
+    "expected": "invalid",
+    "expected_codes": ["identity-conflict"]
+  },
+  {
+    "name": "conflicting-identity",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "path-id-differs-from-frontmatter-id",
+    "expected": "invalid",
+    "expected_codes": ["id-path-mismatch"]
+  },
+  {
+    "name": "command-inertness",
+    "asset_type": "procedure",
+    "path": ".agents/procedures/fixture-procedure.md",
+    "mutation": "none",
+    "operation": "read-frontmatter-only",
+    "body_marker": "fixture-command-must-not-run",
+    "expected": "valid",
+    "expected_codes": []
+  },
+  {
+    "name": "read-only-input",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "none",
+    "operation": "read-only",
+    "assert": "input-unchanged",
+    "expected": "valid",
+    "expected_codes": []
+  }
+]

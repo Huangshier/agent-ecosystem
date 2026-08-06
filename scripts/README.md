@@ -52,6 +52,18 @@ lightweight routing-contract entrypoint. The complete 17-case sensitive scan
 fixture runs only from the heavy self-protection path when validation control
 surface paths change; the classifier still performs the real PR diff scan.
 
+Slice A also provides a dormant, read-only project asset parser and its
+self-contained fixture suite:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File .\skills\project-workspace\scripts\read-project-assets.ps1 -ProjectRoot <project-root> -Json
+pwsh -NoProfile -NonInteractive -File .\scripts\test-project-workspace-parser.ps1 -Json
+```
+
+The parser reads only YAML frontmatter at the four canonical asset roots. It
+does not execute Markdown bodies, write assets, migrate projects, join the
+installer or bootstrap flow, or expose a discoverable `SKILL.md` entrypoint.
+
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
 `validate-release.ps1` remains the authoritative validator and accepts

@@ -93,7 +93,7 @@ if ([bool]$controlPlane -and -not [bool]$selfProtection) {
 $requiredSuites = @(Get-RequiredPropertyValue -InputObject $Result -Name "required_suites")
 $requiredHosts = @(Get-RequiredPropertyValue -InputObject $Result -Name "required_hosts")
 $suiteHostMap = Get-RequiredPropertyValue -InputObject $Result -Name "suite_host_map"
-$knownSuites = @("agent-skill-bridge", "bootstrap-safety", "hooks-runtime", "installer-contract", "knowledge-contracts", "project-context-gate", "repository-guards", "release-checkpoint", "runtime-smoke", "template-consistency")
+$knownSuites = @("agent-skill-bridge", "bootstrap-safety", "hooks-runtime", "installer-contract", "knowledge-contracts", "project-context-gate", "repository-guards", "release-checkpoint", "runtime-smoke", "template-consistency", "workspace-assets")
 $knownHosts = @("windows-latest", "ubuntu-latest", "macos-latest")
 if (@($requiredHosts | Where-Object { $_ -isnot [string] -or $knownHosts -cnotcontains [string]$_ }).Count -gt 0) {
     throw "Classifier required_hosts contains an unknown or invalid host."

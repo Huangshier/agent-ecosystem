@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-ecosystem/context/v1",
+  "title": "Agent Ecosystem Context v1",
+  "description": "A public-safe, human-readable project context metadata contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "status",
+    "updated",
+    "summary",
+    "keywords",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-ecosystem/context/v1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "superseded",
+        "archived"
+      ]
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-](?:[0-1][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
