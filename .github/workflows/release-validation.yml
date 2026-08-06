@@ -35,7 +35,6 @@ jobs:
       modules: ${{ steps.risk.outputs.modules }}
       required_suites: ${{ steps.risk.outputs.required_suites }}
       required_hosts_json: ${{ steps.risk.outputs.required_hosts_json }}
-      requires_windows_powershell: ${{ steps.risk.outputs.requires_windows_powershell }}
       run_validation_self_protection: ${{ steps.risk.outputs.run_validation_self_protection }}
       validation_self_protection_reason: ${{ steps.risk.outputs.validation_self_protection_reason }}
       base: ${{ steps.risk.outputs.base }}
@@ -115,7 +114,6 @@ jobs:
           "required_suites=$(@($result.required_suites) -join ',')" >> $env:GITHUB_OUTPUT
           $requiredHostsJson = ConvertTo-Json -InputObject ([object[]]@($result.required_hosts)) -Compress
           "required_hosts_json=$requiredHostsJson" >> $env:GITHUB_OUTPUT
-          "requires_windows_powershell=$(([bool]$result.requires_windows_powershell).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "run_validation_self_protection=$(([bool]$result.run_validation_self_protection).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "validation_self_protection_reason=$($result.validation_self_protection_reason)" >> $env:GITHUB_OUTPUT
           "base=$($result.base_ref)" >> $env:GITHUB_OUTPUT
@@ -476,102 +474,6 @@ jobs:
           path: ${{ runner.temp }}/agent-ecosystem-release-validation
           if-no-files-found: error
 
-  validate-windows-powershell:
-    name: validate Windows PowerShell 5.1
-    needs: classify
-    if: always() && ((github.event_name == 'pull_request' && (needs.classify.result != 'success' || needs.classify.outputs.requires_windows_powershell != 'false')) || github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
-    runs-on: windows-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.classify.outputs.validation_sha }}
-      - name: Verify exact candidate identity
-        if: github.event_name == 'pull_request'
-        shell: powershell
-        run: |
-          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
-          .\scripts\validation\resolve-pull-request-candidate.ps1 `
-            -Repository "${{ github.repository }}" `
-            -PullRequestNumber ([int]$env:PR_NUMBER) `
-            -BaseRef $env:PR_BASE_REF `
-            -BaseSha $env:PR_BASE_SHA `
-            -HeadRef $env:PR_HEAD_REF `
-            -HeadSha $env:PR_HEAD_SHA `
-            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
-            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
-            -ExpectedCandidateParents $expectedParents `
-            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
-
-      - name: Run affected Windows PowerShell suites
-        if: github.event_name == 'pull_request'
-        shell: powershell
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-affected-validation-windows-powershell"
-          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-targeted-change.ps1 `
-            -BaseRef "${{ needs.classify.outputs.base }}" -HeadRef "${{ needs.classify.outputs.head }}" `
-            -Mode targeted -ExecutionHost windows-powershell -ScratchRoot $scratch -Json |
-            Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-
-      - name: Run release validator
-        if: github.event_name != 'pull_request'
-        shell: powershell
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell"
-          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $shard = if ("${{ github.event_name }}" -eq "push") { "RuntimePlatform" } else { "RepositoryCheckpointRuntime" }
-          powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
-            Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-
-      - name: Write validation evidence manifest
-        if: always()
-        shell: powershell
-        run: |
-          $scratch = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "agent-ecosystem-affected-validation-windows-powershell" } else { Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation-windows-powershell" }
-          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
-          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          $heavyStatus = "not-applicable"
-          $heavyReason = "independent-self-protection-job"
-          $successAllowlist = if ("${{ github.event_name }}" -eq "pull_request") { @("targeted-validation-result.json", "evidence-manifest.json") } else { @("validation-result.json", "evidence-manifest.json") }
-          $candidatePath = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "candidate-contract.json" } else { "" }
-          .\scripts\validation\write-evidence-manifest.ps1 `
-            -ScratchRoot $scratch `
-            -Outcome $outcome `
-            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}" `
-            -JobName "${{ github.job }}" `
-            -HostIdentity $hostIdentity `
-            -Repository "${{ github.repository }}" `
-            -EventName "${{ github.event_name }}" `
-            -CandidateContractPath $candidatePath `
-            -HeavyTargetedStatus $heavyStatus `
-            -HeavyTargetedReason $heavyReason `
-            -SuccessAllowlist $successAllowlist
-      - name: Upload validation success evidence
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ github.event_name == 'pull_request' && format('validation-windows-powershell-attempt-{0}', github.run_attempt) || 'validation-windows-powershell' }}
-          path: |
-            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/targeted-validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell/evidence-manifest.json
-            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell/evidence-manifest.json
-          if-no-files-found: error
-      - name: Upload validation failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ github.event_name == 'pull_request' && format('validation-windows-powershell-failure-attempt-{0}', github.run_attempt) || 'validation-windows-powershell-failure' }}
-          path: |
-            ${{ runner.temp }}/agent-ecosystem-affected-validation-windows-powershell
-            ${{ runner.temp }}/agent-ecosystem-release-validation-windows-powershell
-          if-no-files-found: error
-
   validation-gate:
     name: validation gate
     if: always()
@@ -582,7 +484,6 @@ jobs:
       - validation-self-protection
       - validate-platform-neutral
       - validate
-      - validate-windows-powershell
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -617,10 +518,8 @@ jobs:
           TARGETED_RESULT: ${{ needs.targeted-validation.result }}
           SELF_PROTECTION_RESULT: ${{ needs.validation-self-protection.result }}
           SELF_PROTECTION_REQUIRED: ${{ needs.classify.outputs.run_validation_self_protection }}
-          WINDOWS_POWERSHELL_REQUIRED: ${{ needs.classify.outputs.requires_windows_powershell }}
           PLATFORM_NEUTRAL_RESULT: ${{ needs.validate-platform-neutral.result }}
           PWSH_MATRIX_RESULT: ${{ needs.validate.result }}
-          WINDOWS_POWERSHELL_RESULT: ${{ needs.validate-windows-powershell.result }}
         run: |
           ./scripts/validation/required-validation-gate.ps1 `
             -EventName $env:EVENT_NAME `
@@ -630,10 +529,8 @@ jobs:
             -TargetedResult $env:TARGETED_RESULT `
             -SelfProtectionResult $env:SELF_PROTECTION_RESULT `
             -SelfProtectionRequired $env:SELF_PROTECTION_REQUIRED `
-            -WindowsPowerShellRequired $env:WINDOWS_POWERSHELL_REQUIRED `
             -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
-            -WindowsPowerShellResult $env:WINDOWS_POWERSHELL_RESULT
 
       - name: Write current-generation final gate evidence
         if: success() && github.event_name == 'pull_request'

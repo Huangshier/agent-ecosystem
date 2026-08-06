@@ -62,7 +62,7 @@
         "memory upgrade flow",
         "project bootstrap safety",
         "conservative language migration",
-        "Windows PowerShell script encoding",
+        "PowerShell script encoding",
         "PowerShell parse",
         "JSON parse",
         "language policy templates",
@@ -81,11 +81,11 @@
       "authority": "release-archive-governance-eval-scheduled-checkpoint",
       "responsibility": "Complete runtime/platform checkpoint including scheduled performance, retention, knowledge, and compatibility observations.",
       "checks": [
-        "hub initialization git mode", "installer contract fixtures", "runtime status fixtures", "agent skill bridge fixtures", "runtime smoke", "project context gate targeted suite", "body-level memory language audit", "context gate large context benchmark", "validation scratch retention pruning", "hub.lock drift check", "uninstall behavior", "memory upgrade flow", "project bootstrap safety", "conservative language migration", "knowledge candidate intake", "knowledge hub experience search", "Windows PowerShell script encoding", "PowerShell parse", "JSON parse", "language policy templates", "missing language template fallback", "Claude hooks runtime fixtures"
+        "hub initialization git mode", "installer contract fixtures", "runtime status fixtures", "agent skill bridge fixtures", "runtime smoke", "project context gate targeted suite", "body-level memory language audit", "context gate large context benchmark", "validation scratch retention pruning", "hub.lock drift check", "uninstall behavior", "memory upgrade flow", "project bootstrap safety", "conservative language migration", "knowledge candidate intake", "knowledge hub experience search", "PowerShell script encoding", "PowerShell parse", "JSON parse", "language policy templates", "missing language template fallback", "Claude hooks runtime fixtures"
       ]
     }
   },
   "required_runtime_checks": [
-    "hub initialization git mode", "installer contract fixtures", "runtime status fixtures", "agent skill bridge fixtures", "runtime smoke", "project context gate targeted suite", "project bootstrap safety", "Windows PowerShell script encoding", "PowerShell parse", "JSON parse", "language policy templates", "Claude hooks runtime fixtures"
+    "hub initialization git mode", "installer contract fixtures", "runtime status fixtures", "agent skill bridge fixtures", "runtime smoke", "project context gate targeted suite", "project bootstrap safety", "PowerShell script encoding", "PowerShell parse", "JSON parse", "language policy templates", "Claude hooks runtime fixtures"
   ]
 }

@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$Json)
 
 $ErrorActionPreference = "Stop"
@@ -40,10 +40,10 @@ function New-Evidence([int]$Pr, [string]$Base, [string]$Head, [string]$Tree, [st
             control_plane = $false; self_protection_required = $false; self_protection_reason = "not-tier-3"
         }
         required = [pscustomobject][ordered]@{
-            suites = @("documentation-contract"); hosts = @("ubuntu-latest"); windows_powershell = $false; self_protection = $false
+            suites = @("documentation-contract"); hosts = @("ubuntu-latest"); self_protection = $false
         }
         actual = [pscustomobject][ordered]@{ suites = @("documentation-contract"); hosts = @("ubuntu-latest"); fragment_count = 1 }
-        decisions = [pscustomobject][ordered]@{ windows_powershell = "not-required"; self_protection = "not-required" }
+        decisions = [pscustomobject][ordered]@{ self_protection = "not-required" }
         contracts = [pscustomobject][ordered]@{
             workflow = ".github/workflows/release-validation.yml"
             routing = "scripts/validation/change-risk-rules.json"

@@ -10,17 +10,23 @@ Run the release validation gate before any push, tag, or published release.
 For publish-ready finalization, pass the version that is about to be tagged:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
 ```
 
 Use a scratch directory outside the live runtime. The validator refuses to use
 the current user's `$HOME\.agents` runtime path. It writes an
 `install-manifest.json` plus `install-report.json` for each temporary install and a final
 `validation-result.json` under the scratch directory.
-Windows PowerShell 5.1 is supported. On non-Windows systems, or when PowerShell
-7+ is already available, use `pwsh -NoProfile -File` with the same script
-arguments. The Windows `-ExecutionPolicy Bypass` flag is process-scoped and
-helps when local execution policy or Mark-of-the-Web blocks downloaded scripts.
+The C3.3 validation control plane and normative repository validation
+entrypoints, including this release validator, require PowerShell Core 7.6 or
+later through `pwsh -NoProfile -NonInteractive -File`.
+
+Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
+bridge, or legacy Skill execution contracts. Those surfaces remain
+transitional and will be migrated or retired only in their designated later
+slices. This transition is not a commitment to long-lived dual-host or
+dual-semantics support.
+
 See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
 the public release line does not ship Bash or Zsh wrappers yet, and future
 wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
@@ -29,7 +35,7 @@ When a maintainer intentionally reuses a persistent scratch parent, inspect
 retention before deleting anything:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
+pwsh -NoProfile -NonInteractive -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
 ```
 
 The pruning helper is a dry run by default. Add `-Apply` only after reviewing
@@ -68,7 +74,7 @@ The validator checks:
 - Claude Code hooks guardrails contract, executable lifecycle settings and
   runner, bundled snapshot, and public-safe deterministic stdin/stdout fixtures
 - PowerShell parser checks and JSON parsing
-- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
+- UTF-8 encoding for non-ASCII PowerShell scripts
 - public sensitive-pattern audit
 - duplicate helper script hashes
 - language policy template coverage in both repository guidance and bootstrap
@@ -114,8 +120,7 @@ events use different authority profiles rather than running one universal
 hosted release matrix for every pull request.
 
 For pull requests, the deterministic classifier selects the affected suites
-and the hosts declared by those suites. Windows PowerShell 5.1 runs only when
-an affected suite declares that dependency. Changes to validation routing or
+and the hosts declared by those suites. Changes to validation routing or
 other validation control-plane surfaces also run an independent
 self-protection oracle. See
 [PR validation risk tiers](pr-validation-risk-tiers.md) for the authoritative

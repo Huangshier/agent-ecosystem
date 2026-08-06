@@ -34,14 +34,18 @@ Recommended checks before proposing a change:
 
 ```powershell
 git diff --check
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
 ```
 
-Windows PowerShell 5.1 is supported for public scripts. On non-Windows systems,
-or when PowerShell 7+ is already available, use `pwsh -NoProfile -File` with the
-same script arguments. The Windows `-ExecutionPolicy Bypass` example is
-process-scoped and helps when downloaded scripts are blocked by local policy or
-Mark-of-the-Web.
+The C3.3 validation control plane and normative repository validation
+entrypoints require PowerShell Core 7.6 or later through
+`pwsh -NoProfile -NonInteractive -File`.
+
+Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
+bridge, or legacy Skill execution contracts. Those surfaces remain
+transitional and will be migrated or retired only in their designated later
+slices. This transition is not a commitment to long-lived dual-host or
+dual-semantics support.
 
 For PowerShell changes, parse scripts before committing:
 

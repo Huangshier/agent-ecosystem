@@ -15,9 +15,16 @@ $sensitiveScanFileName = "pr-" + ("se" + "cret") + "-keyword-scan.ps1"
 $sensitiveScanScript = Join-Path $PSScriptRoot ("validation/{0}" -f $sensitiveScanFileName)
 $sensitiveScanContract = Join-Path $PSScriptRoot "validation/sensitive-scan-contract.ps1"
 $localPlanValidator = Join-Path $PSScriptRoot "test-local-validation-plan.ps1"
+$runtimeRequirementValidator = Join-Path $PSScriptRoot "test-powershell-runtime-requirement.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
+
+$runtimeRequirementRaw = @(& $runtimeRequirementValidator -Json) -join "`n"
+$runtimeRequirementResult = $runtimeRequirementRaw | ConvertFrom-Json
+if ([int]$runtimeRequirementResult.fail -ne 0 -or [int]$runtimeRequirementResult.pass -ne 7) {
+    throw "PowerShell runtime requirement fixtures returned incomplete evidence."
+}
 
 $sensitiveScanCaseCount = 0
 $sensitiveScanRequiredMarkers = @(
@@ -229,21 +236,7 @@ function Invoke-PowerShellEncodingFixtures {
         Assert-EncodingPass "ascii-without-bom" $asciiRelative
         Assert-EncodingPass "non-ascii-with-bom" $bomRelative
 
-        $failure = $null
-        try {
-            & $targetedValidator -ChangedPath $noBomRelative -Mode quick -ScratchRoot (Join-Path $targetedScratch "encoding-non-ascii-no-bom") -Json | Out-Null
-        }
-        catch {
-            $failure = $_
-        }
-        $requiredMessage = "Non-ASCII PowerShell files must be UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
-        if ($null -eq $failure -or
-            -not $failure.Exception.Message.Contains($noBomRelative) -or
-            -not $failure.Exception.Message.Contains($requiredMessage)) {
-            throw "PowerShell encoding fixture 'non-ascii-without-bom' did not fail with the required path and compatibility message."
-        }
-        $fixtureResults.Add([ordered]@{ name = "non-ascii-without-bom"; status = "PASS" })
-
+        Assert-EncodingPass "non-ascii-without-bom" $noBomRelative
         Assert-EncodingPass "current-git-stable-patch-id" "scripts/validation/git-stable-patch-id.ps1"
         return @($fixtureResults.ToArray())
     }
@@ -492,7 +485,6 @@ $workflowMarkers = @(
     "needs.classify.outputs.base",
     "needs.classify.outputs.head",
     "needs.classify.outputs.required_hosts_json",
-    "needs.classify.outputs.requires_windows_powershell",
     "needs.classify.outputs.run_validation_self_protection",
     "release-classifier-output-contract.ps1 -Result `$result",
     "needs.classify.result != 'success'",
@@ -506,7 +498,7 @@ if ($classifierContractIndex -lt 0 -or $firstClassifierOutputIndex -lt 0 -or $cl
     throw "Classifier schema validation must complete before the first GITHUB_OUTPUT write."
 }
 $releaseValidatorCallSites = @([regex]::Matches($workflow, "validate-release\.ps1")).Count
-if ($releaseValidatorCallSites -ne 3) { throw "Expected one platform-neutral and two runtime/full validator workflow call sites, found $releaseValidatorCallSites." }
+if ($releaseValidatorCallSites -ne 2) { throw "Expected one platform-neutral and one runtime/full validator workflow call site, found $releaseValidatorCallSites." }
 foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/", "scripts/install.ps1")) {
     if ($workflow.Contains($duplicatedRuleToken)) { throw "Workflow duplicates a path-routing rule: $duplicatedRuleToken" }
 }
@@ -514,8 +506,8 @@ if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 
 if (@([regex]::Matches($workflow, "test-heavy-targeted-regression\.ps1 -Json")).Count -ne 1) { throw "Hosted control-plane changes must run one independent self-protection oracle." }
 if (-not $heavyRegression.Contains("validation/test-sensitive-scan.ps1") -or -not $heavyRegression.Contains("control_plane")) { throw "Heavy self-protection must own the full sensitive scan and gate it through classifier control-plane evidence." }
 if ($workflow.Contains("test-sensitive-scan.ps1")) { throw "The hosted classifier workflow must not invoke the full sensitive scan directly." }
-if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier base boundary." }
-if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 3) { throw "Quick, affected, and WinPS jobs must reuse the classifier head boundary." }
+if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier base boundary." }
+if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier head boundary." }
 if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
 if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
 if (-not $workflow.Contains("github.event_name == 'push' && github.run_id") -or
@@ -562,7 +554,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + [int]$runtimeRequirementResult.pass + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_runtime_requirement = $runtimeRequirementResult; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8

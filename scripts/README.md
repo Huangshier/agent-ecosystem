@@ -30,12 +30,22 @@ Use the classifier-owned local plan instead of manually composing validators:
 ```
 
 `iteration` never invokes the full release validator. `pre-push` runs affected
-checks for Tier 0-2 and preserves the PowerShell 7 plus Windows PowerShell 5.1
-full boundary for Tier 3. `release` always preserves that dual-host full
+checks for Tier 0-2 and preserves the PowerShell 7.6 validation full boundary
+for Tier 3. `release` always preserves that single-host full validation
 boundary. `-DryRun -Json` reports each command, host, suite, reason, skipped
 action, and non-negative observational timing without executing validation.
 Executed stages checkpoint `local-validation-result.json` after every completed
 action so a caller timeout does not erase earlier evidence.
+
+The classifier, local-plan orchestrator, and normative repository validation
+entrypoints use the C3.3 PowerShell Core 7.6 control plane through
+`pwsh -NoProfile -NonInteractive -File` without a `powershell.exe` fallback.
+Slice A0 does not change the current v0.7.1 installer, Runtime, bootstrap,
+bridge, status, uninstall, or legacy Skill execution contracts documented in
+this file. Those transitional surfaces will be migrated or retired only in
+their designated later slices; this is not a commitment to long-lived
+dual-host or dual-semantics support.
+
 The heavyweight classifier regression entrypoint is
 `test-heavy-targeted-regression.ps1`; `test-validate-change.ps1` remains the
 lightweight routing-contract entrypoint. The complete 17-case sensitive scan

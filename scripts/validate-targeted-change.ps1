@@ -5,7 +5,7 @@ param(
     [string[]]$ChangedPath = @(),
     [ValidateSet("quick", "targeted")]
     [string]$Mode = "quick",
-    [ValidateSet("current", "windows-latest", "ubuntu-latest", "macos-latest", "windows-powershell")]
+    [ValidateSet("current", "windows-latest", "ubuntu-latest", "macos-latest")]
     [string]$ExecutionHost = "current",
     [string]$ScratchRoot = "",
     [switch]$Json
@@ -13,6 +13,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "validation/powershell-runtime-requirement.ps1")
+Assert-AgentEcosystemPowerShellRuntime
 $repoRoot = Split-Path -Parent $scriptDir
 . (Join-Path $scriptDir "validation/release-test-helper.ps1")
 if ([string]::IsNullOrWhiteSpace($ScratchRoot)) {
@@ -73,10 +75,6 @@ foreach ($path in @($classification.changed_paths)) {
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
     $extension = [IO.Path]::GetExtension($fullPath).ToLowerInvariant()
     if ($extension -eq ".ps1" -or $extension -eq ".psm1") {
-        $bytes = [System.IO.File]::ReadAllBytes($fullPath)
-        if ((Test-BytesHaveNonAscii -Bytes $bytes) -and -not (Test-BytesHaveUtf8Bom -Bytes $bytes)) {
-            throw "$path`: Non-ASCII PowerShell files must be UTF-8 with BOM for Windows PowerShell 5.1 compatibility."
-        }
         $astLexemes = $null; $errors = $null
         [void][Management.Automation.Language.Parser]::ParseFile($fullPath, [ref]$astLexemes, [ref]$errors)
         if (@($errors).Count -gt 0) { throw "PowerShell parse failed for $path`: $($errors[0].Message)" }
@@ -94,7 +92,7 @@ foreach ($path in @($classification.changed_paths)) {
         }
     }
 }
-Add-Result "changed-file-parse" "PASS" "Changed PowerShell files satisfy the Windows PowerShell encoding contract; PowerShell and JSON files parse; public-safe text scan passed."
+Add-Result "changed-file-parse" "PASS" "Changed PowerShell files parse; JSON files parse; public-safe text scan passed."
 
 if ([int]$classification.detected_tier -ge 1) {
     foreach ($scriptPath in @(Get-ChildItem -LiteralPath $scriptDir -Recurse -File | Where-Object { $_.Extension -in @(".ps1", ".psm1") })) {
@@ -114,9 +112,6 @@ if ([int]$classification.detected_tier -ge 1) {
     $allRequiredSuites = @($classification.required_suites)
     $requiredSuites = if ($ExecutionHost -ceq "current") {
         @($allRequiredSuites)
-    }
-    elseif ($ExecutionHost -ceq "windows-powershell") {
-        @($classification.required_windows_powershell_suites)
     }
     else {
         @($allRequiredSuites | Where-Object {

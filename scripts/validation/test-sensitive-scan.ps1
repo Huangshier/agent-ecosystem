@@ -10,6 +10,7 @@ $scanScript = Join-Path $scriptDir "pr-secret-keyword-scan.ps1"
 $contractPath = Join-Path $scriptDir "sensitive-scan-contract.ps1"
 $validatorSource = Join-Path (Split-Path -Parent $scriptDir) "validate-change.ps1"
 $rulesSource = Join-Path $scriptDir "change-risk-rules.json"
+$runtimeRequirementSource = Join-Path $scriptDir "powershell-runtime-requirement.ps1"
 
 $pass = 0
 $fail = 0
@@ -159,6 +160,7 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $integration "scripts" "validation") | Out-Null
     Copy-Item -LiteralPath $validatorSource -Destination (Join-Path $integration "scripts" "validate-change.ps1")
     Copy-Item -LiteralPath $rulesSource -Destination (Join-Path $integration "scripts" "validation" "change-risk-rules.json")
+    Copy-Item -LiteralPath $runtimeRequirementSource -Destination (Join-Path $integration "scripts" "validation" "powershell-runtime-requirement.ps1")
     Copy-Item -LiteralPath $scanScript -Destination (Join-Path $integration "scripts" "validation" "pr-secret-keyword-scan.ps1")
     Copy-Item -LiteralPath $contractPath -Destination (Join-Path $integration "scripts" "validation" "sensitive-scan-contract.ps1")
     Set-Content -LiteralPath (Join-Path $integration "baseline.md") -Value "clean baseline" -Encoding UTF8

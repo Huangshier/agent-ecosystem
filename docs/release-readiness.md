@@ -451,29 +451,38 @@ Local release validation for this alignment passed with
 ## Current Quick Start
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended
 ```
 
 Safe validation form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
 Full release validation form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 Machine-readable output form:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
 ```
 
-Use `pwsh -NoProfile -File` with the same arguments on non-Windows systems or
-when PowerShell 7+ is already available.
+The full and machine-readable `validate-release.ps1` forms above are normative
+repository validation entrypoints. The C3.3 validation control plane requires
+PowerShell Core 7.6 or later through
+`pwsh -NoProfile -NonInteractive -File` and does not fall back to
+`powershell.exe`.
+
+Running the installer examples through `pwsh` here does not change the current
+v0.7.1 Runtime, installer, bootstrap, bridge, or legacy Skill execution
+contracts. Those surfaces remain transitional and will be migrated or retired
+only in their designated later slices. This transition is not a commitment to
+long-lived dual-host or dual-semantics support.
 
 ## Installer Metadata
 
@@ -528,7 +537,7 @@ The release validator now covers:
 - public domain-pack catalog coverage
 - duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,
   public structure, sensitive-pattern audit, and language policy templates
-- Windows PowerShell 5.1-compatible encoding for non-ASCII PowerShell scripts
+- UTF-8 encoding for non-ASCII PowerShell scripts
 - first-session language write coverage for English and Simplified Chinese
   temporary projects
 - project-bootstrap operating-mode coverage for safe refresh, compatibility

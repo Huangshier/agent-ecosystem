@@ -1,4 +1,4 @@
-﻿[CmdletBinding(DefaultParameterSetName = "GitDiff")]
+[CmdletBinding(DefaultParameterSetName = "GitDiff")]
 param(
     [Parameter(ParameterSetName = "Paths", Mandatory = $true)]
     [Alias("Paths")]
@@ -16,6 +16,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $PSCommandPath
+. (Join-Path $scriptDir "validation/powershell-runtime-requirement.ps1")
+Assert-AgentEcosystemPowerShellRuntime
 $defaultRepoRoot = Split-Path -Parent $scriptDir
 $repoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) { $defaultRepoRoot } else { [System.IO.Path]::GetFullPath($RepositoryRoot) }
 $rulesPath = Join-Path $scriptDir "validation/change-risk-rules.json"
@@ -48,8 +50,7 @@ function New-LocalValidationPlan {
     param(
         [int]$Tier,
         [bool]$RunSelfProtection,
-        [string]$SelfProtectionReason,
-        [bool]$RequiresWindowsPowerShell
+        [string]$SelfProtectionReason
     )
 
     $lightweight = New-LocalValidationAction `
@@ -84,19 +85,13 @@ function New-LocalValidationPlan {
     $prePushSkips = New-Object 'System.Collections.Generic.List[object]'
     $prePushActions.Add($lightweight)
     $prePushActions.Add($targeted)
-    if ($RequiresWindowsPowerShell) {
-        $prePushActions.Add((New-LocalValidationAction -Id "affected-change-validation-windows-powershell" -Script "scripts/validate-targeted-change.ps1" -Arguments @("-Mode", $targetedMode, "-ExecutionHost", "windows-powershell") -HostName "windows-powershell" -Suite "affected-windows-powershell-oracle" -Reason "The affected suite set contains PowerShell 5.1 compatibility semantics."))
-    }
-    else {
-        $prePushSkips.Add((New-LocalValidationSkip -Id "affected-windows-powershell-oracle" -Reason "No affected suite requires Windows PowerShell 5.1 semantics."))
-    }
     if ($RunSelfProtection) {
         $prePushActions.Add((New-LocalValidationAction -Id "validation-self-protection" -Script "scripts/test-heavy-targeted-regression.ps1" -Arguments @() -HostName "current" -Suite "validation-self-protection" -Reason $SelfProtectionReason))
     }
     else {
         $prePushSkips.Add((New-LocalValidationSkip -Id "validation-self-protection" -Reason $SelfProtectionReason))
     }
-    $prePushSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Pre-push is satisfied by affected suites, the necessary WinPS oracle, and independent self-protection."))
+    $prePushSkips.Add((New-LocalValidationSkip -Id "full-release-validation" -Reason "Pre-push is satisfied by affected suites and the independent self-protection oracle."))
 
     $releaseActions = New-Object 'System.Collections.Generic.List[object]'
     $releaseSkips = New-Object 'System.Collections.Generic.List[object]'
@@ -107,8 +102,8 @@ function New-LocalValidationPlan {
     else {
         $releaseSkips.Add((New-LocalValidationSkip -Id "validation-self-protection" -Reason $SelfProtectionReason))
     }
-    foreach ($hostName in @("pwsh", "windows-powershell")) {
-        $releaseActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @("-ValidationShard", "RepositoryCheckpoint") -HostName $hostName -Suite "full-release-validation" -Reason "Release validation always preserves the complete dual-host repository checkpoint boundary."))
+    foreach ($hostName in @("pwsh")) {
+        $releaseActions.Add((New-LocalValidationAction -Id ("full-release-validation-{0}" -f $hostName) -Script "scripts/validate-release.ps1" -Arguments @("-ValidationShard", "RepositoryCheckpoint") -HostName $hostName -Suite "full-release-validation" -Reason "Release validation always preserves the complete pwsh 7.6 repository checkpoint boundary."))
     }
 
     return [ordered]@{
@@ -186,8 +181,6 @@ function New-ChangeResult {
     }
     $suiteHostMap = [ordered]@{}
     $requiredHosts = New-Object 'System.Collections.Generic.List[string]'
-    $requiresWindowsPowerShell = $false
-    $requiredWindowsPowerShellSuites = New-Object 'System.Collections.Generic.List[string]'
     foreach ($suite in @($requiredSuites.ToArray() | Sort-Object -Unique)) {
         $hostProperty = $config.suite_hosts.PSObject.Properties[[string]$suite]
         if ($null -eq $hostProperty -or @($hostProperty.Value).Count -eq 0) {
@@ -199,15 +192,11 @@ function New-ChangeResult {
             $suiteHostMap[[string]$suite] = @($hostProperty.Value)
             foreach ($hostName in @($hostProperty.Value)) { $requiredHosts.Add([string]$hostName) }
         }
-        if (@($config.windows_powershell_suites) -contains [string]$suite) {
-            $requiresWindowsPowerShell = $true
-            $requiredWindowsPowerShellSuites.Add([string]$suite)
-        }
     }
     if ($runSelfProtection) {
         foreach ($hostName in @($config.self_protection_hosts)) { $requiredHosts.Add([string]$hostName) }
     }
-    $localPlan = New-LocalValidationPlan -Tier $Tier -RunSelfProtection $runSelfProtection -SelfProtectionReason $selfProtectionReason -RequiresWindowsPowerShell $requiresWindowsPowerShell
+    $localPlan = New-LocalValidationPlan -Tier $Tier -RunSelfProtection $runSelfProtection -SelfProtectionReason $selfProtectionReason
     $requiredChecks = New-Object 'System.Collections.Generic.List[string]'
     $skippedChecks = New-Object 'System.Collections.Generic.List[string]'
     foreach ($check in @("change-classification", "diff-check", "document-and-data-parse", "public-safe-scan", "base-guard", "identity-guard")) {
@@ -222,7 +211,6 @@ function New-ChangeResult {
     else {
         $skippedChecks.Add("targeted-module-checks")
     }
-    if ($requiresWindowsPowerShell) { $requiredChecks.Add("affected-windows-powershell") } else { $skippedChecks.Add("affected-windows-powershell") }
     if ($runSelfProtection) { $requiredChecks.Add("validation-self-protection") } else { $skippedChecks.Add("validation-self-protection") }
     $skippedChecks.Add("full-release-matrix")
     $hostedPlan = [ordered]@{
@@ -244,8 +232,6 @@ function New-ChangeResult {
         module_suite_map = $moduleSuiteMap
         required_hosts = @($requiredHosts.ToArray() | Sort-Object -Unique)
         suite_host_map = $suiteHostMap
-        requires_windows_powershell = [bool]$requiresWindowsPowerShell
-        required_windows_powershell_suites = @($requiredWindowsPowerShellSuites.ToArray() | Sort-Object -Unique)
         run_validation_self_protection = [bool]$runSelfProtection
         validation_self_protection_reason = $selfProtectionReason
         control_plane = [bool]$ControlPlane.IsPresent
