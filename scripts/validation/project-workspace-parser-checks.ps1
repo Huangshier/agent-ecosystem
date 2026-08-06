@@ -281,6 +281,18 @@ function Test-ExpectedCodes {
     }
 }
 
+# Get-ParserFindingSummary: returns a compact diagnostic summary for failed parser fixture assertions.
+function Get-ParserFindingSummary {
+    param([Parameter(Mandatory = $true)][object]$Payload)
+
+    $summaries = @($Payload.findings | ForEach-Object {
+        $location = @([string]$_.path, [string]$_.field) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        "{0}{1}" -f [string]$_.code, $(if ($location.Count -gt 0) { "[$($location -join ':')]" } else { "" })
+    })
+    if ($summaries.Count -eq 0) { return "none" }
+    return ($summaries -join "; ")
+}
+
 foreach ($requiredPath in @($parserPath, $schemaRoot, $templateRoot, $fixtureProject, $caseManifestPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required project workspace fixture dependency is missing: $requiredPath"
@@ -306,7 +318,8 @@ foreach ($case in $cases) {
         }
         if ([string]$case.expected -ceq "valid") {
             if ($invocation.exit_code -ne 0 -or [string]$invocation.payload.status -cne "PASS" -or [int]$invocation.payload.finding_count -ne 0) {
-                throw "Expected a valid parser result. Exit=$($invocation.exit_code) Status=$($invocation.payload.status)"
+                $findingSummary = Get-ParserFindingSummary -Payload $invocation.payload
+                throw "Expected a valid parser result. Exit=$($invocation.exit_code) Status=$($invocation.payload.status) Findings=$findingSummary"
             }
         }
         else {
@@ -349,7 +362,8 @@ foreach ($templateName in @($templateTargets.Keys)) {
         $after = Get-ProjectFingerprint -Root $project
         if ($before -cne $after) { $allReadOnly = $false; throw "Parser changed the canonical template copy." }
         if ($invocation.exit_code -ne 0 -or [string]$invocation.payload.status -cne "PASS" -or [int]$invocation.payload.asset_count -ne 1) {
-            throw "Canonical template did not pass its parser contract."
+            $findingSummary = Get-ParserFindingSummary -Payload $invocation.payload
+            throw "Canonical template did not pass its parser contract. Exit=$($invocation.exit_code) Status=$($invocation.payload.status) Findings=$findingSummary"
         }
         $templateCount++
         Add-CheckResult -Name ("template-{0}" -f $templateName) -Status "PASS" -Detail "Canonical template passed from its canonical project path."
