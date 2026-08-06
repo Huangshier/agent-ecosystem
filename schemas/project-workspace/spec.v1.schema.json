@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-ecosystem/spec/v1",
+  "title": "Agent Ecosystem Spec v1",
+  "description": "A public-safe, human-readable project specification metadata contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "status",
+    "updated",
+    "summary",
+    "related_work",
+    "supersedes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-ecosystem/spec/v1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "accepted",
+        "implemented",
+        "superseded",
+        "archived"
+      ]
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-](?:[0-1][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "related_work": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      }
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      }
+    }
+  }
+}

@@ -183,6 +183,30 @@ if ([int]$classification.detected_tier -ge 1) {
         Add-Result "installer-runtime-smoke" "PASS" "Minimal copy-first install and manifest uninstall completed in scratch space."
         $executedSuites.Add("runtime-smoke")
     }
+    if ($requiredSuites -contains "workspace-assets") {
+        $workspaceOutput = @(
+            & (Join-Path $scriptDir "test-project-workspace-parser.ps1") -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace parser fixtures failed.`n$workspaceOutput"
+        }
+        $workspaceEvidence = $workspaceOutput | ConvertFrom-Json
+        if ([int]$workspaceEvidence.schema_version -ne 1 -or
+            [string]$workspaceEvidence.status -cne "PASS" -or
+            [int]$workspaceEvidence.scenario_count -lt 16 -or
+            [int]$workspaceEvidence.pass -lt 1 -or
+            [int]$workspaceEvidence.fail -ne 0 -or
+            $workspaceEvidence.project_read_only -isnot [bool] -or
+            -not [bool]$workspaceEvidence.project_read_only -or
+            $workspaceEvidence.command_inert -isnot [bool] -or
+            -not [bool]$workspaceEvidence.command_inert -or
+            [int]$workspaceEvidence.template_count -ne 4 -or
+            [int]$workspaceEvidence.asset_type_count -ne 4) {
+            throw "Project workspace parser fixtures returned incomplete evidence."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates with read-only and command-inert assertions." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count)
+        $executedSuites.Add("workspace-assets")
+    }
     if ($requiredSuites -contains "project-context-gate") {
         $contextGateOutput = @(
             & (Join-Path $scriptDir "validation/project-context-gate-checks.ps1") `

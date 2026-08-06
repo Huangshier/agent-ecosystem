@@ -1,0 +1,122 @@
+[
+  {
+    "name": "encoding-valid-utf8",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:utf8",
+    "expected": "valid",
+    "expected_codes": []
+  },
+  {
+    "name": "encoding-valid-utf8-bom",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:utf8-bom",
+    "expected": "valid",
+    "expected_codes": []
+  },
+  {
+    "name": "encoding-reject-utf16-le-bom",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:utf16-le-bom",
+    "expected": "invalid",
+    "expected_codes": ["invalid-utf8"]
+  },
+  {
+    "name": "encoding-reject-utf16-be-bom",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:utf16-be-bom",
+    "expected": "invalid",
+    "expected_codes": ["invalid-utf8"]
+  },
+  {
+    "name": "encoding-reject-utf32-bom",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:utf32-bom",
+    "expected": "invalid",
+    "expected_codes": ["invalid-utf8"]
+  },
+  {
+    "name": "encoding-reject-malformed-utf8",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "encoding:malformed-utf8",
+    "expected": "invalid",
+    "expected_codes": ["invalid-utf8"]
+  },
+  {
+    "name": "updated-invalid-month",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:updated=2026-13-01T00:00:00Z",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-invalid-day",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "set:updated=2026-02-31T00:00:00Z",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-invalid-hour",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:updated=2026-01-01T24:00:00Z",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-invalid-minute",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "set:updated=2026-01-01T00:60:00Z",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-invalid-second",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:updated=2026-01-01T00:00:60Z",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-invalid-offset",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "set:updated=2026-01-01T00:00:00+12:60",
+    "expected": "invalid",
+    "expected_codes": ["invalid-updated"]
+  },
+  {
+    "name": "updated-valid-z",
+    "asset_type": "context",
+    "path": ".agents/context/fixture-context.md",
+    "mutation": "set:updated=2026-01-01T00:00:00Z",
+    "expected": "valid",
+    "expected_codes": []
+  },
+  {
+    "name": "updated-valid-offset",
+    "asset_type": "spec",
+    "path": "docs/specs/fixture-spec/spec.md",
+    "mutation": "set:updated=2026-01-01T12:34:56-08:00",
+    "expected": "valid",
+    "expected_codes": []
+  },
+  {
+    "name": "updated-valid-fraction",
+    "asset_type": "work",
+    "path": ".agents/work/fixture-work-item.md",
+    "mutation": "set:updated=2026-01-01T12:34:56.123456789+05:30",
+    "expected": "valid",
+    "expected_codes": []
+  }
+]

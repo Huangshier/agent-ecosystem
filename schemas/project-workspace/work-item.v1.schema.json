@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-ecosystem/work-item/v1",
+  "title": "Agent Ecosystem Work item v1",
+  "description": "A public-safe, human-readable project work item metadata contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "status",
+    "updated",
+    "revision",
+    "summary",
+    "next"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-ecosystem/work-item/v1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "blocked",
+        "deferred"
+      ]
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?(?:Z|[+-](?:[0-1][0-9]|2[0-3]):[0-5][0-9])$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next": {
+      "type": "string",
+      "minLength": 1
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "worktree": {
+          "type": "string",
+          "format": "project-relative-path",
+          "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!.*(?:^|[\\\\/])\\.\\.?(?:[\\\\/]|$))[^\\\\/:*?\"<>|]+(?:[\\\\/][^\\\\/:*?\"<>|]+)*$"
+        },
+        "last_verified_commit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

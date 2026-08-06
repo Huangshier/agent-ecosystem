@@ -519,7 +519,7 @@ $unsupported = (& $validator -ChangedPath "skills/removed-skill/SKILL.md" -Json 
 if ([int]$unsupported.detected_tier -ne 3 -or -not [bool]$unsupported.run_heavy_targeted_regression) { throw "Runtime skill without a reliable targeted suite did not fail closed to Tier 3 heavy execution." }
 $unmappedTest = (& $validator -ChangedPath "scripts/test-future-runtime.ps1" -Json | Out-String) | ConvertFrom-Json
 if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.conservative_fallback -or
-    @($unmappedTest.required_suites).Count -ne 9 -or @($unmappedTest.required_hosts).Count -ne 3 -or
+    @($unmappedTest.required_suites).Count -ne 10 -or @($unmappedTest.required_hosts).Count -ne 3 -or
     -not [bool]$unmappedTest.run_validation_self_protection -or -not [bool]$unmappedTest.self_protection_required -or
     [bool]$unmappedTest.control_plane -or [string]$unmappedTest.self_protection_reason -cne "unknown-or-ambiguous-input" -or
     -not [bool]$unmappedTest.run_heavy_targeted_regression) {
@@ -538,6 +538,7 @@ if ($RunTargetedRegression.IsPresent) {
         Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
         Invoke-TargetedRegression -Name "context-gate" -Path "skills/project-context-gate/scripts/context_gate.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
         Invoke-TargetedRegression -Name "context-gate-check" -Path "scripts/validation/project-context-gate-checks.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
+        Invoke-TargetedRegression -Name "workspace-assets" -Path @("schemas/project-workspace/work-item.schema.json", "skills/project-workspace/scripts/read-project-assets.ps1", "skills/project-workspace/scripts/project-continuity.ps1", "scripts/migrate-project.ps1") -ExpectedModule @("workspace-schema", "workspace", "continuity", "migration") -ExpectedSuite "workspace-assets" -Mode "targeted"
         Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
         Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
         Invoke-TargetedRegression -Name "docs-context-gate" -Path @("README.md", "skills/project-context-gate/scripts/context_gate.ps1") -ExpectedModule @("documentation", "context-gate") -ExpectedSuite "project-context-gate" -Mode "targeted"

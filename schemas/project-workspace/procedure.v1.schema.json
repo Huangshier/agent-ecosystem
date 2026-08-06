@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-ecosystem/procedure/v1",
+  "title": "Agent Ecosystem Procedure v1",
+  "description": "An internal, public-safe procedure metadata contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "kind",
+    "exposure",
+    "summary",
+    "triggers",
+    "side_effects"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-ecosystem/procedure/v1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "command",
+        "workflow"
+      ]
+    },
+    "exposure": {
+      "const": "internal",
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "side_effects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
