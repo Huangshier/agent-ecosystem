@@ -187,7 +187,9 @@ if ([int]$classification.detected_tier -ge 1) {
         $workspaceOutput = @(
             & (Join-Path $scriptDir "test-project-workspace-parser.ps1") -Json
         ) -join "`n"
-        if ($LASTEXITCODE -ne 0) { throw "Project workspace parser fixtures failed." }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace parser fixtures failed.`n$workspaceOutput"
+        }
         $workspaceEvidence = $workspaceOutput | ConvertFrom-Json
         if ([int]$workspaceEvidence.schema_version -ne 1 -or
             [string]$workspaceEvidence.status -cne "PASS" -or
