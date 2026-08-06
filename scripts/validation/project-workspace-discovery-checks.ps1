@@ -445,20 +445,20 @@ try {
             [ordered]@{ id = "tie-zeta"; updated = "2026-01-01T00:00:00Z" },
             [ordered]@{ id = "tie-newer"; updated = "2026-02-01T00:00:00Z" }
         )) {
-        Add-ContextFixture -ProjectRoot $project -Id $fixture.id -Updated $fixture.updated -Keyword "tie-token"
+        Add-ContextFixture -ProjectRoot $project -Id $fixture.id -Updated $fixture.updated -Keyword "tie-marker"
     }
     Add-ContextFixture -ProjectRoot $project -Id "shared-target-context" -Updated "2026-01-01T00:00:00Z" -Keyword "shared-target"
-    Add-SpecFixture -ProjectRoot $project -Id "tie-draft" -Updated "2027-01-01T00:00:00Z" -SearchText "tie-token"
+    Add-SpecFixture -ProjectRoot $project -Id "tie-draft" -Updated "2027-01-01T00:00:00Z" -SearchText "tie-marker"
 
-    $defaultLimit = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-token"
+    $defaultLimit = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-marker"
     $defaultIds = @($defaultLimit.payload.results | ForEach-Object { [string]$_.id })
     Assert-Condition ([int]$defaultLimit.payload.limit -eq 5 -and [int]$defaultLimit.payload.result_count -eq 5) "Default discovery limit is not exactly 5."
     Assert-Condition (($defaultIds -join ",") -ceq "tie-newer,tie-alpha,tie-beta,tie-delta,tie-epsilon") "Updated/status/path ordinal ordering did not produce the exact default first five results."
 
-    $allTies = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-token" -Limit 20
+    $allTies = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-marker" -Limit 20
     $allIds = @($allTies.payload.results | ForEach-Object { [string]$_.id })
     Assert-Condition (($allIds -join ",") -ceq "tie-newer,tie-alpha,tie-beta,tie-delta,tie-epsilon,tie-gamma,tie-zeta,tie-draft") "Complete deterministic sort key did not order score/status/updated/path/type/id exactly."
-    $repeat = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-token" -Limit 20
+    $repeat = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "tie-marker" -Limit 20
     Assert-Condition (($allTies.payload.results | ConvertTo-Json -Depth 20 -Compress) -ceq ($repeat.payload.results | ConvertTo-Json -Depth 20 -Compress)) "Repeated discovery changed deterministic result ordering."
 
     $deduplicated = Invoke-Workspace -Operation discover -ProjectRoot $project -Query "alpha-source beta-source" -Limit 20
