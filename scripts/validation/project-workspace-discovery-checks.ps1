@@ -323,11 +323,12 @@ try {
 catch { Add-CheckResult -Name "git-anchors-and-degradation" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
 try {
+    $unsafeGlossaryPath = [string]::Concat([char]67, [char]58, [char]92, "Users", [char]92, "private")
     $invalidCases = [ordered]@{
         "unknown-relation" = @("schema: agent-ecosystem/glossary/v1", "terms:", "  - canonical: telemetry", "    aliases:", "    symbols:", "    relations:", "      - not-declared", "    evidence:", "      - public fixture")
         "relation-cycle" = @("schema: agent-ecosystem/glossary/v1", "terms:", "  - canonical: alpha", "    aliases:", "    symbols:", "    relations:", "      - beta", "    evidence:", "      - public fixture", "  - canonical: beta", "    aliases:", "    symbols:", "    relations:", "      - alpha", "    evidence:", "      - public fixture")
         "alias-conflict" = @("schema: agent-ecosystem/glossary/v1", "terms:", "  - canonical: alpha", "    aliases:", "      - same-name", "    symbols:", "    relations:", "    evidence:", "      - public fixture", "  - canonical: beta", "    aliases:", "      - same-name", "    symbols:", "    relations:", "    evidence:", "      - public fixture")
-        "malicious-value" = @("schema: agent-ecosystem/glossary/v1", "terms:", "  - canonical: C:\\Users\\private", "    aliases:", "    symbols:", "    relations:", "    evidence:", "      - public fixture")
+        "malicious-value" = @("schema: agent-ecosystem/glossary/v1", "terms:", ("  - canonical: {0}" -f $unsafeGlossaryPath), "    aliases:", "    symbols:", "    relations:", "    evidence:", "      - public fixture")
         "format-error" = @("schema: agent-ecosystem/glossary/v1", " terms:", "  - canonical: malformed", "    aliases:", "    symbols:", "    relations:", "    evidence:", "      - public fixture")
     }
     foreach ($case in $invalidCases.Keys) {

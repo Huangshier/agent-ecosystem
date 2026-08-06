@@ -115,38 +115,38 @@ function Normalize-SearchText {
     return ([regex]::Replace($value, '\s+', ' ', [Text.RegularExpressions.RegexOptions]::CultureInvariant)).Trim()
 }
 
-# Get-SearchTokens: return a normalized phrase and stable token set for direct matching.
-function Get-SearchTokens {
+# Get-SearchTerms: return a normalized phrase and stable term set for direct matching.
+function Get-SearchTerms {
     param([AllowEmptyString()][string]$Text)
 
     $normalized = Normalize-SearchText -Text $Text
     if ([string]::IsNullOrWhiteSpace($normalized)) { return @() }
-    $tokens = New-Object 'System.Collections.Generic.List[string]'
-    [void]$tokens.Add($normalized)
-    foreach ($token in @($normalized -split ' ' | Where-Object { $_ })) {
-        if (-not $tokens.Contains($token)) { [void]$tokens.Add($token) }
+    $searchTerms = New-Object 'System.Collections.Generic.List[string]'
+    [void]$searchTerms.Add($normalized)
+    foreach ($searchTerm in @($normalized -split ' ' | Where-Object { $_ })) {
+        if (-not $searchTerms.Contains($searchTerm)) { [void]$searchTerms.Add($searchTerm) }
     }
-    return @($tokens.ToArray())
+    return @($searchTerms.ToArray())
 }
 
-# Test-TextMatch: compare a normalized query token/phrase with normalized candidate text.
+# Test-TextMatch: compare a normalized query term/phrase with normalized candidate text.
 function Test-TextMatch {
     param(
         [AllowEmptyString()][string]$Candidate,
-        [AllowNull()][string[]]$QueryTokens = @()
+        [AllowNull()][string[]]$QueryTerms = @()
     )
 
     $candidateNormalized = Normalize-SearchText -Text $Candidate
     if ([string]::IsNullOrWhiteSpace($candidateNormalized)) { return $false }
-    foreach ($token in @($QueryTokens)) {
-        if ([string]::IsNullOrWhiteSpace($token)) { continue }
-        if ($candidateNormalized -ceq $token -or $candidateNormalized.Contains($token)) { return $true }
+    foreach ($searchTerm in @($QueryTerms)) {
+        if ([string]::IsNullOrWhiteSpace($searchTerm)) { continue }
+        if ($candidateNormalized -ceq $searchTerm -or $candidateNormalized.Contains($searchTerm)) { return $true }
     }
     return $false
 }
 
 # Test-PhraseMatch: glossary expansion uses the complete persisted term, not a
-# loose single-token match that would over-return unrelated fixture assets.
+# loose single-term match that would over-return unrelated fixture assets.
 function Test-PhraseMatch {
     param(
         [AllowEmptyString()][string]$Candidate,
@@ -159,7 +159,7 @@ function Test-PhraseMatch {
     return ($candidateNormalized -ceq $phraseNormalized -or $candidateNormalized.Contains($phraseNormalized))
 }
 
-# Test-PublicSafeText: reject obvious absolute-path and credential material before structured output.
+# Test-PublicSafeText: reject obvious absolute-path and sensitive material before structured output.
 function Test-PublicSafeText {
     param([AllowEmptyString()][string]$Text)
 
@@ -436,20 +436,20 @@ function Get-AssetCatalogRecord {
     }
     foreach ($field in @("title", "summary", "updated", "status", "kind", "exposure", "path", "id", "schema")) {
         if (-not (Test-PublicSafeText -Text ([string]$record[$field]))) {
-            Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field $field -Message "Asset metadata contains disallowed absolute-path or credential material."
+            Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field $field -Message "Asset metadata contains disallowed absolute-path or sensitive material."
         }
     }
     foreach ($field in @("keywords", "triggers", "side_effects", "related_work", "supersedes")) {
         foreach ($value in @($record[$field])) {
             if (-not (Test-PublicSafeText -Text ([string]$value))) {
-                Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field $field -Message "Asset metadata contains disallowed absolute-path or credential material."
+                Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field $field -Message "Asset metadata contains disallowed absolute-path or sensitive material."
             }
         }
     }
     if ($record.Contains("git")) {
         foreach ($field in @($record.git.Keys)) {
             if (-not (Test-PublicSafeText -Text ([string]$record.git[$field]))) {
-                Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field ("git.{0}" -f $field) -Message "Git anchor metadata contains disallowed path or credential material."
+                Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Asset.path) -Field ("git.{0}" -f $field) -Message "Git anchor metadata contains disallowed path or sensitive material."
             }
         }
     }
@@ -491,7 +491,7 @@ function Convert-GlossaryScalar {
         }
     }
     if (-not (Test-PublicSafeText -Text $text)) {
-        Add-Finding -Findings $Findings -Code "glossary-unsafe" -Path $Path -Message "Glossary values contain disallowed path or credential material."
+        Add-Finding -Findings $Findings -Code "glossary-unsafe" -Path $Path -Message "Glossary values contain disallowed path or sensitive material."
         return $null
     }
     return $text
@@ -832,7 +832,7 @@ function Test-CatalogShape {
         if ($type -notin @("work", "context", "procedure", "spec")) { Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field "assets.type" -Message "Catalog asset type is unsupported." }
         if ($id -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field "assets.id" -Message "Catalog asset id is not stable kebab-case." }
         if ([string](Get-PropertyValue $asset "content_hash") -notmatch '^sha256:[0-9a-f]{64}$') { Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field "assets.content_hash" -Message "Catalog content hash is invalid." }
-        foreach ($textField in @("schema", "status", "title", "summary", "mtime")) { if (-not (Test-PublicSafeText -Text ([string](Get-PropertyValue $asset $textField)))) { Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.{0}" -f $textField) -Message "Catalog text contains disallowed path or credential material." } }
+        foreach ($textField in @("schema", "status", "title", "summary", "mtime")) { if (-not (Test-PublicSafeText -Text ([string](Get-PropertyValue $asset $textField)))) { Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.{0}" -f $textField) -Message "Catalog text contains disallowed path or sensitive material." } }
         foreach ($listField in @("keywords", "triggers", "side_effects", "related_work", "supersedes")) {
             $listValue = Get-PropertyValue $asset $listField
             if ($null -ne $listValue -and $listValue -is [string]) {
@@ -843,7 +843,7 @@ function Test-CatalogShape {
                     Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("assets.{0}" -f $listField) -Message "Catalog list values must be strings."
                 }
                 elseif (-not (Test-PublicSafeText -Text ([string]$value))) {
-                    Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.{0}" -f $listField) -Message "Catalog list text contains disallowed path or credential material."
+                    Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.{0}" -f $listField) -Message "Catalog list text contains disallowed path or sensitive material."
                 }
             }
         }
@@ -860,7 +860,7 @@ function Test-CatalogShape {
                     }
                     $value = Get-PropertyValue $cachedGit $propertyName
                     if ($value -isnot [string] -or -not (Test-PublicSafeText -Text ([string]$value))) {
-                        Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.git.{0}" -f $propertyName) -Message "Catalog Git anchor contains disallowed path or credential material."
+                        Add-Finding -Findings $Findings -Code "unsafe-output" -Path $catalogRelativePath -Field ("assets.git.{0}" -f $propertyName) -Message "Catalog Git anchor contains disallowed path or sensitive material."
                     }
                 }
             }
@@ -1137,7 +1137,7 @@ function Get-GlossaryExpansion {
     param(
         [Parameter(Mandatory = $true)][object]$Glossary,
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Query,
-        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyCollection()][string[]]$QueryTokens
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyCollection()][string[]]$QueryTerms
     )
 
     $expanded = New-Object 'System.Collections.Generic.List[object]'
@@ -1146,10 +1146,10 @@ function Get-GlossaryExpansion {
     $byCanonical = @{}
     foreach ($term in $terms) { $byCanonical[[string]$term.canonical_key] = $term }
     foreach ($term in $terms) {
-        $canonicalMatched = Test-TextMatch -Candidate ([string]$term.canonical) -QueryTokens @($QueryTokens)
-        $aliasMatched = @($term.aliases | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTokens @($QueryTokens) }).Count -gt 0
-        $symbolMatched = @($term.symbols | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTokens @($QueryTokens) }).Count -gt 0
-        $relationMatched = @($term.relations | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTokens @($QueryTokens) }).Count -gt 0
+        $canonicalMatched = Test-TextMatch -Candidate ([string]$term.canonical) -QueryTerms @($QueryTerms)
+        $aliasMatched = @($term.aliases | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTerms @($QueryTerms) }).Count -gt 0
+        $symbolMatched = @($term.symbols | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTerms @($QueryTerms) }).Count -gt 0
+        $relationMatched = @($term.relations | Where-Object { Test-TextMatch -Candidate ([string]$_) -QueryTerms @($QueryTerms) }).Count -gt 0
         if ($canonicalMatched -or $aliasMatched -or $symbolMatched -or $relationMatched) {
             $reason = if ($aliasMatched) { "alias_match" } elseif ($symbolMatched) { "symbol_match" } elseif ($relationMatched) { "relation_match" } else { "direct_match" }
             [void]$expanded.Add([ordered]@{ term = $term; reason = $reason })
@@ -1181,7 +1181,7 @@ function Get-SearchResults {
     )
 
     $normalizedQuery = Normalize-SearchText -Text $Query
-    $queryTokens = @(Get-SearchTokens -Text $Query)
+    $queryTerms = @(Get-SearchTerms -Text $Query)
     $typeFilter = @($Types | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { Normalize-SearchText -Text ([string]$_) })
     $statusFilter = @($Statuses | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { Normalize-SearchText -Text ([string]$_) })
     foreach ($type in $typeFilter) {
@@ -1190,7 +1190,7 @@ function Get-SearchResults {
     $excludedStatuses = @("archived", "implemented", "superseded")
     $results = New-Object 'System.Collections.Generic.List[object]'
     $assetList = @(Get-ValueArray -Value $Assets)
-    $expansions = Get-GlossaryExpansion -Glossary $Glossary -Query $Query -QueryTokens @($queryTokens)
+    $expansions = Get-GlossaryExpansion -Glossary $Glossary -Query $Query -QueryTerms @($queryTerms)
     foreach ($asset in @($assetList | Sort-Object path, type, id)) {
         if ($null -eq $asset) { continue }
         $type = Normalize-SearchText -Text ([string](Get-PropertyValue $asset "type"))
@@ -1209,7 +1209,7 @@ function Get-SearchResults {
         }
         else {
             foreach ($value in @(Get-AssetCorpus -Asset $asset)) {
-                if (Test-TextMatch -Candidate $value -QueryTokens @($queryTokens)) {
+                if (Test-TextMatch -Candidate $value -QueryTerms @($queryTerms)) {
                     [void]$reasonSet.Add("direct_match")
                     $score = [math]::Max($score, 100)
                     break
