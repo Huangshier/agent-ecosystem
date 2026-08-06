@@ -146,32 +146,74 @@ function Test-SafeProjectRelativePath {
     return $true
 }
 
-# Test-ProjectRelativePathBoundary: verifies lexical containment and, when the target exists, rejects links that escape the physical root.
+# Resolve-ProjectAnchoredPath: resolves existing links below the trusted project root and rejects targets that leave that root.
+function Resolve-ProjectAnchoredPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$VisitedLinks,
+        [int]$Depth = 0
+    )
+
+    if ($Depth -gt 64) {
+        throw "Project-relative link resolution exceeded the safe hop limit."
+    }
+    $rootFull = Get-NormalizedFullPath -Path $Root
+    $pathFull = Get-NormalizedFullPath -Path $Path
+    if (-not (Test-PathIsEqualOrChild -Path $pathFull -Root $rootFull)) {
+        throw "Project-relative link target escapes the project root."
+    }
+    $relativePath = [System.IO.Path]::GetRelativePath($rootFull, $pathFull)
+    if ($relativePath -ceq ".") {
+        return $rootFull
+    }
+
+    $current = $rootFull
+    foreach ($segment in @($relativePath -split '[\\/]+')) {
+        $candidate = Get-NormalizedFullPath -Path (Join-Path $current $segment)
+        $item = Get-PhysicalPathItem -Path $candidate -AllowMissing
+        if ($null -eq $item) {
+            return $candidate
+        }
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+            $current = $candidate
+            continue
+        }
+        foreach ($visitedLink in @($VisitedLinks.ToArray())) {
+            if (Test-PlatformPathEqual -Left $visitedLink -Right $candidate) {
+                throw "Project-relative link cycle detected."
+            }
+        }
+        $VisitedLinks.Add($candidate)
+        $targetPath = Get-ReparsePointTargetPath -Item $item -LinkPath $candidate
+        if (-not (Test-PathIsEqualOrChild -Path $targetPath -Root $rootFull)) {
+            throw "Project-relative link target escapes the project root."
+        }
+        if ($null -eq (Get-PhysicalPathItem -Path $targetPath -AllowMissing)) {
+            throw "Broken project-relative link target."
+        }
+        $current = Resolve-ProjectAnchoredPath -Root $rootFull -Path $targetPath -VisitedLinks $VisitedLinks -Depth ($Depth + 1)
+    }
+    return $current
+}
+
+# Test-ProjectRelativePathBoundary: verifies lexical containment and rejects existing links that escape the trusted project root.
 function Test-ProjectRelativePathBoundary {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$PhysicalRoot,
         [Parameter(Mandatory = $true)][string]$RelativePath
     )
 
-    if (-not (Test-SafeProjectRelativePath -Path $RelativePath)) {
-        return $false
-    }
+    if (-not (Test-SafeProjectRelativePath -Path $RelativePath)) { return $false }
     $fullPath = Get-NormalizedFullPath -Path (Join-Path $Root $RelativePath)
-    if (-not (Test-PathIsEqualOrChild -Path $fullPath -Root $Root)) {
-        return $false
-    }
-    if (-not (Test-Path -LiteralPath $fullPath)) {
-        return $true
-    }
+    if (-not (Test-PathIsEqualOrChild -Path $fullPath -Root $Root)) { return $false }
+    if (-not (Test-Path -LiteralPath $fullPath)) { return $true }
     try {
         $visitedLinks = New-Object 'System.Collections.Generic.List[string]'
-        $physicalPath = Resolve-ExistingPhysicalPath -Path $fullPath -VisitedLinks $visitedLinks
-        return (Test-PathIsEqualOrChild -Path $physicalPath -Root $PhysicalRoot)
+        Resolve-ProjectAnchoredPath -Root $Root -Path $fullPath -VisitedLinks $visitedLinks | Out-Null
+        return $true
     }
-    catch {
-        return $false
-    }
+    catch { return $false }
 }
 
 # ConvertTo-NormalizedRelativePath: returns a slash-normalized path relative to the supplied project root.
@@ -586,17 +628,6 @@ if (-not [string]::IsNullOrWhiteSpace($projectRootFull)) {
     }
 }
 
-$physicalProjectRoot = ""
-if (-not [string]::IsNullOrWhiteSpace($projectRootFull)) {
-    try {
-        $visitedRootLinks = New-Object 'System.Collections.Generic.List[string]'
-        $physicalProjectRoot = Resolve-ExistingPhysicalPath -Path $projectRootFull -VisitedLinks $visitedRootLinks
-    }
-    catch {
-        Add-AssetFinding -Findings $findings -Code "project-root-invalid" -Path "" -Message "Project root physical path cannot be resolved safely."
-    }
-}
-
 $identities = @{}
 foreach ($relativePath in @($selectedPaths.ToArray() | Sort-Object)) {
     $descriptor = Get-CanonicalAssetDescriptor -RelativePath $relativePath
@@ -609,14 +640,7 @@ foreach ($relativePath in @($selectedPaths.ToArray() | Sort-Object)) {
         Add-AssetFinding -Findings $findings -Code "asset-path-missing" -Path $relativePath -Message "Asset path does not exist."
         continue
     }
-    try {
-        $visitedLinks = New-Object 'System.Collections.Generic.List[string]'
-        $physicalPath = Resolve-ExistingPhysicalPath -Path $fullPath -VisitedLinks $visitedLinks
-        if ([string]::IsNullOrWhiteSpace($physicalProjectRoot) -or -not (Test-PathIsEqualOrChild -Path $physicalPath -Root $physicalProjectRoot)) {
-            throw "Asset physical path escapes the project root."
-        }
-    }
-    catch {
+    if (-not (Test-ProjectRelativePathBoundary -Root $projectRootFull -RelativePath $relativePath)) {
         Add-AssetFinding -Findings $findings -Code "unsafe-path" -Path $relativePath -Message "Asset physical path cannot be resolved inside the project root."
         continue
     }
@@ -664,7 +688,7 @@ foreach ($relativePath in @($selectedPaths.ToArray() | Sort-Object)) {
             }
             if ($worktree -is [string] -and
                 (Test-SafeProjectRelativePath -Path $worktree) -and
-                -not (Test-ProjectRelativePathBoundary -Root $projectRootFull -PhysicalRoot $physicalProjectRoot -RelativePath $worktree)) {
+                -not (Test-ProjectRelativePathBoundary -Root $projectRootFull -RelativePath $worktree)) {
                 Add-AssetFinding -Findings $findings -Code "unsafe-path" -Path $relativePath -Field "git.worktree" -Message "Field 'git.worktree' resolves outside the project root."
             }
         }
