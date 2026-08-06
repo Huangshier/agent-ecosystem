@@ -4,6 +4,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [string[]]$AssetPath = @(),
+    [switch]$IncludeMetadata,
+    [switch]$NoExit,
     [switch]$Json
 )
 
@@ -809,14 +811,20 @@ foreach ($relativePath in @($selectedPaths.ToArray() | Sort-Object)) {
         }
     }
 
-    $assets.Add([ordered]@{
+    $assetResult = [ordered]@{
         type = $assetType
         id = $assetId
         path = $relativePath
         schema = $schemaUri
         valid = ($findings.Count -eq $findingStart)
         finding_codes = @()
-    })
+    }
+    if ($IncludeMetadata.IsPresent -and $null -ne $metadata) {
+        # Metadata is opt-in so the original parser contract remains compact. The
+        # discovery layer still uses this parser as the sole Markdown authority.
+        $assetResult.metadata = $metadata
+    }
+    $assets.Add($assetResult)
 }
 
 $sortedFindings = @($findings.ToArray() | Sort-Object path, field, code, message)
@@ -849,6 +857,9 @@ else {
     }
 }
 
-if ($result.status -ne "PASS") {
-    exit 1
+if (-not $NoExit.IsPresent) {
+    if ($result.status -ne "PASS") {
+        exit 1
+    }
+    exit 0
 }

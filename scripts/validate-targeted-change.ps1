@@ -204,7 +204,26 @@ if ([int]$classification.detected_tier -ge 1) {
             [int]$workspaceEvidence.asset_type_count -ne 4) {
             throw "Project workspace parser fixtures returned incomplete evidence."
         }
-        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates with read-only and command-inert assertions." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count)
+        $workspaceDiscoveryOutput = @(
+            & (Join-Path $scriptDir "validation/project-workspace-discovery-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "workspace-discovery") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace discovery fixtures failed.`n$workspaceDiscoveryOutput"
+        }
+        $workspaceDiscoveryEvidence = $workspaceDiscoveryOutput | ConvertFrom-Json
+        if ([int]$workspaceDiscoveryEvidence.schema_version -ne 1 -or
+            [string]$workspaceDiscoveryEvidence.status -cne "PASS" -or
+            [int]$workspaceDiscoveryEvidence.scenario_count -lt 5 -or
+            [int]$workspaceDiscoveryEvidence.pass -lt 5 -or
+            [int]$workspaceDiscoveryEvidence.fail -ne 0 -or
+            $workspaceDiscoveryEvidence.project_read_only -isnot [bool] -or
+            -not [bool]$workspaceDiscoveryEvidence.project_read_only) {
+            throw "Project workspace discovery fixtures returned incomplete evidence."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates plus {3} discovery scenarios with read-only, cache, glossary, revision, and Git-anchor assertions." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count)
         $executedSuites.Add("workspace-assets")
     }
     if ($requiredSuites -contains "project-context-gate") {
