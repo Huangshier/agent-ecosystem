@@ -1,6 +1,9 @@
 [
   { "name": "catalog-search-determinism", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
+  { "name": "deterministic-order-and-dedup", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
   { "name": "cache-invalidation-matrix", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
+  { "name": "catalog-shape-invalid", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
+  { "name": "broken-canonical-references", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
   { "name": "revision-and-read-only", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
   { "name": "git-anchors-and-degradation", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] },
   { "name": "glossary-fail-closed", "category": "workspace", "hosts": ["windows", "ubuntu", "macos"] }

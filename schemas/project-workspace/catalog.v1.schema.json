@@ -118,9 +118,13 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "branch": { "type": "string" },
-              "worktree": { "type": "string" },
-              "last_verified_commit": { "type": "string" }
+              "branch": { "type": "string", "minLength": 1 },
+              "worktree": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!.*(?:^|[\\\\/])\\.\\.?(?:[\\\\/]|$))[^\\\\/:*?\"<>|]+(?:[\\\\/][^\\\\/:*?\"<>|]+)*$"
+              },
+              "last_verified_commit": { "type": "string", "minLength": 1 }
             }
           },
           "size": {
