@@ -31,6 +31,7 @@ $templateRoot = Join-Path $repoRoot "templates/project/assets"
 $fixtureRoot = Join-Path $scriptDir "project-workspace-fixtures"
 $fixtureProject = Join-Path $fixtureRoot "new-project"
 $caseManifestPath = Join-Path $fixtureRoot "cases.json"
+$hardeningManifestPath = Join-Path $fixtureRoot "hardening-cases.json"
 $pwshPath = Resolve-AgentEcosystemPwshExecutable
 
 if ([string]::IsNullOrWhiteSpace($pwshPath)) {
@@ -84,13 +85,14 @@ function New-FixtureProject {
 function Invoke-ParserProcess {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
-        [string]$ExplicitAssetPath = ""
+        [string]$ExplicitAssetPath = "",
+        [string]$ParserScriptPath = ""
     )
 
+    $scriptPath = if ([string]::IsNullOrWhiteSpace($ParserScriptPath)) { $parserPath } else { $ParserScriptPath }
     $arguments = @(
-        "-NoProfile", "-NonInteractive", "-File", $parserPath,
+        "-NoProfile", "-NonInteractive", "-File", $scriptPath,
         "-ProjectRoot", $ProjectRoot,
-        "-SchemaRoot", $schemaRoot,
         "-Json"
     )
     if (-not [string]::IsNullOrWhiteSpace($ExplicitAssetPath)) {
@@ -128,6 +130,82 @@ function Write-AssetText {
     )
 
     [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($false))
+}
+
+# Write-EncodingFixture: writes the copied asset with an explicit byte encoding so parser checks exercise real byte inputs.
+function Write-EncodingFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$EncodingName
+    )
+
+    $text = Read-AssetText -Path $Path
+    if ($EncodingName -ceq "malformed-utf8") {
+        $encoding = [System.Text.UTF8Encoding]::new($false, $true)
+        $prefixText = $text.Substring(0, $text.IndexOf("title: ", [StringComparison]::Ordinal) + 7)
+        $suffixText = $text.Substring($prefixText.Length)
+        $prefixBytes = $encoding.GetBytes($prefixText)
+        $suffixBytes = $encoding.GetBytes($suffixText)
+        $invalidBytes = [byte[]](0xC3, 0x28)
+        [System.IO.File]::WriteAllBytes($Path, [byte[]]($prefixBytes + $invalidBytes + $suffixBytes))
+        return
+    }
+
+    $encoding = switch ($EncodingName) {
+        "utf8" { [System.Text.UTF8Encoding]::new($false, $true); break }
+        "utf8-bom" { [System.Text.UTF8Encoding]::new($true, $true); break }
+        "utf16-le-bom" { [System.Text.UnicodeEncoding]::new($false, $true, $true); break }
+        "utf16-be-bom" { [System.Text.UnicodeEncoding]::new($true, $true, $true); break }
+        "utf32-bom" { [System.Text.UTF32Encoding]::new($false, $true, $true); break }
+        default { throw "Unknown encoding fixture: $EncodingName" }
+    }
+    [System.IO.File]::WriteAllBytes($Path, [byte[]]($encoding.GetPreamble() + $encoding.GetBytes($text)))
+}
+
+# Assert-EncodingFixtureBytes: proves encoding cases use the intended raw byte prefix or malformed sequence.
+function Assert-EncodingFixtureBytes {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$EncodingName
+    )
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $matchesPrefix = {
+        param([byte[]]$Expected)
+        if ($bytes.Length -lt $Expected.Length) { return $false }
+        for ($index = 0; $index -lt $Expected.Length; $index++) {
+            if ($bytes[$index] -ne $Expected[$index]) { return $false }
+        }
+        return $true
+    }
+    switch ($EncodingName) {
+        "utf8" {
+            if (& $matchesPrefix ([byte[]](0xEF, 0xBB, 0xBF))) { throw "UTF-8 no-BOM fixture unexpectedly contains a BOM." }
+        }
+        "utf8-bom" {
+            if (-not (& $matchesPrefix ([byte[]](0xEF, 0xBB, 0xBF)))) { throw "UTF-8 BOM fixture does not contain the expected BOM." }
+        }
+        "utf16-le-bom" {
+            if (-not (& $matchesPrefix ([byte[]](0xFF, 0xFE)))) { throw "UTF-16 LE fixture does not contain the expected BOM." }
+        }
+        "utf16-be-bom" {
+            if (-not (& $matchesPrefix ([byte[]](0xFE, 0xFF)))) { throw "UTF-16 BE fixture does not contain the expected BOM." }
+        }
+        "utf32-bom" {
+            if (-not (& $matchesPrefix ([byte[]](0xFF, 0xFE, 0x00, 0x00)))) { throw "UTF-32 fixture does not contain the expected BOM." }
+        }
+        "malformed-utf8" {
+            $found = $false
+            for ($index = 0; $index -lt ($bytes.Length - 1); $index++) {
+                if ($bytes[$index] -eq 0xC3 -and $bytes[$index + 1] -eq 0x28) {
+                    $found = $true
+                    break
+                }
+            }
+            if (-not $found) { throw "Malformed UTF-8 fixture does not contain the intended invalid byte sequence." }
+        }
+        default { throw "Unknown encoding fixture assertion: $EncodingName" }
+    }
 }
 
 # Remove-FrontMatterField: removes one top-level field and its indented children from a scratch fixture.
@@ -221,6 +299,10 @@ function Apply-FixtureMutation {
         Set-FrontMatterField -Path $assetPath -Field $assignment.Substring(0, $separator) -Value $assignment.Substring($separator + 1)
         return
     }
+    if ($mutation.StartsWith("encoding:")) {
+        Write-EncodingFixture -Path $assetPath -EncodingName $mutation.Substring(9)
+        return
+    }
     if ($mutation -ceq "add:unexpected") {
         Add-UnknownFrontMatterField -Path $assetPath
         return
@@ -293,13 +375,35 @@ function Get-ParserFindingSummary {
     return ($summaries -join "; ")
 }
 
-foreach ($requiredPath in @($parserPath, $schemaRoot, $templateRoot, $fixtureProject, $caseManifestPath)) {
+# New-ParserRepositoryCopy: creates an isolated parser checkout so canonical-schema failure modes can be tested without changing this repository.
+function New-ParserRepositoryCopy {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $copyRoot = Join-Path $scratchRootFull $Name
+    $copyParserDir = Join-Path $copyRoot "skills/project-workspace/scripts"
+    $copySchemaDir = Join-Path $copyRoot "schemas/project-workspace"
+    $copyValidationDir = Join-Path $copyRoot "scripts/validation"
+    $copyLibDir = Join-Path $copyRoot "scripts/lib"
+    foreach ($directory in @($copyParserDir, $copySchemaDir, $copyValidationDir, $copyLibDir)) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }
+    Copy-Item -LiteralPath $parserPath -Destination (Join-Path $copyParserDir (Split-Path -Leaf $parserPath))
+    foreach ($schemaFile in @(Get-ChildItem -LiteralPath $schemaRoot -File -Filter "*.json")) {
+        Copy-Item -LiteralPath $schemaFile.FullName -Destination (Join-Path $copySchemaDir $schemaFile.Name)
+    }
+    Copy-Item -LiteralPath (Join-Path $repoRoot "scripts/validation/powershell-runtime-requirement.ps1") -Destination (Join-Path $copyValidationDir "powershell-runtime-requirement.ps1")
+    Copy-Item -LiteralPath (Join-Path $repoRoot "scripts/lib/path-guard.ps1") -Destination (Join-Path $copyLibDir "path-guard.ps1")
+    return $copyRoot
+}
+
+foreach ($requiredPath in @($parserPath, $schemaRoot, $templateRoot, $fixtureProject, $caseManifestPath, $hardeningManifestPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required project workspace fixture dependency is missing: $requiredPath"
     }
 }
 
 $cases = @(Get-Content -LiteralPath $caseManifestPath -Raw | ConvertFrom-Json -Depth 20)
+$hardeningCases = @(Get-Content -LiteralPath $hardeningManifestPath -Raw | ConvertFrom-Json -Depth 20)
 $allReadOnly = $true
 $commandInert = $true
 
@@ -373,14 +477,123 @@ foreach ($templateName in @($templateTargets.Keys)) {
     }
 }
 
+$baselineScenarioCount = $results.Count
+$baselinePassCount = @($results | Where-Object status -eq "PASS").Count
+$baselineFailCount = @($results | Where-Object status -eq "FAIL").Count
+$baselineContract = ($baselineScenarioCount -eq 34 -and $baselinePassCount -eq 34 -and $baselineFailCount -eq 0)
+
+foreach ($case in $hardeningCases) {
+    $caseName = [string]$case.name
+    try {
+        $project = New-FixtureProject -Name ("hardening-case-{0}" -f $caseName)
+        Apply-FixtureMutation -ProjectRoot $project -Case $case
+        if ([string]$case.mutation -like "encoding:*") {
+            Assert-EncodingFixtureBytes -Path (Join-Path $project ([string]$case.path).Replace('/', [System.IO.Path]::DirectorySeparatorChar)) -EncodingName ([string]$case.mutation).Substring(9)
+        }
+        $before = Get-ProjectFingerprint -Root $project
+        $invocation = Invoke-ParserProcess -ProjectRoot $project -ExplicitAssetPath ([string]$case.path)
+        $after = Get-ProjectFingerprint -Root $project
+        if ($before -cne $after) {
+            $allReadOnly = $false
+            throw "Parser changed hardening fixture input files."
+        }
+        if ([string]$case.expected -ceq "valid") {
+            if ($invocation.exit_code -ne 0 -or [string]$invocation.payload.status -cne "PASS" -or [int]$invocation.payload.finding_count -ne 0) {
+                $findingSummary = Get-ParserFindingSummary -Payload $invocation.payload
+                throw "Expected a valid hardening parser result. Exit=$($invocation.exit_code) Status=$($invocation.payload.status) Findings=$findingSummary"
+            }
+        }
+        else {
+            if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL" -or [int]$invocation.payload.finding_count -lt 1) {
+                throw "Expected an invalid hardening parser result. Exit=$($invocation.exit_code) Status=$($invocation.payload.status)"
+            }
+            Test-ExpectedCodes -Payload $invocation.payload -ExpectedCodes @($case.expected_codes)
+        }
+        Add-CheckResult -Name $caseName -Status "PASS" -Detail ("Expected {0} hardening result with stable input fingerprint." -f [string]$case.expected)
+    }
+    catch {
+        Add-CheckResult -Name $caseName -Status "FAIL" -Detail $_.Exception.Message
+    }
+}
+
+try {
+    $parserCommand = Get-Command -Name $parserPath -ErrorAction Stop
+    if (@($parserCommand.Parameters.Keys) -icontains "SchemaRoot") {
+        throw "Product parser still exposes the removed SchemaRoot parameter."
+    }
+    Add-CheckResult -Name "schema-root-removed" -Status "PASS" -Detail "Product parser parameters do not expose SchemaRoot."
+}
+catch {
+    Add-CheckResult -Name "schema-root-removed" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
+    $project = New-FixtureProject -Name "schema-authority-custom-relaxation"
+    $assetPath = Join-Path $project ".agents/work/fixture-work-item.md"
+    Add-UnknownFrontMatterField -Path $assetPath
+    $customSchemaDir = Join-Path $project "custom-schemas"
+    New-Item -ItemType Directory -Force -Path $customSchemaDir | Out-Null
+    $customSchemaText = Get-Content -LiteralPath (Join-Path $schemaRoot "work-item.v1.schema.json") -Raw
+    $customSchemaText = $customSchemaText.Replace('"additionalProperties": false', '"additionalProperties": true')
+    [System.IO.File]::WriteAllText((Join-Path $customSchemaDir "work-item.v1.schema.json"), $customSchemaText, [System.Text.UTF8Encoding]::new($false))
+    $invocation = Invoke-ParserProcess -ProjectRoot $project -ExplicitAssetPath ".agents/work/fixture-work-item.md"
+    if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL") {
+        throw "A custom relaxed schema changed the parser result for a canonical v1 asset."
+    }
+    Test-ExpectedCodes -Payload $invocation.payload -ExpectedCodes @("unknown-field")
+    Add-CheckResult -Name "schema-authority-custom-relaxation" -Status "PASS" -Detail "Custom schema files cannot relax canonical v1 validation."
+}
+catch {
+    Add-CheckResult -Name "schema-authority-custom-relaxation" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
+    $copyRoot = New-ParserRepositoryCopy -Name "schema-authority-missing-canonical"
+    $schemaPath = Join-Path $copyRoot "schemas/project-workspace/work-item.v1.schema.json"
+    Remove-Item -LiteralPath $schemaPath -Force
+    $project = New-FixtureProject -Name "schema-authority-missing-project"
+    $copyParser = Join-Path $copyRoot "skills/project-workspace/scripts/read-project-assets.ps1"
+    $invocation = Invoke-ParserProcess -ProjectRoot $project -ExplicitAssetPath ".agents/work/fixture-work-item.md" -ParserScriptPath $copyParser
+    if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL") {
+        throw "Missing canonical schema did not fail closed."
+    }
+    Test-ExpectedCodes -Payload $invocation.payload -ExpectedCodes @("schema-load-failed")
+    Add-CheckResult -Name "schema-authority-missing-canonical" -Status "PASS" -Detail "Missing canonical schema returned stable schema-load-failed."
+}
+catch {
+    Add-CheckResult -Name "schema-authority-missing-canonical" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
+    $copyRoot = New-ParserRepositoryCopy -Name "schema-authority-corrupt-canonical"
+    $schemaPath = Join-Path $copyRoot "schemas/project-workspace/work-item.v1.schema.json"
+    [System.IO.File]::WriteAllText($schemaPath, '{"type":', [System.Text.UTF8Encoding]::new($false))
+    $project = New-FixtureProject -Name "schema-authority-corrupt-project"
+    $copyParser = Join-Path $copyRoot "skills/project-workspace/scripts/read-project-assets.ps1"
+    $invocation = Invoke-ParserProcess -ProjectRoot $project -ExplicitAssetPath ".agents/work/fixture-work-item.md" -ParserScriptPath $copyParser
+    if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL") {
+        throw "Corrupt canonical schema did not fail closed."
+    }
+    Test-ExpectedCodes -Payload $invocation.payload -ExpectedCodes @("schema-load-failed")
+    Add-CheckResult -Name "schema-authority-corrupt-canonical" -Status "PASS" -Detail "Corrupt canonical schema returned stable schema-load-failed."
+}
+catch {
+    Add-CheckResult -Name "schema-authority-corrupt-canonical" -Status "FAIL" -Detail $_.Exception.Message
+}
+
 $failures = @($results | Where-Object status -eq "FAIL")
 $assetTypes = @($cases | Where-Object expected -eq "valid" | ForEach-Object { [string]$_.asset_type } | Sort-Object -Unique)
 $summary = [ordered]@{
     schema_version = 1
-    status = $(if ($failures.Count -eq 0 -and $allReadOnly -and $commandInert -and $templateCount -eq 4 -and $assetTypes.Count -eq 4) { "PASS" } else { "FAIL" })
+    status = $(if ($failures.Count -eq 0 -and $baselineContract -and $allReadOnly -and $commandInert -and $templateCount -eq 4 -and $assetTypes.Count -eq 4) { "PASS" } else { "FAIL" })
     scenario_count = $results.Count
     pass = @($results | Where-Object status -eq "PASS").Count
     fail = $failures.Count
+    baseline_scenario_count = $baselineScenarioCount
+    baseline_pass = $baselinePassCount
+    baseline_fail = $baselineFailCount
+    baseline_contract = $baselineContract
+    hardening_scenario_count = @($hardeningCases).Count + 4
     project_read_only = $allReadOnly
     command_inert = $commandInert
     template_count = $templateCount
@@ -401,3 +614,4 @@ else {
 if ($summary.status -ne "PASS") {
     exit 1
 }
+exit 0

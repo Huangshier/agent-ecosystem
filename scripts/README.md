@@ -64,6 +64,8 @@ The parser reads only YAML frontmatter at the four canonical asset roots. It
 does not execute Markdown bodies, write assets, migrate projects, join the
 installer or bootstrap flow, or expose a discoverable `SKILL.md` entrypoint.
 
+The schemas use JSON Schema Draft 2020-12 syntax. The read-only parser deterministically enforces the repository-owned subset used by the four canonical asset schemas; it is not a general-purpose Draft 2020-12 validator.
+
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
 `validate-release.ps1` remains the authoritative validator and accepts

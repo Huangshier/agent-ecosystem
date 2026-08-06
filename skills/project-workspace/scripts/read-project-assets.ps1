@@ -4,7 +4,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [string[]]$AssetPath = @(),
-    [string]$SchemaRoot = "",
     [switch]$Json
 )
 
@@ -388,13 +387,65 @@ function ConvertFrom-AssetFrontMatter {
     return $result
 }
 
-# Read-AssetFrontMatter: reads only a UTF-8 frontmatter prefix, bounded to 256 lines and 65,536 characters, and ignores the body.
+# Get-StrictUtf8FileInfo: validates the complete file's byte encoding without allowing BOM-driven encoding switches.
+function Get-StrictUtf8FileInfo {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $prefix = [byte[]]::new(4)
+        $prefixLength = $stream.Read($prefix, 0, $prefix.Length)
+        $bomLength = 0
+
+        # UTF-32 BOMs must be checked before the shared UTF-16 LE prefix.
+        if (($prefixLength -ge 4 -and $prefix[0] -eq 0xFF -and $prefix[1] -eq 0xFE -and $prefix[2] -eq 0x00 -and $prefix[3] -eq 0x00) -or
+            ($prefixLength -ge 4 -and $prefix[0] -eq 0x00 -and $prefix[1] -eq 0x00 -and $prefix[2] -eq 0xFE -and $prefix[3] -eq 0xFF)) {
+            Throw-FrontMatterError -Code "invalid-utf8" -Message "Asset file uses UTF-32 encoding; only UTF-8 is accepted."
+        }
+        if (($prefixLength -ge 2 -and $prefix[0] -eq 0xFF -and $prefix[1] -eq 0xFE) -or
+            ($prefixLength -ge 2 -and $prefix[0] -eq 0xFE -and $prefix[1] -eq 0xFF)) {
+            Throw-FrontMatterError -Code "invalid-utf8" -Message "Asset file uses UTF-16 encoding; only UTF-8 is accepted."
+        }
+        if ($prefixLength -ge 3 -and $prefix[0] -eq 0xEF -and $prefix[1] -eq 0xBB -and $prefix[2] -eq 0xBF) {
+            # The repository's UTF-8 contract permits a UTF-8 BOM. Skip it explicitly;
+            # StreamReader must never infer or switch to another encoding.
+            $bomLength = 3
+        }
+
+        $stream.Position = $bomLength
+        $encoding = [System.Text.UTF8Encoding]::new($false, $true)
+        $decoder = $encoding.GetDecoder()
+        $byteBuffer = [byte[]]::new(4096)
+        $charBuffer = [char[]]::new(4096)
+        while (($readLength = $stream.Read($byteBuffer, 0, $byteBuffer.Length)) -gt 0) {
+            [void]$decoder.GetChars($byteBuffer, 0, $readLength, $charBuffer, 0, $false)
+        }
+        [void]$decoder.GetChars([byte[]]::new(0), 0, 0, $charBuffer, 0, $true)
+        return [ordered]@{ bom_length = $bomLength }
+    }
+    catch [System.Text.DecoderFallbackException] {
+        Throw-FrontMatterError -Code "invalid-utf8" -Message "Asset file is not valid UTF-8."
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
+# Read-AssetFrontMatter: validates UTF-8 bytes, then reads only a bounded frontmatter prefix and ignores the body.
 function Read-AssetFrontMatter {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    $encoding = [System.Text.UTF8Encoding]::new($false, $true)
-    $reader = [System.IO.StreamReader]::new($Path, $encoding, $true, 4096)
+    $encodingInfo = Get-StrictUtf8FileInfo -Path $Path
+    $stream = $null
+    $reader = $null
     try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $stream.Position = [long]$encodingInfo.bom_length
+        $encoding = [System.Text.UTF8Encoding]::new($false, $true)
+        $reader = [System.IO.StreamReader]::new($stream, $encoding, $false, 4096, $true)
         $firstLine = $reader.ReadLine()
         if ($null -eq $firstLine) {
             Throw-FrontMatterError -Code "empty-file" -Message "Asset file is empty."
@@ -421,8 +472,58 @@ function Read-AssetFrontMatter {
         Throw-FrontMatterError -Code "invalid-utf8" -Message "Asset frontmatter is not valid UTF-8."
     }
     finally {
-        $reader.Dispose()
+        if ($null -ne $reader) {
+            $reader.Dispose()
+        }
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
     }
+}
+
+# Test-Rfc3339DateTimeSemantics: validates calendar, clock, and offset semantics after the schema shape check.
+function Test-Rfc3339DateTimeSemantics {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $match = [regex]::Match(
+        $Value,
+        '^(?<year>[0-9]{4})-(?<month>[0-9]{2})-(?<day>[0-9]{2})T(?<hour>[0-9]{2}):(?<minute>[0-9]{2}):(?<second>[0-9]{2})(?:\.(?<fraction>[0-9]+))?(?<offset>Z|(?<sign>[+-])(?<offset_hour>[0-9]{2}):(?<offset_minute>[0-9]{2}))$',
+        [Text.RegularExpressions.RegexOptions]::CultureInvariant
+    )
+    if (-not $match.Success) {
+        return $false
+    }
+
+    $year = [int]$match.Groups["year"].Value
+    $month = [int]$match.Groups["month"].Value
+    $day = [int]$match.Groups["day"].Value
+    $hour = [int]$match.Groups["hour"].Value
+    $minute = [int]$match.Groups["minute"].Value
+    $second = [int]$match.Groups["second"].Value
+    if ($month -lt 1 -or $month -gt 12 -or $hour -gt 23 -or $minute -gt 59 -or $second -gt 59) {
+        return $false
+    }
+
+    $daysInMonth = @(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+    $isLeapYear = (($year % 4) -eq 0 -and (($year % 100) -ne 0 -or ($year % 400) -eq 0))
+    if ($month -eq 2 -and $isLeapYear) {
+        $maximumDay = 29
+    }
+    else {
+        $maximumDay = $daysInMonth[$month - 1]
+    }
+    if ($day -lt 1 -or $day -gt $maximumDay) {
+        return $false
+    }
+
+    if ($match.Groups["offset"].Value -ne "Z") {
+        $offsetHour = [int]$match.Groups["offset_hour"].Value
+        $offsetMinute = [int]$match.Groups["offset_minute"].Value
+        if ($offsetHour -gt 23 -or $offsetMinute -gt 59) {
+            return $false
+        }
+    }
+    return $true
 }
 
 # Get-PatternFindingCode: converts a schema pattern failure into the stable finding code for the affected field.
@@ -533,12 +634,17 @@ function Test-ValueAgainstSchema {
         if ($null -ne $minimumLength -and ([string]$Value).Length -lt [int]$minimumLength) {
             Add-AssetFinding -Findings $Findings -Code "invalid-field-value" -Path $RelativePath -Field $FieldPath -Message "Field '$FieldPath' must not be empty."
         }
+        $patternValid = $true
         $pattern = if (Test-ObjectHasProperty -Object $Schema -Name "pattern") { [string]$Schema.pattern } else { "" }
         if (-not [string]::IsNullOrWhiteSpace($pattern) -and -not [regex]::IsMatch([string]$Value, $pattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant)) {
+            $patternValid = $false
             $code = Get-PatternFindingCode -FieldPath $FieldPath
             Add-AssetFinding -Findings $Findings -Code $code -Path $RelativePath -Field $FieldPath -Message "Field '$FieldPath' does not match the required format."
         }
         $format = if (Test-ObjectHasProperty -Object $Schema -Name "format") { [string]$Schema.format } else { "" }
+        if ($format -ceq "date-time" -and $patternValid -and -not (Test-Rfc3339DateTimeSemantics -Value ([string]$Value))) {
+            Add-AssetFinding -Findings $Findings -Code "invalid-updated" -Path $RelativePath -Field $FieldPath -Message "Field '$FieldPath' is not a semantically valid RFC 3339 date-time."
+        }
         if ($format -ceq "project-relative-path" -and -not (Test-SafeProjectRelativePath -Path ([string]$Value))) {
             Add-AssetFinding -Findings $Findings -Code "unsafe-path" -Path $RelativePath -Field $FieldPath -Message "Field '$FieldPath' must be a safe project-relative path."
         }
@@ -588,10 +694,7 @@ catch {
     Add-AssetFinding -Findings $findings -Code "project-root-invalid" -Path "" -Message "Project root does not exist or is not a directory."
 }
 
-if ([string]::IsNullOrWhiteSpace($SchemaRoot)) {
-    $SchemaRoot = Join-Path $repoRoot 'schemas/project-workspace'
-}
-$schemaRootFull = Get-NormalizedFullPath -Path $SchemaRoot
+$schemaRootFull = Get-NormalizedFullPath -Path (Join-Path $repoRoot 'schemas/project-workspace')
 foreach ($type in @($schemaFiles.Keys)) {
     $schemaPath = Join-Path $schemaRootFull $schemaFiles[$type]
     try {
