@@ -301,6 +301,8 @@ function Initialize-GitFixture {
         Invoke-Git -ProjectRoot $ProjectRoot -Arguments @("init") | Out-Null
         Invoke-Git -ProjectRoot $ProjectRoot -Arguments @("branch", "-M", "fixture") | Out-Null
     }
+    # NOTE: Deep Windows scratch roots can exceed MAX_PATH while Git writes .git/objects.
+    Invoke-Git -ProjectRoot $ProjectRoot -Arguments @("config", "core.longpaths", "true") | Out-Null
     Invoke-Git -ProjectRoot $ProjectRoot -Arguments @("config", "user.name", "continuity-fixture") | Out-Null
     Invoke-Git -ProjectRoot $ProjectRoot -Arguments @("config", "user.email", "continuity-fixture@example.invalid") | Out-Null
     Write-Utf8NoBom -Path (Join-Path $ProjectRoot ".gitignore") -Text ".agents/work/`n.agents/.cache/`n"
