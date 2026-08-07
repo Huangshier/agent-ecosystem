@@ -11,3 +11,12 @@ next: Review the next verified step.
 
 The `revision` value is a format-valid zero placeholder. A future write command
 generates the content hash; read-only checks must not write it back.
+
+`checkpoint` manages only the exact sections below. Other Markdown body content
+is preserved.
+
+## Verified
+
+## Boundaries
+
+## Blockers
