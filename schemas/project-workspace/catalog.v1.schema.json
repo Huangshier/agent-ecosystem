@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-ecosystem/catalog/v1",
+  "title": "Agent Ecosystem Catalog v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "generated_by",
+    "directory_fingerprint",
+    "schema_fingerprint",
+    "glossary_fingerprint",
+    "asset_count",
+    "assets"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-ecosystem/catalog/v1",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "generated_by": {
+      "const": "project-workspace-discover",
+      "type": "string"
+    },
+    "directory_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "schema_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "glossary_fingerprint": {
+      "type": "string",
+      "pattern": "^(?:absent|sha256:[0-9a-f]{64})$"
+    },
+    "asset_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "path",
+          "schema",
+          "status",
+          "title",
+          "summary",
+          "keywords",
+          "size",
+          "mtime",
+          "content_hash"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["work", "context", "procedure", "spec"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?:\\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\\.md|docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\\.md)$"
+          },
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          },
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "kind": {
+            "type": "string"
+          },
+          "exposure": {
+            "type": "string"
+          },
+          "triggers": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "side_effects": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "related_work": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "supersedes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "git": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "branch": { "type": "string", "minLength": 1 },
+              "worktree": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!.*(?:^|[\\\\/])\\.\\.?(?:[\\\\/]|$))[^\\\\/:*?\"<>|]+(?:[\\\\/][^\\\\/:*?\"<>|]+)*$"
+              },
+              "last_verified_commit": { "type": "string", "minLength": 1 }
+            }
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mtime": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -196,15 +196,38 @@ if ([int]$classification.detected_tier -ge 1) {
             [int]$workspaceEvidence.scenario_count -lt 16 -or
             [int]$workspaceEvidence.pass -lt 1 -or
             [int]$workspaceEvidence.fail -ne 0 -or
-            $workspaceEvidence.project_read_only -isnot [bool] -or
-            -not [bool]$workspaceEvidence.project_read_only -or
+            $workspaceEvidence.canonical_sources_read_only -isnot [bool] -or
+            -not [bool]$workspaceEvidence.canonical_sources_read_only -or
             $workspaceEvidence.command_inert -isnot [bool] -or
             -not [bool]$workspaceEvidence.command_inert -or
             [int]$workspaceEvidence.template_count -ne 4 -or
             [int]$workspaceEvidence.asset_type_count -ne 4) {
             throw "Project workspace parser fixtures returned incomplete evidence."
         }
-        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates with read-only and command-inert assertions." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count)
+        $workspaceDiscoveryOutput = @(
+            & (Join-Path $scriptDir "validation/project-workspace-discovery-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "workspace-discovery") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace discovery fixtures failed.`n$workspaceDiscoveryOutput"
+        }
+        $workspaceDiscoveryEvidence = $workspaceDiscoveryOutput | ConvertFrom-Json
+        if ([int]$workspaceDiscoveryEvidence.schema_version -ne 1 -or
+            [string]$workspaceDiscoveryEvidence.status -cne "PASS" -or
+            [int]$workspaceDiscoveryEvidence.scenario_count -lt 8 -or
+            [int]$workspaceDiscoveryEvidence.pass -lt 8 -or
+            [int]$workspaceDiscoveryEvidence.fail -ne 0 -or
+            $workspaceDiscoveryEvidence.canonical_sources_read_only -isnot [bool] -or
+            -not [bool]$workspaceDiscoveryEvidence.canonical_sources_read_only -or
+            $workspaceDiscoveryEvidence.check_read_only -isnot [bool] -or
+            -not [bool]$workspaceDiscoveryEvidence.check_read_only -or
+            $workspaceDiscoveryEvidence.discover_writes_only_catalog_cache -isnot [bool] -or
+            -not [bool]$workspaceDiscoveryEvidence.discover_writes_only_catalog_cache) {
+            throw "Project workspace discovery fixtures returned incomplete evidence."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates plus {3} discovery scenarios proving canonical-source/check read-only boundaries and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count)
         $executedSuites.Add("workspace-assets")
     }
     if ($requiredSuites -contains "project-context-gate") {
