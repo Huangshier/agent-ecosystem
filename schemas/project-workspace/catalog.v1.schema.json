@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "agent-ecosystem/catalog/v1",
-  "title": "Agent Ecosystem Catalog v1",
+  "title": "Agent Ecosystem Derived Discovery Catalog v1",
+  "description": "A disposable discovery projection over the four canonical project asset roots; skill records are standard Agent Skills projections and are not canonical assets.",
   "type": "object",
   "required": [
     "schema",
@@ -62,7 +63,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["work", "context", "procedure", "spec"]
+            "enum": ["work", "context", "procedure", "skill", "spec"]
           },
           "id": {
             "type": "string",
@@ -70,7 +71,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(?:\\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\\.md|docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\\.md)$"
+            "pattern": "^(?:\\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\\.md|\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*/SKILL\\.md|docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\\.md)$"
           },
           "schema": {
             "type": "string",

@@ -244,7 +244,28 @@ if ([int]$classification.detected_tier -ge 1) {
             [int]$workspaceContinuityEvidence.fail -ne 0) {
             throw "Project workspace continuity fixtures returned an invalid summary."
         }
-        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates, {3} discovery scenarios, and {4} continuity scenarios proving four-class recovery, CAS conflict, canonical-only writes, check/recovery read-only behavior, and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count, [int]$workspaceContinuityEvidence.scenario_count)
+        $workspaceAuthoringOutput = @(
+            & (Join-Path $scriptDir "validation/project-workspace-authoring-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "workspace-authoring") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace authoring fixtures failed.`n$workspaceAuthoringOutput"
+        }
+        $workspaceAuthoringEvidence = $workspaceAuthoringOutput | ConvertFrom-Json
+        if ([int]$workspaceAuthoringEvidence.schema_version -ne 1 -or
+            [string]$workspaceAuthoringEvidence.status -cne "PASS" -or
+            [int]$workspaceAuthoringEvidence.scenario_count -lt 6 -or
+            [int]$workspaceAuthoringEvidence.pass -ne [int]$workspaceAuthoringEvidence.scenario_count -or
+            [int]$workspaceAuthoringEvidence.fail -ne 0 -or
+            -not [bool]$workspaceAuthoringEvidence.catalog_written_only_by_discover -or
+            -not [bool]$workspaceAuthoringEvidence.analyze_read_only -or
+            -not [bool]$workspaceAuthoringEvidence.apply_no_dual_authority -or
+            -not [bool]$workspaceAuthoringEvidence.public_safe) {
+            throw "Project workspace authoring fixtures returned incomplete evidence."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates, {3} discovery scenarios, {4} continuity scenarios, and {5} Slice D authoring scenarios proving canonical-only writes, Analyze read-only behavior, single-authority promotion, and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count, [int]$workspaceContinuityEvidence.scenario_count, [int]$workspaceAuthoringEvidence.scenario_count)
         $executedSuites.Add("workspace-assets")
     }
     if ($requiredSuites -contains "project-context-gate") {

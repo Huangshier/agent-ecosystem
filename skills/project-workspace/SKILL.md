@@ -19,6 +19,52 @@ strictly read-only and never creates or refreshes that cache. Canonical Markdown
 remains the content authority; `glossary.yaml` is used only when it is present,
 evidence-backed, and valid.
 
+## Canonical authoring
+
+Use the same dispatcher for explicit canonical asset creation. These operations
+write only the requested repository-relative asset and never write Catalog:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-context -ProjectRoot <project-root> -Id <context-id> -Title <title> -Summary <summary> -Keywords <keyword> -Evidence <evidence> -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-procedure -ProjectRoot <project-root> -Id <procedure-id> -Title <title> -Kind command -Summary <summary> -Triggers <trigger> -SideEffects <side-effect> -Preconditions <precondition> -Steps <step> -Validation <validation> -StopBoundaries <stop-boundary> -Authorization <authorization> -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-spec -ProjectRoot <project-root> -Id <spec-id> -Title <title> -Summary <summary> -Goals <goal> -NonGoals <non-goal> -Tradeoffs <tradeoff> -Acceptance <criterion> -RelatedWork <work-id> -Supersedes <spec-id> -Json
+```
+
+`create-context` records only stable, public-safe facts. `create-procedure`
+accepts only `command` or `workflow`, keeps the Preconditions, Steps,
+Validation, Stop Boundaries, and Authorization sections as documentation, and
+never executes them. `create-spec` records a caller-confirmed stable design;
+none of these operations classifies task complexity or creates short-lived
+branch, check, log, or next-step state. Empty list parameters may be supplied
+when the canonical schema permits an empty relation list.
+
+## Procedure promotion
+
+Promotion is an explicit two-step boundary:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation promote-skill -ProjectRoot <project-root> -Id <procedure-id> -Analyze -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation promote-skill -ProjectRoot <project-root> -Id <procedure-id> -Apply -AnalyzeEvidence <evidence-hash> -ConfirmPromotion -Json
+```
+
+Analyze is read-only and returns a candidate `.agents/skills/<name>/SKILL.md`,
+the original Procedure deletion plan, and the discovery/authorization/side-effect
+boundary change, plus deterministic evidence bound to the current Procedure and
+candidate hashes. Apply requires that evidence and explicit human confirmation;
+missing or stale evidence fails closed without writes. Only Apply writes the
+Skill and deletes the original Procedure. After Apply there is one published
+Skill representation, not a Procedure plus Skill pair; the next `discover`
+refreshes the disposable Catalog. Skill discovery never grants execution
+authorization, and Apply performs only the minimal failure recovery needed to
+avoid losing the original Procedure or leaving dual authority.
+
+The four canonical project asset roots remain Work, Context, Procedure, and
+Spec. A promoted `SKILL.md` follows the standard Agent Skills frontmatter
+(`name` and `description`, with only standard optional fields when needed) and
+is a Procedure publication form. It is read by an internal discover projection
+reader, not by the canonical parser, and it is not a fifth canonical project
+asset authority.
+
 ## Deterministic discovery contract
 
 - The default result limit is exactly `5`; callers may request `1..100`.
@@ -86,11 +132,14 @@ facts take precedence over Work summary text.
 
 The external surface remains one `project-workspace` Skill. Internally, the
 implementation separates Catalog/cache, Glossary/query, shared Git facts,
-revision checks, and Work continuity responsibilities; those
-internal scripts are not additional commands or Skills.
+revision checks, Work continuity, and authoring responsibilities; those
+internal scripts are not additional commands or Skills. Slice D does not
+connect authoring or promotion to bootstrap, installer, runtime defaults,
+migration, client adapters, releases, or later C3.3 slices.
 
 The Slice C surface remains dormant. It does not integrate with bootstrap,
-installer, runtime defaults, orchestration, or Agent-native Procedure
-discovery. Work mutations never synchronously write the disposable Catalog;
+installer, runtime defaults, orchestration, migration, client adapters, or
+release paths. Work and authoring mutations never synchronously write the
+disposable Catalog;
 the next `discover` observes canonical create/update/delete state and refreshes
 that cache when needed, while `check` remains strictly read-only.

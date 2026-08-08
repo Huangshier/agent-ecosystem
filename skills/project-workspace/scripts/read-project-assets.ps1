@@ -653,7 +653,7 @@ function Test-ValueAgainstSchema {
     }
 }
 
-# Get-CanonicalAssetPaths: returns only immediate Markdown assets under the four canonical project roots in stable order.
+# Get-CanonicalAssetPaths: returns only canonical Markdown assets in stable order.
 function Get-CanonicalAssetPaths {
     param([Parameter(Mandatory = $true)][string]$Root)
 
