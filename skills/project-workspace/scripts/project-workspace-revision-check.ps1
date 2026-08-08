@@ -14,7 +14,7 @@ function Get-CanonicalReferenceChecks {
     foreach ($asset in @($Assets)) {
         $type = [string](Get-PropertyValue $asset "type")
         $id = [string](Get-PropertyValue $asset "id")
-        if ($type -notin @("work", "context", "procedure", "spec") -or [string]::IsNullOrWhiteSpace($id)) { continue }
+        if ($type -notin @("work", "context", "procedure", "skill", "spec") -or [string]::IsNullOrWhiteSpace($id)) { continue }
         [void]$identitySet.Add(("{0}`0{1}" -f $type, $id))
         if (-not $typesById.ContainsKey($id)) {
             $typesById[$id] = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)

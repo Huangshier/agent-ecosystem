@@ -62,7 +62,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["work", "context", "procedure", "spec"]
+            "enum": ["work", "context", "procedure", "skill", "spec"]
           },
           "id": {
             "type": "string",
@@ -70,7 +70,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(?:\\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\\.md|docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\\.md)$"
+            "pattern": "^(?:\\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\\.md|\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*/SKILL\\.md|docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\\.md)$"
           },
           "schema": {
             "type": "string",

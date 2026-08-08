@@ -20,12 +20,14 @@ $schemaFiles = [ordered]@{
     work = "work-item.v1.schema.json"
     context = "context.v1.schema.json"
     procedure = "procedure.v1.schema.json"
+    skill = "skill.v1.schema.json"
     spec = "spec.v1.schema.json"
 }
 $schemaUris = [ordered]@{
     work = "agent-ecosystem/work-item/v1"
     context = "agent-ecosystem/context/v1"
     procedure = "agent-ecosystem/procedure/v1"
+    skill = "agent-ecosystem/skill/v1"
     spec = "agent-ecosystem/spec/v1"
 }
 
@@ -242,6 +244,10 @@ function Get-CanonicalAssetDescriptor {
     $match = [regex]::Match($RelativePath, '^\.agents/procedures/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)\.md$', 'CultureInvariant')
     if ($match.Success) {
         return [ordered]@{ type = "procedure"; path_id = $match.Groups["id"].Value }
+    }
+    $match = [regex]::Match($RelativePath, '^\.agents/skills/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/SKILL\.md$', 'CultureInvariant')
+    if ($match.Success) {
+        return [ordered]@{ type = "skill"; path_id = $match.Groups["id"].Value }
     }
     $match = [regex]::Match($RelativePath, '^docs/specs/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/spec\.md$', 'CultureInvariant')
     if ($match.Success) {
@@ -653,7 +659,7 @@ function Test-ValueAgainstSchema {
     }
 }
 
-# Get-CanonicalAssetPaths: returns only immediate Markdown assets under the four canonical project roots in stable order.
+# Get-CanonicalAssetPaths: returns only canonical Markdown assets in stable order.
 function Get-CanonicalAssetPaths {
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -665,6 +671,16 @@ function Get-CanonicalAssetPaths {
         }
         foreach ($file in @(Get-ChildItem -LiteralPath $directory -File -Filter '*.md' -Force)) {
             $paths.Add((ConvertTo-NormalizedRelativePath -Root $Root -Path $file.FullName))
+        }
+    }
+
+    $skillRoot = Join-Path $Root '.agents/skills'
+    if (Test-Path -LiteralPath $skillRoot -PathType Container) {
+        foreach ($directory in @(Get-ChildItem -LiteralPath $skillRoot -Directory -Force | Sort-Object Name)) {
+            $candidate = Join-Path $directory.FullName 'SKILL.md'
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                $paths.Add((ConvertTo-NormalizedRelativePath -Root $Root -Path $candidate))
+            }
         }
     }
 

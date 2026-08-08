@@ -142,13 +142,13 @@ function Test-CatalogShape {
         $id = [string](Get-PropertyValue $asset "id")
         $path = [string](Get-PropertyValue $asset "path")
         $assetSchema = [string](Get-PropertyValue $asset "schema")
-        if ($type -notin @("work", "context", "procedure", "spec")) {
+        if ($type -notin @("work", "context", "procedure", "skill", "spec")) {
             Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("{0}.type" -f $assetField) -Message "Catalog asset type is unsupported."
         }
         if ($id -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') {
             Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("{0}.id" -f $assetField) -Message "Catalog asset id is not stable kebab-case."
         }
-        $expectedSchemas = @{ work = "agent-ecosystem/work-item/v1"; context = "agent-ecosystem/context/v1"; procedure = "agent-ecosystem/procedure/v1"; spec = "agent-ecosystem/spec/v1" }
+        $expectedSchemas = @{ work = "agent-ecosystem/work-item/v1"; context = "agent-ecosystem/context/v1"; procedure = "agent-ecosystem/procedure/v1"; skill = "agent-ecosystem/skill/v1"; spec = "agent-ecosystem/spec/v1" }
         if ($expectedSchemas.ContainsKey($type) -and $assetSchema -cne [string]$expectedSchemas[$type]) {
             Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("{0}.schema" -f $assetField) -Message "Catalog asset schema does not match its type."
         }
@@ -156,6 +156,7 @@ function Test-CatalogShape {
             "work" { ".agents/work/{0}.md" -f $id }
             "context" { ".agents/context/{0}.md" -f $id }
             "procedure" { ".agents/procedures/{0}.md" -f $id }
+            "skill" { ".agents/skills/{0}/SKILL.md" -f $id }
             "spec" { "docs/specs/{0}/spec.md" -f $id }
             default { "" }
         }

@@ -377,7 +377,7 @@ function Get-SearchResults {
     $typeFilter = @($Types | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { Normalize-SearchText -Text ([string]$_) })
     $statusFilter = @($Statuses | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { Normalize-SearchText -Text ([string]$_) })
     foreach ($type in $typeFilter) {
-        if ($type -notin @("work", "context", "procedure", "spec")) { Add-Finding -Findings $Findings -Code "invalid-filter" -Path "" -Field "type" -Message "Type filter contains an unsupported asset type." }
+        if ($type -notin @("work", "context", "procedure", "skill", "spec")) { Add-Finding -Findings $Findings -Code "invalid-filter" -Path "" -Field "type" -Message "Type filter contains an unsupported asset type." }
     }
     $excludedStatuses = @("archived", "implemented", "superseded")
     $results = New-Object 'System.Collections.Generic.List[object]'

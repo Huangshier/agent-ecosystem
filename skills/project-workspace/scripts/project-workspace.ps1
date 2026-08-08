@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check", "create-work", "checkpoint", "set-status", "complete", "recover-work")][string]$Operation,
+    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check", "create-work", "checkpoint", "set-status", "complete", "recover-work", "create-context", "create-procedure", "promote-skill", "create-spec")][string]$Operation,
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [string]$Query = "",
     [Alias("MaxResults")][ValidateRange(1, 100)][int]$Limit = 5,
@@ -21,6 +21,25 @@ param(
     [string[]]$Verified = @(),
     [string[]]$Boundary = @(),
     [string[]]$Blocker = @(),
+    [Alias("Keyword")][string[]]$Keywords = @(),
+    [string[]]$Evidence = @(),
+    [Alias("Trigger")][string[]]$Triggers = @(),
+    [Alias("SideEffect")][string[]]$SideEffects = @(),
+    [string]$Kind = "",
+    [Alias("Precondition")][string[]]$Preconditions = @(),
+    [Alias("Step")][string[]]$Steps = @(),
+    [string[]]$Validation = @(),
+    [Alias("StopBoundary", "Stop")][string[]]$StopBoundaries = @(),
+    [string[]]$Authorization = @(),
+    [Alias("Goal")][string[]]$Goals = @(),
+    [Alias("NonGoal")][string[]]$NonGoals = @(),
+    [Alias("Tradeoff")][string[]]$Tradeoffs = @(),
+    [string[]]$Acceptance = @(),
+    [string[]]$RelatedWork = @(),
+    [string[]]$Supersedes = @(),
+    [Alias("Name")][string]$SkillName = "",
+    [switch]$Analyze,
+    [switch]$Apply,
     [string]$Updated = "",
     [switch]$ResultPersisted,
     [switch]$Json,
@@ -328,6 +347,31 @@ function Get-CanonicalFileRecords {
         }
     }
 
+    $skillRoot = Join-Path $Root ".agents/skills"
+    if (Test-Path -LiteralPath $skillRoot -PathType Container) {
+        foreach ($directory in @(Get-ChildItem -LiteralPath $skillRoot -Directory -Force | Sort-Object Name)) {
+            $file = Join-Path $directory.FullName "SKILL.md"
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+            $relative = [IO.Path]::GetRelativePath($Root, $file).Replace('\', '/')
+            try {
+                Assert-ProjectPath -Root $Root -RelativePath $relative | Out-Null
+            }
+            catch {
+                Add-Finding -Findings $Findings -Code "unsafe-path" -Path $relative -Message "Canonical Skill path cannot be resolved safely inside the project root."
+                continue
+            }
+            if (-not $seen.Add($relative)) { continue }
+            $item = Get-Item -LiteralPath $file -Force
+            [void]$records.Add([ordered]@{
+                path = $relative
+                type = "skill"
+                size = [long]$item.Length
+                mtime = $item.LastWriteTimeUtc.ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+                full_path = $item.FullName
+            })
+        }
+    }
+
     $specRoot = Join-Path $Root "docs/specs"
     if (Test-Path -LiteralPath $specRoot -PathType Container) {
         foreach ($directory in @(Get-ChildItem -LiteralPath $specRoot -Directory -Force | Sort-Object Name)) {
@@ -506,6 +550,7 @@ $internalModules = @(
     "project-workspace-glossary-query.ps1",
     "project-workspace-git.ps1",
     "project-workspace-revision-check.ps1",
+    "project-workspace-authoring.ps1",
     "project-continuity.ps1"
 )
 foreach ($internalModule in $internalModules) {
@@ -655,6 +700,9 @@ try {
     elseif ($Operation -ceq "check") {
         Invoke-CheckOperation -Root $ProjectRoot
     }
+    elseif ($Operation -in @("create-context", "create-procedure", "promote-skill", "create-spec")) {
+        Invoke-AuthoringOperation -Operation $Operation -Root (Resolve-AuthoringRoot -Root $ProjectRoot) -BoundParameters $PSBoundParameters
+    }
     else {
         Invoke-ContinuityOperation -Operation $Operation -Root $ProjectRoot -BoundParameters $PSBoundParameters
     }
@@ -666,7 +714,7 @@ catch {
     $failure = [ordered]@{
         operation = $Operation
         status = "FAIL"
-        read_only = ($Operation -in @("check", "recover-work"))
+        read_only = ($Operation -in @("check", "recover-work") -or ($Operation -ceq "promote-skill" -and $Analyze.IsPresent))
         findings = @([ordered]@{ code = "unexpected-error"; path = ""; field = ""; severity = "error"; message = $failureMessage })
     }
     Write-OperationResult -Result $failure
