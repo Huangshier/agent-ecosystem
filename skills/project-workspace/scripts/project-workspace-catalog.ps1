@@ -46,6 +46,182 @@ function Test-CatalogJsonInteger {
         $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64])
 }
 
+# ConvertFrom-PromotedSkillScalar: parse the small scalar subset needed by the standard Agent Skills frontmatter reader.
+function ConvertFrom-PromotedSkillScalar {
+    param([AllowEmptyString()][string]$Text)
+
+    $value = $Text.Trim()
+    if ($value.StartsWith('"') -and $value.EndsWith('"') -and $value.Length -ge 2) {
+        try { return (('[' + $value + ']') | ConvertFrom-Json -Depth 20 -NoEnumerate -ErrorAction Stop)[0] }
+        catch { throw "Skill frontmatter contains a malformed double-quoted scalar." }
+    }
+    if ($value.StartsWith("'") -and $value.EndsWith("'") -and $value.Length -ge 2) {
+        return $value.Substring(1, $value.Length - 2).Replace("''", "'")
+    }
+    return $value
+}
+
+# Read-PromotedSkill: validate and read a promoted standard Agent Skill for discover projection only.
+# This reader is intentionally not the canonical project asset parser and has no write path.
+function Read-PromotedSkill {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [AllowEmptyString()][string]$Text = ""
+    )
+
+    $normalized = $RelativePath.Replace('\', '/')
+    $match = [regex]::Match($normalized, '^\.agents/skills/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/SKILL\.md$', 'CultureInvariant')
+    if (-not $match.Success) { throw "Promoted Skill path is not a safe project-relative skill path." }
+    $pathId = $match.Groups["id"].Value
+    $path = if ([string]::IsNullOrEmpty($Text)) {
+        Assert-ProjectPath -Root $Root -RelativePath $normalized
+    }
+    else {
+        Assert-ProjectPath -Root $Root -RelativePath $normalized -AllowMissing
+    }
+    $skillText = if ([string]::IsNullOrEmpty($Text)) { Read-StrictUtf8Text -Path $path } else { $Text }
+    if (-not (Test-PublicSafeText -Text $skillText)) { throw "Promoted Skill contains unsafe output material." }
+    $lines = @($skillText -split "`n")
+    if ($lines.Count -lt 3 -or $lines[0] -cne "---") { throw "Promoted Skill frontmatter is missing." }
+    $closing = -1
+    for ($index = 1; $index -lt $lines.Count; $index++) {
+        if ([string]$lines[$index] -ceq "---") { $closing = $index; break }
+    }
+    if ($closing -lt 0) { throw "Promoted Skill frontmatter closing delimiter is missing." }
+
+    $allowedFields = @("name", "description", "compatibility", "metadata", "allowed-tools", "license")
+    $frontmatter = [ordered]@{}
+    $currentKey = ""
+    for ($index = 1; $index -lt $closing; $index++) {
+        $line = [string]$lines[$index]
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -match '^  - (?<item>.+)$') { throw "Promoted Skill frontmatter does not allow YAML lists at the top level." }
+        if ($line -match '^  (?<nested>[a-zA-Z][a-zA-Z0-9_-]*):(?:[ \t]*(?<nestedValue>.*))?$') {
+            if ($currentKey -cne "metadata") { throw "Promoted Skill frontmatter contains unsupported nested fields." }
+            if (-not ($frontmatter.Contains("metadata") -and $frontmatter.metadata -is [System.Collections.IDictionary])) {
+                $frontmatter.metadata = [ordered]@{}
+            }
+            if ($frontmatter.metadata.Contains($matches.nested)) { throw "Promoted Skill metadata contains a duplicate key." }
+            $frontmatter.metadata[$matches.nested] = ConvertFrom-PromotedSkillScalar -Text ([string]$matches.nestedValue)
+            continue
+        }
+        if ($line -notmatch '^(?<key>[a-z][a-z0-9-]*):(?:[ \t]*(?<value>.*))?$') {
+            throw "Promoted Skill frontmatter contains malformed YAML."
+        }
+        $key = [string]$matches.key
+        if ($allowedFields -cnotcontains $key) { throw "Promoted Skill frontmatter contains unsupported field '$key'." }
+        if ($frontmatter.Contains($key)) { throw "Promoted Skill frontmatter contains duplicate field '$key'." }
+        $valueText = [string]$matches.value
+        if ([string]::IsNullOrWhiteSpace($valueText)) {
+            $frontmatter[$key] = if ($key -ceq "metadata") { [ordered]@{} } else { "" }
+        }
+        else {
+            $frontmatter[$key] = ConvertFrom-PromotedSkillScalar -Text $valueText
+        }
+        $currentKey = $key
+    }
+
+    foreach ($required in @("name", "description")) {
+        if (-not $frontmatter.Contains($required) -or $frontmatter[$required] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$frontmatter[$required])) {
+            throw "Promoted Skill frontmatter requires a non-empty '$required' field."
+        }
+    }
+    $skillName = [string]$frontmatter.name
+    if ($skillName.Length -gt 64 -or $skillName -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') {
+        throw "Promoted Skill name does not satisfy the Agent Skills naming constraints."
+    }
+    if ($skillName -cne $pathId) { throw "Promoted Skill name must match its directory identity." }
+    $description = [string]$frontmatter.description
+    if ($description.Length -gt 1024) { throw "Promoted Skill description exceeds the Agent Skills limit." }
+    if ($frontmatter.Contains("compatibility")) {
+        $compatibility = [string]$frontmatter.compatibility
+        if ([string]::IsNullOrWhiteSpace($compatibility) -or $compatibility.Length -gt 500) { throw "Promoted Skill compatibility exceeds the Agent Skills limit." }
+    }
+    if ($frontmatter.Contains("allowed-tools")) {
+        if ($frontmatter["allowed-tools"] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$frontmatter["allowed-tools"])) {
+            throw "Promoted Skill allowed-tools must be a non-empty space-separated string."
+        }
+    }
+    if ($frontmatter.Contains("metadata")) {
+        if ($frontmatter.metadata -isnot [System.Collections.IDictionary]) { throw "Promoted Skill metadata must be a key-value mapping." }
+        foreach ($metadataKey in @($frontmatter.metadata.Keys)) {
+            if ([string]::IsNullOrWhiteSpace([string]$metadataKey) -or $frontmatter.metadata[$metadataKey] -isnot [string]) {
+                throw "Promoted Skill metadata must map string keys to string values."
+            }
+        }
+    }
+    return [ordered]@{
+        path = $normalized
+        full_path = $path
+        name = [string]$frontmatter.name
+        description = $description
+        frontmatter = $frontmatter
+        body = (($lines[($closing + 1)..($lines.Count - 1)] -join "`n").Trim())
+        text = $skillText
+        normalized_hash = if ([string]::IsNullOrEmpty($Text)) { Get-NormalizedTextHash -Path $path } else { Get-Sha256 -Bytes ([Text.UTF8Encoding]::new($false).GetBytes($skillText)) }
+    }
+}
+
+# Get-PromotedSkillMetadataList: read optional project-facing list metadata without making it canonical authority.
+function Get-PromotedSkillMetadataList {
+    param(
+        [AllowNull()][object]$Metadata,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Metadata) { return @() }
+    $value = Get-PropertyValue -Object $Metadata -Name $Name
+    if ($null -eq $value) { return @() }
+    if ($value -is [string]) { return @([string]$value) }
+    return @($value | ForEach-Object { [string]$_ })
+}
+
+# Get-PromotedSkillCatalogRecord: build a disposable Catalog projection for a valid standard Agent Skill.
+function Get-PromotedSkillCatalogRecord {
+    param(
+        [Parameter(Mandatory = $true)][object]$Skill,
+        [Parameter(Mandatory = $true)][object]$FileRecord,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $skillMetadata = Get-PropertyValue -Object $Skill -Name "frontmatter"
+    $projectMetadata = Get-PropertyValue -Object $skillMetadata -Name "metadata"
+    $record = [ordered]@{
+        type = "skill"
+        id = [string]$Skill.name
+        path = [string]$Skill.path
+        schema = "agent-skills/frontmatter"
+        status = "active"
+        title = [string]$Skill.name
+        summary = [string]$Skill.description
+        updated = ""
+        keywords = @([string]$Skill.name) + @(Get-PromotedSkillMetadataList -Metadata $projectMetadata -Name "keywords")
+        kind = [string](Get-PropertyValue -Object $projectMetadata -Name "kind")
+        exposure = [string](Get-PropertyValue -Object $projectMetadata -Name "exposure")
+        triggers = @(Get-PromotedSkillMetadataList -Metadata $projectMetadata -Name "triggers")
+        side_effects = @(Get-PromotedSkillMetadataList -Metadata $projectMetadata -Name "side_effects")
+        related_work = @(Get-PromotedSkillMetadataList -Metadata $projectMetadata -Name "related_work")
+        supersedes = @(Get-PromotedSkillMetadataList -Metadata $projectMetadata -Name "supersedes")
+        size = [long]$FileRecord.size
+        mtime = [string]$FileRecord.mtime
+        content_hash = [string]$Skill.normalized_hash
+    }
+    foreach ($field in @("id", "path", "schema", "status", "title", "summary", "kind", "exposure")) {
+        if (-not (Test-PublicSafeText -Text ([string]$record[$field]))) {
+            Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Skill.path) -Field $field -Message "Promoted Skill metadata contains disallowed output material."
+        }
+    }
+    foreach ($field in @("keywords", "triggers", "side_effects", "related_work", "supersedes")) {
+        foreach ($value in @($record[$field])) {
+            if (-not (Test-PublicSafeText -Text ([string]$value))) {
+                Add-Finding -Findings $Findings -Code "unsafe-output" -Path ([string]$Skill.path) -Field $field -Message "Promoted Skill metadata contains disallowed output material."
+            }
+        }
+    }
+    return $record
+}
+
 # Test-CatalogShape: validate the complete cache contract without trusting coercions.
 function Test-CatalogShape {
     param(
@@ -148,7 +324,8 @@ function Test-CatalogShape {
         if ($id -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') {
             Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("{0}.id" -f $assetField) -Message "Catalog asset id is not stable kebab-case."
         }
-        $expectedSchemas = @{ work = "agent-ecosystem/work-item/v1"; context = "agent-ecosystem/context/v1"; procedure = "agent-ecosystem/procedure/v1"; skill = "agent-ecosystem/skill/v1"; spec = "agent-ecosystem/spec/v1" }
+        # Skill records are derived discovery projections, not canonical asset records.
+        $expectedSchemas = @{ work = "agent-ecosystem/work-item/v1"; context = "agent-ecosystem/context/v1"; procedure = "agent-ecosystem/procedure/v1"; skill = "agent-skills/frontmatter"; spec = "agent-ecosystem/spec/v1" }
         if ($expectedSchemas.ContainsKey($type) -and $assetSchema -cne [string]$expectedSchemas[$type]) {
             Add-Finding -Findings $Findings -Code "catalog-schema" -Path $catalogRelativePath -Field ("{0}.schema" -f $assetField) -Message "Catalog asset schema does not match its type."
         }
@@ -259,7 +436,28 @@ function Convert-ParserAssetsToCatalog {
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
     )
 
-    $invocation = if ($null -ne $ParserInvocation) { $ParserInvocation } else { Invoke-CanonicalParser -Root $Root -Paths $Paths }
+    $canonicalFileRecords = @($FileRecords | Where-Object { [string]$_.type -cne "skill" })
+    $canonicalPaths = if (@($Paths).Count -eq 0) {
+        @()
+    }
+    else {
+        @($Paths | ForEach-Object {
+                $requestedPath = [string]$_
+                if (@($canonicalFileRecords | Where-Object { [string]$_.path -ceq $requestedPath }).Count -gt 0) { $requestedPath }
+            })
+    }
+    if (@($Paths).Count -gt 0 -and $canonicalPaths.Count -eq 0 -and $null -eq $ParserInvocation) {
+        return [ordered]@{ success = $true; records = @() }
+    }
+    $invocation = if ($null -ne $ParserInvocation) {
+        $ParserInvocation
+    }
+    elseif (@($Paths).Count -eq 0) {
+        Invoke-CanonicalParser -Root $Root -Paths @()
+    }
+    else {
+        Invoke-CanonicalParser -Root $Root -Paths $canonicalPaths
+    }
     if ($null -eq $invocation.payload) {
         Add-Finding -Findings $Findings -Code "canonical-parser" -Path "" -Message "Canonical parser did not return structured JSON."
         return [ordered]@{ success = $false; records = @() }
@@ -273,7 +471,7 @@ function Convert-ParserAssetsToCatalog {
         return [ordered]@{ success = $false; records = @() }
     }
     $byPath = @{}
-    foreach ($fileRecord in @($FileRecords)) { $byPath[[string]$fileRecord.path] = $fileRecord }
+    foreach ($fileRecord in @($canonicalFileRecords)) { $byPath[[string]$fileRecord.path] = $fileRecord }
     $records = New-Object 'System.Collections.Generic.List[object]'
     foreach ($asset in @(Get-ValueArray -Value $payload.assets)) {
         $path = [string]$asset.path
@@ -284,13 +482,44 @@ function Convert-ParserAssetsToCatalog {
         $record = Get-AssetCatalogRecord -Asset $asset -FileRecord $byPath[$path] -Findings $Findings
         if ($null -ne $record) { [void]$records.Add($record) }
     }
-    if ($records.Count -ne @($FileRecords | Where-Object { @($Paths).Count -eq 0 -or $Paths -contains $_.path }).Count) {
+    $expectedRecordCount = if (@($Paths).Count -eq 0) {
+        @($canonicalFileRecords).Count
+    }
+    else {
+        @($canonicalFileRecords | Where-Object { $canonicalPaths -contains [string]$_.path }).Count
+    }
+    if ($records.Count -ne $expectedRecordCount) {
         Add-Finding -Findings $Findings -Code "canonical-count" -Path "" -Message "Canonical parser asset count does not match the requested canonical file set."
     }
     return [ordered]@{ success = ($Findings.Count -eq 0); records = @($records.ToArray() | Sort-Object path) }
 }
 
-# Test-CatalogMatchesFiles: compare the cache's cheap directory view with the current tree.
+# Convert-PromotedSkillsToCatalog: read standard Agent Skills only for disposable discover projection records.
+function Convert-PromotedSkillsToCatalog {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$FileRecords,
+        [string[]]$Paths = @(),
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $findingStart = $Findings.Count
+    $skillRecords = @($FileRecords | Where-Object { [string]$_.type -ceq "skill" -and (@($Paths).Count -eq 0 -or $Paths -contains [string]$_.path) })
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($fileRecord in @($skillRecords | Sort-Object path)) {
+        try {
+            $skill = Read-PromotedSkill -Root $Root -RelativePath ([string]$fileRecord.path)
+            $record = Get-PromotedSkillCatalogRecord -Skill $skill -FileRecord $fileRecord -Findings $Findings
+            if ($null -ne $record) { [void]$records.Add($record) }
+        }
+        catch {
+            Add-Finding -Findings $Findings -Code "skill-invalid" -Path ([string]$fileRecord.path) -Message "Promoted Skill could not be read as standard Agent Skills frontmatter."
+        }
+    }
+    return [ordered]@{ success = ($Findings.Count -eq $findingStart); records = @($records.ToArray() | Sort-Object path) }
+}
+
+# Test-CatalogMatchesFiles: compare the cache's cheap canonical plus derived projection view with the current tree.
 function Test-CatalogMatchesFiles {
     param(
         [Parameter(Mandatory = $true)][object]$Catalog,

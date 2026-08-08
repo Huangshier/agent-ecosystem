@@ -44,16 +44,26 @@ Promotion is an explicit two-step boundary:
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation promote-skill -ProjectRoot <project-root> -Id <procedure-id> -Analyze -Json
-pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation promote-skill -ProjectRoot <project-root> -Id <procedure-id> -Apply -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation promote-skill -ProjectRoot <project-root> -Id <procedure-id> -Apply -AnalyzeEvidence <evidence-hash> -ConfirmPromotion -Json
 ```
 
 Analyze is read-only and returns a candidate `.agents/skills/<name>/SKILL.md`,
 the original Procedure deletion plan, and the discovery/authorization/side-effect
-boundary change. Only Apply writes the Skill and deletes the original Procedure.
-After Apply there is one authority, not a Procedure plus Skill pair; the next
-`discover` refreshes the disposable Catalog. Skill discovery never grants
-execution authorization, and Apply performs only the minimal failure recovery
-needed to avoid losing the original Procedure or leaving dual authority.
+boundary change, plus deterministic evidence bound to the current Procedure and
+candidate hashes. Apply requires that evidence and explicit human confirmation;
+missing or stale evidence fails closed without writes. Only Apply writes the
+Skill and deletes the original Procedure. After Apply there is one published
+Skill representation, not a Procedure plus Skill pair; the next `discover`
+refreshes the disposable Catalog. Skill discovery never grants execution
+authorization, and Apply performs only the minimal failure recovery needed to
+avoid losing the original Procedure or leaving dual authority.
+
+The four canonical project asset roots remain Work, Context, Procedure, and
+Spec. A promoted `SKILL.md` follows the standard Agent Skills frontmatter
+(`name` and `description`, with only standard optional fields when needed) and
+is a Procedure publication form. It is read by an internal discover projection
+reader, not by the canonical parser, and it is not a fifth canonical project
+asset authority.
 
 ## Deterministic discovery contract
 

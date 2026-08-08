@@ -14,7 +14,7 @@ function Get-CanonicalReferenceChecks {
     foreach ($asset in @($Assets)) {
         $type = [string](Get-PropertyValue $asset "type")
         $id = [string](Get-PropertyValue $asset "id")
-        if ($type -notin @("work", "context", "procedure", "skill", "spec") -or [string]::IsNullOrWhiteSpace($id)) { continue }
+        if ($type -notin @("work", "context", "procedure", "spec") -or [string]::IsNullOrWhiteSpace($id)) { continue }
         [void]$identitySet.Add(("{0}`0{1}" -f $type, $id))
         if (-not $typesById.ContainsKey($id)) {
             $typesById[$id] = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
@@ -169,9 +169,13 @@ function Invoke-CheckOperation {
         if (-not (Test-Path -LiteralPath $rootFull -PathType Container)) { throw "project root is not a directory" }
     }
     catch { Add-Finding -Findings $findings -Code "project-root-invalid" -Path "" -Message "Project root does not exist or is not a safe directory." }
-    $fileRecords = @()
-    try { $fileRecords = @(Get-CanonicalFileRecords -Root $rootFull -Findings $findings) }
+    $canonicalFileRecords = @()
+    $skillFileRecords = @()
+    try { $canonicalFileRecords = @(Get-CanonicalFileRecords -Root $rootFull -Findings $findings) }
     catch { Add-Finding -Findings $findings -Code "canonical-enumeration" -Path "" -Message "Canonical project assets could not be enumerated safely." }
+    try { $skillFileRecords = @(Get-PromotedSkillFileRecords -Root $rootFull -Findings $findings) }
+    catch { Add-Finding -Findings $findings -Code "skill-enumeration" -Path "" -Message "Promoted Skill projections could not be enumerated safely." }
+    $fileRecords = @($canonicalFileRecords) + @($skillFileRecords)
     $directoryFingerprint = ""
     $schemaFingerprint = ""
     try { $directoryFingerprint = Get-DirectoryFingerprint -Records $fileRecords } catch { Add-Finding -Findings $findings -Code "directory-fingerprint" -Path "" -Message "Canonical directory fingerprint could not be computed." }

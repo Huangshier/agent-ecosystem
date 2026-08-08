@@ -40,6 +40,8 @@ param(
     [Alias("Name")][string]$SkillName = "",
     [switch]$Analyze,
     [switch]$Apply,
+    [string]$AnalyzeEvidence = "",
+    [switch]$ConfirmPromotion,
     [string]$Updated = "",
     [switch]$ResultPersisted,
     [switch]$Json,
@@ -310,7 +312,7 @@ function Assert-ProjectPath {
     return $full
 }
 
-# Get-CanonicalFileRecords: enumerate only Slice A canonical roots and return cache-local metadata.
+# Get-CanonicalFileRecords: enumerate the four canonical project asset roots and return cache-local metadata.
 function Get-CanonicalFileRecords {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -347,31 +349,6 @@ function Get-CanonicalFileRecords {
         }
     }
 
-    $skillRoot = Join-Path $Root ".agents/skills"
-    if (Test-Path -LiteralPath $skillRoot -PathType Container) {
-        foreach ($directory in @(Get-ChildItem -LiteralPath $skillRoot -Directory -Force | Sort-Object Name)) {
-            $file = Join-Path $directory.FullName "SKILL.md"
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
-            $relative = [IO.Path]::GetRelativePath($Root, $file).Replace('\', '/')
-            try {
-                Assert-ProjectPath -Root $Root -RelativePath $relative | Out-Null
-            }
-            catch {
-                Add-Finding -Findings $Findings -Code "unsafe-path" -Path $relative -Message "Canonical Skill path cannot be resolved safely inside the project root."
-                continue
-            }
-            if (-not $seen.Add($relative)) { continue }
-            $item = Get-Item -LiteralPath $file -Force
-            [void]$records.Add([ordered]@{
-                path = $relative
-                type = "skill"
-                size = [long]$item.Length
-                mtime = $item.LastWriteTimeUtc.ToString("o", [Globalization.CultureInfo]::InvariantCulture)
-                full_path = $item.FullName
-            })
-        }
-    }
-
     $specRoot = Join-Path $Root "docs/specs"
     if (Test-Path -LiteralPath $specRoot -PathType Container) {
         foreach ($directory in @(Get-ChildItem -LiteralPath $specRoot -Directory -Force | Sort-Object Name)) {
@@ -395,6 +372,40 @@ function Get-CanonicalFileRecords {
                 full_path = $item.FullName
             })
         }
+    }
+    return @($records.ToArray() | Sort-Object path)
+}
+
+# Get-PromotedSkillFileRecords: enumerate promoted Agent Skills only as a disposable discover projection input.
+# Skill files are never returned by the canonical parser and never become a canonical project asset authority.
+function Get-PromotedSkillFileRecords {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    $skillRoot = Join-Path $Root ".agents/skills"
+    if (-not (Test-Path -LiteralPath $skillRoot -PathType Container)) { return @() }
+    foreach ($directory in @(Get-ChildItem -LiteralPath $skillRoot -Directory -Force | Sort-Object Name)) {
+        $file = Join-Path $directory.FullName "SKILL.md"
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+        $relative = [IO.Path]::GetRelativePath($Root, $file).Replace('\', '/')
+        try {
+            Assert-ProjectPath -Root $Root -RelativePath $relative | Out-Null
+        }
+        catch {
+            Add-Finding -Findings $Findings -Code "unsafe-path" -Path $relative -Message "Promoted Skill path cannot be resolved safely inside the project root."
+            continue
+        }
+        $item = Get-Item -LiteralPath $file -Force
+        [void]$records.Add([ordered]@{
+            path = $relative
+            type = "skill"
+            size = [long]$item.Length
+            mtime = $item.LastWriteTimeUtc.ToString("o", [Globalization.CultureInfo]::InvariantCulture)
+            full_path = $item.FullName
+        })
     }
     return @($records.ToArray() | Sort-Object path)
 }
@@ -574,9 +585,13 @@ function Invoke-DiscoverOperation {
         Add-Finding -Findings $findings -Code "project-root-invalid" -Path "" -Message "Project root does not exist or is not a safe directory."
     }
 
-    $fileRecords = @()
-    try { $fileRecords = @(Get-CanonicalFileRecords -Root $rootFull -Findings $findings) }
+    $canonicalFileRecords = @()
+    $skillFileRecords = @()
+    try { $canonicalFileRecords = @(Get-CanonicalFileRecords -Root $rootFull -Findings $findings) }
     catch { Add-Finding -Findings $findings -Code "canonical-enumeration" -Path "" -Message "Canonical project assets could not be enumerated safely." }
+    try { $skillFileRecords = @(Get-PromotedSkillFileRecords -Root $rootFull -Findings $findings) }
+    catch { Add-Finding -Findings $findings -Code "skill-enumeration" -Path "" -Message "Promoted Skill projections could not be enumerated safely." }
+    $fileRecords = @($canonicalFileRecords) + @($skillFileRecords)
     $directoryFingerprint = ""
     try { $directoryFingerprint = Get-DirectoryFingerprint -Records $fileRecords }
     catch { Add-Finding -Findings $findings -Code "directory-fingerprint" -Path "" -Message "Canonical directory fingerprint could not be computed." }
@@ -618,17 +633,21 @@ function Invoke-DiscoverOperation {
                 if ($changedPaths.Count -eq 0) { $incremental = $false }
             }
             if ($incremental) {
-                $parsed = Convert-ParserAssetsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths $changedPaths -Findings $findings
-                if ($parsed.success) {
-                    $merged = Merge-IncrementalCatalog -OldCatalog $catalogRead.payload -FileRecords $fileRecords -ChangedRecords $parsed.records
+                $parsedCanonical = Convert-ParserAssetsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths $changedPaths -Findings $findings
+                $parsedSkills = Convert-PromotedSkillsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths $changedPaths -Findings $findings
+                if ($parsedCanonical.success -and $parsedSkills.success) {
+                    $changedRecords = @($parsedCanonical.records) + @($parsedSkills.records)
+                    $merged = Merge-IncrementalCatalog -OldCatalog $catalogRead.payload -FileRecords $fileRecords -ChangedRecords $changedRecords
                     $catalog = New-CatalogPayload -DirectoryFingerprint $directoryFingerprint -SchemaFingerprint $schemaFingerprint -GlossaryFingerprint ([string]$glossary.fingerprint) -Assets $merged
                     $cacheReason = "changed_paths"
                 }
             }
             else {
-                $parsed = Convert-ParserAssetsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths @() -Findings $findings
-                if ($parsed.success) {
-                    $catalog = New-CatalogPayload -DirectoryFingerprint $directoryFingerprint -SchemaFingerprint $schemaFingerprint -GlossaryFingerprint ([string]$glossary.fingerprint) -Assets $parsed.records
+                $parsedCanonical = Convert-ParserAssetsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths @() -Findings $findings
+                $parsedSkills = Convert-PromotedSkillsToCatalog -Root $rootFull -FileRecords $fileRecords -Paths @() -Findings $findings
+                if ($parsedCanonical.success -and $parsedSkills.success) {
+                    $records = @($parsedCanonical.records) + @($parsedSkills.records)
+                    $catalog = New-CatalogPayload -DirectoryFingerprint $directoryFingerprint -SchemaFingerprint $schemaFingerprint -GlossaryFingerprint ([string]$glossary.fingerprint) -Assets $records
                     $cacheReason = if ($catalogRead.state -eq "missing") { "missing" } elseif ($catalogRead.state -eq "invalid") { "corrupt" } elseif (-not $cacheShapeValid) { "schema_invalid" } elseif ([string](Get-PropertyValue $catalogRead.payload "schema_fingerprint") -cne $schemaFingerprint) { "schema_changed" } elseif ([string](Get-PropertyValue $catalogRead.payload "glossary_fingerprint") -cne [string]$glossary.fingerprint) { "glossary_changed" } else { "directory_changed" }
                 }
             }

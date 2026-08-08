@@ -255,6 +255,11 @@ function Get-AuthoringCandidate {
         [Parameter(Mandatory = $true)][string]$Id,
         [Parameter(Mandatory = $true)][string]$Text
     )
+    if ($Type -ceq "skill") {
+        $skill = Read-PromotedSkill -Root $Root -RelativePath $RelativePath -Text $Text
+        if ([string]$skill.name -cne $Id -or [string]$skill.path -cne $RelativePath) { throw "standard Agent Skill candidate identity was rejected" }
+        return [ordered]@{ text = $Text; path = $RelativePath; type = $Type; id = $Id }
+    }
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-authoring-{0}" -f ([Guid]::NewGuid().ToString("N")))
     try {
         $candidatePath = Join-Path $tempRoot $RelativePath
@@ -335,7 +340,7 @@ function Assert-AuthoringOperationParameters {
         "create-context" { @("Id", "Title", "Summary", "Status", "Keywords", "Keyword", "Evidence", "Updated") }
         "create-procedure" { @("Id", "Title", "Summary", "Kind", "Triggers", "Trigger", "SideEffects", "SideEffect", "Preconditions", "Precondition", "Steps", "Step", "Validation", "StopBoundaries", "StopBoundary", "Stop", "Authorization", "Updated") }
         "create-spec" { @("Id", "Title", "Summary", "Status", "RelatedWork", "Supersedes", "Goals", "Goal", "NonGoals", "NonGoal", "Tradeoffs", "Tradeoff", "Acceptance", "Updated") }
-        "promote-skill" { @("Id", "SkillName", "Name", "Analyze", "Apply") }
+        "promote-skill" { @("Id", "SkillName", "Name", "Analyze", "Apply", "AnalyzeEvidence", "ConfirmPromotion") }
         default { @() }
     }
     foreach ($key in @($BoundParameters.Keys)) {
@@ -528,6 +533,28 @@ function Get-AuthoringProcedureSnapshot {
     }
 }
 
+# Get-AuthoringPromotionEvidence: bind the current Procedure and deterministic candidate to one reusable evidence hash.
+function Get-AuthoringPromotionEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProcedurePath,
+        [Parameter(Mandatory = $true)][string]$ProcedureHash,
+        [Parameter(Mandatory = $true)][string]$SkillPath,
+        [Parameter(Mandatory = $true)][string]$SkillName,
+        [Parameter(Mandatory = $true)][string]$CandidateHash
+    )
+
+    $lines = @(
+        "promotion-contract=agent-ecosystem/procedure-to-skill/v1",
+        ("procedure_path={0}" -f $ProcedurePath),
+        ("procedure_hash={0}" -f $ProcedureHash),
+        ("skill_path={0}" -f $SkillPath),
+        ("skill_name={0}" -f $SkillName),
+        ("candidate_hash={0}" -f $CandidateHash),
+        "delete_source=true"
+    )
+    return Get-Sha256 -Bytes ([Text.UTF8Encoding]::new($false).GetBytes(($lines -join "`n")))
+}
+
 function New-AuthoringSkillPlan {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -539,29 +566,18 @@ function New-AuthoringSkillPlan {
     $snapshot = Get-AuthoringProcedureSnapshot -Root $Root -Id $procedureId
     $skillName = if (Get-AuthoringBound -BoundParameters $BoundParameters -Name "SkillName") { [string]$BoundParameters.SkillName } else { $procedureId }
     if ([string]::IsNullOrWhiteSpace($skillName)) { $skillName = $procedureId }
-    if (-not (Test-AuthoringId -Id $skillName)) { throw "invalid parameter: SkillName" }
+    if (-not (Test-AuthoringId -Id $skillName) -or $skillName.Length -gt 64) { throw "invalid parameter: SkillName" }
     $skillPath = Get-AuthoringCanonicalPath -Type skill -Id $skillName
     $skillTarget = Assert-ProjectPath -Root $Root -RelativePath $skillPath -AllowMissing
     if (Test-Path -LiteralPath $skillTarget -PathType Leaf) { throw "target Skill already exists" }
     $procedureMetadata = $snapshot.metadata
     $triggers = @(Get-StringList (Get-PropertyValue -Object $procedureMetadata -Name "triggers"))
     $sideEffects = @(Get-StringList (Get-PropertyValue -Object $procedureMetadata -Name "side_effects"))
-    $keywords = if ($triggers.Count -gt 0) { @($triggers) } else { @($procedureId) }
-    $updated = Get-ContinuityUtcNow
+    $description = "{0} Use when {1}." -f ([string](Get-PropertyValue -Object $procedureMetadata -Name "summary")), $(if ($triggers.Count -gt 0) { $triggers -join "; " } else { "the caller explicitly selects this promoted Skill" })
+    if ([string]::IsNullOrWhiteSpace($description) -or $description.Length -gt 1024) { throw "generated Skill description exceeds the Agent Skills limit" }
     $skillMetadata = [ordered]@{
-        schema = "agent-ecosystem/skill/v1"
-        id = $skillName
         name = $skillName
-        title = [string](Get-PropertyValue -Object $procedureMetadata -Name "title")
-        description = [string](Get-PropertyValue -Object $procedureMetadata -Name "summary")
-        status = "active"
-        updated = $updated
-        summary = [string](Get-PropertyValue -Object $procedureMetadata -Name "summary")
-        keywords = @($keywords)
-        kind = [string](Get-PropertyValue -Object $procedureMetadata -Name "kind")
-        exposure = "internal"
-        triggers = @($triggers)
-        side_effects = @($sideEffects)
+        description = $description
     }
     $boundaryLines = @(
         "## Promotion boundary",
@@ -569,12 +585,15 @@ function New-AuthoringSkillPlan {
         ("- Original Procedure: {0} (deleted only by explicit Apply)." -f $snapshot.path),
         "- Agent-native discovery does not grant execution authorization.",
         "- Procedure authorization and side_effects remain explicit and unchanged.",
+        ("- Declared side_effects: {0}." -f ($sideEffects -join "; ")),
         "- This Skill does not execute itself during discovery or analysis.",
         ""
     )
     $skillBody = (($snapshot.body.TrimEnd()) + "`n`n" + ($boundaryLines -join "`n") + "`n")
     $text = (New-AuthoringFrontMatter -Metadata $skillMetadata) + "`n`n" + $skillBody
     Get-AuthoringCandidate -Root $Root -RelativePath $skillPath -Type "skill" -Id $skillName -Text $text | Out-Null
+    $candidateHash = Get-Sha256 -Bytes ([Text.UTF8Encoding]::new($false).GetBytes($text))
+    $evidence = Get-AuthoringPromotionEvidence -ProcedurePath $snapshot.path -ProcedureHash $snapshot.normalized_hash -SkillPath $skillPath -SkillName $skillName -CandidateHash $candidateHash
     return [ordered]@{
         procedure = $snapshot
         skill_name = $skillName
@@ -582,10 +601,17 @@ function New-AuthoringSkillPlan {
         skill_full_path = $skillTarget
         skill_metadata = $skillMetadata
         skill_text = $text
+        candidate_hash = $candidateHash
+        evidence = $evidence
         side_effects = @($sideEffects)
         authorization_boundary = @(
             "Original Procedure authorization section is preserved in the generated Skill body.",
             "Promotion changes discovery exposure only; it does not authorize implicit execution."
+        )
+        manual_conditions = @(
+            "The caller has reviewed the generated Skill candidate and intends to publish this Procedure as a Skill.",
+            "The explicit authorization and side_effects boundaries remain acceptable after promotion.",
+            "The caller understands that Apply deletes the source Procedure after the candidate is created and verified."
         )
     }
 }
@@ -604,6 +630,9 @@ function Get-AuthoringPlanResult {
         source_hash = [string]$Plan.procedure.normalized_hash
         candidate_path = [string]$Plan.skill_path
         candidate = [string]$Plan.skill_text
+        candidate_hash = [string]$Plan.candidate_hash
+        evidence = [string]$Plan.evidence
+        evidence_hash = [string]$Plan.evidence
         delete_source = $true
         authority_before = "procedure"
         authority_after_apply = "skill"
@@ -615,6 +644,8 @@ function Get-AuthoringPlanResult {
         )
         authorization = @($Plan.authorization_boundary)
         side_effects = @($Plan.side_effects)
+        manual_conditions = @($Plan.manual_conditions)
+        apply_requires = @("Analyze evidence", "ConfirmPromotion")
         findings = @()
     }
 }
@@ -643,9 +674,9 @@ function Invoke-AuthoringPromoteApply {
 
     $verified = $false
     try {
-        $parser = Invoke-CanonicalParser -Root $Root -Paths @([string]$Plan.skill_path)
-        $asset = if ($null -ne $parser.payload) { @($parser.payload.assets | Where-Object { [string]$_.path -ceq [string]$Plan.skill_path }) | Select-Object -First 1 } else { $null }
-        $verified = ($null -ne $asset -and [string]$parser.payload.status -ceq "PASS" -and [bool]$asset.valid -and -not (Test-Path -LiteralPath (Join-Path $Root ([string]$Plan.procedure.path))))
+        $skill = Read-PromotedSkill -Root $Root -RelativePath ([string]$Plan.skill_path)
+        $verified = ([string]$skill.normalized_hash -ceq [string]$Plan.candidate_hash -and
+            -not (Test-Path -LiteralPath (Join-Path $Root ([string]$Plan.procedure.path))))
     }
     catch { $verified = $false }
     if (-not $verified) {
@@ -684,11 +715,23 @@ function Invoke-AuthoringPromote {
     $apply = Get-AuthoringBound -BoundParameters $BoundParameters -Name "Apply"
     if ($analyze -and $apply) { return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $false -Code "invalid-mode" -Message "Analyze and Apply are mutually exclusive." }
     if (-not $analyze -and -not $apply) { return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $false -Code "explicit-mode-required" -Message "promote-skill requires explicit Analyze or Apply." }
+    if ($analyze -and (Get-AuthoringBound -BoundParameters $BoundParameters -Name "AnalyzeEvidence")) {
+        return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $true -Code "invalid-mode" -Message "Analyze cannot consume Apply evidence."
+    }
+    if ($apply -and (-not (Get-AuthoringBound -BoundParameters $BoundParameters -Name "AnalyzeEvidence") -or [string]::IsNullOrWhiteSpace([string]$BoundParameters.AnalyzeEvidence))) {
+        return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $false -Code "analyze-evidence-required" -Message "Apply requires evidence returned by Analyze."
+    }
+    if ($apply -and (-not (Get-AuthoringBound -BoundParameters $BoundParameters -Name "ConfirmPromotion") -or -not [bool]$BoundParameters.ConfirmPromotion)) {
+        return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $false -Code "confirmation-required" -Message "Apply requires explicit confirmation of the promotion conditions."
+    }
     try { $plan = New-AuthoringSkillPlan -Root $Root -BoundParameters $BoundParameters }
     catch {
         return New-AuthoringFailure -Operation "promote-skill" -ReadOnly ([bool]$analyze) -Code "promotion-not-ready" -Message $_.Exception.Message
     }
     if ($analyze) { return Get-AuthoringPlanResult -Operation "promote-skill" -Plan $plan }
+    if ([string]$BoundParameters.AnalyzeEvidence -cne [string]$plan.evidence) {
+        return New-AuthoringFailure -Operation "promote-skill" -ReadOnly $false -Code "stale-analyze-evidence" -Path ([string]$plan.procedure.path) -Message "Analyze evidence does not match the current Procedure and candidate baseline." -Extra ([ordered]@{ expected_evidence = [string]$plan.evidence; current_source_hash = [string]$plan.procedure.normalized_hash; candidate_hash = [string]$plan.candidate_hash })
+    }
     return Invoke-AuthoringPromoteApply -Root $Root -Plan $plan
 }
 
