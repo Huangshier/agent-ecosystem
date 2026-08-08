@@ -609,9 +609,12 @@ function New-AuthoringSkillPlan {
             "Promotion changes discovery exposure only; it does not authorize implicit execution."
         )
         manual_conditions = @(
-            "The caller has reviewed the generated Skill candidate and intends to publish this Procedure as a Skill.",
-            "The explicit authorization and side_effects boundaries remain acceptable after promotion.",
-            "The caller understands that Apply deletes the source Procedure after the candidate is created and verified."
+            "The Procedure has been used repeatedly and is stable.",
+            "The Procedure inputs, outputs, and stop conditions are stable.",
+            "The Procedure clearly benefits from Agent-native discovery.",
+            "The Skill description is not prone to accidental triggering.",
+            "The authorization and side_effects boundaries are clear.",
+            "The caller has reviewed the generated Skill candidate and understands that Apply deletes the original Procedure."
         )
     }
 }

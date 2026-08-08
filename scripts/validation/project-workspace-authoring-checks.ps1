@@ -158,6 +158,22 @@ try {
     $analysis = Invoke-WorkspaceJson -OperationParameters ([ordered]@{ Operation = "promote-skill"; ProjectRoot = $runRoot; Id = "slice-d-procedure"; Analyze = $true; Json = $true })
     $afterAnalyze = Get-TreeFingerprint -Root $runRoot
     $frontMatterAllowed = Test-StandardSkillFrontMatter -Text ([string]$analysis.candidate)
+    $frozenAnalyzeConditions = @(
+        "The Procedure has been used repeatedly and is stable.",
+        "The Procedure inputs, outputs, and stop conditions are stable.",
+        "The Procedure clearly benefits from Agent-native discovery.",
+        "The Skill description is not prone to accidental triggering.",
+        "The authorization and side_effects boundaries are clear.",
+        "The caller has reviewed the generated Skill candidate and understands that Apply deletes the original Procedure."
+    )
+    $analyzeConditionValues = @($analysis.manual_conditions | ForEach-Object { [string]$_ })
+    $analyzeConditionsComplete = ($frozenAnalyzeConditions.Count -eq $analyzeConditionValues.Count)
+    foreach ($condition in $frozenAnalyzeConditions) {
+        if (-not ($analyzeConditionValues -ccontains $condition)) {
+            $analyzeConditionsComplete = $false
+            break
+        }
+    }
     $analyzeReadOnly = ([string]$analysis.status -ceq "PASS" -and [bool]$analysis.read_only -and
         [string]$analysis.candidate_path -ceq ".agents/skills/slice-d-procedure/SKILL.md" -and
         $beforeAnalyze -ceq $afterAnalyze -and
@@ -174,6 +190,7 @@ try {
         [string]$analysis.candidate -match "## Authorization" -and
         [string]$analysis.candidate -match "writes fixture output")
     Add-Case -Name "promote-analyze-is-read-only" -Passed $analyzeReadOnly -Detail "Analyze emits a deterministic standard Agent Skill candidate and bound evidence without project writes."
+    Add-Case -Name "analyze-returns-frozen-manual-conditions" -Passed $analyzeConditionsComplete -Detail "Analyze returns the complete frozen human-review condition list without automatic evaluation."
 
     $procedurePath = Join-Path $runRoot ".agents/procedures/slice-d-procedure.md"
     $skillPath = Join-Path $runRoot ".agents/skills/slice-d-procedure/SKILL.md"
@@ -238,6 +255,7 @@ try {
         catalog_written_only_by_discover = $createNoCatalog -and $discoverReadsCreated
         check_read_only = $checkReadOnly
         analyze_read_only = $analyzeReadOnly
+        analyze_frozen_manual_conditions = $analyzeConditionsComplete
         frontmatter_allowed_fields = $frontMatterAllowed
         apply_requires_analyze_evidence = $directApplyClosed
         apply_requires_confirmation = $confirmationClosed
