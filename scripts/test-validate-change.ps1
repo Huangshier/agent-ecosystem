@@ -19,6 +19,8 @@ $runtimeRequirementValidator = Join-Path $PSScriptRoot "test-powershell-runtime-
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
+$targetedExecutionCache = @{}
+$targetedExecutionSequence = 0
 
 $runtimeRequirementRaw = @(& $runtimeRequirementValidator -Json) -join "`n"
 $runtimeRequirementResult = $runtimeRequirementRaw | ConvertFrom-Json
@@ -314,25 +316,200 @@ function Invoke-WorkflowHostArrayFixtures {
     return @($fixtureResults.ToArray())
 }
 
-function Invoke-TargetedRegression {
-    param([string]$Name, [string[]]$Path, [string[]]$ExpectedModule, [string[]]$ExpectedSuite, [string]$Mode)
-    $caseScratch = Join-Path $targetedScratch $Name
+function ConvertTo-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
+        return ([BitConverter]::ToString($sha256.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function Get-TargetedRunnerIdentity {
+    return "{0}-{1}-{2}" -f [System.Environment]::OSVersion.Platform, $PSVersionTable.PSEdition, $PSVersionTable.PSVersion.ToString()
+}
+
+function New-TargetedExecutionContract {
+    param(
+        [string[]]$ExpectedSuite,
+        [string]$Mode,
+        [string]$ExecutionHost
+    )
+
+    $head = [string](@(& git -C $repoRoot rev-parse HEAD 2>$null)[-1]).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
+        throw "Could not resolve the current repository head for the targeted execution contract."
+    }
+    $validatorHash = (Get-FileHash -LiteralPath $targetedValidator -Algorithm SHA256).Hash.ToLowerInvariant()
+    return [ordered]@{
+        contract_version = 1
+        suite_identity = @($ExpectedSuite | Sort-Object -Unique)
+        mode = $Mode
+        execution_host = $ExecutionHost
+        runner_identity = Get-TargetedRunnerIdentity
+        repository_head = $head.ToLowerInvariant()
+        validator_sha256 = $validatorHash
+    }
+}
+
+function Get-TargetedExecutionKey {
+    param([Parameter(Mandatory = $true)][object]$Contract)
+
+    return ConvertTo-Sha256Hex -Value ($Contract | ConvertTo-Json -Depth 8 -Compress)
+}
+
+function Copy-TargetedExecutionContract {
+    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Contract)
+
+    $copy = [ordered]@{}
+    foreach ($key in $Contract.Keys) { $copy[$key] = $Contract[$key] }
+    return $copy
+}
+
+function Invoke-SharedTargetedExecution {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Cache,
+        [Parameter(Mandatory = $true)][ref]$Sequence,
+        [Parameter(Mandatory = $true)][string]$CaseName,
+        [Parameter(Mandatory = $true)][string]$ExecutionKey,
+        [Parameter(Mandatory = $true)][object]$ExecutionContract,
+        [Parameter(Mandatory = $true)][scriptblock]$Executor
+    )
+
+    if ($Cache.ContainsKey($ExecutionKey)) {
+        $shared = $Cache[$ExecutionKey]
+        return [ordered]@{
+            case = $CaseName
+            shared_execution_id = [string]$shared.shared_execution_id
+            execution_key = $ExecutionKey
+            execution_contract = $ExecutionContract
+            executed = $false
+            reused = $true
+            status = [string]$shared.status
+            check_count = [int]$shared.check_count
+            error = $shared.error
+        }
+    }
+
+    $Sequence.Value = [int]$Sequence.Value + 1
+    $sharedExecutionId = "targeted-suite-{0:D3}" -f [int]$Sequence.Value
     $startedAt = [DateTimeOffset]::UtcNow
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $raw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -ScratchRoot $caseScratch -Json) -join "`n"
-    $stopwatch.Stop()
+    $status = "FAIL"
+    $checkCount = 0
+    $errorDetail = $null
+    try {
+        $evidence = & $Executor
+        if ($null -eq $evidence -or [string]$evidence.status -cne "PASS") {
+            $reportedError = if ($null -ne $evidence) { [string]$evidence.error } else { "executor returned no evidence" }
+            throw "Shared targeted suite execution did not PASS: $reportedError"
+        }
+        if ($null -ne $evidence.check_count) { $checkCount = [int]$evidence.check_count }
+        $status = "PASS"
+    }
+    catch {
+        $errorDetail = [string]$_.Exception.Message
+    }
     $completedAt = [DateTimeOffset]::UtcNow
-    $value = $raw | ConvertFrom-Json
-    if ([int]$value.executed_suite_count -lt 1) { throw "Targeted case '$Name' executed no actual module suite." }
-    foreach ($suite in $ExpectedSuite) { if (@($value.executed_suites) -notcontains $suite) { throw "Targeted case '$Name' did not execute '$suite'." } }
+    $shared = [ordered]@{
+        shared_execution_id = $sharedExecutionId
+        execution_key = $ExecutionKey
+        execution_contract = $ExecutionContract
+        status = $status
+        check_count = $checkCount
+        error = $errorDetail
+        started_at_utc = $startedAt.ToString("o")
+        completed_at_utc = $completedAt.ToString("o")
+    }
+    $Cache[$ExecutionKey] = $shared
+    return [ordered]@{
+        case = $CaseName
+        shared_execution_id = $sharedExecutionId
+        execution_key = $ExecutionKey
+        execution_contract = $ExecutionContract
+        executed = $true
+        reused = $false
+        status = $status
+        check_count = $checkCount
+        error = $errorDetail
+    }
+}
+
+function Assert-TargetedRoutingEvidence {
+    param(
+        [string]$Name,
+        [string[]]$Path,
+        [int]$ExpectedTier,
+        [string[]]$ExpectedModule,
+        [string[]]$ExpectedSuite,
+        [string]$Mode
+    )
+
+    $routingRaw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -RoutingOnly -Json) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "Routing case '$Name' validation failed." }
+    $routingValue = $routingRaw | ConvertFrom-Json
+    if (-not [bool]$routingValue.routing_only -or $null -eq $routingValue.classification) {
+        throw "Routing case '$Name' did not produce routing-only evidence."
+    }
+    $value = $routingValue.classification
+    & $classifierOutputContract -Result $value | Out-Null
+    if ([int]$value.detected_tier -ne $ExpectedTier) {
+        throw "Routing case '$Name' expected Tier $ExpectedTier, got Tier $($value.detected_tier)."
+    }
+    $actualModules = @($value.affected_modules | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    $expectedModules = @($ExpectedModule | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    if (($actualModules -join ",") -cne ($expectedModules -join ",")) {
+        throw "Routing case '$Name' expected modules '$($expectedModules -join ',')', got '$($actualModules -join ',')'."
+    }
+    $actualSuites = @($value.required_suites | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    $expectedSuites = @($ExpectedSuite | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    if (($actualSuites -join ",") -cne ($expectedSuites -join ",")) {
+        throw "Routing case '$Name' expected suites '$($expectedSuites -join ',')', got '$($actualSuites -join ',')'."
+    }
     foreach ($module in $ExpectedModule) {
-        $coverage = @($value.module_coverage | Where-Object module -eq $module)
+        if ($module -eq "documentation" -and @($value.base_check_modules) -notcontains "documentation") {
+            throw "Routing case '$Name' did not preserve documentation base-check coverage."
+        }
+    }
+    if ($value.run_validation_self_protection -isnot [bool] -or $value.self_protection_required -isnot [bool]) {
+        throw "Routing case '$Name' emitted invalid fail-closed self-protection fields."
+    }
+    return [ordered]@{
+        name = $Name
+        case = $Name
+        changed_paths = @($Path)
+        detected_tier = [int]$value.detected_tier
+        modules = @($value.affected_modules)
+        required_suites = @($value.required_suites)
+        base_check_modules = @($value.base_check_modules)
+        routing_check_count = [int]$routingValue.summary.pass
+        run_validation_self_protection = [bool]$value.run_validation_self_protection
+        self_protection_reason = [string]$value.self_protection_reason
+        status = "PASS"
+    }
+}
+
+function Assert-TargetedSuiteEvidence {
+    param(
+        [string]$Name,
+        [object]$Value,
+        [string[]]$ExpectedModule,
+        [string[]]$ExpectedSuite
+    )
+
+    if ([int]$Value.executed_suite_count -lt 1) { throw "Targeted case '$Name' executed no actual module suite." }
+    foreach ($suite in $ExpectedSuite) { if (@($Value.executed_suites) -notcontains $suite) { throw "Targeted case '$Name' did not execute '$suite'." } }
+    foreach ($module in $ExpectedModule) {
+        $coverage = @($Value.module_coverage | Where-Object module -eq $module)
         if ($coverage.Count -ne 1 -or [int]$coverage[0].executed_check_count -lt 1) { throw "Targeted case '$Name' has no actual check coverage for '$module'." }
         $expectedCoverage = if ($module -eq "documentation") { "base-checks" } else { "targeted-suite" }
         if ([string]$coverage[0].coverage -ne $expectedCoverage) { throw "Targeted case '$Name' used '$($coverage[0].coverage)' coverage for '$module', expected '$expectedCoverage'." }
     }
-    if (@($value.checks.name) -contains "skill-metadata" -or @($value.checks.name) -contains "targeted-module-matrix") { throw "Targeted case '$Name' emitted a forbidden empty/generic PASS." }
-    $telemetry = @($value.telemetry)
+    if (@($Value.checks.name) -contains "skill-metadata" -or @($Value.checks.name) -contains "targeted-module-matrix") { throw "Targeted case '$Name' emitted a forbidden empty/generic PASS." }
+    $telemetry = @($Value.telemetry)
     if ($telemetry.Count -lt 2) { throw "Targeted case '$Name' emitted incomplete suite telemetry." }
     foreach ($record in $telemetry) {
         if ([string]::IsNullOrWhiteSpace([string]$record.suite) -or
@@ -345,19 +522,158 @@ function Invoke-TargetedRegression {
             throw "Targeted case '$Name' emitted an invalid suite telemetry record."
         }
     }
+}
+
+function Invoke-ExecutionDedupContractFixtures {
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+
+    $contextRouteA = Assert-TargetedRoutingEvidence -Name "context-gate" -Path @("skills/project-context-gate/scripts/context_gate.ps1") -ExpectedTier 2 -ExpectedModule @("context-gate") -ExpectedSuite @("project-context-gate") -Mode "targeted"
+    $contextRouteB = Assert-TargetedRoutingEvidence -Name "context-gate-check" -Path @("scripts/validation/project-context-gate-checks.ps1") -ExpectedTier 2 -ExpectedModule @("context-gate") -ExpectedSuite @("project-context-gate") -Mode "targeted"
+    $contextContract = New-TargetedExecutionContract -ExpectedSuite @("project-context-gate") -Mode "targeted" -ExecutionHost "current"
+    $contextKey = Get-TargetedExecutionKey -Contract $contextContract
+    $contextCache = @{}
+    $contextSequence = 0
+    $script:dedupFixtureContextCalls = 0
+    $contextFirst = Invoke-SharedTargetedExecution -Cache $contextCache -Sequence ([ref]$contextSequence) -CaseName $contextRouteA.case -ExecutionKey $contextKey -ExecutionContract $contextContract -Executor {
+        $script:dedupFixtureContextCalls++
+        [ordered]@{ status = "PASS"; check_count = 2 }
+    }
+    $contextSecond = Invoke-SharedTargetedExecution -Cache $contextCache -Sequence ([ref]$contextSequence) -CaseName $contextRouteB.case -ExecutionKey $contextKey -ExecutionContract $contextContract -Executor {
+        $script:dedupFixtureContextCalls++
+        [ordered]@{ status = "PASS"; check_count = 2 }
+    }
+    if ($contextRouteA.status -cne "PASS" -or $contextRouteB.status -cne "PASS" -or $script:dedupFixtureContextCalls -ne 1 -or
+        -not [bool]$contextFirst.executed -or -not [bool]$contextSecond.reused -or
+        [string]$contextFirst.shared_execution_id -cne [string]$contextSecond.shared_execution_id) {
+        throw "Context routing cases did not independently pass routing while sharing one suite execution."
+    }
+    $fixtureResults.Add([ordered]@{ name = "context-routing-cases-share-suite-contract"; status = "PASS" })
+
+    $cache = @{}
+    $sequence = 0
+    $script:dedupFixturePassCalls = 0
+    $contractA = [ordered]@{ contract_version = 1; suite_identity = @("project-context-gate"); mode = "targeted"; execution_host = "windows-latest"; runner_identity = "fixture-windows"; repository_head = "fixture-head"; validator_sha256 = "fixture-validator"; execution_input = "same" }
+    $keyA = Get-TargetedExecutionKey -Contract $contractA
+    $first = Invoke-SharedTargetedExecution -Cache $cache -Sequence ([ref]$sequence) -CaseName "case-a" -ExecutionKey $keyA -ExecutionContract $contractA -Executor {
+        $script:dedupFixturePassCalls++
+        [ordered]@{ status = "PASS"; check_count = 2 }
+    }
+    $second = Invoke-SharedTargetedExecution -Cache $cache -Sequence ([ref]$sequence) -CaseName "case-b" -ExecutionKey $keyA -ExecutionContract $contractA -Executor {
+        $script:dedupFixturePassCalls++
+        [ordered]@{ status = "PASS"; check_count = 2 }
+    }
+    if ($script:dedupFixturePassCalls -ne 1 -or -not [bool]$first.executed -or [bool]$first.reused -or [bool]$second.executed -or -not [bool]$second.reused -or [string]$first.shared_execution_id -cne [string]$second.shared_execution_id) {
+        throw "Same execution key did not execute once and produce shared evidence."
+    }
+    $fixtureResults.Add([ordered]@{ name = "same-contract-reuses-execution"; status = "PASS" })
+
+    $contractDifferent = Copy-TargetedExecutionContract -Contract $contractA
+    $contractDifferent.execution_input = "different"
+    $keyDifferent = Get-TargetedExecutionKey -Contract $contractDifferent
+    $different = Invoke-SharedTargetedExecution -Cache $cache -Sequence ([ref]$sequence) -CaseName "case-different-contract" -ExecutionKey $keyDifferent -ExecutionContract $contractDifferent -Executor {
+        $script:dedupFixturePassCalls++
+        [ordered]@{ status = "PASS"; check_count = 3 }
+    }
+    if ($script:dedupFixturePassCalls -ne 2 -or -not [bool]$different.executed -or [bool]$different.reused) {
+        throw "Different execution contracts incorrectly reused suite evidence."
+    }
+    $fixtureResults.Add([ordered]@{ name = "different-contract-reexecutes"; status = "PASS" })
+
+    $contractDifferentHost = Copy-TargetedExecutionContract -Contract $contractA
+    $contractDifferentHost.execution_host = "ubuntu-latest"
+    $keyDifferentHost = Get-TargetedExecutionKey -Contract $contractDifferentHost
+    $differentHost = Invoke-SharedTargetedExecution -Cache $cache -Sequence ([ref]$sequence) -CaseName "case-different-host" -ExecutionKey $keyDifferentHost -ExecutionContract $contractDifferentHost -Executor {
+        $script:dedupFixturePassCalls++
+        [ordered]@{ status = "PASS"; check_count = 4 }
+    }
+    if ($script:dedupFixturePassCalls -ne 3 -or -not [bool]$differentHost.executed -or [bool]$differentHost.reused) {
+        throw "Different execution hosts incorrectly reused suite evidence."
+    }
+    if ([string]$first.shared_execution_id -cne "targeted-suite-001" -or [string]$second.shared_execution_id -cne "targeted-suite-001" -or
+        [string]$different.shared_execution_id -cne "targeted-suite-002" -or [string]$differentHost.shared_execution_id -cne "targeted-suite-003") {
+        throw "Shared execution identities were not deterministic."
+    }
+    $fixtureResults.Add([ordered]@{ name = "different-host-reexecutes-deterministically"; status = "PASS" })
+
+    $failureCache = @{}
+    $failureSequence = 0
+    $script:dedupFixtureFailureCalls = 0
+    $failureExecutor = {
+        $script:dedupFixtureFailureCalls++
+        throw "fixture shared suite failure"
+    }
+    $failureContract = Copy-TargetedExecutionContract -Contract $contractA
+    $failureKey = Get-TargetedExecutionKey -Contract $failureContract
+    $failureFirst = Invoke-SharedTargetedExecution -Cache $failureCache -Sequence ([ref]$failureSequence) -CaseName "failure-a" -ExecutionKey $failureKey -ExecutionContract $failureContract -Executor $failureExecutor
+    $failureSecond = Invoke-SharedTargetedExecution -Cache $failureCache -Sequence ([ref]$failureSequence) -CaseName "failure-b" -ExecutionKey $failureKey -ExecutionContract $failureContract -Executor $failureExecutor
+    if ($script:dedupFixtureFailureCalls -ne 1 -or [string]$failureFirst.status -cne "FAIL" -or [string]$failureSecond.status -cne "FAIL" -or
+        -not [bool]$failureFirst.executed -or -not [bool]$failureSecond.reused -or [string]$failureSecond.status -ceq "PASS") {
+        throw "Shared execution failure did not propagate without a false PASS."
+    }
+    $fixtureResults.Add([ordered]@{ name = "shared-failure-propagates-no-false-pass"; status = "PASS" })
+    return @($fixtureResults.ToArray())
+}
+
+function Invoke-TargetedRegression {
+    param(
+        [string]$Name,
+        [string[]]$Path,
+        [int]$ExpectedTier,
+        [string[]]$ExpectedModule,
+        [string[]]$ExpectedSuite,
+        [string]$Mode,
+        [string]$ExecutionHost = "current"
+    )
+
+    $startedAt = [DateTimeOffset]::UtcNow
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    # NOTE: ChangedPath is routing evidence, not a suite execution input. Every case
+    # is classified independently before an equivalent suite result can be reused.
+    $routing = Assert-TargetedRoutingEvidence -Name $Name -Path $Path -ExpectedTier $ExpectedTier -ExpectedModule $ExpectedModule -ExpectedSuite $ExpectedSuite -Mode $Mode
+    $executionContract = New-TargetedExecutionContract -ExpectedSuite $ExpectedSuite -Mode $Mode -ExecutionHost $ExecutionHost
+    $executionKey = Get-TargetedExecutionKey -Contract $executionContract
+    $execution = Invoke-SharedTargetedExecution `
+        -Cache $script:targetedExecutionCache `
+        -Sequence ([ref]$script:targetedExecutionSequence) `
+        -CaseName $Name `
+        -ExecutionKey $executionKey `
+        -ExecutionContract $executionContract `
+        -Executor {
+            $caseScratch = Join-Path $targetedScratch $Name
+            $raw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -ExecutionHost $ExecutionHost -ScratchRoot $caseScratch -Json) -join "`n"
+            if ($LASTEXITCODE -ne 0) { throw "Targeted suite executor failed for '$Name'." }
+            $value = $raw | ConvertFrom-Json
+            Assert-TargetedSuiteEvidence -Name $Name -Value $value -ExpectedModule $ExpectedModule -ExpectedSuite $ExpectedSuite
+            [ordered]@{ status = "PASS"; check_count = [int]$value.summary.pass }
+        }
+    $stopwatch.Stop()
+    $completedAt = [DateTimeOffset]::UtcNow
     return [ordered]@{
         name = $Name
         case = $Name
         modules = $ExpectedModule
         suite = $ExpectedSuite
         suites = $ExpectedSuite
-        host = [string]$telemetry[0].host
+        host = [string]$executionContract.runner_identity
         started_at_utc = $startedAt.ToString("o")
         completed_at_utc = $completedAt.ToString("o")
         duration_ms = [long]$stopwatch.ElapsedMilliseconds
         unique_coverage_category = ("routing-regression:{0}" -f $Name)
-        check_count = [int]$value.summary.pass
-        status = "PASS"
+        check_count = [int]$execution.check_count
+        routing = $routing
+        execution = [ordered]@{
+            suite = $ExpectedSuite
+            host = [string]$executionContract.execution_host
+            runner_identity = [string]$executionContract.runner_identity
+            execution_contract = $executionContract
+            execution_key = $execution.execution_key
+            shared_execution_id = $execution.shared_execution_id
+            executed = [bool]$execution.executed
+            reused = [bool]$execution.reused
+            status = [string]$execution.status
+            error = $execution.error
+        }
+        status = [string]$execution.status
     }
 }
 
@@ -526,6 +842,7 @@ if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.conserva
     throw "Unmapped future test path did not fail closed to Tier 3 full routing."
 }
 $workflowHostArrayResults = @(Invoke-WorkflowHostArrayFixtures -Workflow $workflow -FallbackClassification $unmappedTest)
+$executionDedupResults = @(Invoke-ExecutionDedupContractFixtures)
 
 $targetedResults = @()
 if ($RunTargetedRegression.IsPresent) {
@@ -533,16 +850,20 @@ if ($RunTargetedRegression.IsPresent) {
     $tierZero = $tierZeroRaw | ConvertFrom-Json
     if ([int]$tierZero.executed_suite_count -ne 0 -or @($tierZero.checks.name) -contains "quick-repository-checks") { throw "Tier 0 incorrectly executed heavy or module checks." }
     $targetedResults = @(
-        Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
-        Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
-        Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
-        Invoke-TargetedRegression -Name "context-gate" -Path "skills/project-context-gate/scripts/context_gate.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
-        Invoke-TargetedRegression -Name "context-gate-check" -Path "scripts/validation/project-context-gate-checks.ps1" -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
-        Invoke-TargetedRegression -Name "workspace-assets" -Path @("schemas/project-workspace/work-item.schema.json", "skills/project-workspace/scripts/read-project-assets.ps1", "skills/project-workspace/scripts/project-continuity.ps1", "scripts/migrate-project.ps1") -ExpectedModule @("workspace-schema", "workspace", "continuity", "migration") -ExpectedSuite "workspace-assets" -Mode "targeted"
-        Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
-        Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
-        Invoke-TargetedRegression -Name "docs-context-gate" -Path @("README.md", "skills/project-context-gate/scripts/context_gate.ps1") -ExpectedModule @("documentation", "context-gate") -ExpectedSuite "project-context-gate" -Mode "targeted"
+        Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedTier 1 -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
+        Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedTier 2 -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
+        Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedTier 2 -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
+        Invoke-TargetedRegression -Name "context-gate" -Path "skills/project-context-gate/scripts/context_gate.ps1" -ExpectedTier 2 -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
+        Invoke-TargetedRegression -Name "context-gate-check" -Path "scripts/validation/project-context-gate-checks.ps1" -ExpectedTier 2 -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
+        Invoke-TargetedRegression -Name "workspace-assets" -Path @("schemas/project-workspace/work-item.schema.json", "skills/project-workspace/scripts/read-project-assets.ps1", "skills/project-workspace/scripts/project-continuity.ps1", "scripts/migrate-project.ps1") -ExpectedTier 2 -ExpectedModule @("workspace-schema", "workspace", "continuity", "migration") -ExpectedSuite "workspace-assets" -Mode "targeted"
+        Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedTier 1 -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
+        Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedTier 2 -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
+        Invoke-TargetedRegression -Name "docs-context-gate" -Path @("README.md", "skills/project-context-gate/scripts/context_gate.ps1") -ExpectedTier 2 -ExpectedModule @("documentation", "context-gate") -ExpectedSuite "project-context-gate" -Mode "targeted"
     )
+    $targetedFailures = @($targetedResults | Where-Object { [string]$_.status -cne "PASS" })
+    if ($targetedFailures.Count -gt 0) {
+        throw ("Targeted regression contained failed routing or shared execution cases: {0}" -f (($targetedFailures | ForEach-Object { "{0}: {1}" -f $_.name, $_.execution.error }) -join "; "))
+    }
     $tierZeroText = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero-text")) -join "`n"
     if ($tierZeroText -notmatch "0 actual module suites") { throw "Targeted text output disagrees with Tier 0 JSON evidence." }
 }
@@ -555,7 +876,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + [int]$runtimeRequirementResult.pass + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_runtime_requirement = $runtimeRequirementResult; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + [int]$runtimeRequirementResult.pass + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $executionDedupResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_runtime_requirement = $runtimeRequirementResult; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; execution_dedup_contract = $executionDedupResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
