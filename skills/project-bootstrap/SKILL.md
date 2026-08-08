@@ -67,6 +67,16 @@ Default behavior:
 - Keep project-local edits untouched.
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
 - Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
+- For a fresh project invoked from the explicit `c3-3-candidate` Runtime,
+  create the minimal C3.3 workspace layout: a short `AGENTS.md`,
+  `.agents/README.md`, empty `work/`, `context/`, `procedures/`, and `skills/`
+  roots, and `docs/specs/`. Do not create placeholder Work, Context,
+  Procedure, Spec, glossary, or promoted Skill content. Fresh projects using
+  `minimal`, `recommended`, `full`, or `dev` retain the legacy scaffold path.
+- An existing C3.3 workspace is refreshed through the same minimal template
+  contract; an existing legacy project keeps the legacy scaffold path.
+- The C3.3 runtime is exposed only by the explicit `c3-3-candidate` install
+  profile. That profile is dormant and does not change the default runtime.
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
@@ -114,6 +124,14 @@ Optional flags:
 - `-ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>`: validate narrative result metadata, source artifacts, backup, and review markers.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
+
+The C3.3 fresh-project path writes only layout metadata and preserves the
+existing language contract. It does not write current branch, checks, next-step
+state, or any temporary run state. Direct
+`memory_upgrade.ps1 -Mode Analyze -Json` remains the strict read-only path;
+the compatibility `bootstrap_project.ps1 -AnalyzeMemoryUpgrade` wrapper may
+write missing bootstrap templates and `hub.lock.json` before it delegates to
+analysis.
 
 Intent semantics:
 - Refresh or template upgrade means preserve project-specific memory by

@@ -27,6 +27,17 @@ This document does not:
 - control any runtime's internal loading behavior;
 - include private overlay paths, local runtime state, or sensitive material.
 
+## C3.3 Candidate Boundary
+
+The explicit `c3-3-candidate` runtime profile packages the public
+`project-workspace` Skill and its project templates. Its manifest records the
+workspace capability as `dormant` with `default_cutover: false`. The packaged
+runtime owns only its manifest-managed runtime content; `AGENTS.md`, the
+`.agents/` workspace, canonical Work/Context/Procedure/Spec assets,
+project-local Skills, and `docs/specs/` remain project-local and are outside
+runtime uninstall ownership. A later unified cutover is a separate decision;
+Slice E does not perform it.
+
 ## Shared Entry Point
 
 The Workflow Kernel uses `AGENTS.md` at the project root as the canonical

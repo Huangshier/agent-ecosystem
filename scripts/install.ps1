@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [ValidateSet("minimal", "recommended", "full", "dev")]
+    [ValidateSet("minimal", "recommended", "full", "dev", "c3-3-candidate")]
     [string]$Profile = "recommended",
 
     [string]$TargetDir = (Join-Path $HOME ".agents"),
@@ -60,6 +60,13 @@ function Get-PublicSkillNames {
         return @($kernelSkills)
     }
 
+    if ($SelectedProfile -eq "c3-3-candidate") {
+        # C3.3 remains an explicit candidate profile. It is never selected by
+        # the default or legacy profiles and therefore cannot perform the
+        # unified default cutover implicitly.
+        return @("project-bootstrap", "project-workspace")
+    }
+
     throw "Unsupported profile: $SelectedProfile"
 }
 
@@ -115,6 +122,9 @@ function Get-InstallerSourceProvenance {
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
+        # A dirty development checkout makes provenance unknown by design;
+        # it must not leak git diff's exit code into a successful install.
+        $global:LASTEXITCODE = 0
     }
 }
 
@@ -731,8 +741,11 @@ $statusProviderFiles = @(
     "lib/path-guard.ps1",
     "lib/runtime-status-action.ps1"
 )
-$installStatusProvider = $installStrategy -eq "copy" -and "project-context-gate" -in $skillNames
+$installStatusProvider = $installStrategy -eq "copy" -and ("project-context-gate" -in $skillNames -or $Profile -eq "c3-3-candidate")
 $managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
+if ($Profile -eq "c3-3-candidate") {
+    $managedSourcePaths += "templates/project"
+}
 if ($installStatusProvider) {
     $managedSourcePaths += @($statusProviderFiles | ForEach-Object { "scripts/$_" })
 }
@@ -748,6 +761,14 @@ foreach ($skillName in $skillNames) {
             destination = "skills/$skillName"
         })
     $desiredItemNames["skills/$skillName"] = $true
+}
+if ($Profile -eq "c3-3-candidate") {
+    $itemSpecs.Add([ordered]@{
+            name = "templates/project"
+            source = "templates/project"
+            destination = "templates/project"
+        })
+    $desiredItemNames["templates/project"] = $true
 }
 if ($installStatusProvider) {
     $itemSpecs.Add([ordered]@{
@@ -837,6 +858,14 @@ $manifest = [ordered]@{
     installed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
     target_dir = "."
     skills = @($skillNames)
+    workspace = [ordered]@{
+        architecture = if ($Profile -eq "c3-3-candidate") { "c3.3" } else { "legacy-runtime" }
+        lifecycle = if ($Profile -eq "c3-3-candidate") { "dormant" } else { "not-enabled" }
+        default_cutover = $false
+        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "templates/project") } else { @() }
+        project_local_authority = "project-local"
+        derived_cache = ".agents/.cache/catalog.json"
+    }
     items = @($manifestItems.ToArray())
 }
 

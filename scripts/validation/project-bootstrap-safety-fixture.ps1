@@ -168,17 +168,21 @@ $results.Add([ordered]@{ name = "missing-default-hub"; status = "PASS" }) | Out-
 $inheritProject = Join-Path $scratchFull "existing-zh-cn"
 New-Item -ItemType Directory -Path $inheritProject | Out-Null
 & $BootstrapScript -ProjectDir $inheritProject -HubDir $HubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Null
-$missingScaffold = Join-Path $inheritProject ".agents/context/README.md"
-Remove-Item -LiteralPath $missingScaffold -Force
+$missingScaffold = Join-Path $inheritProject ".agents/context"
+Remove-Item -LiteralPath $missingScaffold -Recurse -Force
 $inheritOutput = @(& $BootstrapScript -ProjectDir $inheritProject -HubDir $HubDir -AnalyzeMemoryUpgrade)
 $inheritLock = Get-Content -LiteralPath (Join-Path $inheritProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
 if ([string]$inheritLock.project_language -ne "zh-CN") {
     throw "Omitted -ProjectLanguage did not inherit zh-CN from hub.lock.json."
 }
-$expectedZhScaffold = Join-Path $HubDir "templates/languages/zh-CN/project-agent/context/README.md"
-if (-not (Test-Path -LiteralPath $missingScaffold -PathType Leaf) -or
-    (Get-FileHash -LiteralPath $missingScaffold -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $expectedZhScaffold -Algorithm SHA256).Hash) {
-    throw "Inherited bootstrap did not restore the missing zh-CN scaffold."
+$inheritWorkspaceModel = [string]$inheritLock.workspace_model
+if ($inheritWorkspaceModel -ne "legacy" -or [string]$inheritLock.workspace_state -ne "not-enabled") {
+    throw "Recommended runtime fresh bootstrap did not retain the legacy workspace contract."
+}
+$expectedZhWorkspace = Join-Path $inheritProject ".agents/context"
+if (-not (Test-Path -LiteralPath $expectedZhWorkspace -PathType Container) -or
+    @(Get-ChildItem -LiteralPath $expectedZhWorkspace -Recurse -File -Force).Count -eq 0) {
+    throw "Inherited bootstrap did not restore the zh-CN legacy context scaffold."
 }
 $resolvedIndex = [array]::FindIndex([string[]]$inheritOutput, [Predicate[string]]{ param($line) $line -match '^Resolved project dir: ' })
 $completeIndex = [array]::FindIndex([string[]]$inheritOutput, [Predicate[string]]{ param($line) $line -eq 'Project bootstrap complete.' })

@@ -133,13 +133,13 @@ facts take precedence over Work summary text.
 The external surface remains one `project-workspace` Skill. Internally, the
 implementation separates Catalog/cache, Glossary/query, shared Git facts,
 revision checks, Work continuity, and authoring responsibilities; those
-internal scripts are not additional commands or Skills. Slice D does not
-connect authoring or promotion to bootstrap, installer, runtime defaults,
-migration, client adapters, releases, or later C3.3 slices.
+internal scripts are not additional commands or Skills. The explicit
+`c3-3-candidate` runtime profile packages this Skill and its templates, while
+the capability remains dormant and does not change default bootstrap/runtime
+selection.
 
-The Slice C surface remains dormant. It does not integrate with bootstrap,
-installer, runtime defaults, orchestration, migration, client adapters, or
-release paths. Work and authoring mutations never synchronously write the
-disposable Catalog;
+The workspace surface does not provide orchestration, migration, client
+adapters, releases, automatic Skill calls, Skill chains, or schedulers. Work
+and authoring mutations never synchronously write the disposable Catalog;
 the next `discover` observes canonical create/update/delete state and refreshes
 that cache when needed, while `check` remains strictly read-only.
