@@ -161,6 +161,8 @@ Profiles:
 - `full`: currently the same public skill set as `recommended`.
 - `dev`: currently the same public skill set as `recommended`, intended for
   future development helpers.
+- `c3-3-candidate`: explicitly packages `project-workspace` and project
+  templates. It remains dormant and never changes the default profile.
 
 Install modes and reruns:
 

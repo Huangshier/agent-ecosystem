@@ -151,6 +151,75 @@ function Read-BootstrapLockLanguage {
     return Resolve-BootstrapProjectLanguage -Language $language
 }
 
+# Read-BootstrapWorkspaceModel: 只读取既有 lock 中的 workspace contract，不把
+# project-local 文件重新解释成 runtime authority。
+function Read-BootstrapWorkspaceModel {
+    param([string]$LockPath)
+
+    if (-not (Test-Path -LiteralPath $LockPath -PathType Leaf)) {
+        return ""
+    }
+
+    try {
+        $lock = Get-Content -LiteralPath $LockPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        return ""
+    }
+
+    if ($null -eq $lock.PSObject.Properties["workspace_model"]) {
+        return ""
+    }
+    return ([string]$lock.workspace_model).Trim().ToLowerInvariant()
+}
+
+# Test-BootstrapC33CandidateRuntime: 只信任当前安装 Runtime 的 manifest contract；
+# source checkout、legacy profile 或不完整/损坏的 manifest 均保持 legacy bootstrap。
+function Test-BootstrapC33CandidateRuntime {
+    param([Parameter(Mandatory = $true)][string]$BootstrapScriptRoot)
+
+    try {
+        $runtimeRoot = $BootstrapScriptRoot
+        for ($index = 0; $index -lt 3; $index++) {
+            $runtimeRoot = Split-Path -Parent $runtimeRoot
+        }
+
+        $manifestPath = Join-Path $runtimeRoot "install-manifest.json"
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            return $false
+        }
+
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $schemaProperty = $manifest.PSObject.Properties["schema_version"]
+        $profileProperty = $manifest.PSObject.Properties["profile"]
+        $workspaceProperty = $manifest.PSObject.Properties["workspace"]
+        if ($null -eq $schemaProperty -or $null -eq $profileProperty -or $null -eq $workspaceProperty) {
+            return $false
+        }
+
+        $workspace = $workspaceProperty.Value
+        if ($null -eq $workspace) {
+            return $false
+        }
+        $architectureProperty = $workspace.PSObject.Properties["architecture"]
+        $lifecycleProperty = $workspace.PSObject.Properties["lifecycle"]
+        $defaultCutoverProperty = $workspace.PSObject.Properties["default_cutover"]
+        if ($null -eq $architectureProperty -or $null -eq $lifecycleProperty -or $null -eq $defaultCutoverProperty) {
+            return $false
+        }
+
+        return ([int]$schemaProperty.Value -eq 2 -and
+            [string]$profileProperty.Value -ceq "c3-3-candidate" -and
+            [string]$architectureProperty.Value -ceq "c3.3" -and
+            [string]$lifecycleProperty.Value -ceq "dormant" -and
+            $defaultCutoverProperty.Value -is [bool] -and
+            $defaultCutoverProperty.Value -eq $false)
+    }
+    catch {
+        return $false
+    }
+}
+
 # Read-ProjectGuideLanguage: 读取 .agents/AGENTS.md 的语言声明；参数 ProjectPath 为已解析的项目目录。
 function Read-ProjectGuideLanguage {
     param([string]$ProjectPath)
@@ -525,31 +594,66 @@ if (-not $projectLanguageWasProvided) {
 }
 
 $projectLanguageCode = Resolve-BootstrapProjectLanguage -Language $ProjectLanguage
+$existingWorkspaceModel = Read-BootstrapWorkspaceModel -LockPath $preflightLockPath
+$hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
+$runtimeIsC33Candidate = Test-BootstrapC33CandidateRuntime -BootstrapScriptRoot $PSScriptRoot
+# Freshness only selects the branch after an explicit candidate Runtime contract
+# has opted in; an existing c3.3 lock remains authoritative on later bootstrap.
+$useC33Workspace = $existingWorkspaceModel -eq "c3.3" -or ($runtimeIsC33Candidate -and -not $hadExistingProjectMemory)
+
 $templateRoot = Join-PathParts $HubDir "templates" "languages"
-$projectRootTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-root"
-$projectAgentTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-agent"
+$projectRootTemplate = ""
+$projectAgentTemplate = ""
+$c33TemplateRoot = ""
+if ($useC33Workspace) {
+    $c33TemplateRoot = (Resolve-Path -LiteralPath (Join-PathParts $PSScriptRoot ".." "assets" "c3-3-project-template" $projectLanguageCode)).Path
+    $requiredC33Templates = @(
+        (Join-Path $c33TemplateRoot "AGENTS.md"),
+        (Join-Path $c33TemplateRoot ".agents\README.md"),
+        (Join-Path $c33TemplateRoot ".agents\.gitignore")
+    )
+    $missingC33Templates = @($requiredC33Templates | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+    if ($missingC33Templates.Count -gt 0) {
+        throw "Missing C3.3 project bootstrap templates: $($missingC33Templates -join ', ')"
+    }
 
-$missingTemplateFolders = @()
-if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
-    $missingTemplateFolders += $projectRootTemplate
-}
-if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
-    $missingTemplateFolders += $projectAgentTemplate
-}
-
-if ($missingTemplateFolders.Count -gt 0) {
-    $initHubScript = Join-PathParts $PSScriptRoot "init_hub.ps1"
-    if (Test-Path -LiteralPath $initHubScript) {
-        Write-Warning ("Hub templates missing; initializing hub at {0} from bundled bootstrap assets." -f $HubDir)
-        & $initHubScript -HubDir $HubDir | Out-Null
+    # Preserve the existing hub initialization safety contract. The hub is
+    # runtime/template support; it is not project-local workspace authority.
+    $hubLanguagesDir = Join-PathParts $HubDir "templates" "languages"
+    if (-not (Test-Path -LiteralPath $hubLanguagesDir -PathType Container)) {
+        $initHubScript = Join-PathParts $PSScriptRoot "init_hub.ps1"
+        if (Test-Path -LiteralPath $initHubScript) {
+            Write-Warning ("Hub templates missing; initializing hub at {0} from bundled bootstrap assets." -f $HubDir)
+            & $initHubScript -HubDir $HubDir | Out-Null
+        }
     }
 }
+else {
+    $projectRootTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-root"
+    $projectAgentTemplate = Join-PathParts $templateRoot $projectLanguageCode "project-agent"
 
-if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
-    throw "Missing template folder: $projectRootTemplate. Run scripts/init_hub.ps1 -HubDir `"$HubDir`" or install the knowledge-hub repository."
-}
-if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
-    throw "Missing template folder: $projectAgentTemplate. Run scripts/init_hub.ps1 -HubDir `"$HubDir`" or install the knowledge-hub repository."
+    $missingTemplateFolders = @()
+    if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
+        $missingTemplateFolders += $projectRootTemplate
+    }
+    if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
+        $missingTemplateFolders += $projectAgentTemplate
+    }
+
+    if ($missingTemplateFolders.Count -gt 0) {
+        $initHubScript = Join-PathParts $PSScriptRoot "init_hub.ps1"
+        if (Test-Path -LiteralPath $initHubScript) {
+            Write-Warning ("Hub templates missing; initializing hub at {0} from bundled bootstrap assets." -f $HubDir)
+            & $initHubScript -HubDir $HubDir | Out-Null
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $projectRootTemplate)) {
+        throw "Missing template folder: $projectRootTemplate. Run scripts/init_hub.ps1 -HubDir `"$HubDir`" or install the knowledge-hub repository."
+    }
+    if (-not (Test-Path -LiteralPath $projectAgentTemplate)) {
+        throw "Missing template folder: $projectAgentTemplate. Run scripts/init_hub.ps1 -HubDir `"$HubDir`" or install the knowledge-hub repository."
+    }
 }
 
 $copiedCount = 0
@@ -561,7 +665,6 @@ $skippedPaths = New-Object 'System.Collections.Generic.List[string]'
 $preservedPaths = New-Object 'System.Collections.Generic.List[string]'
 $replacedPaths = New-Object 'System.Collections.Generic.List[string]'
 $manualReviewPaths = New-Object 'System.Collections.Generic.List[string]'
-$hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
 $projectAgentDir = Join-Path $ProjectDir ".agents"
 $lockPath = Join-Path $projectAgentDir "hub.lock.json"
 $previousTemplateHashes = Read-PreviousTemplateHashMap -LockPath $lockPath
@@ -575,7 +678,11 @@ if ($ForceResetScaffold.IsPresent) {
 }
 
 $bootstrapOperationMode = "refresh-missing-templates"
-if (-not $hadExistingProjectMemory) {
+if ($useC33Workspace -and -not $hadExistingProjectMemory) {
+    $bootstrapOperationMode = "initialize-c3-3-workspace"
+} elseif ($useC33Workspace) {
+    $bootstrapOperationMode = "refresh-c3-3-workspace"
+} elseif (-not $hadExistingProjectMemory) {
     $bootstrapOperationMode = "initialize-empty-project"
 } elseif ($ForceResetScaffold.IsPresent) {
     $bootstrapOperationMode = "explicit-force-reset"
@@ -614,59 +721,104 @@ function Record-InstalledTemplateHash {
     }
 }
 
-Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
-    $relative = $_.FullName.Substring($projectRootTemplate.Length).TrimStart([char[]]"\/")
-    $destination = Join-Path $ProjectDir $relative
-    $normalizedRelative = Normalize-RelativePath -Path $relative
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
-    Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
-    if ($result -eq "copied") {
-        $copiedCount++
-        $copiedPaths.Add($normalizedRelative) | Out-Null
+if (-not $useC33Workspace) {
+    Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
+        $relative = $_.FullName.Substring($projectRootTemplate.Length).TrimStart([char[]]"\/")
+        $destination = Join-Path $ProjectDir $relative
+        $normalizedRelative = Normalize-RelativePath -Path $relative
+        $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
+        Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
+        if ($result -eq "copied") {
+            $copiedCount++
+            $copiedPaths.Add($normalizedRelative) | Out-Null
+        }
+        elseif ($result -eq "updated") {
+            $updatedCount++
+            $replacedPaths.Add($normalizedRelative) | Out-Null
+        }
+        elseif ($result -eq "manual-review") {
+            $skippedCount++
+            $manualReviewCount++
+            $manualReviewPaths.Add($normalizedRelative) | Out-Null
+            $preservedPaths.Add($normalizedRelative) | Out-Null
+        }
+        else {
+            $skippedCount++
+            $skippedPaths.Add($normalizedRelative) | Out-Null
+            $preservedPaths.Add($normalizedRelative) | Out-Null
+        }
     }
-    elseif ($result -eq "updated") {
-        $updatedCount++
-        $replacedPaths.Add($normalizedRelative) | Out-Null
-    }
-    elseif ($result -eq "manual-review") {
-        $skippedCount++
-        $manualReviewCount++
-        $manualReviewPaths.Add($normalizedRelative) | Out-Null
-        $preservedPaths.Add($normalizedRelative) | Out-Null
-    }
-    else {
-        $skippedCount++
-        $skippedPaths.Add($normalizedRelative) | Out-Null
-        $preservedPaths.Add($normalizedRelative) | Out-Null
+
+    Ensure-Dir -Path $projectAgentDir
+
+    Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
+        $relative = $_.FullName.Substring($projectAgentTemplate.Length).TrimStart([char[]]"\/")
+        $destination = Join-Path $projectAgentDir $relative
+        $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)
+        $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
+        Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
+        if ($result -eq "copied") {
+            $copiedCount++
+            $copiedPaths.Add($normalizedRelative) | Out-Null
+        }
+        elseif ($result -eq "updated") {
+            $updatedCount++
+            $replacedPaths.Add($normalizedRelative) | Out-Null
+        }
+        elseif ($result -eq "manual-review") {
+            $skippedCount++
+            $manualReviewCount++
+            $manualReviewPaths.Add($normalizedRelative) | Out-Null
+            $preservedPaths.Add($normalizedRelative) | Out-Null
+        }
+        else {
+            $skippedCount++
+            $skippedPaths.Add($normalizedRelative) | Out-Null
+            $preservedPaths.Add($normalizedRelative) | Out-Null
+        }
     }
 }
+else {
+    # Fresh and already-C3.3 projects receive structure plus real metadata only.
+    # Empty canonical roots are deliberately created without placeholder assets.
+    Ensure-Dir -Path $projectAgentDir
+    foreach ($relativeDirectory in @(
+            ".agents/work",
+            ".agents/context",
+            ".agents/procedures",
+            ".agents/skills",
+            "docs/specs"
+        )) {
+        Ensure-Dir -Path (Join-Path $ProjectDir $relativeDirectory)
+    }
 
-Ensure-Dir -Path $projectAgentDir
-
-Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
-    $relative = $_.FullName.Substring($projectAgentTemplate.Length).TrimStart([char[]]"\/")
-    $destination = Join-Path $projectAgentDir $relative
-    $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)
-    $result = Copy-TemplateFile -Source $_.FullName -Destination $destination -RelativePath $normalizedRelative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
-    Record-InstalledTemplateHash -RelativePath $normalizedRelative -Destination $destination -Result $result
-    if ($result -eq "copied") {
-        $copiedCount++
-        $copiedPaths.Add($normalizedRelative) | Out-Null
-    }
-    elseif ($result -eq "updated") {
-        $updatedCount++
-        $replacedPaths.Add($normalizedRelative) | Out-Null
-    }
-    elseif ($result -eq "manual-review") {
-        $skippedCount++
-        $manualReviewCount++
-        $manualReviewPaths.Add($normalizedRelative) | Out-Null
-        $preservedPaths.Add($normalizedRelative) | Out-Null
-    }
-    else {
-        $skippedCount++
-        $skippedPaths.Add($normalizedRelative) | Out-Null
-        $preservedPaths.Add($normalizedRelative) | Out-Null
+    $c33TemplateFiles = @(
+        @{ source = (Join-Path $c33TemplateRoot "AGENTS.md"); destination = (Join-Path $ProjectDir "AGENTS.md"); relative = "AGENTS.md" },
+        @{ source = (Join-Path $c33TemplateRoot ".agents\README.md"); destination = (Join-Path $projectAgentDir "README.md"); relative = ".agents/README.md" },
+        @{ source = (Join-Path $c33TemplateRoot ".agents\.gitignore"); destination = (Join-Path $projectAgentDir ".gitignore"); relative = ".agents/.gitignore" }
+    )
+    foreach ($templateFile in $c33TemplateFiles) {
+        $result = Copy-TemplateFile -Source $templateFile.source -Destination $templateFile.destination -RelativePath $templateFile.relative -RefreshUnmodified $refreshUnmodifiedMode -ForceReset $ForceResetScaffold.IsPresent -PreviousTemplateHashes $previousTemplateHashes
+        Record-InstalledTemplateHash -RelativePath $templateFile.relative -Destination $templateFile.destination -Result $result
+        if ($result -eq "copied") {
+            $copiedCount++
+            $copiedPaths.Add($templateFile.relative) | Out-Null
+        }
+        elseif ($result -eq "updated") {
+            $updatedCount++
+            $replacedPaths.Add($templateFile.relative) | Out-Null
+        }
+        elseif ($result -eq "manual-review") {
+            $skippedCount++
+            $manualReviewCount++
+            $manualReviewPaths.Add($templateFile.relative) | Out-Null
+            $preservedPaths.Add($templateFile.relative) | Out-Null
+        }
+        else {
+            $skippedCount++
+            $skippedPaths.Add($templateFile.relative) | Out-Null
+            $preservedPaths.Add($templateFile.relative) | Out-Null
+        }
     }
 }
 
@@ -675,7 +827,7 @@ $hubCommit = "UNKNOWN"
 $hubBranch = "UNKNOWN"
 $hubRemote = ""
 $hubDirty = $false
-if ($null -ne $git) {
+if ($null -ne $git -and -not $useC33Workspace) {
     try {
         $commitProbe = (& git -C $HubDir rev-parse --verify HEAD 2>$null)
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commitProbe)) {
@@ -705,10 +857,15 @@ if ($null -ne $git) {
     } catch {}
 }
 
-$templateTreeHash = Get-TemplateTreeHash -ProjectRootTemplate $projectRootTemplate -ProjectAgentTemplate $projectAgentTemplate
+$templateTreeHash = if ($useC33Workspace) {
+    Get-TemplateTreeHash -ProjectRootTemplate $c33TemplateRoot -ProjectAgentTemplate (Join-Path $c33TemplateRoot ".not-used")
+}
+else {
+    Get-TemplateTreeHash -ProjectRootTemplate $projectRootTemplate -ProjectAgentTemplate $projectAgentTemplate
+}
 
 $languageResult = $null
-if (-not [string]::IsNullOrWhiteSpace($projectLanguageCode)) {
+if (-not $useC33Workspace -and -not [string]::IsNullOrWhiteSpace($projectLanguageCode)) {
     $languageScript = Join-PathParts $PSScriptRoot "set_project_language.ps1"
     if (-not (Test-Path -LiteralPath $languageScript)) {
         throw "Project language helper not found: $languageScript"
@@ -738,7 +895,7 @@ if (-not [string]::IsNullOrWhiteSpace($projectLanguageCode)) {
     }
 }
 
-$projectLanguageValue = if ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
+$projectLanguageValue = if ($useC33Workspace) { $projectLanguageCode } elseif ($null -ne $languageResult) { [string]$languageResult.project_language } else { "" }
 $evidenceReport = $null
 if ($OverwriteTemplates.IsPresent -or $RefreshUnmodifiedTemplates.IsPresent -or $ForceResetScaffold.IsPresent -or $manualReviewCount -gt 0 -or $script:bootstrapBackupCount -gt 0) {
     $evidenceReport = Write-BootstrapEvidenceReport `
@@ -765,13 +922,13 @@ $lockData = [ordered]@{
     installed_at_utc = (Get-Date).ToUniversalTime().ToString("o")
     installer = "project-bootstrap"
     project_dir = (Resolve-Path -LiteralPath $ProjectDir).Path
-    hub_dir = $HubDir
+    hub_dir = if ($useC33Workspace) { "" } else { $HubDir }
     hub_remote = $hubRemote
     hub_branch = $hubBranch
     hub_commit = $hubCommit
     hub_dirty = [bool]$hubDirty
-    template_source = "templates/languages/$projectLanguageCode/project-root + templates/languages/$projectLanguageCode/project-agent"
-    language_template_source = if ($null -ne $languageResult) { "templates/languages" } else { "" }
+    template_source = if ($useC33Workspace) { "skills/project-bootstrap/assets/c3-3-project-template/$projectLanguageCode" } else { "templates/languages/$projectLanguageCode/project-root + templates/languages/$projectLanguageCode/project-agent" }
+    language_template_source = if ($useC33Workspace) { "c3-3-project-template" } elseif ($null -ne $languageResult) { "templates/languages" } else { "" }
     template_tree_hash_sha256 = $templateTreeHash
     bootstrap_operation_mode = $bootstrapOperationMode
     template_mode = $templateMode
@@ -797,6 +954,9 @@ $lockData = [ordered]@{
     language_template_fallback_count = if ($null -ne $languageResult) { [int]$languageResult.fallback_count } else { 0 }
     language_template_fallback_paths = if ($null -ne $languageResult) { @($languageResult.fallback_paths) } else { @() }
     project_language = $projectLanguageValue
+    workspace_model = if ($useC33Workspace) { "c3.3" } else { "legacy" }
+    workspace_state = if ($useC33Workspace) { "dormant" } else { "not-enabled" }
+    workspace_roots = if ($useC33Workspace) { @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs") } else { @() }
 }
 
 $lockData | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lockPath -Encoding UTF8
@@ -842,6 +1002,9 @@ if ($null -ne $languageResult) {
         Write-Output "Project language scaffold reset used explicit force reset; replacements are backup-first."
     }
 }
+elseif ($useC33Workspace) {
+    Write-Output ("Project language: {0} (minimal C3.3 workspace metadata)" -f $projectLanguageValue)
+}
 Write-Output "Lock file: $lockPath"
 
 $memoryUpgradeScript = Join-PathParts $PSScriptRoot "memory_upgrade.ps1"
@@ -877,7 +1040,7 @@ if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyM
     } else {
         & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Analyze
     }
-} elseif (-not $SkipMemoryUpgradeAnalysis.IsPresent -and (Test-Path -LiteralPath $memoryUpgradeScript)) {
+} elseif (-not $SkipMemoryUpgradeAnalysis.IsPresent -and -not $useC33Workspace -and (Test-Path -LiteralPath $memoryUpgradeScript)) {
     try {
         $analysisJson = & $memoryUpgradeScript -ProjectDir $ProjectDir -Mode Analyze -Json | ConvertFrom-Json
         $findingCount = @($analysisJson.findings).Count
@@ -888,4 +1051,6 @@ if ($AnalyzeMemoryUpgrade.IsPresent -or $PlanMemoryUpgrade.IsPresent -or $ApplyM
     } catch {
         Write-Warning "Memory upgrade analysis failed: $($_.Exception.Message)"
     }
+} elseif ($useC33Workspace -and -not $SkipMemoryUpgradeAnalysis.IsPresent) {
+    Write-Output "C3.3 workspace is an empty canonical layout; legacy memory analysis was not run by default. Use memory_upgrade.ps1 -Mode Analyze for an explicit read-only check."
 }

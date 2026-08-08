@@ -163,6 +163,8 @@ Current public profile behavior is unchanged:
 - `recommended` installs the Workflow Kernel and public knowledge hub.
 - `full` currently installs the same public content as `recommended`.
 - `dev` currently installs the same public content as `recommended`.
+- `c3-3-candidate` is an explicit dormant candidate profile for the C3.3
+  workspace package; it is not a default profile and does not perform cutover.
 
 The `full` and `dev` names remain reserved for future public domain packs and
 developer maintenance tooling. A domain pack reaching `installable` maturity is

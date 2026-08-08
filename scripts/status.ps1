@@ -47,6 +47,15 @@ function New-RuntimePayload {
                 counts = [ordered]@{ current = 0; modified = 0; missing = 0; conflict = 0; unknown = 0 }
                 problems = @()
             }
+            workspace = [ordered]@{
+                architecture = "unknown"
+                lifecycle = "unknown"
+                default_cutover = $null
+                packaged_content = @()
+                project_local_authority = "unknown"
+                derived_cache = ".agents/.cache/catalog.json"
+                ownership = "unknown"
+            }
         }
         bridge = [ordered]@{
             status = "not-configured"
@@ -72,6 +81,23 @@ function New-RuntimePayload {
                 refresh_finding_count = 0
                 diagnostic_warning_count = 0
                 finding_codes = @()
+            }
+            workspace = [ordered]@{
+                status = "unknown"
+                reason = "not-requested"
+                layout = "unknown"
+                runtime_boundary = "unknown"
+                runtime_ownership = "unknown"
+                project_local = $true
+                canonical_asset_types = @("Work", "Context", "Procedure", "Spec")
+                readiness = "unknown"
+                roots = @(
+                    ".agents/work",
+                    ".agents/context",
+                    ".agents/procedures",
+                    ".agents/skills",
+                    "docs/specs"
+                )
             }
             # NOTE: #278 新增三事实增量字段，与 project.status/reason/baseline 并列但不互相覆盖。
             # 旧 schema-1 消费方忽略这些字段时，仍获得与当前契约兼容的 project.status/reason/baseline 结果。
@@ -121,6 +147,23 @@ function Reset-ProjectUnavailable {
     $Payload.project.snapshot_consistency = "unknown"
     $Payload.project.source_provenance = "unknown"
     $Payload.project.remote_latest = "not-checked"
+    $Payload.project.workspace.status = "unknown"
+    $Payload.project.workspace.reason = "baseline-helper-unavailable"
+    $Payload.project.workspace.layout = "unknown"
+    $Payload.project.workspace.runtime_boundary = "unknown"
+    $Payload.project.workspace.runtime_ownership = "unknown"
+    $Payload.project.workspace.readiness = "unknown"
+}
+
+function Reset-ProjectWorkspaceUnavailable {
+    param([object]$Payload, [string]$Reason = "workspace-helper-unavailable")
+
+    $Payload.project.workspace.status = "unknown"
+    $Payload.project.workspace.reason = $Reason
+    $Payload.project.workspace.layout = "unknown"
+    $Payload.project.workspace.runtime_boundary = "unknown"
+    $Payload.project.workspace.runtime_ownership = "unknown"
+    $Payload.project.workspace.readiness = "unknown"
 }
 
 function Reset-ProjectMemoryUnavailable {
@@ -361,7 +404,7 @@ function Set-BridgeStatus {
     }
 
     $records = Get-ManifestPropertyValue -Manifest $bridgeManifest -Name "bridges"
-    if ($records -isnot [System.Array] -or @($records).Count -eq 0) {
+    if ($null -eq $records -or @($records).Count -eq 0) {
         $Payload.bridge.status = "unknown"
         Add-RuntimeFinding -List $Findings -Code "bridge.record.invalid" -Severity "error" -Message "The Agent skill bridge records are invalid."
         return
@@ -618,6 +661,213 @@ function Test-CanonicalManagedPath {
     return -not [System.IO.Path]::IsPathRooted($path) -and
         $path -cnotmatch '\\' -and $path -cnotmatch '(^|/)\.{1,2}(/|$)' -and
         $path -cnotmatch '//|^/|/$' -and $path -cmatch '^[^:]+$'
+}
+
+function Test-ProjectLocalStatusPath {
+    param([AllowNull()][object]$Path)
+
+    if ($Path -isnot [string]) {
+        return $false
+    }
+    $normalized = ([string]$Path -replace "\\", "/").TrimStart('/')
+    return $normalized -in @("AGENTS.md", "CLAUDE.md", ".agents", "docs/specs") -or
+        $normalized.StartsWith(".agents/", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $normalized.StartsWith("docs/specs/", [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Set-RuntimeWorkspaceStatus {
+    param(
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [AllowNull()][object]$Manifest,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $workspace = $Payload.runtime.workspace
+    $workspace.project_local_authority = "project-local"
+    if ($null -eq $Manifest -or [string]::IsNullOrWhiteSpace([string]$Payload.runtime.profile)) {
+        $workspace.architecture = "unknown"
+        $workspace.lifecycle = "unknown"
+        $workspace.default_cutover = $null
+        $workspace.packaged_content = @()
+        $workspace.ownership = "unknown"
+        return
+    }
+
+    $managedItems = Get-ManifestPropertyValue -Manifest $Manifest -Name "items"
+    if ($managedItems -is [System.Array]) {
+        $projectOwnedDestinations = @($managedItems | Where-Object {
+                Test-ProjectLocalStatusPath -Path (Get-ManifestPropertyValue -Manifest $_ -Name "destination")
+            })
+        if ($projectOwnedDestinations.Count -gt 0) {
+            $workspace.architecture = if ([string]$Payload.runtime.profile -eq "c3-3-candidate") { "c3.3" } else { "legacy-runtime" }
+            $workspace.lifecycle = "unknown"
+            $workspace.default_cutover = $null
+            $workspace.packaged_content = @()
+            $workspace.ownership = "unknown"
+            Add-RuntimeFinding -List $Findings -Code "runtime.workspace.project_local_owned" -Severity "error" -Message "The runtime manifest overlaps project-local workspace ownership."
+            return
+        }
+    }
+
+    if ([string]$Payload.runtime.profile -ne "c3-3-candidate") {
+        $workspace.architecture = "legacy-runtime"
+        $workspace.lifecycle = "not-enabled"
+        $workspace.default_cutover = $false
+        $workspace.packaged_content = @()
+        $workspace.ownership = "manifest-scoped"
+        return
+    }
+
+    $declared = Get-ManifestPropertyValue -Manifest $Manifest -Name "workspace"
+    $architecture = Get-ManifestPropertyValue -Manifest $declared -Name "architecture"
+    $lifecycle = Get-ManifestPropertyValue -Manifest $declared -Name "lifecycle"
+    $defaultCutover = Get-ManifestPropertyValue -Manifest $declared -Name "default_cutover"
+    $packagedContent = Get-ManifestPropertyValue -Manifest $declared -Name "packaged_content"
+    $projectAuthority = Get-ManifestPropertyValue -Manifest $declared -Name "project_local_authority"
+    $derivedCache = Get-ManifestPropertyValue -Manifest $declared -Name "derived_cache"
+    $valid = (Test-ManifestObject -Value $declared) -and
+        $architecture -is [string] -and [string]$architecture -ceq "c3.3" -and
+        $lifecycle -is [string] -and [string]$lifecycle -ceq "dormant" -and
+        $defaultCutover -is [bool] -and -not [bool]$defaultCutover -and
+        $packagedContent -is [System.Array] -and
+        @($packagedContent | Where-Object { [string]$_ -in @("skills/project-workspace", "templates/project") }).Count -eq 2 -and
+        $projectAuthority -is [string] -and [string]$projectAuthority -ceq "project-local" -and
+        $derivedCache -is [string] -and [string]$derivedCache -ceq ".agents/.cache/catalog.json"
+    if (-not $valid) {
+        $workspace.architecture = "c3.3"
+        $workspace.lifecycle = "unknown"
+        $workspace.default_cutover = $null
+        $workspace.packaged_content = @()
+        $workspace.ownership = "unknown"
+        Add-RuntimeFinding -List $Findings -Code "runtime.workspace.contract_invalid" -Severity "error" -Message "The C3.3 candidate workspace runtime contract is invalid."
+        return
+    }
+
+    $workspace.architecture = "c3.3"
+    $workspace.lifecycle = "dormant"
+    $workspace.default_cutover = $false
+    $workspace.packaged_content = @("skills/project-workspace", "templates/project")
+    $workspace.ownership = "manifest-scoped"
+}
+
+function Set-ProjectWorkspaceStatus {
+    param(
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [string]$Root,
+        [Parameter(Mandatory = $true)][string]$RuntimeRoot
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Root)) {
+        return
+    }
+
+    $workspace = $Payload.project.workspace
+    $workspace.status = "unknown"
+    $workspace.reason = "not-requested"
+    $workspace.layout = "unknown"
+    $workspace.runtime_boundary = "unknown"
+    $workspace.runtime_ownership = [string]$Payload.runtime.workspace.ownership
+    $workspace.readiness = "unknown"
+
+    $projectRoot = Get-NormalizedFullPath -Path $Root
+    if (-not (Test-Path -LiteralPath $projectRoot -PathType Container)) {
+        $workspace.status = "missing"
+        $workspace.reason = "project-not-found"
+        $workspace.layout = "missing"
+        return
+    }
+    $projectRootItem = Get-StatusItem -Path $projectRoot
+    if ($null -eq $projectRootItem -or (Test-ReparsePoint -Item $projectRootItem)) {
+        Reset-ProjectWorkspaceUnavailable -Payload $Payload -Reason "ambiguous-project-root"
+        return
+    }
+
+    $requiredFiles = @("AGENTS.md", ".agents/README.md")
+    $requiredDirectories = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    $missing = New-Object 'System.Collections.Generic.List[string]'
+    $ambiguous = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($relative in $requiredFiles) {
+        $path = Join-PathParts $projectRoot $relative
+        $item = Get-StatusItem -Path $path
+        if ($null -eq $item -or -not $item.PSIsContainer -and -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            $missing.Add($relative)
+        }
+        elseif (Test-ReparsePoint -Item $item) {
+            $ambiguous.Add($relative)
+        }
+    }
+    foreach ($relative in $requiredDirectories) {
+        $path = Join-PathParts $projectRoot $relative
+        $item = Get-StatusItem -Path $path
+        if ($null -eq $item -or -not (Test-Path -LiteralPath $path -PathType Container)) {
+            $missing.Add($relative)
+        }
+        elseif (Test-ReparsePoint -Item $item) {
+            $ambiguous.Add($relative)
+        }
+    }
+
+    if ($ambiguous.Count -gt 0) {
+        $workspace.status = "unknown"
+        $workspace.reason = "ambiguous-layout-ownership:" + ($ambiguous -join ",")
+        $workspace.layout = "unknown"
+        $workspace.runtime_boundary = "unknown"
+        $workspace.runtime_ownership = "unknown"
+        return
+    }
+
+    $workspace.layout = if ($missing.Count -eq 0) { "complete" } else { "incomplete" }
+    $workspace.status = if ($missing.Count -eq 0) { "current" } else { "incomplete" }
+    $workspace.reason = if ($missing.Count -eq 0) { "canonical-layout-present" } else { "missing-layout:" + ($missing -join ",") }
+
+    $runtimeRootFull = Get-NormalizedFullPath -Path $RuntimeRoot
+    $runtimeSeparated = -not (Test-PathIsEqualOrChild -Path $runtimeRootFull -Root $projectRoot) -and
+        -not (Test-PathIsEqualOrChild -Path $projectRoot -Root $runtimeRootFull)
+    if ($runtimeSeparated -and [string]$Payload.runtime.workspace.ownership -eq "manifest-scoped") {
+        $workspace.runtime_boundary = "separate"
+    }
+    else {
+        $workspace.runtime_boundary = "unknown"
+        $workspace.runtime_ownership = "unknown"
+    }
+
+    $lockPath = Join-PathParts $projectRoot ".agents" "hub.lock.json"
+    $workspaceModel = ""
+    $workspaceState = ""
+    if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+        try {
+            $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+            $workspaceModel = [string](Get-ManifestPropertyValue -Manifest $lock -Name "workspace_model")
+            $workspaceState = [string](Get-ManifestPropertyValue -Manifest $lock -Name "workspace_state")
+            if (-not [string]::IsNullOrWhiteSpace($workspaceModel) -and $workspaceModel -cne "c3.3" -and $workspaceModel -cne "legacy") {
+                throw "unsupported workspace model"
+            }
+        }
+        catch {
+            $workspace.status = "unknown"
+            $workspace.reason = "invalid-workspace-metadata"
+            $workspace.runtime_boundary = "unknown"
+            $workspace.runtime_ownership = "unknown"
+            return
+        }
+    }
+
+    if ($workspaceModel -eq "c3.3") {
+        if ($workspaceState -eq "dormant" -and $workspace.layout -eq "complete" -and
+            [string]$Payload.runtime.workspace.architecture -eq "c3.3" -and
+            [string]$Payload.runtime.workspace.lifecycle -eq "dormant") {
+            $workspace.readiness = "candidate-dormant-ready"
+        }
+        else {
+            $workspace.readiness = "unknown"
+        }
+    }
+    elseif ($workspaceModel -eq "legacy") {
+        $workspace.readiness = "not-c3-3"
+    }
+    elseif ($workspace.layout -eq "complete") {
+        $workspace.readiness = "unknown"
+    }
 }
 
 function Set-ManagedFilesStatus {
@@ -907,7 +1157,7 @@ function Get-RuntimeStatusPayload {
     }
 
     $profile = Get-ManifestPropertyValue -Manifest $manifest -Name "profile"
-    if ($profile -is [string] -and [string]$profile -cin @("minimal", "recommended", "full", "dev")) {
+    if ($profile -is [string] -and [string]$profile -cin @("minimal", "recommended", "full", "dev", "c3-3-candidate")) {
         $payload.runtime.profile = [string]$profile
     }
     else {
@@ -951,6 +1201,7 @@ function Get-RuntimeStatusPayload {
     else {
         Set-ManagedFilesUnavailable -Payload $payload -Reason "manifest-invalid" -Findings $findings
     }
+    Set-RuntimeWorkspaceStatus -Payload $payload -Manifest $manifest -Findings $findings
     Set-BridgeStatus -Payload $payload -Root $Root -InstallManifest $manifest -Findings $findings
     $payload.findings = @($findings.ToArray())
     return $payload
@@ -985,6 +1236,9 @@ function Write-RuntimeStatusText {
     Write-Output "Source commit: $(Format-ProvenanceText -Field $runtime.source_commit -ShortCommit)"
     Write-Output "Install strategy: $(if ($null -eq $runtime.install_strategy) { 'unknown' } else { [string]$runtime.install_strategy })"
     Write-Output "Profile: $(if ($null -eq $runtime.profile) { 'unknown' } else { [string]$runtime.profile })"
+    Write-Output "Workspace runtime: $([string]$runtime.workspace.architecture) / $([string]$runtime.workspace.lifecycle)"
+    Write-Output "Workspace default cutover: $(if ($null -eq $runtime.workspace.default_cutover) { 'unknown' } else { [string]$runtime.workspace.default_cutover })"
+    Write-Output "Workspace ownership: $([string]$runtime.workspace.ownership)"
     Write-Output "Installed at: $(if ($null -eq $runtime.installed_at_utc) { 'unknown' } else { [string]$runtime.installed_at_utc })"
     Write-Output "Managed files: $([string]$runtime.managed_files.status)"
     Write-Output "Managed status reason: $([string]$runtime.managed_files.reason)"
@@ -1010,6 +1264,10 @@ function Write-RuntimeStatusText {
     Write-Output "Source provenance: $([string]$Payload.project.source_provenance)"
     Write-Output "Remote latest: $([string]$Payload.project.remote_latest)"
     Write-Output "Project memory: $([string]$Payload.project.memory.status)"
+    Write-Output "Project workspace: $([string]$Payload.project.workspace.status)"
+    Write-Output "Project workspace layout: $([string]$Payload.project.workspace.layout)"
+    Write-Output "Project workspace boundary: $([string]$Payload.project.workspace.runtime_boundary)"
+    Write-Output "Project workspace readiness: $([string]$Payload.project.workspace.readiness)"
     Write-Output "Migration findings: $([int]$Payload.project.memory.migration_finding_count)"
     Write-Output "Refresh findings: $([int]$Payload.project.memory.refresh_finding_count)"
     Write-Output "Diagnostic warnings: $([int]$Payload.project.memory.diagnostic_warning_count)"
@@ -1025,6 +1283,8 @@ $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFrom
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
 try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
 catch { Reset-ProjectUnavailable -Payload $statusPayload }
+try { Set-ProjectWorkspaceStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
+catch { Reset-ProjectWorkspaceUnavailable -Payload $statusPayload }
 $statusPayload.recommended_next_action = Get-RecommendedNextAction -Payload $statusPayload
 if ($Json.IsPresent) {
     $statusPayload | ConvertTo-Json -Depth 8

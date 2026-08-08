@@ -104,6 +104,7 @@ Release → installed Runtime → optional Agent bridge → Project
 - `minimal`：安装 bootstrap skill 和 public knowledge hub templates。
 - `recommended`：安装工作流内核和 public knowledge hub。
 - `full`、`dev`：当前与 `recommended` 相同，为未来 public domain packs 和维护工具预留。
+- `c3-3-candidate`：显式安装 `project-workspace` 与 project templates；C3.3 保持 dormant，不改变默认 Runtime/profile。
 
 Profile 生命周期见 [Domain pack governance](docs/domain-pack-governance.md)。
 

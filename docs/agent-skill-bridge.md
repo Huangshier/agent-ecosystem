@@ -13,6 +13,11 @@ selected runtime has a schema-2 `install-manifest.json`, uses
 unlisted skills, linked runtime skill sources, and manifest items whose managed
 destination is not exactly `skills/<skill>`.
 
+The explicit `c3-3-candidate` profile packages `project-workspace`, so that
+Skill may be exposed through this existing bridge while C3.3 remains dormant.
+Project-local or promoted Skills are separate project authority and must not be
+represented as packaged runtime ownership by this bridge.
+
 Skill ownership is canonical and case-exact across the manifest's `skills`,
 `items[].name`, and `items[].destination` fields. A differently cased request
 cannot borrow another skill's ownership. Link targets follow platform path
@@ -94,7 +99,8 @@ to a source repository.
 
 The helper only establishes filesystem discovery links. It does not verify
 that a client supports every skill field, tool, hook, instruction, or runtime
-behavior.
+behavior, and it does not grant implicit high-risk execution authorization or
+invoke a Skill. It does not build Skill chains, schedulers, or orchestrators.
 
 ## Read-Only Status
 
