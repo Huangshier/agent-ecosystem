@@ -5,7 +5,8 @@
 function Invoke-GitProbe {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string[]]$Arguments
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [switch]$PreserveWhitespace
     )
 
     $hadOptionalLocks = Test-Path Env:GIT_OPTIONAL_LOCKS
@@ -22,7 +23,9 @@ function Invoke-GitProbe {
             $output = @()
             $exitCode = 127
         }
-        return [ordered]@{ exit_code = $exitCode; text = (($output | ForEach-Object { [string]$_ }) -join "`n").Trim() }
+        $text = (($output | ForEach-Object { [string]$_ }) -join "`n")
+        if (-not $PreserveWhitespace.IsPresent) { $text = $text.Trim() }
+        return [ordered]@{ exit_code = $exitCode; text = $text }
     }
     finally {
         if ($hadOptionalLocks) { $env:GIT_OPTIONAL_LOCKS = $previousOptionalLocks }
@@ -52,15 +55,16 @@ function Get-GitState {
     $insideProbe = Invoke-GitProbe -Root $Root -Arguments @("rev-parse", "--is-inside-work-tree")
     if ([int]$insideProbe.exit_code -ne 0 -or [string]$insideProbe.text -cne "true") {
         Add-Finding -Findings $Findings -Code "git-unavailable" -Path "" -Message "Git repository metadata is unavailable; discovery remains filesystem-based." -Severity warning
-        return [ordered]@{ state = "unavailable"; branch = ""; head = ""; dirty = $null; shallow = $null; detached = $null; anchors = @() }
+        return [ordered]@{ state = "unavailable"; branch = ""; head = ""; dirty = $null; shallow = $null; detached = $null; anchors = @(); staged = $null; unstaged = $null; untracked = $null; status_count = $null }
     }
     $branchProbe = Invoke-GitProbe -Root $Root -Arguments @("symbolic-ref", "--quiet", "--short", "HEAD")
     $headProbe = Invoke-GitProbe -Root $Root -Arguments @("rev-parse", "HEAD")
     $shallowProbe = Invoke-GitProbe -Root $Root -Arguments @("rev-parse", "--is-shallow-repository")
-    $statusProbe = Invoke-GitProbe -Root $Root -Arguments @("status", "--porcelain", "--untracked-files=all")
+    # Porcelain XY state uses leading spaces as data (for example ` M`).
+    $statusProbe = Invoke-GitProbe -Root $Root -Arguments @("status", "--porcelain", "--untracked-files=all") -PreserveWhitespace
     if ([int]$headProbe.exit_code -ne 0 -or [int]$shallowProbe.exit_code -ne 0 -or [int]$statusProbe.exit_code -ne 0) {
         Add-Finding -Findings $Findings -Code "git-unavailable" -Path "" -Message "Git repository state could not be observed reliably; anchor checks degrade to unavailable." -Severity warning
-        return [ordered]@{ state = "unavailable"; branch = ""; head = ""; dirty = $null; shallow = $null; detached = $null; anchors = @() }
+        return [ordered]@{ state = "unavailable"; branch = ""; head = ""; dirty = $null; shallow = $null; detached = $null; anchors = @(); staged = $null; unstaged = $null; untracked = $null; status_count = $null }
     }
     $branch = if ([int]$branchProbe.exit_code -eq 0) { [string]$branchProbe.text } else { "" }
     $head = [string]$headProbe.text
@@ -73,10 +77,20 @@ function Get-GitState {
     $detached = [string]::IsNullOrWhiteSpace($branch)
     $dirty = -not [string]::IsNullOrWhiteSpace($statusText)
     $shallow = ($shallowText -ceq "true")
+    $statusLines = @($statusText -split "`n" | Where-Object { $_ -match '\S' })
+    $staged = $false
+    $unstaged = $false
+    $untracked = $false
+    foreach ($line in $statusLines) {
+        $xy = if ($line.Length -ge 2) { $line.Substring(0, 2) } else { "  " }
+        if ($xy -ceq "??") { $untracked = $true; continue }
+        if ($xy[0] -ne ' ' -and $xy[0] -ne '?') { $staged = $true }
+        if ($xy[1] -ne ' ' -and $xy[1] -ne '?') { $unstaged = $true }
+    }
     if ($dirty) { Add-Finding -Findings $Findings -Code "git-dirty" -Path "" -Message "Git worktree has uncommitted changes." -Severity warning }
     if ($shallow) { Add-Finding -Findings $Findings -Code "git-shallow" -Path "" -Message "Git repository is shallow; commit reachability is limited." -Severity warning }
     if ($detached) { Add-Finding -Findings $Findings -Code "git-detached" -Path "" -Message "Git HEAD is detached; branch anchors cannot be matched." -Severity warning }
-    return [ordered]@{ state = "available"; branch = [string]$branch; head = [string]$head; dirty = $dirty; shallow = $shallow; detached = $detached; anchors = @() }
+    return [ordered]@{ state = "available"; branch = [string]$branch; head = [string]$head; dirty = $dirty; shallow = $shallow; detached = $detached; anchors = @(); staged = $staged; unstaged = $unstaged; untracked = $untracked; status_count = $statusLines.Count }
 }
 
 # Test-GitAnchor: evaluate optional Work anchors against current read-only Git facts.

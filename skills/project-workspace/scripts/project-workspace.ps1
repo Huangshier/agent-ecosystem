@@ -2,13 +2,27 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check")][string]$Operation,
+    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check", "create-work", "checkpoint", "set-status", "complete", "recover-work")][string]$Operation,
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [string]$Query = "",
     [Alias("MaxResults")][ValidateRange(1, 100)][int]$Limit = 5,
     [Alias("AssetType")][string[]]$Type = @(),
     [Alias("State")][string[]]$Status = @(),
     [switch]$CurrentBranchOnly,
+    [string]$Id = "",
+    [string]$Title = "",
+    [string]$Summary = "",
+    [string]$Next = "",
+    [string]$ContinuityReason = "",
+    [string]$BaseRevision = "",
+    [string]$GitBranch = "",
+    [string]$GitWorktree = "",
+    [string]$GitLastVerifiedCommit = "",
+    [string[]]$Verified = @(),
+    [string[]]$Boundary = @(),
+    [string[]]$Blocker = @(),
+    [string]$Updated = "",
+    [switch]$ResultPersisted,
     [switch]$Json,
     [switch]$NoExit
 )
@@ -491,7 +505,8 @@ $internalModules = @(
     "project-workspace-catalog.ps1",
     "project-workspace-glossary-query.ps1",
     "project-workspace-git.ps1",
-    "project-workspace-revision-check.ps1"
+    "project-workspace-revision-check.ps1",
+    "project-continuity.ps1"
 )
 foreach ($internalModule in $internalModules) {
     $internalModulePath = Join-Path $scriptDir $internalModule
@@ -626,13 +641,23 @@ function Write-OperationResult {
     else {
         Write-Output ("project-workspace {0}: {1}" -f $Result.operation, $Result.status)
         if ($Result.operation -eq "discover") { Write-Output ("results={0} cache={1}" -f $Result.result_count, $Result.catalog.action) }
-        else { Write-Output ("read_only={0} revisions={1}" -f $Result.read_only, @($Result.revisions).Count) }
+        elseif ($Result.operation -eq "check") { Write-Output ("read_only={0} revisions={1}" -f $Result.read_only, @($Result.revisions).Count) }
+        elseif ($Result.operation -eq "recover-work") { Write-Output ("read_only={0} classification={1} degraded={2}" -f $Result.read_only, $Result.classification, $Result.degraded) }
+        else { Write-Output ("result={0} path={1}" -f $Result.result, $Result.path) }
         foreach ($finding in @($Result.findings)) { Write-Output ("[{0}] {1} {2}" -f $finding.severity, $finding.code, $finding.path) }
     }
 }
 
 try {
-    $result = if ($Operation -ceq "discover") { Invoke-DiscoverOperation -Root $ProjectRoot } else { Invoke-CheckOperation -Root $ProjectRoot }
+    $result = if ($Operation -ceq "discover") {
+        Invoke-DiscoverOperation -Root $ProjectRoot
+    }
+    elseif ($Operation -ceq "check") {
+        Invoke-CheckOperation -Root $ProjectRoot
+    }
+    else {
+        Invoke-ContinuityOperation -Operation $Operation -Root $ProjectRoot -BoundParameters $PSBoundParameters
+    }
     Write-OperationResult -Result $result
     $exitCode = if ([string]$result.status -ceq "PASS") { 0 } else { 1 }
 }
@@ -641,7 +666,7 @@ catch {
     $failure = [ordered]@{
         operation = $Operation
         status = "FAIL"
-        read_only = ($Operation -ceq "check")
+        read_only = ($Operation -in @("check", "recover-work"))
         findings = @([ordered]@{ code = "unexpected-error"; path = ""; field = ""; severity = "error"; message = $failureMessage })
     }
     Write-OperationResult -Result $failure

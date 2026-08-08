@@ -1,12 +1,12 @@
 ---
 name: project-workspace
-description: Discover public-safe project Work, Context, Procedure, and Spec metadata through one deterministic read-oriented entrypoint.
+description: Discover and check public-safe project assets, manage canonical Work continuity with revision CAS, and classify interrupted Work from read-only Git evidence.
 compatibility: Requires PowerShell 7.6 or newer and a local project root.
 ---
 
 # Project workspace
 
-Use the scripts under `scripts/` as the single public entrypoint for Slice B:
+Use the dispatcher under `scripts/` as the single public entrypoint:
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project-root> -Query <query> -Json
@@ -40,11 +40,57 @@ evidence-backed, and valid.
 - Without an explicit status filter, `archived`, `implemented`, and
   `superseded` assets are excluded.
 
-The external surface remains one `project-workspace` Skill with the existing
-`discover` and `check` commands. Internally, the implementation separates
-Catalog/cache, Glossary/query, Git-anchor, and revision/reference-check
-responsibilities; those internal scripts are not additional commands or Skills.
+## Work continuity operations
 
-The Slice B surface is dormant. It does not create assets, update Work items,
-integrate with bootstrap or runtime defaults, or expose Procedure files as
-native Skills.
+Slice C adds five operations to the same dispatcher. `create-work` is intended
+only when the caller can name one of the frozen continuity risks:
+`unfinished`, `external-wait`, `blocked`, `cross-boundary`, `user-paused`, or
+`parallel-slices`.
+
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-work -ProjectRoot <project-root> -Id <work-id> -Title <title> -Summary <summary> -Next <next-step> -ContinuityReason unfinished -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Summary <snapshot> -Next <next-step> -Verified <fact> -Boundary <boundary> -Blocker <blocker> -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation set-status -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Status paused -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation complete -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -ResultPersisted -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation recover-work -ProjectRoot <project-root> -Id <work-id> -Json
+```
+
+`create-work` may also accept one status value, `GitBranch`, `GitWorktree`,
+`GitLastVerifiedCommit`, and `Updated`. `checkpoint` updates only explicitly
+provided metadata or the exact `## Verified`, `## Boundaries`, and
+`## Blockers` sections; all other Markdown body content is preserved.
+`set-status` accepts exactly one of `active`, `paused`, `blocked`, or
+`deferred`, plus an optional deterministic `Updated`. If `Updated` is omitted,
+write operations use the current UTC RFC3339 timestamp.
+
+Every update or deletion requires the current `BaseRevision`. A stale request
+returns top-level `status: revision-conflict`, the expected and current
+revisions, repository-relative `current_path`, and deterministic
+`changed_fields`; it never retries, merges, or overwrites. Before mutation the
+implementation validates the current Work and revision again. The adjacent
+final snapshot check is a one-shot optimistic fail-closed guard, not a lock,
+lease, or claim of linearizable concurrent writes.
+
+`complete` requires explicit persisted-result confirmation and a current
+`BaseRevision`. It does not create `completed`, archive, history, or tombstone
+state.
+
+`recover-work` is strictly read-only. When Git evidence is sufficient,
+`classification` is exactly one of `exact`, `advanced`, `dirty`, or
+`diverged`. Branch or ancestry divergence wins over dirty state. Missing or
+unverifiable anchors, unavailable Git, an uncheckable detached branch, missing
+objects, or shallow-history uncertainty return `classification: null`,
+`degraded: true`, and a stable `reason_code`; no fifth classification is
+invented. Real branch, full HEAD, staged, unstaged, untracked, and ancestry
+facts take precedence over Work summary text.
+
+The external surface remains one `project-workspace` Skill. Internally, the
+implementation separates Catalog/cache, Glossary/query, shared Git facts,
+revision checks, and Work continuity responsibilities; those
+internal scripts are not additional commands or Skills.
+
+The Slice C surface remains dormant. It does not integrate with bootstrap,
+installer, runtime defaults, orchestration, or Agent-native Procedure
+discovery. Work mutations never synchronously write the disposable Catalog;
+the next `discover` observes canonical create/update/delete state and refreshes
+that cache when needed, while `check` remains strictly read-only.

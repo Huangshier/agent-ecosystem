@@ -227,7 +227,24 @@ if ([int]$classification.detected_tier -ge 1) {
             -not [bool]$workspaceDiscoveryEvidence.discover_writes_only_catalog_cache) {
             throw "Project workspace discovery fixtures returned incomplete evidence."
         }
-        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates plus {3} discovery scenarios proving canonical-source/check read-only boundaries and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count)
+        $workspaceContinuityOutput = @(
+            & (Join-Path $scriptDir "validation/project-workspace-continuity-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "workspace-continuity") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace continuity fixtures failed.`n$workspaceContinuityOutput"
+        }
+        $workspaceContinuityEvidence = $workspaceContinuityOutput | ConvertFrom-Json
+        if ([int]$workspaceContinuityEvidence.schema_version -ne 1 -or
+            [string]$workspaceContinuityEvidence.status -cne "PASS" -or
+            [int]$workspaceContinuityEvidence.scenario_count -lt 1 -or
+            [int]$workspaceContinuityEvidence.pass -ne [int]$workspaceContinuityEvidence.scenario_count -or
+            [int]$workspaceContinuityEvidence.fail -ne 0) {
+            throw "Project workspace continuity fixtures returned an invalid summary."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates, {3} discovery scenarios, and {4} continuity scenarios proving four-class recovery, CAS conflict, canonical-only writes, check/recovery read-only behavior, and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count, [int]$workspaceContinuityEvidence.scenario_count)
         $executedSuites.Add("workspace-assets")
     }
     if ($requiredSuites -contains "project-context-gate") {
