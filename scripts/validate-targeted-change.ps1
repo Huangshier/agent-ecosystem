@@ -8,6 +8,7 @@ param(
     [ValidateSet("current", "windows-latest", "ubuntu-latest", "macos-latest")]
     [string]$ExecutionHost = "current",
     [string]$ScratchRoot = "",
+    [switch]$RoutingOnly,
     [switch]$Json
 )
 
@@ -105,6 +106,31 @@ if ([int]$classification.detected_tier -ge 1) {
         Get-Content -LiteralPath $jsonPath.FullName -Raw | ConvertFrom-Json | Out-Null
     }
     Add-Result "quick-repository-checks" "PASS" "Repository PowerShell and knowledge JSON parse checks passed."
+}
+
+if ($RoutingOnly.IsPresent) {
+    $routingOnlyResult = [ordered]@{
+        schema_version = 2
+        mode = "routing-only"
+        execution_host = $ExecutionHost
+        classification = $classification
+        checks = @($checks.ToArray())
+        telemetry = @($telemetry.ToArray())
+        executed_suites = @()
+        module_coverage = @()
+        executed_suite_count = 0
+        routing_only = $true
+        summary = [ordered]@{ pass = @($checks | Where-Object status -eq "PASS").Count; fail = 0 }
+    }
+    $routingOnlyPath = Join-Path $ScratchRoot "targeted-validation-result.json"
+    $routingOnlyResult | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $routingOnlyPath -Encoding UTF8
+    if ($Json.IsPresent) {
+        $routingOnlyResult | ConvertTo-Json -Depth 10
+    }
+    else {
+        Write-Output ("Targeted routing PASS ({0} checks; no business suites executed)." -f $routingOnlyResult.summary.pass)
+    }
+    return
 }
 
 if ([int]$classification.detected_tier -ge 1) {
