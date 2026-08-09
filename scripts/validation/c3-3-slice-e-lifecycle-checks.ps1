@@ -66,6 +66,15 @@ function Convert-OutputToJson {
     return $text | ConvertFrom-Json -Depth 40
 }
 
+function Convert-BlockedOutputToJson {
+    param([Parameter(Mandatory = $true)][object]$Invocation)
+
+    Assert-SliceE -Condition ([int]$Invocation.exit_code -eq 2) -Message ("Blocked child script returned the wrong exit code: {0}" -f (@($Invocation.output) -join "`n"))
+    $text = @($Invocation.output) -join "`n"
+    Assert-SliceE -Condition (-not [string]::IsNullOrWhiteSpace($text)) -Message "Blocked child script returned no JSON output."
+    return $text | ConvertFrom-Json -Depth 40
+}
+
 function Get-ProjectFingerprint {
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -104,7 +113,7 @@ $evidence = [ordered]@{
     bridge = "pass"
     status = "pass"
     uninstall = "pass"
-    fail_closed = @("stale-bridge-ownership", "nested-unknown-runtime-file")
+    fail_closed = @("stale-bridge-ownership", "nested-unknown-runtime-file", "locally-modified-runtime-file")
     scope = "pass"
 }
 
@@ -250,10 +259,48 @@ try {
     Write-Utf8NoBom -Path $bridgeManifestPath -Text $originalBridgeManifest
 
     Write-Utf8NoBom -Path (Join-Path $runtimeRoot "skills/project-workspace/local-runtime-note.txt") -Text "unknown runtime content`n"
+    $unknownHumanUninstall = Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot)
+    $unknownHumanOutput = @($unknownHumanUninstall.output) -join "`n"
+    Assert-SliceE -Condition ([int]$unknownHumanUninstall.exit_code -eq 2) -Message "Unknown runtime content human uninstall did not return the blocked exit code."
+    foreach ($expectedLine in @(
+            "Uninstall blocked. No files were removed.",
+            "Nested unknown files: 1",
+            "The install manifest and install report were preserved."
+        )) {
+        Assert-SliceE -Condition ($unknownHumanOutput.Contains($expectedLine)) -Message "Unknown runtime content human uninstall omitted: $expectedLine"
+    }
     $unknownUninstall = Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot, "-Json")
     Assert-SliceE -Condition ([int]$unknownUninstall.exit_code -eq 2) -Message "Unknown runtime content did not fail closed."
+    $unknownBlocked = Convert-BlockedOutputToJson -Invocation $unknownUninstall
+    $expectedBlockedFields = @(
+        "schema_version", "target_dir", "manifest_path", "status", "reason", "removed", "missing",
+        "preserved_unknown", "protection_scope", "ownership_errors", "nested_unknown", "locally_modified"
+    )
+    Assert-SliceE -Condition ((@($unknownBlocked.PSObject.Properties.Name) -join "`n") -ceq ($expectedBlockedFields -join "`n")) -Message "Blocked uninstall JSON fields changed."
+    Assert-SliceE -Condition (
+        [int]$unknownBlocked.schema_version -eq 1 -and
+        [string]$unknownBlocked.status -ceq "blocked" -and
+        [string]$unknownBlocked.reason -ceq "schema2_copy_item_safety_check" -and
+        [bool]$unknownBlocked.preserved_unknown -and
+        [string]$unknownBlocked.protection_scope -ceq "fail-closed-ownership" -and
+        @($unknownBlocked.nested_unknown).Count -eq 1 -and
+        @($unknownBlocked.locally_modified).Count -eq 0
+    ) -Message "Blocked uninstall JSON contract changed."
     Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json") -PathType Leaf) -Message "Unknown runtime content uninstall removed the manifest."
     Remove-Item -LiteralPath (Join-Path $runtimeRoot "skills/project-workspace/local-runtime-note.txt") -Force
+
+    $managedRuntimeFile = Join-Path $runtimeRoot "skills/project-workspace/SKILL.md"
+    $managedRuntimeBytes = [System.IO.File]::ReadAllBytes($managedRuntimeFile)
+    try {
+        [System.IO.File]::AppendAllText($managedRuntimeFile, "`nlocal modification`n", (New-Object System.Text.UTF8Encoding($false)))
+        $modifiedHumanUninstall = Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot)
+        $modifiedHumanOutput = @($modifiedHumanUninstall.output) -join "`n"
+        Assert-SliceE -Condition ([int]$modifiedHumanUninstall.exit_code -eq 2) -Message "Locally modified runtime content human uninstall did not return the blocked exit code."
+        Assert-SliceE -Condition ($modifiedHumanOutput.Contains("Locally modified managed files: 1")) -Message "Locally modified runtime content human uninstall omitted its count."
+    }
+    finally {
+        [System.IO.File]::WriteAllBytes($managedRuntimeFile, $managedRuntimeBytes)
+    }
 
     $uninstall = Convert-OutputToJson -Invocation (Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot, "-Json"))
     Assert-SliceE -Condition ([string]$uninstall.status -ceq "uninstalled" -and @($uninstall.bridge_removed).Count -ge 2) -Message "Manifest-owned runtime/bridge uninstall did not complete."
