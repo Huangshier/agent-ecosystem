@@ -157,6 +157,7 @@ function Invoke-Migration {
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
         [string]$AnalyzeEvidence = "",
         [string]$BackupId = "",
+        [string]$ScriptPath = $migrationScript,
         [switch]$ConfirmMigration,
         [switch]$ConfirmRollback
     )
@@ -172,7 +173,7 @@ function Invoke-Migration {
     if ($ConfirmRollback.IsPresent) { $arguments += "-ConfirmRollback" }
 
     $global:LASTEXITCODE = 0
-    $output = @(& $pwshPath -NoProfile -NonInteractive -File $migrationScript @arguments 2>&1 | ForEach-Object { [string]$_ })
+    $output = @(& $pwshPath -NoProfile -NonInteractive -File $ScriptPath @arguments 2>&1 | ForEach-Object { [string]$_ })
     $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
     $payload = $null
     foreach ($candidate in @(Get-JsonCandidates -Lines $output)) {
@@ -643,6 +644,8 @@ $scratchRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-ecosystem-c33-slice-
 $baseRoot = Join-Path $scratchRoot "base-project"
 $pristineRoot = Join-Path $scratchRoot "pristine-project"
 $runtimeRoot = Join-Path $scratchRoot "runtime"
+$isolatedRuntimeRoot = Join-Path $scratchRoot "isolated-runtime"
+$isolatedMigrationScript = Join-Path $isolatedRuntimeRoot "scripts/migrate-project.ps1"
 $evidence = [ordered]@{
     analyze_deterministic = $false
     analyze_read_only = $false
@@ -658,6 +661,8 @@ $evidence = [ordered]@{
     rollback_analyze = $false
     mutation_rejection = $false
     rollback_integrity = $false
+    interrupted_apply_rollback = $false
+    interrupted_apply_conflict = $false
 }
 
 try {
@@ -665,6 +670,8 @@ try {
     New-LegacyFixture -Root $baseRoot
     Copy-Fixture -Source $baseRoot -Destination $pristineRoot
     Write-Utf8NoBom -Path (Join-Path $runtimeRoot "runtime-sentinel.txt") -Text "Runtime sentinel must remain untouched.`n"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $isolatedMigrationScript) | Out-Null
+    Copy-Item -LiteralPath $migrationScript -Destination $isolatedMigrationScript -Force
     $runtimeBefore = Get-FileSnapshot -Root $runtimeRoot
 
     if (-not (Test-Path -LiteralPath $migrationScript -PathType Leaf)) {
@@ -792,6 +799,60 @@ No compatibility mirror.
     $rollbackAnalyze = ((Test-InvocationPass -Invocation $postRollbackAnalyze) -and $postRollbackAnalyzeBefore -ceq $postRollbackAnalyzeAfter)
     Add-Case -Name "rollback-followed-by-analyze" -Passed $rollbackAnalyze -Detail "A restored project remains analyzable and Analyze remains read-only after Rollback."
     $evidence.rollback_analyze = $rollbackAnalyze
+
+    # An isolated Runtime copy intentionally omits project-workspace so Apply
+    # fails only after executing its declared target mutations.  Rollback
+    # evidence must already be complete and integrity-protected at that point.
+    $interruptedRoot = Join-Path $scratchRoot "interrupted-apply"
+    Copy-Fixture -Source $pristineRoot -Destination $interruptedRoot
+    $interruptedBeforeSnapshot = Get-FileSnapshot -Root $interruptedRoot
+    $interruptedBeforeTree = Get-TreeFingerprint -Root $interruptedRoot
+    $interruptedAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $interruptedRoot -ScriptPath $isolatedMigrationScript
+    Assert-Migration -Condition (Test-InvocationPass -Invocation $interruptedAnalyze) -Message "Interrupted-Apply fixture Analyze failed."
+    $interruptedBackupId = [string]$interruptedAnalyze.payload.backup_requirements.backup_id
+    $interruptedApply = Invoke-Migration -Mode "Apply" -ProjectRoot $interruptedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $interruptedAnalyze.payload) -ConfirmMigration -ScriptPath $isolatedMigrationScript
+    $interruptedBackupRoot = Join-Path $interruptedRoot (Join-Path ".agents/.migration-backups" $interruptedBackupId)
+    $manifestPath = Join-Path $interruptedBackupRoot "manifest.json"
+    $manifestHashPath = Join-Path $interruptedBackupRoot "manifest.sha256"
+    $recordPath = Join-Path $interruptedBackupRoot "apply-record.json"
+    $recordHashPath = Join-Path $interruptedBackupRoot "apply-record.sha256"
+    $rollbackEvidenceFiles = @($manifestPath, $manifestHashPath, $recordPath, $recordHashPath)
+    $rollbackEvidenceComplete = (@($rollbackEvidenceFiles | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -eq 4)
+    if ($rollbackEvidenceComplete) {
+        $manifestText = Get-Content -LiteralPath $manifestPath -Raw
+        $recordText = Get-Content -LiteralPath $recordPath -Raw
+        $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $recordHash = (Get-FileHash -LiteralPath $recordPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $manifest = $manifestText | ConvertFrom-Json -Depth 100
+        $record = $recordText | ConvertFrom-Json -Depth 100
+        $rollbackEvidenceComplete = (
+            $manifestHash -ceq (Get-Content -LiteralPath $manifestHashPath -Raw).Trim() -and
+            $recordHash -ceq (Get-Content -LiteralPath $recordHashPath -Raw).Trim() -and
+            @($manifest.pre_state).Count -gt 0 -and @($record.expected_post_state).Count -gt 0 -and
+            @($record.managed_paths).Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$record.expected_post_state_digest)
+        )
+    }
+    $failedAfterMutation = ((Test-InvocationBlocked -Invocation $interruptedApply) -and $interruptedApply.text -match 'WORKSPACE_CHECK_UNAVAILABLE' -and $interruptedBeforeTree -cne (Get-TreeFingerprint -Root $interruptedRoot))
+    $interruptedRollback = Invoke-Migration -Mode "Rollback" -ProjectRoot $interruptedRoot -BackupId $interruptedBackupId -ConfirmRollback -ScriptPath $isolatedMigrationScript
+    $interruptedExact = ((Test-InvocationPass -Invocation $interruptedRollback) -and (Test-SnapshotEqual -Before $interruptedBeforeSnapshot -After (Get-FileSnapshot -Root $interruptedRoot)))
+    $interruptedBackupRetained = (Test-Path -LiteralPath $interruptedBackupRoot -PathType Container)
+    $interruptedPass = ($failedAfterMutation -and $rollbackEvidenceComplete -and $interruptedExact -and $interruptedBackupRetained)
+    Add-Case -Name "interrupted-apply-rollback-exact" -Passed $interruptedPass -Detail ("Post-mutation Apply failure={0} evidence_complete={1} rollback_exact={2} backup_retained={3}." -f $failedAfterMutation, $rollbackEvidenceComplete, $interruptedExact, $interruptedBackupRetained)
+    $evidence.interrupted_apply_rollback = $interruptedPass
+
+    $interruptedConflictRoot = Join-Path $scratchRoot "interrupted-apply-conflict"
+    Copy-Fixture -Source $pristineRoot -Destination $interruptedConflictRoot
+    $conflictAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $interruptedConflictRoot -ScriptPath $isolatedMigrationScript
+    Assert-Migration -Condition (Test-InvocationPass -Invocation $conflictAnalyze) -Message "Interrupted-Apply conflict fixture Analyze failed."
+    $conflictBackupId = [string]$conflictAnalyze.payload.backup_requirements.backup_id
+    $conflictApply = Invoke-Migration -Mode "Apply" -ProjectRoot $interruptedConflictRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $conflictAnalyze.payload) -ConfirmMigration -ScriptPath $isolatedMigrationScript
+    Assert-Migration -Condition ((Test-InvocationBlocked -Invocation $conflictApply) -and $conflictApply.text -match 'WORKSPACE_CHECK_UNAVAILABLE') -Message "Interrupted-Apply conflict fixture did not fail after mutation."
+    Add-Content -LiteralPath (Join-Path $interruptedConflictRoot ".agents/project-metadata.json") -Value "`nHuman post-failure edit.`n"
+    $conflictBeforeRollback = Get-FileSnapshot -Root $interruptedConflictRoot
+    $conflictRollback = Invoke-Migration -Mode "Rollback" -ProjectRoot $interruptedConflictRoot -BackupId $conflictBackupId -ConfirmRollback -ScriptPath $isolatedMigrationScript
+    $interruptedConflictRejected = ((Test-InvocationBlocked -Invocation $conflictRollback) -and (Test-SnapshotEqual -Before $conflictBeforeRollback -After (Get-FileSnapshot -Root $interruptedConflictRoot)))
+    Add-Case -Name "interrupted-apply-rejects-third-state" -Passed $interruptedConflictRejected -Detail "Rollback rejects and preserves a human edit made after post-mutation Apply failure."
+    $evidence.interrupted_apply_conflict = $interruptedConflictRejected
 
     # Apply evidence binds all source categories.  A mutation after Analyze in
     # legacy, target, language, or workspace state must fail before writes.

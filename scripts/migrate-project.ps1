@@ -145,6 +145,49 @@ function Get-StateDigest {
     return Get-Sha256Text (ConvertTo-StableJson $minimal)
 }
 
+function Test-StateItemEqual {
+    param([Parameter(Mandatory = $true)][object]$Left, [Parameter(Mandatory = $true)][object]$Right)
+    return (
+        [string](Get-HashtableValue $Left "path") -ceq [string](Get-HashtableValue $Right "path") -and
+        [string](Get-HashtableValue $Left "presence") -ceq [string](Get-HashtableValue $Right "presence") -and
+        [string](Get-HashtableValue $Left "sha256") -ceq [string](Get-HashtableValue $Right "sha256") -and
+        [long](Get-HashtableValue $Left "length") -eq [long](Get-HashtableValue $Right "length")
+    )
+}
+
+function Get-PlannedPostState {
+    param(
+        [Parameter(Mandatory = $true)][object[]]$PreState,
+        [Parameter(Mandatory = $true)][object[]]$Actions
+    )
+    $byPath = @{}
+    foreach ($item in $PreState) {
+        $path = [string](Get-HashtableValue $item "path")
+        $byPath[$path] = [ordered]@{
+            path = $path
+            presence = [string](Get-HashtableValue $item "presence")
+            sha256 = Get-HashtableValue $item "sha256"
+            length = [long](Get-HashtableValue $item "length")
+        }
+    }
+    foreach ($action in $Actions) {
+        $kind = [string](Get-HashtableValue $action "action")
+        if ($kind -ceq "preserve") { continue }
+        $path = [string](Get-HashtableValue $action "path")
+        if (-not $byPath.ContainsKey($path)) { throw "ROLLBACK_SCOPE_INCOMPLETE" }
+        if ($kind -in @("create", "change")) {
+            $content = [string](Get-HashtableValue $action "content")
+            $bytes = [Text.UTF8Encoding]::new($false).GetBytes($content)
+            $byPath[$path] = [ordered]@{ path = $path; presence = "file"; sha256 = Get-Sha256Bytes $bytes; length = $bytes.Length }
+        }
+        elseif ($kind -ceq "remove") {
+            $byPath[$path] = [ordered]@{ path = $path; presence = "absent"; sha256 = $null; length = 0 }
+        }
+        else { throw "MIGRATION_ACTION_UNSUPPORTED" }
+    }
+    return @($byPath.Keys | Sort-Object -Unique | ForEach-Object { $byPath[$_] })
+}
+
 function Read-Utf8Text {
     param([Parameter(Mandatory = $true)][string]$Path)
     try { return [IO.File]::ReadAllText($Path, $script:Utf8NoBom) }
@@ -459,6 +502,32 @@ function Assert-StateMatches {
     }
 }
 
+function Assert-InterruptedApplyStateSafe {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][object[]]$PreState,
+        [Parameter(Mandatory = $true)][object[]]$PlannedPostState,
+        [Parameter(Mandatory = $true)][string[]]$ManagedPaths
+    )
+    $expectedPaths = @($PreState | ForEach-Object { [string](Get-HashtableValue $_ "path") })
+    $actual = @(Get-StateSnapshot $Root $expectedPaths)
+    $expectedPathSet = @($expectedPaths | Sort-Object -Unique)
+    $actualPathSet = @($actual | ForEach-Object { [string](Get-HashtableValue $_ "path") } | Sort-Object -Unique)
+    if (($expectedPathSet -join "`n") -cne ($actualPathSet -join "`n")) { throw "STATE_CONFLICT" }
+
+    $preByPath = @{}; foreach ($item in $PreState) { $preByPath[[string](Get-HashtableValue $item "path")] = $item }
+    $postByPath = @{}; foreach ($item in $PlannedPostState) { $postByPath[[string](Get-HashtableValue $item "path")] = $item }
+    $managed = @{}; foreach ($path in $ManagedPaths) { $managed[[string]$path] = $true }
+    foreach ($item in $actual) {
+        $path = [string](Get-HashtableValue $item "path")
+        if (-not $preByPath.ContainsKey($path) -or -not $postByPath.ContainsKey($path)) { throw "STATE_CONFLICT" }
+        if ($managed.ContainsKey($path)) {
+            if (-not (Test-StateItemEqual $item $preByPath[$path]) -and -not (Test-StateItemEqual $item $postByPath[$path])) { throw "STATE_CONFLICT" }
+        }
+        elseif (-not (Test-StateItemEqual $item $preByPath[$path])) { throw "STATE_CONFLICT" }
+    }
+}
+
 function Write-ExactText {
     param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$RelativePath, [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content)
     $path = Get-ProjectPath $Root $RelativePath
@@ -500,10 +569,24 @@ function Invoke-Apply {
     if (Test-Path -LiteralPath $backupRoot) { throw "BACKUP_ALREADY_EXISTS" }
     [IO.Directory]::CreateDirectory($backupRoot) | Out-Null
     $preState = @(Get-StateSnapshot $Root @($fresh.evidence.files.path) -IncludeContent)
+    $plannedPostState = @(Get-PlannedPostState $preState @($fresh.plan.actions))
+    $managedPaths = @($fresh.plan.actions | Where-Object { [string]$_.action -in @("create", "change", "remove") } | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
     $manifest = [ordered]@{ schema_version = 1; backup_kind = "c3.3-project-migration"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; project_language = $fresh.evidence.project_language; pre_state = $preState; plan_digest = $fresh.plan.plan_digest }
     $manifestText = (ConvertTo-StableJson $manifest) + "`n"
     [IO.File]::WriteAllText((Join-Path $backupRoot "manifest.json"), $manifestText, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $backupRoot "manifest.sha256"), (Get-Sha256Text $manifestText) + "`n", [Text.UTF8Encoding]::new($false))
+    $completion = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-complete"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; expected_post_state_digest = Get-StateDigest $plannedPostState }
+    $completionText = (ConvertTo-StableJson $completion) + "`n"
+    $record = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-apply"; apply_state = "prepared"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; managed_paths = $managedPaths; expected_post_state = $plannedPostState; expected_post_state_digest = $completion.expected_post_state_digest; completion_marker_sha256 = Get-Sha256Text $completionText }
+    $recordText = (ConvertTo-StableJson $record) + "`n"
+    [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.json"), $recordText, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.sha256"), (Get-Sha256Text $recordText) + "`n", [Text.UTF8Encoding]::new($false))
+    $persistedManifest = Read-Utf8Text (Join-Path $backupRoot "manifest.json")
+    $persistedRecord = Read-Utf8Text (Join-Path $backupRoot "apply-record.json")
+    if ((Get-Sha256Text $persistedManifest) -cne (Read-Utf8Text (Join-Path $backupRoot "manifest.sha256")).Trim() -or (Get-Sha256Text $persistedRecord) -cne (Read-Utf8Text (Join-Path $backupRoot "apply-record.sha256")).Trim()) { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
+    try { $persistedManifestObject = $persistedManifest | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop; $persistedRecordObject = $persistedRecord | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
+    catch { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
+    if ([string](Get-HashtableValue $persistedManifestObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "expected_post_state_digest") -cne [string]$completion.expected_post_state_digest) { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
     foreach ($action in @($fresh.plan.actions)) {
         if ($action.action -in @("create", "change")) { Write-ExactText $Root $action.path ([string]$action.content) }
         elseif ($action.action -ceq "remove") {
@@ -522,11 +605,12 @@ function Invoke-Apply {
         $actual = $postState | Where-Object { [string]$_.path -ceq [string]$action.path } | Select-Object -First 1
         if ($null -eq $actual -or [string]$actual.presence -cne "absent") { throw "APPLY_VERIFICATION_FAILED" }
     }
+    if ((Get-StateDigest $postState) -cne [string]$record.expected_post_state_digest) { throw "APPLY_VERIFICATION_FAILED" }
     $workspaceCheck = Invoke-MigratedWorkspaceCheck $Root
-    $record = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-apply"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; expected_post_state = $postState; expected_post_state_digest = Get-StateDigest $postState }
-    $recordText = (ConvertTo-StableJson $record) + "`n"
-    [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.json"), $recordText, [Text.UTF8Encoding]::new($false))
-    [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.sha256"), (Get-Sha256Text $recordText) + "`n", [Text.UTF8Encoding]::new($false))
+    $completionTemp = Join-Path $backupRoot "apply-complete.tmp"
+    $completionPath = Join-Path $backupRoot "apply-complete.json"
+    [IO.File]::WriteAllText($completionTemp, $completionText, [Text.UTF8Encoding]::new($false))
+    [IO.File]::Move($completionTemp, $completionPath)
     return [ordered]@{ schema_version = 1; operation = "apply"; status = "applied"; reason_codes = @(); migration_revision = $fresh.migration_revision; backup_id = $backupIdValue; backup_path = "$backupRelative/"; backup_before_mutation = $true; workspace_check = $workspaceCheck; expected_post_state_digest = $record.expected_post_state_digest }
 }
 
@@ -544,7 +628,7 @@ function Invoke-Rollback {
     if (-not $ConfirmRollback.IsPresent) { throw "CONFIRMATION_REQUIRED" }
     if ([string]::IsNullOrWhiteSpace($BackupId) -or $BackupId -cnotmatch '^[0-9a-f]{24}$') { throw "BACKUP_ID_INVALID" }
     $backupRelative = ".agents/.migration-backups/$BackupId"; $backupRoot = Get-ProjectPath $Root $backupRelative
-    $manifestPath = Join-Path $backupRoot "manifest.json"; $hashPath = Join-Path $backupRoot "manifest.sha256"; $recordPath = Join-Path $backupRoot "apply-record.json"; $recordHashPath = Join-Path $backupRoot "apply-record.sha256"
+    $manifestPath = Join-Path $backupRoot "manifest.json"; $hashPath = Join-Path $backupRoot "manifest.sha256"; $recordPath = Join-Path $backupRoot "apply-record.json"; $recordHashPath = Join-Path $backupRoot "apply-record.sha256"; $completionPath = Join-Path $backupRoot "apply-complete.json"
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or -not (Test-Path -LiteralPath $hashPath -PathType Leaf) -or -not (Test-Path -LiteralPath $recordPath -PathType Leaf) -or -not (Test-Path -LiteralPath $recordHashPath -PathType Leaf)) { throw "BACKUP_INCOMPLETE" }
     $manifestText = Read-Utf8Text $manifestPath; $expectedManifestHash = (Read-Utf8Text $hashPath).Trim()
     if ((Get-Sha256Text $manifestText) -cne $expectedManifestHash) { throw "BACKUP_INTEGRITY_FAILED" }
@@ -553,9 +637,20 @@ function Invoke-Rollback {
     try { $manifest = $manifestText | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop; $record = $recordText | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
     catch { throw "BACKUP_INVALID" }
     if ([string](Get-HashtableValue $manifest "backup_id") -cne $BackupId -or [string](Get-HashtableValue $record "backup_id") -cne $BackupId -or [string](Get-HashtableValue $manifest "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $manifest "plan_digest") -cne [string](Get-HashtableValue $record "plan_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
-    $postState = @(Get-HashtableValue $record "expected_post_state")
-    Assert-StateMatches $Root $postState -ExactScope
     $preState = @(Get-HashtableValue $manifest "pre_state")
+    $postState = @(Get-HashtableValue $record "expected_post_state")
+    $completedApply = Test-Path -LiteralPath $completionPath -PathType Leaf
+    if ($completedApply) {
+        $completionText = Read-Utf8Text $completionPath
+        if ((Get-Sha256Text $completionText) -cne [string](Get-HashtableValue $record "completion_marker_sha256")) { throw "BACKUP_INTEGRITY_FAILED" }
+        try { $completion = $completionText | ConvertFrom-Json -AsHashtable -Depth 50 -ErrorAction Stop }
+        catch { throw "BACKUP_INTEGRITY_FAILED" }
+        if ([string](Get-HashtableValue $completion "backup_id") -cne $BackupId -or [string](Get-HashtableValue $completion "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $completion "expected_post_state_digest") -cne [string](Get-HashtableValue $record "expected_post_state_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
+        Assert-StateMatches $Root $postState -ExactScope
+    }
+    else {
+        Assert-InterruptedApplyStateSafe $Root $preState $postState @((Get-HashtableValue $record "managed_paths"))
+    }
     foreach ($item in $preState) {
         if ([string](Get-HashtableValue $item "presence") -cne "file") { continue }
         try { $bytes = [Convert]::FromBase64String([string](Get-HashtableValue $item "content_base64")) }
