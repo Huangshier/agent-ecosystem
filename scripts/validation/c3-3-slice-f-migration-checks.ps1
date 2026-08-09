@@ -19,6 +19,8 @@ if ($PSVersionTable.PSVersion -lt [version]"7.6") {
 
 $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $migrationScript = Join-Path $repositoryRoot "scripts/migrate-project.ps1"
+$legacyTemplateRoot = Join-Path $repositoryRoot "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en"
+$c33TemplateRoot = Join-Path $repositoryRoot "skills/project-bootstrap/assets/c3-3-project-template/en"
 $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
 
 $cases = New-Object 'System.Collections.Generic.List[object]'
@@ -96,6 +98,18 @@ function Get-FileSnapshot {
         $snapshot[$relative] = [Convert]::ToBase64String([IO.File]::ReadAllBytes($file.FullName))
     }
     return $snapshot
+}
+
+function Get-DirectorySnapshot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) { return @() }
+    return @(
+        Get-ChildItem -LiteralPath $Root -Recurse -Directory -Force |
+            ForEach-Object { [IO.Path]::GetRelativePath($Root, $_.FullName).Replace('\', '/') } |
+            Where-Object { $_ -notmatch '(?i)^\.agents/\.migration-backups(?:/|$)' } |
+            Sort-Object -Unique
+    )
 }
 
 function Test-SnapshotEqual {
@@ -406,24 +420,8 @@ function New-LegacyFixture {
     param([Parameter(Mandatory = $true)][string]$Root)
 
     New-Item -ItemType Directory -Force -Path $Root | Out-Null
-    Write-Utf8NoBom -Path (Join-Path $Root "AGENTS.md") -Text @"
-# Project Agent Entrypoint
-
-Read `.agents/AGENTS.md`, `.agents/process.txt`, `.agents/plan.md`, and the
-relevant command card before non-trivial work.
-"@
-    Write-Utf8NoBom -Path (Join-Path $Root ".agents/AGENTS.md") -Text @"
-# Project Agent Guide
-
-## Project Language Policy
-
-Project memory language: English.
-
-## Working Rules
-
-- Preserve project-owned memory.
-- Keep commands, paths, APIs, filenames, and raw errors unchanged.
-"@
+    Write-Utf8NoBom -Path (Join-Path $Root "AGENTS.md") -Text ([IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-root/AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)))
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/AGENTS.md") -Text ([IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-agent/AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)))
     Write-Utf8NoBom -Path (Join-Path $Root ".agents/process.txt") -Text @"
 Current State
 - Status: active
@@ -663,6 +661,9 @@ $evidence = [ordered]@{
     rollback_integrity = $false
     interrupted_apply_rollback = $false
     interrupted_apply_conflict = $false
+    scaffold_layout_migrated = $false
+    scaffold_conflict = $false
+    rollback_layout_exact = $false
 }
 
 try {
@@ -672,6 +673,16 @@ try {
     Write-Utf8NoBom -Path (Join-Path $runtimeRoot "runtime-sentinel.txt") -Text "Runtime sentinel must remain untouched.`n"
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $isolatedMigrationScript) | Out-Null
     Copy-Item -LiteralPath $migrationScript -Destination $isolatedMigrationScript -Force
+    foreach ($templateRelative in @(
+            "skills/project-bootstrap/assets/c3-3-project-template/en",
+            "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root",
+            "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-agent"
+        )) {
+        $source = Join-Path $repositoryRoot $templateRelative
+        $destination = Join-Path $isolatedRuntimeRoot $templateRelative
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+    }
     $runtimeBefore = Get-FileSnapshot -Root $runtimeRoot
 
     if (-not (Test-Path -LiteralPath $migrationScript -PathType Leaf)) {
@@ -688,9 +699,13 @@ try {
     $afterAnalyzeTree = Get-TreeFingerprint -Root $baseRoot
     $deterministic = ((Test-InvocationPass -Invocation $analyzeOne) -and (Test-InvocationPass -Invocation $analyzeTwo) -and
         (Get-CanonicalJson -Payload $analyzeOne.payload) -ceq (Get-CanonicalJson -Payload $analyzeTwo.payload))
+    $scaffoldPlanPaths = @($analyzeOne.payload.plan.actions | ForEach-Object { [string]$_.path })
+    $scaffoldPlanComplete = (
+        @("AGENTS.md", ".agents/AGENTS.md", ".agents/README.md", ".agents/.gitignore") | Where-Object { $scaffoldPlanPaths -notcontains $_ }
+    ).Count -eq 0 -and @($analyzeOne.payload.evidence.scaffold_contract.directories).Count -eq 5
     $readOnly = ($beforeAnalyzeTree -ceq $afterAnalyzeTree -and (Test-SnapshotEqual -Before $beforeAnalyzeSnapshot -After $afterAnalyzeSnapshot) -and
         @((Get-BackupFiles -ProjectRoot $baseRoot)).Count -eq 0)
-    Add-Case -Name "analyze-deterministic-read-only" -Passed ($deterministic -and $readOnly) -Detail ("Analyze repeatable={0} read_only={1} first_exit={2} second_exit={3} first_status={4} second_status={5}." -f $deterministic, $readOnly, $analyzeOne.exit_code, $analyzeTwo.exit_code, (Get-StatusText $analyzeOne.payload), (Get-StatusText $analyzeTwo.payload))
+    Add-Case -Name "analyze-deterministic-read-only" -Passed ($deterministic -and $readOnly -and $scaffoldPlanComplete) -Detail ("Analyze repeatable={0} read_only={1} scaffold_plan={2} first_exit={3} second_exit={4} first_status={5} second_status={6} reasons={7} human={8}." -f $deterministic, $readOnly, $scaffoldPlanComplete, $analyzeOne.exit_code, $analyzeTwo.exit_code, (Get-StatusText $analyzeOne.payload), (Get-StatusText $analyzeTwo.payload), (@($analyzeOne.payload.reason_codes) -join ','), (@($analyzeOne.payload.human_disposition | ForEach-Object { '{0}:{1}' -f $_.path, $_.reason_code }) -join ','))
     $evidence.analyze_deterministic = $deterministic
     $evidence.analyze_read_only = $readOnly
 
@@ -728,6 +743,25 @@ No compatibility mirror.
     Add-Case -Name "unsupported-input-fails-closed" -Passed $unsupportedClosed -Detail "Unsupported legacy input is rejected without creating a backup or target asset."
     $evidence.analyze_fail_closed = ($ambiguousClosed -and $unsupportedClosed)
 
+    # Project-local scaffold is migratable only when both legacy authority
+    # files match the frozen legacy templates exactly.  Custom content must
+    # block Analyze and Apply without creating backup or target state.
+    $scaffoldConflictPass = $true
+    foreach ($relative in @("AGENTS.md", ".agents/AGENTS.md")) {
+        $customRoot = Join-Path $scratchRoot ("custom-scaffold-{0}" -f ($relative -replace '[^A-Za-z0-9]+', '-').Trim('-'))
+        Copy-Fixture -Source $pristineRoot -Destination $customRoot
+        Add-Content -LiteralPath (Join-Path $customRoot $relative) -Value "`nProject-local scaffold customization.`n"
+        $customBefore = Get-TreeFingerprint -Root $customRoot
+        $customAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $customRoot
+        $customApply = Invoke-Migration -Mode "Apply" -ProjectRoot $customRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $customAnalyze.payload) -ConfirmMigration
+        $customDisposition = @($customAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED" }).Count -eq 1
+        $customRejected = ((Test-InvocationBlocked -Invocation $customAnalyze) -and (Test-InvocationBlocked -Invocation $customApply) -and
+            $customDisposition -and $customBefore -ceq (Get-TreeFingerprint -Root $customRoot) -and @((Get-BackupFiles -ProjectRoot $customRoot)).Count -eq 0)
+        $scaffoldConflictPass = $scaffoldConflictPass -and $customRejected
+    }
+    Add-Case -Name "modified-legacy-scaffold-fails-closed" -Passed $scaffoldConflictPass -Detail "Modified root or project-agent legacy authority is routed to HUMAN_DISPOSITION_REQUIRED; Analyze and Apply preserve it without backup or target writes."
+    $evidence.scaffold_conflict = $scaffoldConflictPass
+
     # Apply requires both the reviewed Analyze JSON and explicit confirmation.
     $missingEvidenceBefore = Get-TreeFingerprint -Root $baseRoot
     $missingEvidence = Invoke-Migration -Mode "Apply" -ProjectRoot $baseRoot -ConfirmMigration
@@ -740,6 +774,7 @@ No compatibility mirror.
 
     # A valid fresh Apply creates one asset in each canonical root.
     $beforeApplySnapshot = Get-FileSnapshot -Root $baseRoot
+    $beforeApplyDirectories = @(Get-DirectorySnapshot -Root $baseRoot)
     $beforeApplyTree = Get-TreeFingerprint -Root $baseRoot
     $analysisEvidenceJson = Get-CanonicalJson -Payload $analyzeOne.payload
     $applied = Invoke-Migration -Mode "Apply" -ProjectRoot $baseRoot -AnalyzeEvidence $analysisEvidenceJson -ConfirmMigration
@@ -763,9 +798,27 @@ No compatibility mirror.
     $evidence.fresh_apply = $freshApply
     $evidence.canonical_targets = ($targetShape -and $onlyCanonicalTargets -and $projectOwnedPreserved)
 
+    $targetAgents = [IO.File]::ReadAllText((Join-Path $c33TemplateRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    $targetReadme = [IO.File]::ReadAllText((Join-Path $c33TemplateRoot ".agents/README.md"), [Text.UTF8Encoding]::new($false, $true))
+    $targetGitignore = [IO.File]::ReadAllText((Join-Path $c33TemplateRoot ".agents/.gitignore"), [Text.UTF8Encoding]::new($false, $true))
+    $migratedAgents = Get-Content -LiteralPath (Join-Path $baseRoot "AGENTS.md") -Raw
+    $canonicalDirectories = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    $layoutMigrated = (
+        $migratedAgents -ceq $targetAgents -and
+        $migratedAgents -notmatch '(?i)\.agents/(?:AGENTS\.md|process\.txt|plan\.md|commands)' -and
+        (Get-Content -LiteralPath (Join-Path $baseRoot ".agents/README.md") -Raw) -ceq $targetReadme -and
+        (Get-Content -LiteralPath (Join-Path $baseRoot ".agents/.gitignore") -Raw) -ceq $targetGitignore -and
+        -not (Test-Path -LiteralPath (Join-Path $baseRoot ".agents/AGENTS.md")) -and
+        @($canonicalDirectories | Where-Object { -not (Test-Path -LiteralPath (Join-Path $baseRoot $_) -PathType Container) }).Count -eq 0 -and
+        [string]$applied.payload.workspace_check -ceq "PASS"
+    )
+    Add-Case -Name "successful-migration-layout" -Passed $layoutMigrated -Detail "Apply installs the frozen C3.3 entrypoint, README, ignore contract, and canonical directories; retires legacy project-agent authority; and passes project-workspace check."
+    $evidence.scaffold_layout_migrated = $layoutMigrated
+
     $lockPath = Join-Path $baseRoot ".agents/hub.lock.json"
     $lockAfterApply = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json -Depth 30
-    $languagePreserved = ([string]$lockAfterApply.project_language -ceq "en")
+    $languagePreserved = ([string]$lockAfterApply.project_language -ceq "en" -and [string]$lockAfterApply.workspace_model -ceq "c3.3" -and
+        (@($lockAfterApply.workspace_roots) -join "`n") -ceq (@(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs") -join "`n"))
     $evidence.language_preserved = $languagePreserved
     Add-Case -Name "language-preserved" -Passed $languagePreserved -Detail "Apply keeps the legacy project memory language unchanged."
 
@@ -792,6 +845,23 @@ No compatibility mirror.
     $evidence.rollback_exact = $rollbackExact
     $evidence.runtime_sentinel = $runtimeStable
     $evidence.backup_retained = $backupRetained
+
+    $rollbackDirectories = @(Get-DirectorySnapshot -Root $baseRoot)
+    $rollbackSnapshot = Get-FileSnapshot -Root $baseRoot
+    $layoutRollbackExact = (
+        ($beforeApplyDirectories -join "`n") -ceq ($rollbackDirectories -join "`n") -and
+        [string]$beforeApplySnapshot["AGENTS.md"] -ceq [string]$rollbackSnapshot["AGENTS.md"] -and
+        [string]$beforeApplySnapshot[".agents/AGENTS.md"] -ceq [string]$rollbackSnapshot[".agents/AGENTS.md"] -and
+        -not (Test-Path -LiteralPath (Join-Path $baseRoot ".agents/README.md")) -and
+        -not (Test-Path -LiteralPath (Join-Path $baseRoot ".agents/.gitignore")) -and
+        @($canonicalDirectories | Where-Object {
+                $relative = $_
+                $beforeApplyDirectories -notcontains $relative -and (Test-Path -LiteralPath (Join-Path $baseRoot $relative))
+            }).Count -eq 0 -and
+        $backupRetained
+    )
+    Add-Case -Name "rollback-layout-exactness" -Passed $layoutRollbackExact -Detail "Rollback restores the legacy entrypoint and project-agent authority, removes migration-created C3.3 scaffold files and empty directories, and retains the backup."
+    $evidence.rollback_layout_exact = $layoutRollbackExact
 
     $postRollbackAnalyzeBefore = Get-TreeFingerprint -Root $baseRoot
     $postRollbackAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $baseRoot

@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v1"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v2"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -105,8 +105,8 @@ function Get-MigrationRelevantPaths {
     foreach ($relativeRoot in @(".agents", "docs/specs", ".claude/skills", ".codex/skills", ".github/skills")) {
         $fullRoot = Get-ProjectPath $Root $relativeRoot
         if (-not (Test-Path -LiteralPath $fullRoot -PathType Container)) { continue }
-        foreach ($file in @(Get-ChildItem -LiteralPath $fullRoot -File -Force -Recurse)) {
-            $relative = ConvertTo-RelativePath $Root $file.FullName
+        foreach ($item in @(Get-ChildItem -LiteralPath $fullRoot -Force -Recurse)) {
+            $relative = ConvertTo-RelativePath $Root $item.FullName
             if ($relative -match '^\.agents/\.migration-backups(?:/|$)') { continue }
             $paths.Add($relative)
         }
@@ -114,15 +114,17 @@ function Get-MigrationRelevantPaths {
     return @($paths.ToArray() | Sort-Object -Unique)
 }
 
-function Get-FileState {
+function Get-PathState {
     param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$RelativePath, [switch]$IncludeContent)
     $full = Get-ProjectPath $Root $RelativePath
     if (-not (Test-Path -LiteralPath $full)) {
         return [ordered]@{ path = $RelativePath.Replace('\', '/'); presence = "absent"; sha256 = $null; length = 0 }
     }
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw "NON_FILE_MIGRATION_PATH" }
     $item = Get-Item -LiteralPath $full -Force
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "REPARSE_POINT_UNSUPPORTED" }
+    if ($item.PSIsContainer) {
+        return [ordered]@{ path = $RelativePath.Replace('\', '/'); presence = "directory"; sha256 = $null; length = 0 }
+    }
     $bytes = [IO.File]::ReadAllBytes($full)
     $state = [ordered]@{ path = $RelativePath.Replace('\', '/'); presence = "file"; sha256 = Get-Sha256Bytes $bytes; length = $bytes.Length }
     if ($IncludeContent) { $state.content_base64 = [Convert]::ToBase64String($bytes) }
@@ -135,7 +137,7 @@ function Get-StateSnapshot {
     foreach ($path in @(Get-MigrationRelevantPaths $Root)) { $all.Add($path) }
     foreach ($path in @($AdditionalPaths)) { if (-not [string]::IsNullOrWhiteSpace($path)) { $all.Add($path.Replace('\', '/')) } }
     $result = [Collections.Generic.List[object]]::new()
-    foreach ($path in @($all.ToArray() | Sort-Object -Unique)) { $result.Add((Get-FileState $Root $path -IncludeContent:$IncludeContent)) }
+    foreach ($path in @($all.ToArray() | Sort-Object -Unique)) { $result.Add((Get-PathState $Root $path -IncludeContent:$IncludeContent)) }
     return @($result.ToArray())
 }
 
@@ -172,7 +174,7 @@ function Get-PlannedPostState {
     }
     foreach ($action in $Actions) {
         $kind = [string](Get-HashtableValue $action "action")
-        if ($kind -ceq "preserve") { continue }
+        if ($kind -in @("preserve", "preserve-directory")) { continue }
         $path = [string](Get-HashtableValue $action "path")
         if (-not $byPath.ContainsKey($path)) { throw "ROLLBACK_SCOPE_INCOMPLETE" }
         if ($kind -in @("create", "change")) {
@@ -182,6 +184,9 @@ function Get-PlannedPostState {
         }
         elseif ($kind -ceq "remove") {
             $byPath[$path] = [ordered]@{ path = $path; presence = "absent"; sha256 = $null; length = 0 }
+        }
+        elseif ($kind -ceq "create-directory") {
+            $byPath[$path] = [ordered]@{ path = $path; presence = "directory"; sha256 = $null; length = 0 }
         }
         else { throw "MIGRATION_ACTION_UNSUPPORTED" }
     }
@@ -335,6 +340,137 @@ function Add-PlanAction {
     $Actions.Add($entry)
 }
 
+function Get-C33ScaffoldContract {
+    param([Parameter(Mandatory = $true)][string]$Language)
+    $runtimeRoot = Split-Path -Parent $PSScriptRoot
+    $relativeRoot = "skills/project-bootstrap/assets/c3-3-project-template/$Language"
+    $templateRoot = Join-Path $runtimeRoot $relativeRoot
+    $files = [ordered]@{}
+    foreach ($relative in @("AGENTS.md", ".agents/README.md", ".agents/.gitignore")) {
+        $source = Join-Path $templateRoot $relative
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "C33_SCAFFOLD_CONTRACT_UNAVAILABLE" }
+        $content = Read-Utf8Text $source
+        $files[$relative] = [ordered]@{
+            source = "$relativeRoot/$relative"
+            content = $content
+            sha256 = Get-Sha256Text $content
+        }
+    }
+    return [ordered]@{
+        source = $relativeRoot
+        files = $files
+        directories = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    }
+}
+
+function Get-LegacyScaffoldText {
+    param([Parameter(Mandatory = $true)][string]$Language, [Parameter(Mandatory = $true)][string]$RelativePath)
+    $runtimeRoot = Split-Path -Parent $PSScriptRoot
+    $source = switch ($RelativePath) {
+        "AGENTS.md" { Join-Path $runtimeRoot "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/$Language/project-root/AGENTS.md" }
+        ".agents/AGENTS.md" { Join-Path $runtimeRoot "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/$Language/project-agent/AGENTS.md" }
+        default { return $null }
+    }
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "LEGACY_SCAFFOLD_CONTRACT_UNAVAILABLE" }
+    return Read-Utf8Text $source
+}
+
+function Test-RecordedLegacyScaffold {
+    param(
+        [AllowNull()][object]$Lock,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+    if ($null -eq $Lock -or [string](Get-HashtableValue $Lock "workspace_model") -notin @("", "legacy")) { return $false }
+    $hashes = Get-HashtableValue $Lock "template_installed_hashes_sha256"
+    $recorded = [string](Get-HashtableValue $hashes $RelativePath)
+    return (-not [string]::IsNullOrWhiteSpace($recorded) -and $recorded -ceq (Get-Sha256Text $Content))
+}
+
+function Add-ScaffoldTransitionPlan {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Language,
+        [AllowNull()][object]$Lock,
+        [Parameter(Mandatory = $true)][object]$Contract,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][Collections.Generic.List[object]]$Actions,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][Collections.Generic.List[object]]$Human,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][Collections.Generic.List[string]]$TargetPaths
+    )
+    $legacyRoot = Get-LegacyScaffoldText $Language "AGENTS.md"
+    $legacyAgent = Get-LegacyScaffoldText $Language ".agents/AGENTS.md"
+    foreach ($relative in @("AGENTS.md", ".agents/README.md", ".agents/.gitignore")) {
+        $TargetPaths.Add($relative)
+        $full = Get-ProjectPath $Root $relative
+        $target = Get-HashtableValue (Get-HashtableValue $Contract "files") $relative
+        $targetContent = [string](Get-HashtableValue $target "content")
+        if (-not (Test-Path -LiteralPath $full)) {
+            Add-PlanAction $Actions "create" $relative @([string](Get-HashtableValue $target "source")) $targetContent "C33_SCAFFOLD_CREATED"
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+            $Human.Add([ordered]@{ path = $relative; reason_code = "SCAFFOLD_PATH_CONFLICT" })
+            continue
+        }
+        $current = Read-Utf8Text $full
+        if ($current -ceq $targetContent) {
+            Add-PlanAction $Actions "preserve" $relative @($relative) $null "C33_SCAFFOLD_PRESERVED"
+        }
+        elseif (($relative -ceq "AGENTS.md" -and $current -ceq $legacyRoot) -or (Test-RecordedLegacyScaffold $Lock $relative $current)) {
+            Add-PlanAction $Actions "change" $relative @($relative, [string](Get-HashtableValue $target "source")) $targetContent "LEGACY_ENTRYPOINT_REPLACED"
+        }
+        else {
+            $Human.Add([ordered]@{ path = $relative; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED" })
+        }
+    }
+
+    $legacyAgentPath = ".agents/AGENTS.md"
+    $TargetPaths.Add($legacyAgentPath)
+    $legacyAgentFull = Get-ProjectPath $Root $legacyAgentPath
+    if (-not (Test-Path -LiteralPath $legacyAgentFull)) {
+        Add-PlanAction $Actions "preserve" $legacyAgentPath @($legacyAgentPath) $null "LEGACY_AUTHORITY_ALREADY_ABSENT"
+    }
+    elseif (-not (Test-Path -LiteralPath $legacyAgentFull -PathType Leaf)) {
+        $Human.Add([ordered]@{ path = $legacyAgentPath; reason_code = "SCAFFOLD_PATH_CONFLICT" })
+    }
+    else {
+        $current = Read-Utf8Text $legacyAgentFull
+        if ($current -ceq $legacyAgent -or (Test-RecordedLegacyScaffold $Lock $legacyAgentPath $current)) {
+            Add-PlanAction $Actions "remove" $legacyAgentPath @($legacyAgentPath) $null "LEGACY_PROJECT_AUTHORITY_RETIRED"
+        }
+        else {
+            $Human.Add([ordered]@{ path = $legacyAgentPath; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED" })
+        }
+    }
+
+    foreach ($relative in @(".agents", "docs")) {
+        $TargetPaths.Add($relative)
+        $full = Get-ProjectPath $Root $relative
+        if (-not (Test-Path -LiteralPath $full)) {
+            Add-PlanAction $Actions "create-directory" $relative @() $null "C33_CANONICAL_DIRECTORY_PARENT_CREATED"
+        }
+        elseif (Test-Path -LiteralPath $full -PathType Container) {
+            Add-PlanAction $Actions "preserve-directory" $relative @($relative) $null "C33_CANONICAL_DIRECTORY_PARENT_PRESERVED"
+        }
+        else {
+            $Human.Add([ordered]@{ path = $relative; reason_code = "SCAFFOLD_PATH_CONFLICT" })
+        }
+    }
+    foreach ($relative in @(Get-HashtableValue $Contract "directories")) {
+        $TargetPaths.Add([string]$relative)
+        $full = Get-ProjectPath $Root ([string]$relative)
+        if (-not (Test-Path -LiteralPath $full)) {
+            Add-PlanAction $Actions "create-directory" ([string]$relative) @() $null "C33_CANONICAL_DIRECTORY_CREATED"
+        }
+        elseif (Test-Path -LiteralPath $full -PathType Container) {
+            Add-PlanAction $Actions "preserve-directory" ([string]$relative) @([string]$relative) $null "C33_CANONICAL_DIRECTORY_PRESERVED"
+        }
+        else {
+            $Human.Add([ordered]@{ path = [string]$relative; reason_code = "SCAFFOLD_PATH_CONFLICT" })
+        }
+    }
+}
+
 function Invoke-Analyze {
     param([Parameter(Mandatory = $true)][string]$Root)
     $reasons = [Collections.Generic.List[string]]::new()
@@ -360,6 +496,15 @@ function Invoke-Analyze {
             if ($workspaceModel -ceq "c3.3") { $reasons.Add("WORKSPACE_ALREADY_C33") }
             elseif ($workspaceModel -notin @("legacy", "")) { $reasons.Add("WORKSPACE_MODEL_UNSUPPORTED") }
         }
+    }
+
+    $scaffoldContract = $null
+    if ($language -in @("en", "zh-CN")) {
+        try {
+            $scaffoldContract = Get-C33ScaffoldContract $language
+            Add-ScaffoldTransitionPlan $Root $language $lock $scaffoldContract $actions $human $targetPaths
+        }
+        catch { $reasons.Add([string]$_.Exception.Message) }
     }
 
     $workSources = [Collections.Generic.List[object]]::new()
@@ -461,6 +606,7 @@ function Invoke-Analyze {
 
     if ($null -ne $lock -and $workspaceModel -ne "c3.3" -and $language -in @("en", "zh-CN")) {
         $lock["workspace_model"] = "c3.3"; $lock["workspace_state"] = "dormant"
+        $lock["workspace_roots"] = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
         $lockContent = ($lock | ConvertTo-Json -Depth 50) + "`n"
         Add-PlanAction $actions "change" ".agents/hub.lock.json" @(".agents/hub.lock.json") $lockContent "WORKSPACE_METADATA_MIGRATED"
         $targetPaths.Add(".agents/hub.lock.json")
@@ -481,8 +627,8 @@ function Invoke-Analyze {
     return [ordered]@{
         schema_version = $script:MigrationSchemaVersion; operation = "analyze"; status = $(if ($eligible) { "eligible" } else { "blocked" }); eligible = $eligible
         reason_codes = $reasonArray; migration_revision = $migrationRevision
-        evidence = [ordered]@{ evidence_version = 1; project_root = $Root; project_language = $language; workspace_model = $workspaceModel; workspace_state = $workspaceState; files = $files; state_digest = $stateDigest }
-        plan = [ordered]@{ plan_version = 1; plan_digest = $planDigest; sentinel_updated = $script:MigrationSentinel; sentinel_source = "deterministic-migration-sentinel-v1"; actions = $sortedActions; create = @($sortedActions | Where-Object action -eq "create" | ForEach-Object path); change = @($sortedActions | Where-Object action -eq "change" | ForEach-Object path); remove = @($sortedActions | Where-Object action -eq "remove" | ForEach-Object path); preserve = @($sortedActions | Where-Object action -eq "preserve" | ForEach-Object path) }
+        evidence = [ordered]@{ evidence_version = 1; project_root = $Root; project_language = $language; workspace_model = $workspaceModel; workspace_state = $workspaceState; scaffold_contract = $(if ($null -eq $scaffoldContract) { $null } else { [ordered]@{ source = $scaffoldContract.source; files = @($scaffoldContract.files.Keys | Sort-Object | ForEach-Object { [ordered]@{ path = $_; sha256 = $scaffoldContract.files[$_].sha256 } }); directories = @($scaffoldContract.directories) } }); files = $files; state_digest = $stateDigest }
+        plan = [ordered]@{ plan_version = 1; plan_digest = $planDigest; sentinel_updated = $script:MigrationSentinel; sentinel_source = "deterministic-migration-sentinel-v1"; actions = $sortedActions; create = @($sortedActions | Where-Object action -eq "create" | ForEach-Object path); create_directories = @($sortedActions | Where-Object action -eq "create-directory" | ForEach-Object path); change = @($sortedActions | Where-Object action -eq "change" | ForEach-Object path); remove = @($sortedActions | Where-Object action -eq "remove" | ForEach-Object path); preserve = @($sortedActions | Where-Object action -in @("preserve", "preserve-directory") | ForEach-Object path) }
         human_disposition = @($human.ToArray() | Sort-Object path, reason_code)
         backup_requirements = [ordered]@{ backup_id = $backupId; path = ".agents/.migration-backups/$backupId/"; project_owned = $true; offline = $true; retained_after_rollback = $true; complete_pre_state_required = $true }
     }
@@ -570,7 +716,7 @@ function Invoke-Apply {
     [IO.Directory]::CreateDirectory($backupRoot) | Out-Null
     $preState = @(Get-StateSnapshot $Root @($fresh.evidence.files.path) -IncludeContent)
     $plannedPostState = @(Get-PlannedPostState $preState @($fresh.plan.actions))
-    $managedPaths = @($fresh.plan.actions | Where-Object { [string]$_.action -in @("create", "change", "remove") } | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
+    $managedPaths = @($fresh.plan.actions | Where-Object { [string]$_.action -in @("create", "create-directory", "change", "remove") } | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
     $manifest = [ordered]@{ schema_version = 1; backup_kind = "c3.3-project-migration"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; project_language = $fresh.evidence.project_language; pre_state = $preState; plan_digest = $fresh.plan.plan_digest }
     $manifestText = (ConvertTo-StableJson $manifest) + "`n"
     [IO.File]::WriteAllText((Join-Path $backupRoot "manifest.json"), $manifestText, [Text.UTF8Encoding]::new($false))
@@ -589,12 +735,18 @@ function Invoke-Apply {
     if ([string](Get-HashtableValue $persistedManifestObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "expected_post_state_digest") -cne [string]$completion.expected_post_state_digest) { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
     foreach ($action in @($fresh.plan.actions)) {
         if ($action.action -in @("create", "change")) { Write-ExactText $Root $action.path ([string]$action.content) }
+        elseif ($action.action -ceq "create-directory") {
+            $path = Get-ProjectPath $Root $action.path
+            if (-not (Test-Path -LiteralPath $path)) { [IO.Directory]::CreateDirectory($path) | Out-Null }
+        }
         elseif ($action.action -ceq "remove") {
             $path = Get-ProjectPath $Root $action.path
             if (Test-Path -LiteralPath $path -PathType Leaf) { [IO.File]::Delete($path) }
         }
     }
-    $postState = @(Get-StateSnapshot $Root @($fresh.plan.actions.path))
+    # Re-read the complete Analyze evidence scope so absent legacy/scaffold
+    # paths remain part of the exact planned post-state comparison.
+    $postState = @(Get-StateSnapshot $Root @($fresh.evidence.files.path))
     foreach ($action in @($fresh.plan.actions | Where-Object action -in @("create", "change"))) {
         $actual = $postState | Where-Object { [string]$_.path -ceq [string]$action.path } | Select-Object -First 1
         if ($null -eq $actual -or [string]$actual.sha256 -cne [string]$action.expected_sha256) {
@@ -604,6 +756,10 @@ function Invoke-Apply {
     foreach ($action in @($fresh.plan.actions | Where-Object action -eq "remove")) {
         $actual = $postState | Where-Object { [string]$_.path -ceq [string]$action.path } | Select-Object -First 1
         if ($null -eq $actual -or [string]$actual.presence -cne "absent") { throw "APPLY_VERIFICATION_FAILED" }
+    }
+    foreach ($action in @($fresh.plan.actions | Where-Object action -eq "create-directory")) {
+        $actual = $postState | Where-Object { [string]$_.path -ceq [string]$action.path } | Select-Object -First 1
+        if ($null -eq $actual -or [string]$actual.presence -cne "directory") { throw "APPLY_VERIFICATION_FAILED" }
     }
     if ((Get-StateDigest $postState) -cne [string]$record.expected_post_state_digest) { throw "APPLY_VERIFICATION_FAILED" }
     $workspaceCheck = Invoke-MigratedWorkspaceCheck $Root
@@ -665,6 +821,10 @@ function Invoke-Rollback {
             $parent = Split-Path -Parent $full; if (-not (Test-Path -LiteralPath $parent)) { [IO.Directory]::CreateDirectory($parent) | Out-Null }
             [IO.File]::WriteAllBytes($full, $bytes)
         }
+        elseif ($presence -ceq "directory") {
+            if (-not (Test-Path -LiteralPath $full)) { [IO.Directory]::CreateDirectory($full) | Out-Null }
+            elseif (-not (Test-Path -LiteralPath $full -PathType Container)) { throw "STATE_CONFLICT" }
+        }
         elseif (Test-Path -LiteralPath $full -PathType Leaf) { [IO.File]::Delete($full) }
     }
     $preByPath = @{}
@@ -677,6 +837,15 @@ function Invoke-Rollback {
         } | ForEach-Object { [string](Get-HashtableValue $_ "path") })
     foreach ($path in $createdPaths) { $full = Get-ProjectPath $Root $path; if (Test-Path -LiteralPath $full -PathType Leaf) { [IO.File]::Delete($full) } }
     Remove-EmptyMigrationDirectories $Root $createdPaths
+    $createdDirectories = @($postState | Where-Object {
+            $path = [string](Get-HashtableValue $_ "path")
+            [string](Get-HashtableValue $_ "presence") -ceq "directory" -and
+            $preByPath.ContainsKey($path) -and
+            [string](Get-HashtableValue $preByPath[$path] "presence") -ceq "absent"
+        } | ForEach-Object { Get-ProjectPath $Root ([string](Get-HashtableValue $_ "path")) } | Sort-Object Length -Descending -Unique)
+    foreach ($directory in $createdDirectories) {
+        if ((Test-Path -LiteralPath $directory -PathType Container) -and @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) { [IO.Directory]::Delete($directory) }
+    }
     $expectedPre = @($preState | ForEach-Object { [ordered]@{ path = [string](Get-HashtableValue $_ "path"); presence = [string](Get-HashtableValue $_ "presence"); sha256 = Get-HashtableValue $_ "sha256"; length = [long](Get-HashtableValue $_ "length") } })
     Assert-StateMatches $Root $expectedPre -ExactScope
     return [ordered]@{ schema_version = 1; operation = "rollback"; status = "rolled-back"; reason_codes = @(); migration_revision = [string](Get-HashtableValue $manifest "migration_revision"); backup_id = $BackupId; backup_retained = $true; restored_state_digest = Get-StateDigest $expectedPre }
