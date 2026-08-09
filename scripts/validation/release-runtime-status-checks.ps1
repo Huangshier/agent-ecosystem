@@ -201,6 +201,20 @@
             profile = "recommended"
             installed_at_utc = "2026-07-12T00:00:00.0000000Z"
             target_dir = "."
+            workspace = [ordered]@{
+                architecture = "legacy-runtime"
+                lifecycle = "not-enabled"
+                default_cutover = $false
+                packaged_content = @()
+                c3_3_authority = @()
+                legacy_only_compatibility_payload = @("project-context-gate", "memory-governance", "workflow-spec-lite")
+                retired_from_c3_3_authority = @("project-context-gate", "memory-governance", "workflow-spec-lite")
+                compatibility_aliases = $false
+                automatic_forwarding = $false
+                dual_write = $false
+                project_local_authority = "project-local"
+                derived_cache = ".agents/.cache/catalog.json"
+            }
             items = @()
         }
     }

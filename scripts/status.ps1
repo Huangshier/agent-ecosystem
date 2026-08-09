@@ -52,6 +52,12 @@ function New-RuntimePayload {
                 lifecycle = "unknown"
                 default_cutover = $null
                 packaged_content = @()
+                c3_3_authority = @()
+                legacy_only_compatibility_payload = @()
+                retired_from_c3_3_authority = @()
+                compatibility_aliases = $null
+                automatic_forwarding = $null
+                dual_write = $null
                 project_local_authority = "unknown"
                 derived_cache = ".agents/.cache/catalog.json"
                 ownership = "unknown"
@@ -684,11 +690,18 @@ function Set-RuntimeWorkspaceStatus {
 
     $workspace = $Payload.runtime.workspace
     $workspace.project_local_authority = "project-local"
+    $expectedRetired = @("project-context-gate", "memory-governance", "workflow-spec-lite")
     if ($null -eq $Manifest -or [string]::IsNullOrWhiteSpace([string]$Payload.runtime.profile)) {
         $workspace.architecture = "unknown"
         $workspace.lifecycle = "unknown"
         $workspace.default_cutover = $null
         $workspace.packaged_content = @()
+        $workspace.c3_3_authority = @()
+        $workspace.legacy_only_compatibility_payload = @()
+        $workspace.retired_from_c3_3_authority = @()
+        $workspace.compatibility_aliases = $null
+        $workspace.automatic_forwarding = $null
+        $workspace.dual_write = $null
         $workspace.ownership = "unknown"
         return
     }
@@ -703,22 +716,73 @@ function Set-RuntimeWorkspaceStatus {
             $workspace.lifecycle = "unknown"
             $workspace.default_cutover = $null
             $workspace.packaged_content = @()
+            $workspace.c3_3_authority = @()
+            $workspace.legacy_only_compatibility_payload = @()
+            $workspace.retired_from_c3_3_authority = @()
+            $workspace.compatibility_aliases = $null
+            $workspace.automatic_forwarding = $null
+            $workspace.dual_write = $null
             $workspace.ownership = "unknown"
             Add-RuntimeFinding -List $Findings -Code "runtime.workspace.project_local_owned" -Severity "error" -Message "The runtime manifest overlaps project-local workspace ownership."
             return
         }
     }
 
+    $declared = Get-ManifestPropertyValue -Manifest $Manifest -Name "workspace"
+    $declaredC33Authority = Get-ManifestPropertyValue -Manifest $declared -Name "c3_3_authority"
+    $declaredLegacyPayload = Get-ManifestPropertyValue -Manifest $declared -Name "legacy_only_compatibility_payload"
+    $declaredRetired = Get-ManifestPropertyValue -Manifest $declared -Name "retired_from_c3_3_authority"
+    $declaredAliases = Get-ManifestPropertyValue -Manifest $declared -Name "compatibility_aliases"
+    $declaredForwarding = Get-ManifestPropertyValue -Manifest $declared -Name "automatic_forwarding"
+    $declaredDualWrite = Get-ManifestPropertyValue -Manifest $declared -Name "dual_write"
+
     if ([string]$Payload.runtime.profile -ne "c3-3-candidate") {
+        $expectedLegacyPayload = if ([string]$Payload.runtime.profile -in @("recommended", "full", "dev")) { @($expectedRetired) } else { @() }
+        $legacyLifecycleMetadataMissing = $null -eq $declaredC33Authority -and $null -eq $declaredLegacyPayload -and
+            $null -eq $declaredRetired -and $null -eq $declaredAliases -and $null -eq $declaredForwarding -and $null -eq $declaredDualWrite
+        if ($legacyLifecycleMetadataMissing) {
+            # NOTE: Existing schema-2 legacy installs predate the explicit Slice F fields.
+            # Derive the legacy-only lifecycle from their frozen profile payload without
+            # treating those Skills as C3.3 authority or requiring a destructive reinstall.
+            $manifestSkills = Get-ManifestPropertyValue -Manifest $Manifest -Name "skills"
+            $legacyContractValid = $manifestSkills -is [System.Array] -and
+                @($expectedLegacyPayload | Where-Object { @($manifestSkills) -ccontains $_ }).Count -eq @($expectedLegacyPayload).Count -and
+                @($expectedRetired | Where-Object { @($manifestSkills) -ccontains $_ }).Count -eq @($expectedLegacyPayload).Count -and
+                @($manifestSkills | Where-Object { [string]$_ -ceq "project-workspace" }).Count -eq 0
+        }
+        else {
+            $legacyContractValid = (Test-ManifestObject -Value $declared) -and
+                $declaredC33Authority -is [System.Array] -and @($declaredC33Authority).Count -eq 0 -and
+                $declaredLegacyPayload -is [System.Array] -and
+                (@($declaredLegacyPayload) -join "`n") -ceq (@($expectedLegacyPayload) -join "`n") -and
+                $declaredRetired -is [System.Array] -and
+                (@($declaredRetired) -join "`n") -ceq (@($expectedRetired) -join "`n") -and
+                $declaredAliases -is [bool] -and -not [bool]$declaredAliases -and
+                $declaredForwarding -is [bool] -and -not [bool]$declaredForwarding -and
+                $declaredDualWrite -is [bool] -and -not [bool]$declaredDualWrite
+        }
+        if (-not $legacyContractValid) {
+            $workspace.architecture = "legacy-runtime"
+            $workspace.lifecycle = "unknown"
+            $workspace.default_cutover = $null
+            $workspace.ownership = "unknown"
+            Add-RuntimeFinding -List $Findings -Code "runtime.workspace.contract_invalid" -Severity "error" -Message "The legacy Runtime Skill lifecycle contract is invalid."
+            return
+        }
         $workspace.architecture = "legacy-runtime"
         $workspace.lifecycle = "not-enabled"
         $workspace.default_cutover = $false
         $workspace.packaged_content = @()
+        $workspace.c3_3_authority = @()
+        $workspace.legacy_only_compatibility_payload = @($expectedLegacyPayload)
+        $workspace.retired_from_c3_3_authority = @($expectedRetired)
+        $workspace.compatibility_aliases = $false
+        $workspace.automatic_forwarding = $false
+        $workspace.dual_write = $false
         $workspace.ownership = "manifest-scoped"
         return
     }
 
-    $declared = Get-ManifestPropertyValue -Manifest $Manifest -Name "workspace"
     $architecture = Get-ManifestPropertyValue -Manifest $declared -Name "architecture"
     $lifecycle = Get-ManifestPropertyValue -Manifest $declared -Name "lifecycle"
     $defaultCutover = Get-ManifestPropertyValue -Manifest $declared -Name "default_cutover"
@@ -726,6 +790,7 @@ function Set-RuntimeWorkspaceStatus {
     $projectAuthority = Get-ManifestPropertyValue -Manifest $declared -Name "project_local_authority"
     $derivedCache = Get-ManifestPropertyValue -Manifest $declared -Name "derived_cache"
     $expectedPackagedContent = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
+    $expectedC33Authority = @("project-bootstrap", "project-workspace")
     $valid = (Test-ManifestObject -Value $declared) -and
         $architecture -is [string] -and [string]$architecture -ceq "c3.3" -and
         $lifecycle -is [string] -and [string]$lifecycle -ceq "dormant" -and
@@ -733,6 +798,14 @@ function Set-RuntimeWorkspaceStatus {
         $packagedContent -is [System.Array] -and
         @($packagedContent).Count -eq 3 -and
         @($expectedPackagedContent | Where-Object { @($packagedContent) -ccontains $_ }).Count -eq 3 -and
+        $declaredC33Authority -is [System.Array] -and
+        (@($declaredC33Authority) -join "`n") -ceq (@($expectedC33Authority) -join "`n") -and
+        $declaredLegacyPayload -is [System.Array] -and @($declaredLegacyPayload).Count -eq 0 -and
+        $declaredRetired -is [System.Array] -and
+        (@($declaredRetired) -join "`n") -ceq (@($expectedRetired) -join "`n") -and
+        $declaredAliases -is [bool] -and -not [bool]$declaredAliases -and
+        $declaredForwarding -is [bool] -and -not [bool]$declaredForwarding -and
+        $declaredDualWrite -is [bool] -and -not [bool]$declaredDualWrite -and
         $projectAuthority -is [string] -and [string]$projectAuthority -ceq "project-local" -and
         $derivedCache -is [string] -and [string]$derivedCache -ceq ".agents/.cache/catalog.json"
     if (-not $valid) {
@@ -740,6 +813,12 @@ function Set-RuntimeWorkspaceStatus {
         $workspace.lifecycle = "unknown"
         $workspace.default_cutover = $null
         $workspace.packaged_content = @()
+        $workspace.c3_3_authority = @()
+        $workspace.legacy_only_compatibility_payload = @()
+        $workspace.retired_from_c3_3_authority = @()
+        $workspace.compatibility_aliases = $null
+        $workspace.automatic_forwarding = $null
+        $workspace.dual_write = $null
         $workspace.ownership = "unknown"
         Add-RuntimeFinding -List $Findings -Code "runtime.workspace.contract_invalid" -Severity "error" -Message "The C3.3 candidate workspace runtime contract is invalid."
         return
@@ -749,6 +828,12 @@ function Set-RuntimeWorkspaceStatus {
     $workspace.lifecycle = "dormant"
     $workspace.default_cutover = $false
     $workspace.packaged_content = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
+    $workspace.c3_3_authority = @($expectedC33Authority)
+    $workspace.legacy_only_compatibility_payload = @()
+    $workspace.retired_from_c3_3_authority = @($expectedRetired)
+    $workspace.compatibility_aliases = $false
+    $workspace.automatic_forwarding = $false
+    $workspace.dual_write = $false
     $workspace.ownership = "manifest-scoped"
 }
 
@@ -1240,6 +1325,8 @@ function Write-RuntimeStatusText {
     Write-Output "Profile: $(if ($null -eq $runtime.profile) { 'unknown' } else { [string]$runtime.profile })"
     Write-Output "Workspace runtime: $([string]$runtime.workspace.architecture) / $([string]$runtime.workspace.lifecycle)"
     Write-Output "Workspace default cutover: $(if ($null -eq $runtime.workspace.default_cutover) { 'unknown' } else { [string]$runtime.workspace.default_cutover })"
+    Write-Output "C3.3 Skill authority: $(if (@($runtime.workspace.c3_3_authority).Count -eq 0) { 'none' } else { @($runtime.workspace.c3_3_authority) -join ', ' })"
+    Write-Output "Legacy-only Skill payload: $(if (@($runtime.workspace.legacy_only_compatibility_payload).Count -eq 0) { 'none' } else { @($runtime.workspace.legacy_only_compatibility_payload) -join ', ' })"
     Write-Output "Workspace ownership: $([string]$runtime.workspace.ownership)"
     Write-Output "Installed at: $(if ($null -eq $runtime.installed_at_utc) { 'unknown' } else { [string]$runtime.installed_at_utc })"
     Write-Output "Managed files: $([string]$runtime.managed_files.status)"
