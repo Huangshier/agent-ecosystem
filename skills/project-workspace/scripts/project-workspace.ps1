@@ -2,8 +2,9 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check", "create-work", "checkpoint", "set-status", "complete", "recover-work", "create-context", "create-procedure", "promote-skill", "create-spec")][string]$Operation,
+    [Parameter(Mandatory = $true)][Alias("Mode")][ValidateSet("discover", "check", "create-work", "checkpoint", "set-status", "complete", "recover-work", "create-context", "create-procedure", "promote-skill", "create-spec", "create-adapter", "rebuild-adapter", "status-adapter", "remove-adapter")][string]$Operation,
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
+    [string]$Target = "",
     [string]$Query = "",
     [Alias("MaxResults")][ValidateRange(1, 100)][int]$Limit = 5,
     [Alias("AssetType")][string[]]$Type = @(),
@@ -562,7 +563,8 @@ $internalModules = @(
     "project-workspace-git.ps1",
     "project-workspace-revision-check.ps1",
     "project-workspace-authoring.ps1",
-    "project-continuity.ps1"
+    "project-continuity.ps1",
+    "project-workspace-adapter.ps1"
 )
 foreach ($internalModule in $internalModules) {
     $internalModulePath = Join-Path $scriptDir $internalModule
@@ -707,6 +709,7 @@ function Write-OperationResult {
         if ($Result.operation -eq "discover") { Write-Output ("results={0} cache={1}" -f $Result.result_count, $Result.catalog.action) }
         elseif ($Result.operation -eq "check") { Write-Output ("read_only={0} revisions={1}" -f $Result.read_only, @($Result.revisions).Count) }
         elseif ($Result.operation -eq "recover-work") { Write-Output ("read_only={0} classification={1} degraded={2}" -f $Result.read_only, $Result.classification, $Result.degraded) }
+        elseif ($Result.operation -in @("create-adapter", "rebuild-adapter", "status-adapter", "remove-adapter")) { Write-Output ("result={0} target={1} items={2}" -f $Result.result, $Result.adapter_target, @($Result.items).Count) }
         else { Write-Output ("result={0} path={1}" -f $Result.result, $Result.path) }
         foreach ($finding in @($Result.findings)) { Write-Output ("[{0}] {1} {2}" -f $finding.severity, $finding.code, $finding.path) }
     }
@@ -722,6 +725,9 @@ try {
     elseif ($Operation -in @("create-context", "create-procedure", "promote-skill", "create-spec")) {
         Invoke-AuthoringOperation -Operation $Operation -Root (Resolve-AuthoringRoot -Root $ProjectRoot) -BoundParameters $PSBoundParameters
     }
+    elseif ($Operation -in @("create-adapter", "rebuild-adapter", "status-adapter", "remove-adapter")) {
+        Invoke-AdapterOperation -Operation $Operation -Root $ProjectRoot -Target $Target -BoundParameters $PSBoundParameters
+    }
     else {
         Invoke-ContinuityOperation -Operation $Operation -Root $ProjectRoot -BoundParameters $PSBoundParameters
     }
@@ -733,7 +739,7 @@ catch {
     $failure = [ordered]@{
         operation = $Operation
         status = "FAIL"
-        read_only = ($Operation -in @("check", "recover-work") -or ($Operation -ceq "promote-skill" -and $Analyze.IsPresent))
+        read_only = ($Operation -in @("check", "recover-work", "status-adapter") -or ($Operation -ceq "promote-skill" -and $Analyze.IsPresent))
         findings = @([ordered]@{ code = "unexpected-error"; path = ""; field = ""; severity = "error"; message = $failureMessage })
     }
     Write-OperationResult -Result $failure

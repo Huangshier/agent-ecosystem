@@ -1,6 +1,6 @@
 ---
 name: project-workspace
-description: Discover and check public-safe project assets, manage canonical Work continuity with revision CAS, and classify interrupted Work from read-only Git evidence.
+description: Discover and check public-safe project assets, manage canonical Work continuity, and explicitly manage derived Claude Code project Skill adapters.
 compatibility: Requires PowerShell 7.6 or newer and a local project root.
 ---
 
@@ -168,8 +168,44 @@ the capability remains dormant and does not change default bootstrap/runtime
 selection.
 
 The workspace dispatcher does not trigger migration and does not provide
-orchestration, client adapters, releases, automatic Skill calls, Skill chains,
-or schedulers. Migration remains an explicit Runtime-level Analyze / Apply /
-Rollback entrypoint. Work and authoring mutations never synchronously write the disposable Catalog;
+orchestration, releases, automatic Skill calls, Skill chains, or schedulers.
+Migration remains an explicit Runtime-level Analyze / Apply / Rollback
+entrypoint. Work and authoring mutations never synchronously write the disposable Catalog;
 the next `discover` observes canonical create/update/delete state and refreshes
 that cache when needed, while `check` remains strictly read-only.
+
+## Claude Code project adapter
+
+Codex discovers the canonical `.agents/skills` tree natively and does not need
+an adapter. ZCode imports Skills through its client-managed UI and does not have
+a Runtime-managed filesystem target. The only supported Runtime adapter target
+is therefore `claude-code`, with the exact mapping
+`.agents/skills/<name>` to `.claude/skills/<name>`.
+
+Bootstrap does not create this adapter. Every lifecycle change is explicit and
+uses the same dispatcher style:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-adapter -ProjectRoot <project-root> -Target claude-code -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation rebuild-adapter -ProjectRoot <project-root> -Target claude-code -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation status-adapter -ProjectRoot <project-root> -Target claude-code -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation remove-adapter -ProjectRoot <project-root> -Target claude-code -Json
+```
+
+The representation is a `managed-copy`. Each derived Skill directory contains
+`.agent-ecosystem-adapter.json` with `lifecycle=derived` and a deterministic
+payload SHA-256. The digest covers normalized relative paths, entry types, raw
+file bytes, and the normalized executable flag; it never uses timestamps or
+absolute paths. Copies retain file bytes, newline/encoding, directory layout,
+and the normalized executable flag on POSIX-like hosts.
+
+`status-adapter` is read-only and reports `absent`, `current`, `stale`,
+`modified/conflict`, or `unknown/invalid-ownership`. Mutations preflight the
+complete target-wide candidate set before writing, build and validate staged
+outputs, replace only unchanged marker-owned outputs, and roll back a failed
+replacement. Unowned, modified, invalid, linked, junction-backed, or reparse
+point content is never overwritten, merged, or deleted. Rebuild retains owned
+source-deleted orphans as `stale`; only explicit `remove-adapter` removes an
+unchanged owned orphan. Runtime uninstall never scans or cleans project
+adapters, and adapter operations never modify `.gitignore` or
+`.git/info/exclude`.

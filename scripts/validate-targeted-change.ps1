@@ -291,7 +291,25 @@ if ([int]$classification.detected_tier -ge 1) {
             -not [bool]$workspaceAuthoringEvidence.public_safe) {
             throw "Project workspace authoring fixtures returned incomplete evidence."
         }
-        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates, {3} discovery scenarios, {4} continuity scenarios, and {5} Slice D authoring scenarios proving canonical-only writes, Analyze read-only behavior, single-authority promotion, and Catalog-only discover writes." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count, [int]$workspaceContinuityEvidence.scenario_count, [int]$workspaceAuthoringEvidence.scenario_count)
+        $workspaceAdapterOutput = @(
+            & (Join-Path $scriptDir "validation/project-workspace-adapter-checks.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "workspace-adapter") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Project workspace adapter fixtures failed.`n$workspaceAdapterOutput"
+        }
+        $workspaceAdapterEvidence = $workspaceAdapterOutput | ConvertFrom-Json
+        if ([int]$workspaceAdapterEvidence.schema_version -ne 1 -or
+            [string]$workspaceAdapterEvidence.status -cne "PASS" -or
+            [int]$workspaceAdapterEvidence.scenario_count -lt 15 -or
+            [int]$workspaceAdapterEvidence.pass -ne [int]$workspaceAdapterEvidence.scenario_count -or
+            [int]$workspaceAdapterEvidence.fail -ne 0 -or
+            -not [bool]$workspaceAdapterEvidence.cross_platform_contract) {
+            throw "Project workspace adapter fixtures returned incomplete evidence."
+        }
+        Add-Result "workspace-assets" "PASS" ("Executed {0} parser scenarios across {1} asset types and {2} canonical templates, {3} discovery scenarios, {4} continuity scenarios, {5} Slice D authoring scenarios, and {6} G1 adapter scenarios proving explicit managed-copy lifecycle and cross-platform fail-closed behavior." -f [int]$workspaceEvidence.scenario_count, [int]$workspaceEvidence.asset_type_count, [int]$workspaceEvidence.template_count, [int]$workspaceDiscoveryEvidence.scenario_count, [int]$workspaceContinuityEvidence.scenario_count, [int]$workspaceAuthoringEvidence.scenario_count, [int]$workspaceAdapterEvidence.scenario_count)
         $executedSuites.Add("workspace-assets")
     }
     if ($requiredSuites -contains "project-context-gate") {
