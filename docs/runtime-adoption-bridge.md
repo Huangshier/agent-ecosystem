@@ -38,6 +38,15 @@ project-local Skills, and `docs/specs/` remain project-local and are outside
 runtime uninstall ownership. A later unified cutover is a separate decision;
 Slice E does not perform it.
 
+For C3.3, Runtime Skill authority is limited to `project-bootstrap` and
+`project-workspace`. `project-context-gate`, `memory-governance`, and
+`workflow-spec-lite` are retired from C3.3 authority: the candidate profile
+does not install or bridge them and provides no alias, forwarder, or dual-write
+path. They remain installable only through the uncut-over `recommended`,
+`full`, and `dev` profiles as a legacy-only compatibility payload. The legacy
+paths described below therefore apply to those profiles, not to the new C3.3
+authority model.
+
 ## Shared Entry Point
 
 The Workflow Kernel uses `AGENTS.md` at the project root as the canonical

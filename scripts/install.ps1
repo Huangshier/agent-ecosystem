@@ -48,6 +48,11 @@ $kernelSkills = @(
     "workflow-spec-lite",
     "memory-governance"
 )
+$retiredC33AuthoritySkills = @(
+    "project-context-gate",
+    "memory-governance",
+    "workflow-spec-lite"
+)
 
 function Get-PublicSkillNames {
     param([string]$SelectedProfile)
@@ -736,6 +741,18 @@ function Install-DevLinkItem {
 }
 
 $skillNames = @(Get-PublicSkillNames -SelectedProfile $Profile)
+$legacyCompatibilityPayload = if ($Profile -in @("recommended", "full", "dev")) {
+    @($retiredC33AuthoritySkills)
+}
+else {
+    @()
+}
+$c33Authority = if ($Profile -eq "c3-3-candidate") {
+    @("project-bootstrap", "project-workspace")
+}
+else {
+    @()
+}
 $statusProviderFiles = @(
     "status.ps1",
     "lib/path-guard.ps1",
@@ -867,6 +884,12 @@ $manifest = [ordered]@{
         lifecycle = if ($Profile -eq "c3-3-candidate") { "dormant" } else { "not-enabled" }
         default_cutover = $false
         packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1") } else { @() }
+        c3_3_authority = @($c33Authority)
+        legacy_only_compatibility_payload = @($legacyCompatibilityPayload)
+        retired_from_c3_3_authority = @($retiredC33AuthoritySkills)
+        compatibility_aliases = $false
+        automatic_forwarding = $false
+        dual_write = $false
         project_local_authority = "project-local"
         derived_cache = ".agents/.cache/catalog.json"
     }
