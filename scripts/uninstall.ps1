@@ -199,9 +199,16 @@ function Exit-UninstallBlocked {
     }
     else {
         Write-Output "Uninstall blocked. No files were removed."
+        if (@($NestedUnknown).Count -gt 0) {
+            Write-Output ("Nested unknown files: {0}" -f @($NestedUnknown).Count)
+        }
+        if (@($LocallyModified).Count -gt 0) {
+            Write-Output ("Locally modified managed files: {0}" -f @($LocallyModified).Count)
+        }
         foreach ($errorValue in @($OwnershipErrors)) {
             Write-Output ("- {0}" -f $errorValue)
         }
+        Write-Output "The install manifest and install report were preserved."
     }
     exit 2
 }
