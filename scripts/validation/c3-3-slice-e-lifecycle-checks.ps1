@@ -139,12 +139,15 @@ try {
     Assert-SliceE -Condition ([bool]$manifest.workspace.default_cutover -eq $false) -Message "Candidate profile changed default cutover state."
     Assert-SliceE -Condition (@($manifest.skills) -contains "project-workspace") -Message "Candidate runtime does not own packaged project-workspace."
     Assert-SliceE -Condition (@($manifest.items | Where-Object { [string]$_.destination -eq "templates/project" }).Count -eq 1) -Message "Candidate runtime template ownership is missing."
+    Assert-SliceE -Condition (@($manifest.workspace.packaged_content | Where-Object { [string]$_ -ceq "scripts/migrate-project.ps1" }).Count -eq 1) -Message "Candidate runtime migration entrypoint is missing from the workspace contract."
+    Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/migrate-project.ps1") -PathType Leaf) -Message "Candidate runtime did not install the migration entrypoint."
     Assert-SliceE -Condition (@($manifest.items | Where-Object { [string]$_.destination -in @("AGENTS.md", ".agents", "docs/specs") }).Count -eq 0) -Message "Runtime manifest owns a project-local path."
 
     $legacyManifest = Get-Content -LiteralPath (Join-Path $legacyRuntimeRoot "install-manifest.json") -Raw | ConvertFrom-Json -Depth 40
     Assert-SliceE -Condition ([string]$legacyManifest.profile -ceq "recommended") -Message "Recommended profile was not recorded."
     Assert-SliceE -Condition ([string]$legacyManifest.workspace.architecture -ceq "legacy-runtime" -and [string]$legacyManifest.workspace.lifecycle -ceq "not-enabled") -Message "Recommended runtime did not retain the legacy workspace contract."
     Assert-SliceE -Condition ([bool]$legacyManifest.workspace.default_cutover -eq $false) -Message "Recommended runtime changed default cutover state."
+    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $legacyRuntimeRoot "scripts/migrate-project.ps1"))) -Message "Recommended runtime gained the dormant C3.3 migration entrypoint."
 
     $bootstrapScript = Join-Path $runtimeRoot "skills/project-bootstrap/scripts/bootstrap_project.ps1"
     $legacyBootstrapScript = Join-Path $legacyRuntimeRoot "skills/project-bootstrap/scripts/bootstrap_project.ps1"
@@ -230,6 +233,7 @@ try {
     Assert-SliceE -Condition ((@($beforeStatus) -join "`n") -ceq (@($afterStatus) -join "`n")) -Message "Status wrote project state."
     Assert-SliceE -Condition ([string]$status.runtime.manifest_status -ceq "current" -and [string]$status.runtime.profile -ceq "c3-3-candidate") -Message "Status did not report the current candidate runtime."
     Assert-SliceE -Condition ([string]$status.runtime.workspace.architecture -ceq "c3.3" -and [string]$status.runtime.workspace.lifecycle -ceq "dormant" -and [bool]$status.runtime.workspace.default_cutover -eq $false) -Message "Status did not preserve dormant/default-cutover semantics."
+    Assert-SliceE -Condition (@($status.runtime.workspace.packaged_content | Where-Object { [string]$_ -ceq "scripts/migrate-project.ps1" }).Count -eq 1) -Message "Status did not report the packaged migration entrypoint."
     Assert-SliceE -Condition ([string]$status.project.workspace.status -ceq "current" -and [string]$status.project.workspace.layout -ceq "complete" -and [string]$status.project.workspace.runtime_boundary -ceq "separate" -and [string]$status.project.workspace.readiness -ceq "candidate-dormant-ready") -Message "Status did not distinguish project workspace lifecycle facts."
     Assert-SliceE -Condition (@($manifest.skills | Where-Object { [string]$_ -eq "promoted-local" }).Count -eq 0) -Message "Project-local Skill was merged into packaged runtime authority."
 
@@ -304,7 +308,7 @@ try {
 
     $uninstall = Convert-OutputToJson -Invocation (Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot, "-Json"))
     Assert-SliceE -Condition ([string]$uninstall.status -ceq "uninstalled" -and @($uninstall.bridge_removed).Count -ge 2) -Message "Manifest-owned runtime/bridge uninstall did not complete."
-    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json")) -and -not (Test-Path -LiteralPath $bridgeManifestPath) -and -not (Test-Path -LiteralPath (Join-Path $bridgeTargetRoot "project-workspace"))) -Message "Uninstall left owned runtime or bridge content."
+    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json")) -and -not (Test-Path -LiteralPath $bridgeManifestPath) -and -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/migrate-project.ps1")) -and -not (Test-Path -LiteralPath (Join-Path $bridgeTargetRoot "project-workspace"))) -Message "Uninstall left owned runtime or bridge content."
     foreach ($relative in @("AGENTS.md", ".agents/README.md", ".agents/work/real-work.md", ".agents/context/real-context.md", ".agents/procedures/real-procedure.md", ".agents/skills/promoted-local/SKILL.md", "docs/specs/real-spec/spec.md")) {
         Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $projectRoot $relative) -PathType Leaf) -Message "Uninstall deleted project-local asset $relative."
     }

@@ -725,12 +725,14 @@ function Set-RuntimeWorkspaceStatus {
     $packagedContent = Get-ManifestPropertyValue -Manifest $declared -Name "packaged_content"
     $projectAuthority = Get-ManifestPropertyValue -Manifest $declared -Name "project_local_authority"
     $derivedCache = Get-ManifestPropertyValue -Manifest $declared -Name "derived_cache"
+    $expectedPackagedContent = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
     $valid = (Test-ManifestObject -Value $declared) -and
         $architecture -is [string] -and [string]$architecture -ceq "c3.3" -and
         $lifecycle -is [string] -and [string]$lifecycle -ceq "dormant" -and
         $defaultCutover -is [bool] -and -not [bool]$defaultCutover -and
         $packagedContent -is [System.Array] -and
-        @($packagedContent | Where-Object { [string]$_ -in @("skills/project-workspace", "templates/project") }).Count -eq 2 -and
+        @($packagedContent).Count -eq 3 -and
+        @($expectedPackagedContent | Where-Object { @($packagedContent) -ccontains $_ }).Count -eq 3 -and
         $projectAuthority -is [string] -and [string]$projectAuthority -ceq "project-local" -and
         $derivedCache -is [string] -and [string]$derivedCache -ceq ".agents/.cache/catalog.json"
     if (-not $valid) {
@@ -746,7 +748,7 @@ function Set-RuntimeWorkspaceStatus {
     $workspace.architecture = "c3.3"
     $workspace.lifecycle = "dormant"
     $workspace.default_cutover = $false
-    $workspace.packaged_content = @("skills/project-workspace", "templates/project")
+    $workspace.packaged_content = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
     $workspace.ownership = "manifest-scoped"
 }
 

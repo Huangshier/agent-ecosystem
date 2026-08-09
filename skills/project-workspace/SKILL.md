@@ -65,6 +65,35 @@ is a Procedure publication form. It is read by an internal discover projection
 reader, not by the canonical parser, and it is not a fifth canonical project
 asset authority.
 
+## Legacy project migration
+
+Legacy migration uses the Runtime-level `scripts/migrate-project.ps1` entrypoint
+and is never triggered by bootstrap, install, update, status, discover, or
+uninstall:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File scripts/migrate-project.ps1 -Mode Analyze -ProjectRoot <project-root> -Json
+pwsh -NoProfile -NonInteractive -File scripts/migrate-project.ps1 -Mode Apply -ProjectRoot <project-root> -AnalyzeEvidence <analyze-json> -ConfirmMigration -Json
+pwsh -NoProfile -NonInteractive -File scripts/migrate-project.ps1 -Mode Rollback -ProjectRoot <project-root> -BackupId <backup-id> -ConfirmRollback -Json
+```
+
+Analyze is deterministic and strictly read-only. Its caller-held JSON evidence
+binds the declared Work / Context / Procedure / Spec plan to every
+migration-relevant source, target, project-language, workspace-model, and
+project-local state. Apply rejects missing, unconfirmed, ambiguous, unsupported,
+or stale evidence before writing. It creates and verifies a complete
+project-owned backup under `.agents/.migration-backups/` before changing any
+migration target, then records the exact expected post-Apply state.
+
+Rollback keeps the backup and restores only an unchanged migrated project. It
+first verifies backup integrity, Apply identity, and the complete expected
+post-Apply state; any later Work, Context, Procedure, Spec, project-local Skill,
+language, workspace metadata, or other migration-relevant edit makes rollback
+fail closed. Rollback never changes the Runtime installation, merges content,
+or restores packaged Runtime files as project authority. Unsupported or
+ambiguous legacy material remains a human-disposition finding and is not
+promoted into a fifth asset type.
+
 ## Deterministic discovery contract
 
 - The default result limit is exactly `5`; callers may request `1..100`.
@@ -138,8 +167,9 @@ internal scripts are not additional commands or Skills. The explicit
 the capability remains dormant and does not change default bootstrap/runtime
 selection.
 
-The workspace surface does not provide orchestration, migration, client
-adapters, releases, automatic Skill calls, Skill chains, or schedulers. Work
-and authoring mutations never synchronously write the disposable Catalog;
+The workspace dispatcher does not trigger migration and does not provide
+orchestration, client adapters, releases, automatic Skill calls, Skill chains,
+or schedulers. Migration remains an explicit Runtime-level Analyze / Apply /
+Rollback entrypoint. Work and authoring mutations never synchronously write the disposable Catalog;
 the next `discover` observes canonical create/update/delete state and refreshes
 that cache when needed, while `check` remains strictly read-only.
