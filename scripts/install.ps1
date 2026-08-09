@@ -741,13 +741,17 @@ $statusProviderFiles = @(
     "lib/path-guard.ps1",
     "lib/runtime-status-action.ps1"
 )
+$runtimeProviderFiles = @($statusProviderFiles)
+if ($Profile -eq "c3-3-candidate") {
+    $runtimeProviderFiles += "migrate-project.ps1"
+}
 $installStatusProvider = $installStrategy -eq "copy" -and ("project-context-gate" -in $skillNames -or $Profile -eq "c3-3-candidate")
 $managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
 if ($Profile -eq "c3-3-candidate") {
     $managedSourcePaths += "templates/project"
 }
 if ($installStatusProvider) {
-    $managedSourcePaths += @($statusProviderFiles | ForEach-Object { "scripts/$_" })
+    $managedSourcePaths += @($runtimeProviderFiles | ForEach-Object { "scripts/$_" })
 }
 $sourceProvenance = Get-InstallerSourceProvenance -SourceRoot $repoRoot -ManagedSourcePaths $managedSourcePaths
 $itemSpecs = New-Object 'System.Collections.Generic.List[object]'
@@ -775,7 +779,7 @@ if ($installStatusProvider) {
             name = "runtime-status-provider"
             source = "scripts"
             destination = "scripts"
-            included_source_files = @($statusProviderFiles)
+            included_source_files = @($runtimeProviderFiles)
         })
     $desiredItemNames["runtime-status-provider"] = $true
 }
@@ -862,7 +866,7 @@ $manifest = [ordered]@{
         architecture = if ($Profile -eq "c3-3-candidate") { "c3.3" } else { "legacy-runtime" }
         lifecycle = if ($Profile -eq "c3-3-candidate") { "dormant" } else { "not-enabled" }
         default_cutover = $false
-        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "templates/project") } else { @() }
+        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1") } else { @() }
         project_local_authority = "project-local"
         derived_cache = ".agents/.cache/catalog.json"
     }
