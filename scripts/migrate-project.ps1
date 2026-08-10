@@ -458,8 +458,10 @@ function Resolve-ReviewedDisposition {
         [string](Get-HashtableValue $reviewed "plan_digest") -cne [string](Get-HashtableValue (Get-HashtableValue $Candidate "plan") "plan_digest")) { throw "DISPOSITION_EVIDENCE_STALE" }
 
     $candidateHuman = @((Get-HashtableValue $Candidate "human_disposition"))
-    $suppliedHumanValue = Get-HashtableValue $reviewed "human_disposition"
-    $decisionsValue = Get-HashtableValue $reviewed "decisions"
+    # Read array-valued fields directly so a single JSON element stays an
+    # IList without accepting an object where the schema requires an array.
+    $suppliedHumanValue = $reviewed["human_disposition"]
+    $decisionsValue = $reviewed["decisions"]
     if ($suppliedHumanValue -isnot [Collections.IList] -or $suppliedHumanValue -is [string] -or
         $decisionsValue -isnot [Collections.IList] -or $decisionsValue -is [string]) { throw "DISPOSITION_EVIDENCE_INVALID" }
     if ($candidateHuman.Count -eq 0) { throw "DISPOSITION_DECISION_EXTRA" }
@@ -567,12 +569,28 @@ function Resolve-ReviewedDisposition {
                 Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "target", "content") @("path", "reason_code", "disposition", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
                 $target = [string](Get-HashtableValue $decision "target")
                 $contentValue = Get-HashtableValue $decision "content"
-                if ($path -cne "AGENTS.md" -or $reason -cne "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED") { throw "DISPOSITION_UNSUPPORTED" }
+                if ($path -cnotin @("AGENTS.md", ".agents/AGENTS.md") -or $reason -cne "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED") { throw "DISPOSITION_UNSUPPORTED" }
                 if ($target -cne "AGENTS.md") { throw "DISPOSITION_TARGET_INVALID" }
                 if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
                 if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
-                Add-PlanAction $resolvedActions "change" $target @($path) ([string]$contentValue) "REVIEWED_ROOT_CONTRACT_REPLACED"
-                $actionPaths[$target] = $true
+                if ($path -ceq ".agents/AGENTS.md") {
+                    $candidateRootActions = @((Get-HashtableValue (Get-HashtableValue $Candidate "plan") "actions") | Where-Object { [string](Get-HashtableValue $_ "path") -ceq "AGENTS.md" })
+                    if ($candidateRootActions.Count -ne 1 -or
+                        [string](Get-HashtableValue $candidateRootActions[0] "action") -cne "change" -or
+                        [string](Get-HashtableValue $candidateRootActions[0] "reason_code") -cne "LEGACY_ENTRYPOINT_REPLACED") { throw "DISPOSITION_TARGET_COLLISION" }
+                    $resolvedRootIndexes = @(0..($resolvedActions.Count - 1) | Where-Object { [string](Get-HashtableValue $resolvedActions[$_] "path") -ceq "AGENTS.md" })
+                    if ($resolvedRootIndexes.Count -ne 1) { throw "DISPOSITION_TARGET_COLLISION" }
+                    $resolvedActions.RemoveAt([int]$resolvedRootIndexes[0])
+                    [void]$actionPaths.Remove("AGENTS.md")
+                    Add-PlanAction $resolvedActions "change" $target @("AGENTS.md", $path) ([string]$contentValue) "REVIEWED_ROOT_CONTRACT_REPLACED"
+                    $actionPaths[$target] = $true
+                    Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                    $actionPaths[$path] = $true
+                }
+                else {
+                    Add-PlanAction $resolvedActions "change" $target @($path) ([string]$contentValue) "REVIEWED_ROOT_CONTRACT_REPLACED"
+                    $actionPaths[$target] = $true
+                }
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; target = $target; content = [string]$contentValue })
             }
             "create-context-and-retire-sources" {

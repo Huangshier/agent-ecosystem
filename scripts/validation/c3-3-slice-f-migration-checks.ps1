@@ -751,6 +751,46 @@ evidence:
     }
 }
 
+function Set-RecognizedRootCustomNestedFixture {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $trustedRoot = @"
+# Proven legacy root contract
+
+This public fixture root is trusted only through completed language-migration provenance.
+"@
+    $sentinel = "reviewed-nested-authority-sentinel"
+    $legacyNested = [IO.File]::ReadAllText((Join-Path $Root ".agents/AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    $customNested = $legacyNested + "`n- Preserve the $sentinel rule in the final root contract.`n"
+    $canonicalRoot = [IO.File]::ReadAllText((Join-Path $c33TemplateRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)).TrimEnd()
+    $finalRoot = $canonicalRoot + "`n- Preserve the $sentinel rule in the final root contract.`n"
+    Write-Utf8NoBom -Path (Join-Path $Root "AGENTS.md") -Text $trustedRoot
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/AGENTS.md") -Text $customNested
+    [void](Set-LanguageMigrationProvenance -Root $Root -Actions @([ordered]@{ relative_path = "AGENTS.md"; action = "replace-template"; manual_review = $false }))
+    return [ordered]@{ root_before = $trustedRoot; nested_before = $customNested; final_root = $finalRoot; sentinel = $sentinel }
+}
+
+function New-RecognizedRootDispositionEvidence {
+    param(
+        [Parameter(Mandatory = $true)][object]$Analyze,
+        [Parameter(Mandatory = $true)][string]$FinalRootContent
+    )
+
+    return [ordered]@{
+        schema_version = 1
+        project_root = [string]$Analyze.evidence.project_root
+        migration_revision = [string]$Analyze.migration_revision
+        state_digest = [string]$Analyze.evidence.state_digest
+        plan_digest = [string]$Analyze.plan.plan_digest
+        human_disposition = @($Analyze.human_disposition | Sort-Object path, reason_code | ForEach-Object {
+                [ordered]@{ path = [string]$_.path; reason_code = [string]$_.reason_code }
+            })
+        decisions = @(
+            [ordered]@{ path = ".agents/AGENTS.md"; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED"; disposition = "replace-root-contract"; target = "AGENTS.md"; content = $FinalRootContent }
+        )
+    }
+}
+
 function Copy-Fixture {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -860,6 +900,10 @@ $evidence = [ordered]@{
     reviewed_disposition_apply = $false
     reviewed_disposition_rollback = $false
     reviewed_disposition_stale = $false
+    recognized_root_nested_merge = $false
+    recognized_root_nested_backup = $false
+    recognized_root_nested_rollback = $false
+    recognized_root_nested_fail_closed = $false
 }
 
 try {
@@ -1296,6 +1340,107 @@ No compatibility mirror.
         (Test-Path -LiteralPath (Join-Path $reviewedRoot (Join-Path ".agents/.migration-backups" $reviewedBackupId)) -PathType Container))
     Add-Case -Name "reviewed-disposition-rollback-exact" -Passed $reviewedRollbackPass -Detail ("Reviewed Rollback exit={0} status={1} reasons={2} backup={3}." -f $reviewedRolledBack.exit_code, (Get-StatusText $reviewedRolledBack.payload), (@($reviewedRolledBack.payload.reason_codes) -join ','), $reviewedBackupId)
     $evidence.reviewed_disposition_rollback = $reviewedRollbackPass
+
+    # A provenance-recognized root already has one automatic replacement
+    # action.  A custom nested authority may replace that action with the full
+    # reviewed final root contract while retiring itself in the same decision.
+    $recognizedRoot = Join-Path $scratchRoot "recognized-root-custom-nested"
+    Copy-Fixture -Source $pristineRoot -Destination $recognizedRoot
+    $recognizedFixture = Set-RecognizedRootCustomNestedFixture -Root $recognizedRoot
+    $recognizedBeforeSnapshot = Get-FileSnapshot -Root $recognizedRoot
+    $recognizedBeforeDirectories = @(Get-DirectorySnapshot -Root $recognizedRoot)
+    $recognizedBeforeTree = Get-TreeFingerprint -Root $recognizedRoot
+    $recognizedCandidate = Invoke-Migration -Mode "Analyze" -ProjectRoot $recognizedRoot
+    $recognizedCandidateRootActions = @($recognizedCandidate.payload.plan.actions | Where-Object { [string]$_.path -ceq "AGENTS.md" })
+    $recognizedCandidateShape = (
+        (Test-InvocationBlocked -Invocation $recognizedCandidate) -and
+        @($recognizedCandidate.payload.human_disposition).Count -eq 1 -and
+        [string]$recognizedCandidate.payload.human_disposition[0].path -ceq ".agents/AGENTS.md" -and
+        [string]$recognizedCandidate.payload.human_disposition[0].reason_code -ceq "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED" -and
+        $recognizedCandidateRootActions.Count -eq 1 -and
+        [string]$recognizedCandidateRootActions[0].action -ceq "change" -and
+        [string]$recognizedCandidateRootActions[0].reason_code -ceq "LEGACY_ENTRYPOINT_REPLACED"
+    )
+    $recognizedDisposition = New-RecognizedRootDispositionEvidence -Analyze $recognizedCandidate.payload -FinalRootContent ([string]$recognizedFixture.final_root)
+    $recognizedDispositionJson = Get-CanonicalJson -Payload $recognizedDisposition
+    $recognizedResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $recognizedRoot -DispositionEvidence $recognizedDispositionJson
+    $recognizedResolvedRootActions = @($recognizedResolved.payload.plan.actions | Where-Object { [string]$_.path -ceq "AGENTS.md" })
+    $recognizedResolvedNestedActions = @($recognizedResolved.payload.plan.actions | Where-Object { [string]$_.path -ceq ".agents/AGENTS.md" })
+    $recognizedResolvedPass = ($recognizedCandidateShape -and (Test-InvocationPass -Invocation $recognizedResolved) -and [bool]$recognizedResolved.payload.eligible -and
+        $recognizedResolvedRootActions.Count -eq 1 -and [string]$recognizedResolvedRootActions[0].action -ceq "change" -and
+        [string]$recognizedResolvedRootActions[0].reason_code -ceq "REVIEWED_ROOT_CONTRACT_REPLACED" -and
+        [string]$recognizedResolvedRootActions[0].content -ceq [string]$recognizedFixture.final_root -and
+        $recognizedResolvedNestedActions.Count -eq 1 -and [string]$recognizedResolvedNestedActions[0].action -ceq "remove" -and
+        $recognizedBeforeTree -ceq (Get-TreeFingerprint -Root $recognizedRoot) -and @((Get-BackupFiles -ProjectRoot $recognizedRoot)).Count -eq 0)
+    Add-Case -Name "recognized-root-custom-nested-resolved-plan" -Passed $recognizedResolvedPass -Detail ("Candidate shape={0}; resolved exit={1} status={2} root_actions={3} nested_actions={4}." -f $recognizedCandidateShape, $recognizedResolved.exit_code, (Get-StatusText $recognizedResolved.payload), $recognizedResolvedRootActions.Count, $recognizedResolvedNestedActions.Count)
+    $evidence.recognized_root_nested_merge = $recognizedResolvedPass
+
+    $recognizedApplied = Invoke-Migration -Mode "Apply" -ProjectRoot $recognizedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $recognizedResolved.payload) -DispositionEvidence $recognizedDispositionJson -ConfirmMigration
+    $recognizedBackupId = Get-BackupIdFromResult -Payload $recognizedApplied.payload
+    $recognizedBackupPath = Get-BackupPathFromResult -ProjectRoot $recognizedRoot -Payload $recognizedApplied.payload
+    $recognizedManifest = if (Test-Path -LiteralPath $recognizedBackupPath -PathType Leaf) { Get-Content -LiteralPath $recognizedBackupPath -Raw | ConvertFrom-Json -Depth 100 } else { $null }
+    $recognizedRootBackup = @($recognizedManifest.pre_state | Where-Object { [string]$_.path -ceq "AGENTS.md" })
+    $recognizedNestedBackup = @($recognizedManifest.pre_state | Where-Object { [string]$_.path -ceq ".agents/AGENTS.md" })
+    $recognizedBackupPass = ((Test-InvocationPass -Invocation $recognizedApplied) -and (Test-BackupBeforeApply -Payload $recognizedApplied.payload -ProjectRoot $recognizedRoot) -and
+        $recognizedRootBackup.Count -eq 1 -and [string]$recognizedRootBackup[0].content_base64 -ceq [string]$recognizedBeforeSnapshot["AGENTS.md"] -and
+        $recognizedNestedBackup.Count -eq 1 -and [string]$recognizedNestedBackup[0].content_base64 -ceq [string]$recognizedBeforeSnapshot[".agents/AGENTS.md"])
+    $recognizedAppliedRoot = [IO.File]::ReadAllText((Join-Path $recognizedRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    $recognizedApplyPass = ($recognizedBackupPass -and [string]$recognizedApplied.payload.workspace_check -ceq "PASS" -and
+        $recognizedAppliedRoot -ceq [string]$recognizedFixture.final_root -and $recognizedAppliedRoot -match [regex]::Escape([string]$recognizedFixture.sentinel) -and
+        -not (Test-Path -LiteralPath (Join-Path $recognizedRoot ".agents/AGENTS.md")))
+    Add-Case -Name "recognized-root-custom-nested-apply-backup" -Passed $recognizedApplyPass -Detail ("Apply exit={0} workspace={1} backup={2} root_backed={3} nested_backed={4}." -f $recognizedApplied.exit_code, [string]$recognizedApplied.payload.workspace_check, $recognizedBackupId, ($recognizedRootBackup.Count -eq 1), ($recognizedNestedBackup.Count -eq 1))
+    $evidence.recognized_root_nested_backup = $recognizedApplyPass
+
+    $recognizedRolledBack = Invoke-Migration -Mode "Rollback" -ProjectRoot $recognizedRoot -BackupId $recognizedBackupId -ConfirmRollback
+    $recognizedRollbackPass = ((Test-InvocationPass -Invocation $recognizedRolledBack) -and
+        (Test-SnapshotEqual -Before $recognizedBeforeSnapshot -After (Get-FileSnapshot -Root $recognizedRoot)) -and
+        ($recognizedBeforeDirectories -join "`n") -ceq ((Get-DirectorySnapshot -Root $recognizedRoot) -join "`n") -and
+        (Test-Path -LiteralPath (Join-Path $recognizedRoot (Join-Path ".agents/.migration-backups" $recognizedBackupId)) -PathType Container))
+    Add-Case -Name "recognized-root-custom-nested-rollback-exact" -Passed $recognizedRollbackPass -Detail ("Rollback exit={0} status={1} backup={2}." -f $recognizedRolledBack.exit_code, (Get-StatusText $recognizedRolledBack.payload), $recognizedBackupId)
+    $evidence.recognized_root_nested_rollback = $recognizedRollbackPass
+
+    $missingRootAction = Join-Path $scratchRoot "recognized-root-missing-auto-action"
+    Copy-Fixture -Source $pristineRoot -Destination $missingRootAction
+    $missingRootFixture = Set-RecognizedRootCustomNestedFixture -Root $missingRootAction
+    $missingLockPath = Join-Path $missingRootAction ".agents/hub.lock.json"
+    $missingLock = Get-Content -LiteralPath $missingLockPath -Raw | ConvertFrom-Json -AsHashtable -Depth 30
+    [void]$missingLock.Remove("language_migration")
+    Write-Utf8NoBom -Path $missingLockPath -Text ($missingLock | ConvertTo-Json -Depth 30)
+    $missingRootAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $missingRootAction
+    $missingRootEvidence = New-RecognizedRootDispositionEvidence -Analyze $missingRootAnalyze.payload -FinalRootContent ([string]$missingRootFixture.final_root)
+    $missingRootEvidence.decisions = @($missingRootEvidence.decisions) + @([ordered]@{ path = "AGENTS.md"; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED"; disposition = "replace-root-contract"; target = "AGENTS.md"; content = [string]$missingRootFixture.final_root })
+    $missingRootBefore = Get-TreeFingerprint -Root $missingRootAction
+    $missingRootResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $missingRootAction -DispositionEvidence (Get-CanonicalJson -Payload $missingRootEvidence)
+    $missingRootClosed = ((Test-InvocationBlocked -Invocation $missingRootResolved) -and $missingRootResolved.text -match "DISPOSITION_TARGET_COLLISION" -and
+        $missingRootBefore -ceq (Get-TreeFingerprint -Root $missingRootAction) -and @((Get-BackupFiles -ProjectRoot $missingRootAction)).Count -eq 0)
+    Add-Case -Name "recognized-root-missing-auto-action-fails-closed" -Passed $missingRootClosed -Detail ("Missing automatic root action exit={0} reasons={1}." -f $missingRootResolved.exit_code, (@($missingRootResolved.payload.reason_codes) -join ','))
+
+    $collidingRootAction = Join-Path $scratchRoot "recognized-root-colliding-auto-action"
+    Copy-Fixture -Source $pristineRoot -Destination $collidingRootAction
+    $collidingRootFixture = Set-RecognizedRootCustomNestedFixture -Root $collidingRootAction
+    Write-Utf8NoBom -Path (Join-Path $collidingRootAction "AGENTS.md") -Text ([IO.File]::ReadAllText((Join-Path $c33TemplateRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)))
+    $collidingRootAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $collidingRootAction
+    $collidingRootEvidence = New-RecognizedRootDispositionEvidence -Analyze $collidingRootAnalyze.payload -FinalRootContent ([string]$collidingRootFixture.final_root)
+    $collidingRootBefore = Get-TreeFingerprint -Root $collidingRootAction
+    $collidingRootResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $collidingRootAction -DispositionEvidence (Get-CanonicalJson -Payload $collidingRootEvidence)
+    $collidingRootClosed = ((Test-InvocationBlocked -Invocation $collidingRootResolved) -and $collidingRootResolved.text -match "DISPOSITION_TARGET_COLLISION" -and
+        $collidingRootBefore -ceq (Get-TreeFingerprint -Root $collidingRootAction) -and @((Get-BackupFiles -ProjectRoot $collidingRootAction)).Count -eq 0)
+    Add-Case -Name "recognized-root-unexpected-auto-action-fails-closed" -Passed $collidingRootClosed -Detail ("Unexpected automatic root action exit={0} reasons={1}." -f $collidingRootResolved.exit_code, (@($collidingRootResolved.payload.reason_codes) -join ','))
+
+    $staleRecognizedRoot = Join-Path $scratchRoot "recognized-root-stale-nested"
+    Copy-Fixture -Source $pristineRoot -Destination $staleRecognizedRoot
+    $staleRecognizedFixture = Set-RecognizedRootCustomNestedFixture -Root $staleRecognizedRoot
+    $staleRecognizedAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleRecognizedRoot
+    $staleRecognizedEvidence = New-RecognizedRootDispositionEvidence -Analyze $staleRecognizedAnalyze.payload -FinalRootContent ([string]$staleRecognizedFixture.final_root)
+    $staleRecognizedEvidenceJson = Get-CanonicalJson -Payload $staleRecognizedEvidence
+    $staleRecognizedResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleRecognizedRoot -DispositionEvidence $staleRecognizedEvidenceJson
+    Add-Content -LiteralPath (Join-Path $staleRecognizedRoot ".agents/AGENTS.md") -Value "`nMutation after resolved Analyze.`n"
+    $staleRecognizedBeforeApply = Get-TreeFingerprint -Root $staleRecognizedRoot
+    $staleRecognizedApply = Invoke-Migration -Mode "Apply" -ProjectRoot $staleRecognizedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $staleRecognizedResolved.payload) -DispositionEvidence $staleRecognizedEvidenceJson -ConfirmMigration
+    $staleRecognizedClosed = ((Test-InvocationBlocked -Invocation $staleRecognizedApply) -and $staleRecognizedApply.text -match "DISPOSITION_EVIDENCE_STALE" -and
+        $staleRecognizedBeforeApply -ceq (Get-TreeFingerprint -Root $staleRecognizedRoot) -and @((Get-BackupFiles -ProjectRoot $staleRecognizedRoot)).Count -eq 0)
+    Add-Case -Name "recognized-root-stale-nested-evidence-fails-closed" -Passed $staleRecognizedClosed -Detail ("Stale nested evidence exit={0} reasons={1}." -f $staleRecognizedApply.exit_code, (@($staleRecognizedApply.payload.reason_codes) -join ','))
+    $evidence.recognized_root_nested_fail_closed = ($missingRootClosed -and $collidingRootClosed -and $staleRecognizedClosed)
 
     # Apply requires both the reviewed Analyze JSON and explicit confirmation.
     $missingEvidenceBefore = Get-TreeFingerprint -Root $baseRoot
