@@ -276,6 +276,7 @@ function Invoke-Migration {
         [Parameter(Mandatory = $true)][string]$Mode,
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
         [string]$AnalyzeEvidence = "",
+        [string]$DispositionEvidence = "",
         [string]$BackupId = "",
         [string]$ScriptPath = $migrationScript,
         [switch]$ConfirmMigration,
@@ -285,6 +286,9 @@ function Invoke-Migration {
     $arguments = @("-Mode", $Mode, "-ProjectRoot", $ProjectRoot, "-Json")
     if (-not [string]::IsNullOrWhiteSpace($AnalyzeEvidence)) {
         $arguments += @("-AnalyzeEvidence", $AnalyzeEvidence)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DispositionEvidence)) {
+        $arguments += @("-DispositionEvidence", $DispositionEvidence)
     }
     if (-not [string]::IsNullOrWhiteSpace($BackupId)) {
         $arguments += @("-BackupId", $BackupId)
@@ -337,6 +341,12 @@ function Get-CanonicalJson {
 
     if ($null -eq $Payload) { return "" }
     return ($Payload | ConvertTo-Json -Depth 100 -Compress)
+}
+
+function Copy-JsonObject {
+    param([Parameter(Mandatory = $true)][object]$Value)
+
+    return ((Get-CanonicalJson -Payload $Value) | ConvertFrom-Json -AsHashtable -Depth 100)
 }
 
 function Get-StringLeaves {
@@ -661,6 +671,86 @@ Keep this local Skill unchanged.
     Write-Utf8NoBom -Path (Join-Path $Root "project-owned.txt") -Text "Project-owned sentinel; migration must not overwrite it.`n"
 }
 
+function Set-ReviewedDispositionFixture {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $rootContract = [IO.File]::ReadAllText((Join-Path $Root "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    Write-Utf8NoBom -Path (Join-Path $Root "AGENTS.md") -Text ($rootContract + "`nProject-specific legacy root behavior awaiting reviewed replacement.`n")
+    $projectAgent = [IO.File]::ReadAllText((Join-Path $Root ".agents/AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/AGENTS.md") -Text ($projectAgent + "`nReviewed legacy authority customization.`n")
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/process.txt") -Text @"
+# Completed process record
+
+The bounded public fixture migration review finished before this migration candidate.
+This file remains useful historical evidence but is not durable authority.
+"@
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/plan.md") -Text @"
+# Retired planning record
+
+All listed actions were completed in a prior session.
+This file is retained only as non-authority project history.
+"@
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/notes.md") -Text @"
+# Legacy review notes
+
+The reviewer retained one source policy and one evidence-routing fact.
+These lines require deliberate consolidation and must not be inferred automatically.
+"@
+    $oldContext = Join-Path $Root ".agents/context/verified-context.md"
+    if (Test-Path -LiteralPath $oldContext -PathType Leaf) { [IO.File]::Delete($oldContext) }
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/context/legacy-stable-facts.md") -Text @"
+# Legacy stable facts
+
+The public fixture has one stable implementation fact and one compatibility boundary.
+The reviewed target must consolidate these bytes with the separate legacy notes source.
+"@
+}
+
+function New-ReviewedDispositionEvidence {
+    param([Parameter(Mandatory = $true)][object]$Analyze)
+
+    $human = @($Analyze.human_disposition | Sort-Object path, reason_code | ForEach-Object {
+            [ordered]@{ path = [string]$_.path; reason_code = [string]$_.reason_code }
+        })
+    $rootTarget = [IO.File]::ReadAllText((Join-Path $c33TemplateRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true))
+    $contextTarget = @"
+---
+schema: agent-ecosystem/context/v1
+id: reviewed-legacy-facts
+title: "Reviewed legacy facts"
+status: active
+updated: 2026-01-01T00:00:00Z
+summary: "Consolidated public fixture facts approved by a maintainer."
+keywords:
+  - "migration"
+  - "reviewed-disposition"
+evidence:
+  - "Reviewed from .agents/context/legacy-stable-facts.md and .agents/notes.md"
+---
+
+# Reviewed legacy facts
+
+- The fixture migration boundary is project-local.
+- Historical notes remain evidence, not a second durable authority.
+"@.TrimStart()
+    return [ordered]@{
+        schema_version = 1
+        project_root = [string]$Analyze.evidence.project_root
+        migration_revision = [string]$Analyze.migration_revision
+        state_digest = [string]$Analyze.evidence.state_digest
+        plan_digest = [string]$Analyze.plan.plan_digest
+        human_disposition = $human
+        decisions = @(
+            [ordered]@{ path = "AGENTS.md"; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED"; disposition = "replace-root-contract"; target = "AGENTS.md"; content = $rootTarget },
+            [ordered]@{ path = ".agents/AGENTS.md"; reason_code = "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED"; disposition = "retire-legacy-source" },
+            [ordered]@{ path = ".agents/process.txt"; reason_code = "LEGACY_WORK_NOT_DETERMINISTIC"; disposition = "preserve-non-authority" },
+            [ordered]@{ path = ".agents/plan.md"; reason_code = "LEGACY_WORK_NOT_DETERMINISTIC"; disposition = "preserve-non-authority" },
+            [ordered]@{ path = ".agents/context/legacy-stable-facts.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "create-context-and-retire-sources"; source_paths = @(".agents/context/legacy-stable-facts.md", ".agents/notes.md"); target = ".agents/context/reviewed-legacy-facts.md"; content = $contextTarget },
+            [ordered]@{ path = ".agents/notes.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "retire-legacy-source" }
+        )
+    }
+}
+
 function Copy-Fixture {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -764,6 +854,12 @@ $evidence = [ordered]@{
     immediate_spec_canonical = $false
     unsupported_nested_spec_rejected = $false
     non_authority_backup_scope = $false
+    reviewed_disposition_resolved_plan = $false
+    reviewed_disposition_fail_closed = $false
+    reviewed_disposition_backup_order = $false
+    reviewed_disposition_apply = $false
+    reviewed_disposition_rollback = $false
+    reviewed_disposition_stale = $false
 }
 
 try {
@@ -1051,6 +1147,155 @@ No compatibility mirror.
     }
     Add-Case -Name "modified-legacy-scaffold-fails-closed" -Passed $scaffoldConflictPass -Detail "Modified root or project-agent legacy authority is routed to HUMAN_DISPOSITION_REQUIRED; Analyze and Apply preserve it without backup or target writes."
     $evidence.scaffold_conflict = $scaffoldConflictPass
+
+    # Reviewed human dispositions are explicit, candidate-bound input.  The
+    # fixture is public-only and models custom legacy authority, completed
+    # process/plan history, and two Context sources consolidated into one.
+    $reviewedRoot = Join-Path $scratchRoot "reviewed-disposition"
+    Copy-Fixture -Source $pristineRoot -Destination $reviewedRoot
+    Set-ReviewedDispositionFixture -Root $reviewedRoot
+    $reviewedBefore = Get-FileSnapshot -Root $reviewedRoot
+    $reviewedBeforeTree = Get-TreeFingerprint -Root $reviewedRoot
+    $reviewedCandidate = Invoke-Migration -Mode "Analyze" -ProjectRoot $reviewedRoot
+    $expectedReviewedHuman = @(
+        "AGENTS.md:SCAFFOLD_CUSTOM_OR_UNRECOGNIZED",
+        ".agents/AGENTS.md:SCAFFOLD_CUSTOM_OR_UNRECOGNIZED",
+        ".agents/process.txt:LEGACY_WORK_NOT_DETERMINISTIC",
+        ".agents/plan.md:LEGACY_WORK_NOT_DETERMINISTIC",
+        ".agents/context/legacy-stable-facts.md:CONTEXT_MARKERS_MISSING",
+        ".agents/notes.md:CONTEXT_MARKERS_MISSING"
+    ) | Sort-Object
+    $actualReviewedHuman = @($reviewedCandidate.payload.human_disposition | ForEach-Object { "{0}:{1}" -f $_.path, $_.reason_code } | Sort-Object)
+    $blockedWithoutDisposition = Invoke-Migration -Mode "Apply" -ProjectRoot $reviewedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $reviewedCandidate.payload) -ConfirmMigration
+    $blockedCandidatePass = ((Test-InvocationBlocked -Invocation $reviewedCandidate) -and
+        @($reviewedCandidate.payload.reason_codes) -ccontains "HUMAN_DISPOSITION_REQUIRED" -and
+        ($actualReviewedHuman -join "`n") -ceq ($expectedReviewedHuman -join "`n") -and
+        (Test-InvocationBlocked -Invocation $blockedWithoutDisposition) -and
+        $reviewedBeforeTree -ceq (Get-TreeFingerprint -Root $reviewedRoot) -and @((Get-BackupFiles -ProjectRoot $reviewedRoot)).Count -eq 0)
+    Add-Case -Name "blocked-analyze-without-disposition-stays-blocked" -Passed $blockedCandidatePass -Detail "A blocked Analyze remains non-applicable without reviewed disposition evidence and creates no backup or target mutation."
+
+    $reviewedEvidenceObject = New-ReviewedDispositionEvidence -Analyze $reviewedCandidate.payload
+    $reviewedEvidenceJson = Get-CanonicalJson -Payload $reviewedEvidenceObject
+    $reviewedCandidateFresh = Invoke-Migration -Mode "Analyze" -ProjectRoot $reviewedRoot
+    $reviewedBindingStable = (
+        [string]$reviewedEvidenceObject.migration_revision -ceq [string]$reviewedCandidateFresh.payload.migration_revision -and
+        [string]$reviewedEvidenceObject.state_digest -ceq [string]$reviewedCandidateFresh.payload.evidence.state_digest -and
+        [string]$reviewedEvidenceObject.plan_digest -ceq [string]$reviewedCandidateFresh.payload.plan.plan_digest
+    )
+    $reviewedResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $reviewedRoot -DispositionEvidence $reviewedEvidenceJson
+    $resolvedActions = @($reviewedResolved.payload.plan.actions)
+    $resolvedSemantics = (
+        @($resolvedActions | Where-Object { [string]$_.path -ceq "AGENTS.md" -and [string]$_.action -ceq "change" -and [string]$_.reason_code -ceq "REVIEWED_ROOT_CONTRACT_REPLACED" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/AGENTS.md" -and [string]$_.action -ceq "remove" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -cin @(".agents/process.txt", ".agents/plan.md") -and [string]$_.action -ceq "preserve" -and [string]$_.reason_code -ceq "REVIEWED_NON_AUTHORITY_PRESERVED" }).Count -eq 2 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/context/reviewed-legacy-facts.md" -and [string]$_.action -ceq "create" -and @($_.source_paths).Count -eq 2 }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -cin @(".agents/context/legacy-stable-facts.md", ".agents/notes.md") -and [string]$_.action -ceq "remove" }).Count -eq 2
+    )
+    $resolvedReadOnly = ($reviewedBeforeTree -ceq (Get-TreeFingerprint -Root $reviewedRoot) -and @((Get-BackupFiles -ProjectRoot $reviewedRoot)).Count -eq 0)
+    $resolvedPlanPass = ((Test-InvocationPass -Invocation $reviewedResolved) -and [bool]$reviewedResolved.payload.eligible -and
+        @($reviewedResolved.payload.reason_codes).Count -eq 0 -and [int]$reviewedResolved.payload.plan.plan_version -eq 2 -and
+        -not [string]::IsNullOrWhiteSpace([string]$reviewedResolved.payload.reviewed_disposition.reviewed_disposition_digest) -and
+        $resolvedSemantics -and $resolvedReadOnly)
+    Add-Case -Name "complete-reviewed-disposition-resolves-eligible-plan" -Passed $resolvedPlanPass -Detail ("Exact evidence exit={0} status={1} reasons={2} binding_stable={3} semantics={4} read_only={5}." -f $reviewedResolved.exit_code, (Get-StatusText $reviewedResolved.payload), (@($reviewedResolved.payload.reason_codes) -join ','), $reviewedBindingStable, $resolvedSemantics, $resolvedReadOnly)
+    $evidence.reviewed_disposition_resolved_plan = $resolvedPlanPass
+
+    $invalidDispositionCases = [Collections.Generic.List[object]]::new()
+    $missingDecision = Copy-JsonObject $reviewedEvidenceObject
+    $missingDecision.decisions = @($missingDecision.decisions | Select-Object -First ($missingDecision.decisions.Count - 1))
+    $invalidDispositionCases.Add([ordered]@{ name = "missing"; evidence = $missingDecision; code = "DISPOSITION_DECISION_MISSING" })
+    $extraDecision = Copy-JsonObject $reviewedEvidenceObject
+    $extraDecision.decisions = @($extraDecision.decisions) + @([ordered]@{ path = ".agents/unknown.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "retire-legacy-source" })
+    $invalidDispositionCases.Add([ordered]@{ name = "extra"; evidence = $extraDecision; code = "DISPOSITION_DECISION_EXTRA" })
+    $duplicateDecision = Copy-JsonObject $reviewedEvidenceObject
+    $duplicateDecision.decisions = @($duplicateDecision.decisions) + @($duplicateDecision.decisions[0])
+    $invalidDispositionCases.Add([ordered]@{ name = "duplicate"; evidence = $duplicateDecision; code = "DISPOSITION_DECISION_DUPLICATE" })
+    $mismatchDecision = Copy-JsonObject $reviewedEvidenceObject
+    $mismatchDecision.decisions[0].reason_code = "CONTEXT_MARKERS_MISSING"
+    $invalidDispositionCases.Add([ordered]@{ name = "path-reason"; evidence = $mismatchDecision; code = "DISPOSITION_PATH_REASON_MISMATCH" })
+    foreach ($binding in @("migration_revision", "state_digest", "plan_digest")) {
+        $staleEvidence = Copy-JsonObject $reviewedEvidenceObject
+        $staleEvidence[$binding] = "0" * 64
+        $invalidDispositionCases.Add([ordered]@{ name = "stale-$binding"; evidence = $staleEvidence; code = "DISPOSITION_EVIDENCE_STALE" })
+    }
+    $staleProjectRoot = Copy-JsonObject $reviewedEvidenceObject
+    $staleProjectRoot.project_root = Join-Path $scratchRoot "different-project"
+    $invalidDispositionCases.Add([ordered]@{ name = "stale-project-root"; evidence = $staleProjectRoot; code = "DISPOSITION_EVIDENCE_STALE" })
+    $unsupportedDecision = Copy-JsonObject $reviewedEvidenceObject
+    $unsupportedDecision.decisions[0].disposition = "infer-project-intent"
+    $invalidDispositionCases.Add([ordered]@{ name = "unsupported"; evidence = $unsupportedDecision; code = "DISPOSITION_UNSUPPORTED" })
+    $invalidTarget = Copy-JsonObject $reviewedEvidenceObject
+    $invalidTarget.decisions[4].target = "../outside.md"
+    $invalidDispositionCases.Add([ordered]@{ name = "invalid-target"; evidence = $invalidTarget; code = "DISPOSITION_TARGET_INVALID" })
+    $collidingTarget = Copy-JsonObject $reviewedEvidenceObject
+    $collidingTarget.decisions[4].target = ".agents/context/README.md"
+    $invalidDispositionCases.Add([ordered]@{ name = "target-collision"; evidence = $collidingTarget; code = "DISPOSITION_TARGET_COLLISION" })
+    $invalidContent = Copy-JsonObject $reviewedEvidenceObject
+    $invalidContent.decisions[4].content = "# Invalid canonical Context`n"
+    $invalidDispositionCases.Add([ordered]@{ name = "invalid-content"; evidence = $invalidContent; code = "DISPOSITION_CONTENT_INVALID" })
+    $invalidDispositionPass = $true
+    foreach ($case in $invalidDispositionCases) {
+        $beforeInvalid = Get-TreeFingerprint -Root $reviewedRoot
+        $invalidResult = Invoke-Migration -Mode "Analyze" -ProjectRoot $reviewedRoot -DispositionEvidence (Get-CanonicalJson -Payload $case.evidence)
+        $casePass = ((Test-InvocationBlocked -Invocation $invalidResult) -and $invalidResult.text -match [regex]::Escape([string]$case.code) -and
+            $beforeInvalid -ceq (Get-TreeFingerprint -Root $reviewedRoot) -and @((Get-BackupFiles -ProjectRoot $reviewedRoot)).Count -eq 0)
+        $invalidDispositionPass = $invalidDispositionPass -and $casePass
+        Add-Case -Name ("reviewed-disposition-{0}-fails-closed" -f $case.name) -Passed $casePass -Detail ("{0} expected={1} actual={2} read_only={3}." -f $case.name, $case.code, (@($invalidResult.payload.reason_codes) -join ','), ($beforeInvalid -ceq (Get-TreeFingerprint -Root $reviewedRoot)))
+    }
+    $resolvedWithoutDisposition = Invoke-Migration -Mode "Apply" -ProjectRoot $reviewedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $reviewedResolved.payload) -ConfirmMigration
+    $resolvedEvidenceRequired = ((Test-InvocationBlocked -Invocation $resolvedWithoutDisposition) -and $resolvedWithoutDisposition.text -match "DISPOSITION_EVIDENCE_REQUIRED" -and
+        $reviewedBeforeTree -ceq (Get-TreeFingerprint -Root $reviewedRoot) -and @((Get-BackupFiles -ProjectRoot $reviewedRoot)).Count -eq 0)
+    Add-Case -Name "resolved-apply-requires-same-disposition-evidence" -Passed $resolvedEvidenceRequired -Detail ("Resolved Apply without disposition exit={0} reasons={1}." -f $resolvedWithoutDisposition.exit_code, (@($resolvedWithoutDisposition.payload.reason_codes) -join ','))
+    $evidence.reviewed_disposition_fail_closed = ($invalidDispositionPass -and $resolvedEvidenceRequired -and $blockedCandidatePass)
+
+    $staleSourceRoot = Join-Path $scratchRoot "reviewed-disposition-stale-source"
+    Copy-Fixture -Source $pristineRoot -Destination $staleSourceRoot
+    Set-ReviewedDispositionFixture -Root $staleSourceRoot
+    $staleSourceCandidate = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleSourceRoot
+    $staleSourceEvidenceObject = New-ReviewedDispositionEvidence -Analyze $staleSourceCandidate.payload
+    $staleSourceEvidenceJson = Get-CanonicalJson -Payload $staleSourceEvidenceObject
+    $staleSourceResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleSourceRoot -DispositionEvidence $staleSourceEvidenceJson
+    Add-Content -LiteralPath (Join-Path $staleSourceRoot ".agents/notes.md") -Value "`nMutation after reviewed Analyze.`n"
+    $afterSourceMutation = Get-TreeFingerprint -Root $staleSourceRoot
+    $staleSourceApply = Invoke-Migration -Mode "Apply" -ProjectRoot $staleSourceRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $staleSourceResolved.payload) -DispositionEvidence $staleSourceEvidenceJson -ConfirmMigration
+    $staleSourcePass = ((Test-InvocationBlocked -Invocation $staleSourceApply) -and $staleSourceApply.text -match "DISPOSITION_EVIDENCE_STALE" -and
+        $afterSourceMutation -ceq (Get-TreeFingerprint -Root $staleSourceRoot) -and @((Get-BackupFiles -ProjectRoot $staleSourceRoot)).Count -eq 0)
+    Add-Case -Name "post-analyze-disposition-source-mutation-is-stale" -Passed $staleSourcePass -Detail ("Post-Analyze source mutation exit={0} reasons={1}." -f $staleSourceApply.exit_code, (@($staleSourceApply.payload.reason_codes) -join ','))
+    $evidence.reviewed_disposition_stale = $staleSourcePass
+
+    $reviewedPreApplySnapshot = Get-FileSnapshot -Root $reviewedRoot
+    $reviewedPreApplyDirectories = @(Get-DirectorySnapshot -Root $reviewedRoot)
+    $reviewedApplied = Invoke-Migration -Mode "Apply" -ProjectRoot $reviewedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $reviewedResolved.payload) -DispositionEvidence $reviewedEvidenceJson -ConfirmMigration
+    $reviewedBackupId = Get-BackupIdFromResult -Payload $reviewedApplied.payload
+    $reviewedBackupPath = Get-BackupPathFromResult -ProjectRoot $reviewedRoot -Payload $reviewedApplied.payload
+    $reviewedManifest = if (Test-Path -LiteralPath $reviewedBackupPath -PathType Leaf) { Get-Content -LiteralPath $reviewedBackupPath -Raw | ConvertFrom-Json -Depth 100 } else { $null }
+    $reviewedPreStatePaths = @($reviewedManifest.pre_state | ForEach-Object { [string]$_.path })
+    $dispositionScopeBackedUp = (@("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md", ".agents/context/legacy-stable-facts.md", ".agents/notes.md", ".agents/context/reviewed-legacy-facts.md") | Where-Object { $reviewedPreStatePaths -cnotcontains $_ }).Count -eq 0
+    $reviewedBackupOrder = ((Test-InvocationPass -Invocation $reviewedApplied) -and (Test-BackupBeforeApply -Payload $reviewedApplied.payload -ProjectRoot $reviewedRoot) -and
+        $dispositionScopeBackedUp -and -not [string]::IsNullOrWhiteSpace([string]$reviewedApplied.payload.reviewed_disposition_digest))
+    Add-Case -Name "reviewed-disposition-backup-before-mutation" -Passed $reviewedBackupOrder -Detail ("Reviewed Apply exit={0} reasons={1} backup={2} complete_scope={3}." -f $reviewedApplied.exit_code, (@($reviewedApplied.payload.reason_codes) -join ','), $reviewedBackupId, $dispositionScopeBackedUp)
+    $evidence.reviewed_disposition_backup_order = $reviewedBackupOrder
+
+    $rootTargetContent = [string]$reviewedEvidenceObject.decisions[0].content
+    $contextTargetContent = [string]$reviewedEvidenceObject.decisions[4].content
+    $reviewedAfterSnapshot = Get-FileSnapshot -Root $reviewedRoot
+    $reviewedMutationPass = ((Test-InvocationPass -Invocation $reviewedApplied) -and [string]$reviewedApplied.payload.workspace_check -ceq "PASS" -and
+        [IO.File]::ReadAllText((Join-Path $reviewedRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $rootTargetContent -and
+        -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/AGENTS.md")) -and
+        [string]$reviewedPreApplySnapshot[".agents/process.txt"] -ceq [string]$reviewedAfterSnapshot[".agents/process.txt"] -and
+        [string]$reviewedPreApplySnapshot[".agents/plan.md"] -ceq [string]$reviewedAfterSnapshot[".agents/plan.md"] -and
+        -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/context/legacy-stable-facts.md")) -and
+        -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/notes.md")) -and
+        [IO.File]::ReadAllText((Join-Path $reviewedRoot ".agents/context/reviewed-legacy-facts.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $contextTargetContent)
+    Add-Case -Name "reviewed-disposition-apply-mutations" -Passed $reviewedMutationPass -Detail ("Reviewed Apply status={0} reasons={1} workspace={2}." -f (Get-StatusText $reviewedApplied.payload), (@($reviewedApplied.payload.reason_codes) -join ','), [string]$reviewedApplied.payload.workspace_check)
+    $evidence.reviewed_disposition_apply = $reviewedMutationPass
+
+    $reviewedRolledBack = Invoke-Migration -Mode "Rollback" -ProjectRoot $reviewedRoot -BackupId $reviewedBackupId -ConfirmRollback
+    $reviewedRollbackPass = ((Test-InvocationPass -Invocation $reviewedRolledBack) -and
+        (Test-SnapshotEqual -Before $reviewedPreApplySnapshot -After (Get-FileSnapshot -Root $reviewedRoot)) -and
+        ($reviewedPreApplyDirectories -join "`n") -ceq ((Get-DirectorySnapshot -Root $reviewedRoot) -join "`n") -and
+        (Test-Path -LiteralPath (Join-Path $reviewedRoot (Join-Path ".agents/.migration-backups" $reviewedBackupId)) -PathType Container))
+    Add-Case -Name "reviewed-disposition-rollback-exact" -Passed $reviewedRollbackPass -Detail ("Reviewed Rollback exit={0} status={1} reasons={2} backup={3}." -f $reviewedRolledBack.exit_code, (Get-StatusText $reviewedRolledBack.payload), (@($reviewedRolledBack.payload.reason_codes) -join ','), $reviewedBackupId)
+    $evidence.reviewed_disposition_rollback = $reviewedRollbackPass
 
     # Apply requires both the reviewed Analyze JSON and explicit confirmation.
     $missingEvidenceBefore = Get-TreeFingerprint -Root $baseRoot
