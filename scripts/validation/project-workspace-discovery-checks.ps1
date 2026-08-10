@@ -735,6 +735,34 @@ try {
 catch { Add-CheckResult -Name "git-anchors-and-degradation" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
 try {
+    $project = New-FixtureProject -Name "context-readme-check-boundary"
+    Set-ValidWorkRevision -ProjectRoot $project
+    $readmeRelative = ".agents/context/README.md"
+    Write-Utf8 -Path (Join-Path $project $readmeRelative) -Text "# Legacy Context Index`n`nPreserved non-authority documentation.`n"
+    $discover = Invoke-Workspace -Operation discover -ProjectRoot $project
+    Assert-Condition ($discover.payload.status -ceq "PASS" -and [int]$discover.payload.catalog.asset_count -eq 4) "Context README entered the disposable Catalog."
+
+    $catalogPath = Join-Path $project ".agents/.cache/catalog.json"
+    $projectBeforeCheck = Get-ProjectFingerprint -ProjectRoot $project
+    $catalogBeforeCheck = Get-FileFingerprintOrMissing -Path $catalogPath
+    $check = Invoke-Workspace -Operation check -ProjectRoot $project
+    $readmeReferenced = @($check.payload.assets + $check.payload.findings | Where-Object { [string]$_.path -ceq $readmeRelative }).Count -gt 0
+    Assert-Condition ($check.payload.status -ceq "PASS" -and [bool]$check.payload.read_only -and [string]$check.payload.catalog.action -ceq "not-written" -and -not $readmeReferenced) "Read-only check did not preserve the exact Context README as non-authority documentation."
+    Assert-Condition ($projectBeforeCheck -ceq (Get-ProjectFingerprint -ProjectRoot $project) -and $catalogBeforeCheck -ceq (Get-FileFingerprintOrMissing -Path $catalogPath)) "Read-only check changed the project or Catalog bytes."
+
+    $noncanonicalRelative = ".agents/context/README-copy.md"
+    Write-Utf8 -Path (Join-Path $project $noncanonicalRelative) -Text "# Noncanonical Context Filename`n"
+    $invalidBeforeCheck = Get-ProjectFingerprint -ProjectRoot $project
+    $invalidCatalogBeforeCheck = Get-FileFingerprintOrMissing -Path $catalogPath
+    $invalidCheck = Invoke-Workspace -Operation check -ProjectRoot $project
+    $noncanonicalFinding = @($invalidCheck.payload.findings | Where-Object { [string]$_.path -ceq $noncanonicalRelative }).Count -gt 0
+    Assert-Condition ($invalidCheck.payload.status -ceq "FAIL" -and [bool]$invalidCheck.payload.read_only -and [string]$invalidCheck.payload.catalog.action -ceq "not-written" -and $noncanonicalFinding) "A noncanonical Context filename was silently excluded with README.md."
+    Assert-Condition ($invalidBeforeCheck -ceq (Get-ProjectFingerprint -ProjectRoot $project) -and $invalidCatalogBeforeCheck -ceq (Get-FileFingerprintOrMissing -Path $catalogPath)) "Fail-closed check changed the project or Catalog bytes."
+    Add-CheckResult -Name "context-readme-check-boundary" -Status "PASS" -Detail "Check excludes only the exact Context README, remains read-only, and fails closed for another noncanonical Context filename."
+}
+catch { Add-CheckResult -Name "context-readme-check-boundary" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
+
+try {
     $unsafeGlossaryPath = [string]::Concat([char]67, [char]58, [char]92, "Users", [char]92, "private")
     $invalidCases = [ordered]@{
         "unknown-relation" = @("schema: agent-ecosystem/glossary/v1", "terms:", "  - canonical: telemetry", "    aliases:", "    symbols:", "    relations:", "      - not-declared", "    evidence:", "      - public fixture")

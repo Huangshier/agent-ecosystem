@@ -517,6 +517,61 @@ foreach ($case in $hardeningCases) {
 }
 
 try {
+    $project = New-FixtureProject -Name "context-readme-non-authority"
+    $readmePath = Join-Path $project ".agents/context/README.md"
+    Write-AssetText -Path $readmePath -Text "# Legacy Context Index`n`nPreserved non-authority documentation.`n"
+    $before = Get-ProjectFingerprint -Root $project
+    $invocation = Invoke-ParserProcess -ProjectRoot $project
+    $after = Get-ProjectFingerprint -Root $project
+    $readmeReferenced = @($invocation.payload.assets + $invocation.payload.findings | Where-Object { [string]$_.path -ceq ".agents/context/README.md" }).Count -gt 0
+    if ($before -cne $after) { $allReadOnly = $false; throw "Parser changed the Context README fixture." }
+    if ($invocation.exit_code -ne 0 -or [string]$invocation.payload.status -cne "PASS" -or
+        [int]$invocation.payload.asset_count -ne 4 -or $readmeReferenced) {
+        throw "The exact Context README was not excluded from canonical enumeration."
+    }
+    Add-CheckResult -Name "context-readme-non-authority" -Status "PASS" -Detail "The exact .agents/context/README.md is ignored as preserved non-authority documentation without changing its bytes."
+}
+catch {
+    Add-CheckResult -Name "context-readme-non-authority" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
+    $project = New-FixtureProject -Name "context-readme-case-sensitive"
+    $lowercaseRelative = ".agents/context/readme.md"
+    Write-AssetText -Path (Join-Path $project $lowercaseRelative) -Text "# Lowercase Context Candidate`n"
+    $before = Get-ProjectFingerprint -Root $project
+    $invocation = Invoke-ParserProcess -ProjectRoot $project
+    $after = Get-ProjectFingerprint -Root $project
+    $lowercaseFinding = @($invocation.payload.findings | Where-Object { [string]$_.path -ceq $lowercaseRelative }).Count -gt 0
+    if ($before -cne $after) { $allReadOnly = $false; throw "Parser changed the lowercase Context fixture." }
+    if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL" -or -not $lowercaseFinding) {
+        throw "A lowercase canonical Context candidate was incorrectly exempted as README.md."
+    }
+    Add-CheckResult -Name "context-readme-case-sensitive" -Status "PASS" -Detail "The README.md exemption is case-sensitive; lowercase readme.md remains a parsed canonical candidate."
+}
+catch {
+    Add-CheckResult -Name "context-readme-case-sensitive" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
+    $project = New-FixtureProject -Name "context-noncanonical-name-fails-closed"
+    $noncanonicalRelative = ".agents/context/README-copy.md"
+    Write-AssetText -Path (Join-Path $project $noncanonicalRelative) -Text "# Noncanonical Context Filename`n"
+    $before = Get-ProjectFingerprint -Root $project
+    $invocation = Invoke-ParserProcess -ProjectRoot $project
+    $after = Get-ProjectFingerprint -Root $project
+    $noncanonicalFinding = @($invocation.payload.findings | Where-Object { [string]$_.path -ceq $noncanonicalRelative }).Count -gt 0
+    if ($before -cne $after) { $allReadOnly = $false; throw "Parser changed the noncanonical Context fixture." }
+    if ($invocation.exit_code -eq 0 -or [string]$invocation.payload.status -cne "FAIL" -or -not $noncanonicalFinding) {
+        throw "A noncanonical Context filename was silently excluded with README.md."
+    }
+    Add-CheckResult -Name "context-noncanonical-name-fails-closed" -Status "PASS" -Detail "Only the exact README.md exemption applies; another noncanonical Context filename remains a failing candidate."
+}
+catch {
+    Add-CheckResult -Name "context-noncanonical-name-fails-closed" -Status "FAIL" -Detail $_.Exception.Message
+}
+
+try {
     $parserCommand = Get-Command -Name $parserPath -ErrorAction Stop
     if (@($parserCommand.Parameters.Keys) -icontains "SchemaRoot") {
         throw "Product parser still exposes the removed SchemaRoot parameter."
@@ -593,7 +648,7 @@ $summary = [ordered]@{
     baseline_pass = $baselinePassCount
     baseline_fail = $baselineFailCount
     baseline_contract = $baselineContract
-    hardening_scenario_count = @($hardeningCases).Count + 4
+    hardening_scenario_count = @($hardeningCases).Count + 7
     canonical_sources_read_only = $allReadOnly
     command_inert = $commandInert
     template_count = $templateCount

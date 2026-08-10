@@ -485,6 +485,11 @@ The bounded fixture inventory was reviewed.
 
 This fact is stable and suitable for a canonical Context asset.
 "@
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/context/README.md") -Text @"
+# Legacy Context Index
+
+This documentation is preserved byte-for-byte and is not canonical Context authority.
+"@
     Write-Utf8NoBom -Path (Join-Path $Root ".agents/commands/migrate-project.md") -Text @"
 # Migrate Project Memory
 
@@ -552,6 +557,11 @@ Move this bounded project-memory record into the C3.3 canonical workspace.
 
 Use one evidence-gated migration with a retained backup and fail-closed rollback.
 "@
+    Write-Utf8NoBom -Path (Join-Path $Root "docs/specs/archive/retired-work/spec.md") -Text @"
+# Retired Historical Specification
+
+This archived material is preserved byte-for-byte and is not canonical Spec authority.
+"@
     Write-Utf8NoBom -Path (Join-Path $Root ".agents/hub.lock.json") -Text (@{
             schema_version = 1
             project_language = "en"
@@ -593,7 +603,11 @@ function Get-CanonicalTargetFiles {
         $path = Join-Path $Root $relativeRoot
         if (-not (Test-Path -LiteralPath $path -PathType Container)) { continue }
         foreach ($file in @(Get-ChildItem -LiteralPath $path -Recurse -File -Force | Sort-Object FullName)) {
-            [void]$records.Add([IO.Path]::GetRelativePath($Root, $file.FullName).Replace('\', '/'))
+            $relative = [IO.Path]::GetRelativePath($Root, $file.FullName).Replace('\', '/')
+            if ($relative -cmatch '^\.agents/(?:work|context|procedures)/[a-z0-9]+(?:-[a-z0-9]+)*\.md$' -or
+                $relative -cmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$') {
+                [void]$records.Add($relative)
+            }
         }
     }
     return @($records.ToArray())
@@ -644,6 +658,9 @@ $pristineRoot = Join-Path $scratchRoot "pristine-project"
 $runtimeRoot = Join-Path $scratchRoot "runtime"
 $isolatedRuntimeRoot = Join-Path $scratchRoot "isolated-runtime"
 $isolatedMigrationScript = Join-Path $isolatedRuntimeRoot "scripts/migrate-project.ps1"
+$contextReadmeRelative = ".agents/context/README.md"
+$archiveSpecRelative = "docs/specs/archive/retired-work/spec.md"
+$immediateSpecRelative = "docs/specs/legacy-spec/spec.md"
 $evidence = [ordered]@{
     analyze_deterministic = $false
     analyze_read_only = $false
@@ -664,6 +681,11 @@ $evidence = [ordered]@{
     scaffold_layout_migrated = $false
     scaffold_conflict = $false
     rollback_layout_exact = $false
+    context_readme_preserved = $false
+    archive_spec_preserved = $false
+    immediate_spec_canonical = $false
+    unsupported_nested_spec_rejected = $false
+    non_authority_backup_scope = $false
 }
 
 try {
@@ -709,6 +731,24 @@ try {
     $evidence.analyze_deterministic = $deterministic
     $evidence.analyze_read_only = $readOnly
 
+    $contextReadmeAnalyzePreserved = (
+        @($analyzeOne.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextReadmeRelative }).Count -eq 0 -and
+        @($analyzeOne.payload.plan.actions | Where-Object { [string]$_.path -ceq $contextReadmeRelative }).Count -eq 0
+    )
+    Add-Case -Name "context-readme-preserved-non-authority" -Passed $contextReadmeAnalyzePreserved -Detail "Analyze excludes only the exact legacy Context README from canonical migration actions and human disposition."
+
+    $archiveSpecAnalyzePreserved = (
+        @($analyzeOne.payload.human_disposition | Where-Object { [string]$_.path -ceq $archiveSpecRelative }).Count -eq 0 -and
+        @($analyzeOne.payload.plan.actions | Where-Object { [string]$_.path -ceq $archiveSpecRelative }).Count -eq 0
+    )
+    Add-Case -Name "archive-spec-preserved-non-authority" -Passed $archiveSpecAnalyzePreserved -Detail "Analyze excludes an archived nested Spec from canonical actions and SPEC_PATH_UNSUPPORTED disposition."
+
+    $immediateSpecCanonical = @($analyzeOne.payload.plan.actions | Where-Object {
+            [string]$_.path -ceq $immediateSpecRelative -and [string]$_.action -ceq "change" -and [string]$_.reason_code -ceq "LEGACY_SPEC_PROMOTED"
+        }).Count -eq 1
+    Add-Case -Name "immediate-spec-remains-canonical" -Passed $immediateSpecCanonical -Detail "An immediate docs/specs/<id>/spec.md keeps its existing canonical migration behavior."
+    $evidence.immediate_spec_canonical = $immediateSpecCanonical
+
     # Ambiguous and unsupported sources are refused before any target write.
     $ambiguousRoot = Join-Path $scratchRoot "ambiguous-project"
     Copy-Fixture -Source $baseRoot -Destination $ambiguousRoot
@@ -722,7 +762,8 @@ try {
 
     $unsupportedRoot = Join-Path $scratchRoot "unsupported-project"
     Copy-Fixture -Source $baseRoot -Destination $unsupportedRoot
-    Write-Utf8NoBom -Path (Join-Path $unsupportedRoot "docs/specs/unsupported_name/spec.md") -Text @"
+    $unsupportedNestedRelative = "docs/specs/custom/nested/spec.md"
+    Write-Utf8NoBom -Path (Join-Path $unsupportedRoot $unsupportedNestedRelative) -Text @"
 # Unsupported specification path
 
 ## Scope
@@ -739,9 +780,14 @@ No compatibility mirror.
 "@
     $unsupportedBefore = Get-TreeFingerprint -Root $unsupportedRoot
     $unsupported = Invoke-Migration -Mode "Analyze" -ProjectRoot $unsupportedRoot
-    $unsupportedClosed = ((Test-InvocationBlocked -Invocation $unsupported) -and $unsupportedBefore -ceq (Get-TreeFingerprint -Root $unsupportedRoot) -and @((Get-BackupFiles -ProjectRoot $unsupportedRoot)).Count -eq 0)
-    Add-Case -Name "unsupported-input-fails-closed" -Passed $unsupportedClosed -Detail "Unsupported legacy input is rejected without creating a backup or target asset."
+    $unsupportedDisposition = @($unsupported.payload.human_disposition | Where-Object {
+            [string]$_.path -ceq $unsupportedNestedRelative -and [string]$_.reason_code -ceq "SPEC_PATH_UNSUPPORTED"
+        }).Count -eq 1
+    $unsupportedClosed = ((Test-InvocationBlocked -Invocation $unsupported) -and $unsupportedDisposition -and
+        $unsupportedBefore -ceq (Get-TreeFingerprint -Root $unsupportedRoot) -and @((Get-BackupFiles -ProjectRoot $unsupportedRoot)).Count -eq 0)
+    Add-Case -Name "unsupported-nested-spec-fails-closed" -Passed $unsupportedClosed -Detail "A non-archive nested Spec remains HUMAN_DISPOSITION_REQUIRED / SPEC_PATH_UNSUPPORTED without backup or target writes."
     $evidence.analyze_fail_closed = ($ambiguousClosed -and $unsupportedClosed)
+    $evidence.unsupported_nested_spec_rejected = $unsupportedClosed
 
     # Project-local scaffold is migratable only when both legacy authority
     # files match the frozen legacy templates exactly.  Custom content must
@@ -815,6 +861,10 @@ No compatibility mirror.
     Add-Case -Name "successful-migration-layout" -Passed $layoutMigrated -Detail "Apply installs the frozen C3.3 entrypoint, README, ignore contract, and canonical directories; retires legacy project-agent authority; and passes project-workspace check."
     $evidence.scaffold_layout_migrated = $layoutMigrated
 
+    $contextReadmeApplyPreserved = ([string]$beforeApplySnapshot[$contextReadmeRelative] -ceq [string]$afterApplySnapshot[$contextReadmeRelative])
+    $archiveSpecApplyPreserved = ([string]$beforeApplySnapshot[$archiveSpecRelative] -ceq [string]$afterApplySnapshot[$archiveSpecRelative])
+    Add-Case -Name "non-authority-bytes-preserved-on-apply" -Passed ($contextReadmeApplyPreserved -and $archiveSpecApplyPreserved -and $layoutMigrated) -Detail "Apply preserves Context README and archived Spec bytes while the post-migration workspace check passes."
+
     $lockPath = Join-Path $baseRoot ".agents/hub.lock.json"
     $lockAfterApply = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json -Depth 30
     $languagePreserved = ([string]$lockAfterApply.project_language -ceq "en" -and [string]$lockAfterApply.workspace_model -ceq "c3.3" -and
@@ -830,6 +880,16 @@ No compatibility mirror.
     $backupOrder = ($freshApply -and $backupExists -and $backupOrder)
     Add-Case -Name "backup-before-target-mutation" -Passed $backupOrder -Detail "Apply evidence proves the backup manifest is written before target mutation without using file timestamps."
     $evidence.backup_order = $backupOrder
+
+    $backupManifest = Get-Content -LiteralPath $backupPath -Raw | ConvertFrom-Json -Depth 100
+    $contextReadmeBackup = @($backupManifest.pre_state | Where-Object { [string]$_.path -ceq $contextReadmeRelative })
+    $archiveSpecBackup = @($backupManifest.pre_state | Where-Object { [string]$_.path -ceq $archiveSpecRelative })
+    $nonAuthorityBackupScope = (
+        $contextReadmeBackup.Count -eq 1 -and [string]$contextReadmeBackup[0].content_base64 -ceq [string]$beforeApplySnapshot[$contextReadmeRelative] -and
+        $archiveSpecBackup.Count -eq 1 -and [string]$archiveSpecBackup[0].content_base64 -ceq [string]$beforeApplySnapshot[$archiveSpecRelative]
+    )
+    Add-Case -Name "non-authority-paths-in-complete-backup" -Passed $nonAuthorityBackupScope -Detail "The complete pre-state backup binds preserved Context README and archived Spec bytes without making them migration actions."
+    $evidence.non_authority_backup_scope = $nonAuthorityBackupScope
 
     # Rollback must restore bytes and tree shape exactly, preserve its backup,
     # and never touch a runtime directory outside ProjectRoot.
@@ -848,6 +908,8 @@ No compatibility mirror.
 
     $rollbackDirectories = @(Get-DirectorySnapshot -Root $baseRoot)
     $rollbackSnapshot = Get-FileSnapshot -Root $baseRoot
+    $contextReadmeRollbackPreserved = ([string]$beforeApplySnapshot[$contextReadmeRelative] -ceq [string]$rollbackSnapshot[$contextReadmeRelative])
+    $archiveSpecRollbackPreserved = ([string]$beforeApplySnapshot[$archiveSpecRelative] -ceq [string]$rollbackSnapshot[$archiveSpecRelative])
     $layoutRollbackExact = (
         ($beforeApplyDirectories -join "`n") -ceq ($rollbackDirectories -join "`n") -and
         [string]$beforeApplySnapshot["AGENTS.md"] -ceq [string]$rollbackSnapshot["AGENTS.md"] -and
@@ -862,6 +924,9 @@ No compatibility mirror.
     )
     Add-Case -Name "rollback-layout-exactness" -Passed $layoutRollbackExact -Detail "Rollback restores the legacy entrypoint and project-agent authority, removes migration-created C3.3 scaffold files and empty directories, and retains the backup."
     $evidence.rollback_layout_exact = $layoutRollbackExact
+    Add-Case -Name "non-authority-bytes-preserved-on-rollback" -Passed ($contextReadmeRollbackPreserved -and $archiveSpecRollbackPreserved) -Detail "Rollback leaves the preserved Context README and archived Spec byte-identical to their pre-Apply state."
+    $evidence.context_readme_preserved = ($contextReadmeAnalyzePreserved -and $contextReadmeApplyPreserved -and $contextReadmeRollbackPreserved -and $layoutMigrated)
+    $evidence.archive_spec_preserved = ($archiveSpecAnalyzePreserved -and $archiveSpecApplyPreserved -and $archiveSpecRollbackPreserved)
 
     $postRollbackAnalyzeBefore = Get-TreeFingerprint -Root $baseRoot
     $postRollbackAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $baseRoot
@@ -926,7 +991,7 @@ No compatibility mirror.
 
     # Apply evidence binds all source categories.  A mutation after Analyze in
     # legacy, target, language, or workspace state must fail before writes.
-    $mutationKinds = @("legacy", "target", "language", "workspace")
+    $mutationKinds = @("legacy", "target", "language", "workspace", "archive")
     $mutationPass = $true
     foreach ($kind in $mutationKinds) {
         $mutationRoot = Join-Path $scratchRoot ("apply-mutation-{0}" -f $kind)
@@ -949,18 +1014,19 @@ No compatibility mirror.
                 $lock.workspace_model = "c3.3"
                 Write-Utf8NoBom -Path (Join-Path $mutationRoot ".agents/hub.lock.json") -Text ($lock | ConvertTo-Json -Depth 30)
             }
+            "archive" { Add-Content -LiteralPath (Join-Path $mutationRoot $archiveSpecRelative) -Value "`nArchive mutation after Analyze.`n" }
         }
         $beforeRejectedApply = Get-TreeFingerprint -Root $mutationRoot
         $rejectedApply = Invoke-Migration -Mode "Apply" -ProjectRoot $mutationRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $mutationAnalyze.payload) -ConfirmMigration
         $mutationRejected = ((Test-InvocationBlocked -Invocation $rejectedApply) -and $beforeRejectedApply -ceq (Get-TreeFingerprint -Root $mutationRoot) -and @((Get-BackupFiles -ProjectRoot $mutationRoot)).Count -eq 0)
         $mutationPass = $mutationPass -and $mutationRejected
-        Add-Case -Name ("apply-rejects-{0}-mutation" -f $kind) -Passed $mutationRejected -Detail ("Apply rejects a {0} mutation after Analyze without creating target or backup files." -f $kind)
+        Add-Case -Name ("apply-rejects-{0}-mutation" -f $kind) -Passed $mutationRejected -Detail ("Apply rejects the {0} mutation after Analyze without creating target or backup files." -f $kind)
     }
     $evidence.mutation_rejection = $mutationPass
 
     # Rollback rejects every canonical target mutation, as well as project-local
     # Skill/metadata edits.  Each copy derives from the same single fixture.
-    $rollbackMutationKinds = @("work", "context", "procedure", "spec", "skill", "metadata")
+    $rollbackMutationKinds = @("work", "context", "procedure", "spec", "skill", "metadata", "archive")
     $rollbackMutationPass = $true
     foreach ($kind in $rollbackMutationKinds) {
         $mutationRoot = Join-Path $scratchRoot ("rollback-mutation-{0}" -f $kind)
@@ -979,6 +1045,7 @@ No compatibility mirror.
                 $metadata.marker = "metadata-mutation"
                 Write-Utf8NoBom -Path $metadataPath -Text ($metadata | ConvertTo-Json -Depth 30)
             }
+            "archive" { Add-Content -LiteralPath (Join-Path $mutationRoot $archiveSpecRelative) -Value "`nArchive mutation before Rollback.`n" }
         }
         $beforeRejectedRollback = Get-TreeFingerprint -Root $mutationRoot
         $rejectedRollback = Invoke-Migration -Mode "Rollback" -ProjectRoot $mutationRoot -BackupId $mutationBackupId -ConfirmRollback
