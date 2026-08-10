@@ -13,7 +13,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v2"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v3"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -75,6 +75,38 @@ function Get-ProjectPath {
     $candidate = [IO.Path]::GetFullPath((Join-Path $Root $RelativePath))
     $prefix = $Root + [IO.Path]::DirectorySeparatorChar
     if (-not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw "UNSAFE_PROJECT_PATH" }
+    return $candidate
+}
+
+function Resolve-ProjectEvidencePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$RecordedPath
+    )
+    if ([string]::IsNullOrWhiteSpace($RecordedPath) -or $RecordedPath -match '[\x00-\x1f]' -or $RecordedPath -match '(^|[\\/])\.\.?(?:[\\/]|$)') { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+    try {
+        $candidate = if ([IO.Path]::IsPathRooted($RecordedPath)) {
+            [IO.Path]::GetFullPath($RecordedPath)
+        }
+        else {
+            [IO.Path]::GetFullPath((Join-Path $Root $RecordedPath))
+        }
+    }
+    catch { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+
+    $prefix = $Root + [IO.Path]::DirectorySeparatorChar
+    if (-not $candidate.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+    $relative = ConvertTo-RelativePath $Root $candidate
+    if (-not (Test-SafeRelativePath $relative)) { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+
+    $current = $Root
+    foreach ($part in @($relative -split '[\\/]')) {
+        $current = Join-Path $current $part
+        if (-not (Test-Path -LiteralPath $current)) { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+        $item = Get-Item -LiteralPath $current -Force
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
+    }
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "LANGUAGE_MIGRATION_PROVENANCE_INVALID" }
     return $candidate
 }
 
@@ -207,13 +239,36 @@ function Get-MarkdownTitle {
 }
 
 function Get-MarkdownSection {
-    param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string[]]$Names)
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string[]]$Names,
+        [switch]$AllowNumericPrefix
+    )
+    $numericPrefix = if ($AllowNumericPrefix.IsPresent) { '(?:\d+\.[ \t]+)?' } else { '' }
     foreach ($name in $Names) {
         $escaped = [regex]::Escape($name)
-        $match = [regex]::Match($Text, "(?ms)^#{1,6}\s+$escaped\s*\r?\n(?<value>.*?)(?=^#{1,6}\s+|\z)", 'IgnoreCase,CultureInvariant')
+        $match = [regex]::Match($Text, "(?ms)^#{1,6}\s+$numericPrefix$escaped\s*\r?\n(?<value>.*?)(?=^#{1,6}\s+|\z)", 'IgnoreCase,CultureInvariant')
         if ($match.Success -and -not [string]::IsNullOrWhiteSpace($match.Groups['value'].Value)) { return $match.Groups['value'].Value.Trim() }
     }
     return ""
+}
+
+function Get-LegacyMetadataMatches {
+    param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string]$Name)
+    $escaped = [regex]::Escape($Name)
+    return @([regex]::Matches($Text, "(?im)^[ \t]*-[ \t]+\*\*$escaped\*\*[ \t]*:[ \t]*(?<value>.*?)[ \t]*$", 'CultureInvariant'))
+}
+
+function Convert-LegacySpecStatus {
+    param([Parameter(Mandatory = $true)][string]$Status)
+    switch ($Status.Trim().ToLowerInvariant()) {
+        "draft" { return "draft" }
+        "active" { return "accepted" }
+        "done" { return "implemented" }
+        "archived" { return "archived" }
+        "superseded" { return "superseded" }
+        default { return $null }
+    }
 }
 
 function Test-TemplateText {
@@ -316,13 +371,19 @@ $Body
 }
 
 function New-SpecContent {
-    param([Parameter(Mandatory = $true)][string]$Id, [Parameter(Mandatory = $true)][string]$Title, [Parameter(Mandatory = $true)][string]$Summary, [Parameter(Mandatory = $true)][string]$Body)
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Status,
+        [Parameter(Mandatory = $true)][string]$Summary,
+        [Parameter(Mandatory = $true)][string]$Body
+    )
     return @"
 ---
 schema: agent-ecosystem/spec/v1
 id: $Id
 title: $(ConvertTo-YamlString $Title)
-status: draft
+status: $Status
 updated: $($script:MigrationSentinel)
 summary: $(ConvertTo-YamlString $Summary)
 related_work: []
@@ -387,11 +448,97 @@ function Test-RecordedLegacyScaffold {
     return (-not [string]::IsNullOrWhiteSpace($recorded) -and $recorded -ceq (Get-Sha256Text $Content))
 }
 
+function Get-VerifiedLanguageMigrationTemplatePaths {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [AllowNull()][object]$Lock,
+        [Parameter(Mandatory = $true)][string]$ProjectLanguage
+    )
+    $verified = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    try {
+        $migration = Get-HashtableValue $Lock "language_migration"
+        if ($null -eq $migration -or [int](Get-HashtableValue $migration "schema_version") -ne 1) { return ,$verified }
+        $sourceLanguage = [string](Get-HashtableValue $migration "source_language")
+        $targetLanguage = [string](Get-HashtableValue $migration "target_language")
+        if ($sourceLanguage -cnotin @("en", "zh-CN") -or $targetLanguage -cnotin @("en", "zh-CN") -or
+            $sourceLanguage -ceq $targetLanguage -or $targetLanguage -cne $ProjectLanguage) { return ,$verified }
+
+        $proposalPath = Resolve-ProjectEvidencePath $Root ([string](Get-HashtableValue $migration "proposal"))
+        $resultPath = Resolve-ProjectEvidencePath $Root ([string](Get-HashtableValue $migration "result"))
+        if ([IO.Path]::GetFileName($proposalPath) -cne "proposal.json" -or [IO.Path]::GetFileName($resultPath) -cne "result.json" -or
+            -not [string]::Equals((Split-Path -Parent $proposalPath), (Split-Path -Parent $resultPath), [StringComparison]::OrdinalIgnoreCase)) { return ,$verified }
+        $proposal = Read-Utf8Text $proposalPath | ConvertFrom-Json -AsHashtable -Depth 50 -ErrorAction Stop
+        $result = Read-Utf8Text $resultPath | ConvertFrom-Json -AsHashtable -Depth 50 -ErrorAction Stop
+        if ([int](Get-HashtableValue $proposal "schema_version") -ne 1 -or [int](Get-HashtableValue $result "schema_version") -ne 1) { return ,$verified }
+        if ([string](Get-HashtableValue $proposal "source_language") -cne $sourceLanguage -or
+            [string](Get-HashtableValue $proposal "target_language") -cne $targetLanguage -or
+            [string](Get-HashtableValue $result "source_language") -cne $sourceLanguage -or
+            [string](Get-HashtableValue $result "target_language") -cne $targetLanguage) { return ,$verified }
+
+        $proposalProject = Get-NormalizedProjectRoot ([string](Get-HashtableValue $proposal "project"))
+        $resultProject = Get-NormalizedProjectRoot ([string](Get-HashtableValue $result "project"))
+        if (-not [string]::Equals($proposalProject, $Root, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals($resultProject, $Root, [StringComparison]::OrdinalIgnoreCase)) { return ,$verified }
+        $resultProposalPath = Resolve-ProjectEvidencePath $Root ([string](Get-HashtableValue $result "proposal"))
+        if (-not [string]::Equals($resultProposalPath, $proposalPath, [StringComparison]::OrdinalIgnoreCase)) { return ,$verified }
+
+        $proposalActions = @((Get-HashtableValue $proposal "actions"))
+        $resultActions = @((Get-HashtableValue $result "actions"))
+        if ($proposalActions.Count -eq 0 -or $proposalActions.Count -ne $resultActions.Count) { return ,$verified }
+        for ($index = 0; $index -lt $proposalActions.Count; $index++) {
+            if ([string](Get-HashtableValue $proposalActions[$index] "relative_path") -cne [string](Get-HashtableValue $resultActions[$index] "relative_path") -or
+                [string](Get-HashtableValue $proposalActions[$index] "action") -cne [string](Get-HashtableValue $resultActions[$index] "action")) { return ,$verified }
+        }
+        $proposalByPath = @{}
+        foreach ($action in $proposalActions) {
+            $relative = [string](Get-HashtableValue $action "relative_path")
+            $canonicalRelative = if (Test-SafeRelativePath $relative) { ConvertTo-RelativePath $Root (Get-ProjectPath $Root $relative) } else { "" }
+            if ($relative -cne $canonicalRelative -or $proposalByPath.ContainsKey($relative)) { return ,$verified }
+            $proposalByPath[$relative] = $action
+        }
+
+        $resultByPath = @{}
+        foreach ($action in $resultActions) {
+            $relative = [string](Get-HashtableValue $action "relative_path")
+            $canonicalRelative = if (Test-SafeRelativePath $relative) { ConvertTo-RelativePath $Root (Get-ProjectPath $Root $relative) } else { "" }
+            if ($relative -cne $canonicalRelative -or $resultByPath.ContainsKey($relative) -or -not $proposalByPath.ContainsKey($relative)) { return ,$verified }
+            if ([string](Get-HashtableValue $action "action") -cne [string](Get-HashtableValue $proposalByPath[$relative] "action")) { return ,$verified }
+            $resultByPath[$relative] = $action
+        }
+
+        $pureActions = @("already-target-template", "replace-template", "add-target-template")
+        foreach ($relative in @($proposalByPath.Keys | Sort-Object)) {
+            $proposalAction = $proposalByPath[$relative]
+            $resultAction = $resultByPath[$relative]
+            $actionName = [string](Get-HashtableValue $proposalAction "action")
+            if ($actionName -cnotin $pureActions -or [bool](Get-HashtableValue $proposalAction "manual_review")) { continue }
+            $targetHash = [string](Get-HashtableValue $proposalAction "target_template_hash_sha256")
+            $finalHash = [string](Get-HashtableValue $resultAction "final_hash_sha256")
+            if ($targetHash -notmatch '^[a-f0-9]{64}$' -or $finalHash -cne $targetHash) { continue }
+            $expectedResult = if ($actionName -ceq "already-target-template") { "preserved" } else { "written-target-template" }
+            if ([string](Get-HashtableValue $resultAction "result") -cne $expectedResult) { continue }
+            $currentPath = Get-ProjectPath $Root $relative
+            if (-not (Test-Path -LiteralPath $currentPath -PathType Leaf)) { continue }
+            # NOTE: language_migration.ps1 defines final_hash_sha256 over strict
+            # UTF-8 text bytes without a BOM, so verification uses that existing
+            # producer contract while the migration state digest still binds raw bytes.
+            $currentHash = Get-Sha256Text (Read-Utf8Text $currentPath)
+            if ($currentHash -ceq $finalHash) { $verified[$relative] = $true }
+        }
+    }
+    catch {
+        # NOTE: Missing, malformed, stale, or unsafe provenance grants no trust.
+        return ,[Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    }
+    return ,$verified
+}
+
 function Add-ScaffoldTransitionPlan {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
         [Parameter(Mandatory = $true)][string]$Language,
         [AllowNull()][object]$Lock,
+        [Parameter(Mandatory = $true)][object]$VerifiedLanguageTemplates,
         [Parameter(Mandatory = $true)][object]$Contract,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][Collections.Generic.List[object]]$Actions,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][Collections.Generic.List[object]]$Human,
@@ -416,7 +563,7 @@ function Add-ScaffoldTransitionPlan {
         if ($current -ceq $targetContent) {
             Add-PlanAction $Actions "preserve" $relative @($relative) $null "C33_SCAFFOLD_PRESERVED"
         }
-        elseif (($relative -ceq "AGENTS.md" -and $current -ceq $legacyRoot) -or (Test-RecordedLegacyScaffold $Lock $relative $current)) {
+        elseif (($relative -ceq "AGENTS.md" -and $current -ceq $legacyRoot) -or (Test-RecordedLegacyScaffold $Lock $relative $current) -or $VerifiedLanguageTemplates.ContainsKey($relative)) {
             Add-PlanAction $Actions "change" $relative @($relative, [string](Get-HashtableValue $target "source")) $targetContent "LEGACY_ENTRYPOINT_REPLACED"
         }
         else {
@@ -435,7 +582,7 @@ function Add-ScaffoldTransitionPlan {
     }
     else {
         $current = Read-Utf8Text $legacyAgentFull
-        if ($current -ceq $legacyAgent -or (Test-RecordedLegacyScaffold $Lock $legacyAgentPath $current)) {
+        if ($current -ceq $legacyAgent -or (Test-RecordedLegacyScaffold $Lock $legacyAgentPath $current) -or $VerifiedLanguageTemplates.ContainsKey($legacyAgentPath)) {
             Add-PlanAction $Actions "remove" $legacyAgentPath @($legacyAgentPath) $null "LEGACY_PROJECT_AUTHORITY_RETIRED"
         }
         else {
@@ -499,10 +646,12 @@ function Invoke-Analyze {
     }
 
     $scaffoldContract = $null
+    $verifiedLanguageTemplates = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
     if ($language -in @("en", "zh-CN")) {
         try {
+            $verifiedLanguageTemplates = Get-VerifiedLanguageMigrationTemplatePaths $Root $lock $language
             $scaffoldContract = Get-C33ScaffoldContract $language
-            Add-ScaffoldTransitionPlan $Root $language $lock $scaffoldContract $actions $human $targetPaths
+            Add-ScaffoldTransitionPlan $Root $language $lock $verifiedLanguageTemplates $scaffoldContract $actions $human $targetPaths
         }
         catch { $reasons.Add([string]$_.Exception.Message) }
     }
@@ -547,6 +696,7 @@ function Invoke-Analyze {
     }
     foreach ($relative in @($contextCandidates.ToArray() | Sort-Object -Unique)) {
         $text = Read-Utf8Text (Get-ProjectPath $Root $relative)
+        if ($verifiedLanguageTemplates.ContainsKey($relative)) { Add-PlanAction $actions "preserve" $relative @($relative) $null "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
         if (Test-TemplateText $text) { Add-PlanAction $actions "preserve" $relative @($relative) $null "TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
         $summary = Get-MarkdownSection $text @("Summary")
         $keywordsText = Get-MarkdownSection $text @("Keywords")
@@ -590,7 +740,7 @@ function Invoke-Analyze {
     if (Test-Path -LiteralPath $specRoot -PathType Container) {
         foreach ($file in @(Get-ChildItem -LiteralPath $specRoot -File -Filter "spec.md" -Recurse -Force | Sort-Object FullName)) {
             $relative = ConvertTo-RelativePath $Root $file.FullName
-            if ($relative -match '^docs/specs/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/spec\.md$') {
+            if ($relative -cmatch '^docs/specs/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/spec\.md$') {
                 $id = $Matches.id
             }
             elseif ($relative -cmatch '^docs/specs/archive/.+/spec\.md$') {
@@ -603,14 +753,38 @@ function Invoke-Analyze {
             }
             $text = Read-Utf8Text $file.FullName
             if ($text -match '(?ms)^---\s*\r?\n.*?^schema:\s*agent-ecosystem/spec/v1\s*$') { Add-PlanAction $actions "preserve" $relative @($relative) $null "CANONICAL_SPEC_PRESERVED"; continue }
-            $scope = Get-MarkdownSection $text @("Scope", "Goals", "目标", "范围")
-            $nonGoals = Get-MarkdownSection $text @("Non-Goals", "Non Goals", "非目标")
-            $acceptance = Get-MarkdownSection $text @("Acceptance", "Acceptance Criteria", "验收", "验收标准")
-            $design = Get-MarkdownSection $text @("Design", "Decisions", "Constraints", "设计", "决策", "约束")
+            $scope = Get-MarkdownSection $text @("Scope", "Goals", "目标", "范围") -AllowNumericPrefix
+            $nonGoals = Get-MarkdownSection $text @("Non-Goals", "Non Goals", "非目标") -AllowNumericPrefix
+            $acceptance = Get-MarkdownSection $text @("Acceptance", "Acceptance Criteria", "Acceptance / Evidence", "验收", "验收标准") -AllowNumericPrefix
+            $design = Get-MarkdownSection $text @("Design", "Decisions", "Constraints", "Proposed Approach", "设计", "决策", "约束", "方案") -AllowNumericPrefix
             $missingSpecSections = @(@($scope, $nonGoals, $acceptance, $design) | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count
             if ((Test-TemplateText $text) -or $missingSpecSections -gt 0) { $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_MARKERS_MISSING" }); continue }
+
+            $titleMatches = @(Get-LegacyMetadataMatches $text "Title")
+            $slugMatches = @(Get-LegacyMetadataMatches $text "Slug")
+            $statusMatches = @(Get-LegacyMetadataMatches $text "Status")
+            if ($titleMatches.Count -gt 1 -or $slugMatches.Count -gt 1 -or $statusMatches.Count -gt 1) {
+                $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_METADATA_AMBIGUOUS" })
+                continue
+            }
+            $legacySlug = if ($slugMatches.Count -eq 1) { [string]$slugMatches[0].Groups['value'].Value.Trim() } else { "" }
+            if (-not [string]::IsNullOrWhiteSpace($legacySlug) -and $legacySlug -cne $id) {
+                $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_SLUG_MISMATCH" })
+                continue
+            }
+            $legacyStatus = if ($statusMatches.Count -eq 1) { [string]$statusMatches[0].Groups['value'].Value.Trim() } else { "" }
+            $canonicalStatus = if ([string]::IsNullOrWhiteSpace($legacyStatus)) { "draft" } else { Convert-LegacySpecStatus $legacyStatus }
+            if ([string]::IsNullOrWhiteSpace($canonicalStatus)) {
+                $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_STATUS_REQUIRES_DISPOSITION" })
+                continue
+            }
+            $title = Get-MarkdownTitle $text "Legacy specification"
+            if ($title -ceq "Work Spec" -and $titleMatches.Count -eq 1) {
+                $metadataTitle = [string]$titleMatches[0].Groups['value'].Value.Trim()
+                if (-not [string]::IsNullOrWhiteSpace($metadataTitle)) { $title = $metadataTitle }
+            }
             $summary = ($scope -split '\r?\n')[0].Trim().TrimStart('-', '*').Trim()
-            Add-PlanAction $actions "change" $relative @($relative) (New-SpecContent $id (Get-MarkdownTitle $text "Legacy specification") $summary $text.Trim()) "LEGACY_SPEC_PROMOTED"
+            Add-PlanAction $actions "change" $relative @($relative) (New-SpecContent $id $title $canonicalStatus $summary $text) "LEGACY_SPEC_PROMOTED"
             $targetPaths.Add($relative)
         }
     }
