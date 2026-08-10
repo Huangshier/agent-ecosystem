@@ -303,7 +303,7 @@ if ([int]$classification.detected_tier -ge 1) {
         $workspaceAdapterEvidence = $workspaceAdapterOutput | ConvertFrom-Json
         if ([int]$workspaceAdapterEvidence.schema_version -ne 1 -or
             [string]$workspaceAdapterEvidence.status -cne "PASS" -or
-            [int]$workspaceAdapterEvidence.scenario_count -lt 15 -or
+            [int]$workspaceAdapterEvidence.scenario_count -lt 16 -or
             [int]$workspaceAdapterEvidence.pass -ne [int]$workspaceAdapterEvidence.scenario_count -or
             [int]$workspaceAdapterEvidence.fail -ne 0 -or
             -not [bool]$workspaceAdapterEvidence.cross_platform_contract) {

@@ -352,6 +352,13 @@ function Get-AdapterPath {
     return (Join-Path (Get-AdapterRoot -Root $Root) $Name)
 }
 
+function Get-AdapterTransactionRoots {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    return @(Get-ChildItem -LiteralPath $Root -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -cmatch '^\.agent-ecosystem-adapter-transaction-[0-9a-f]{32}$' })
+}
+
 function Get-SourcePath {
     param([Parameter(Mandatory = $true)][string]$Root)
     return (Join-Path $Root ".agents/skills")
@@ -489,7 +496,10 @@ function New-SymbolicLinkFixture {
 }
 
 function Invoke-AdapterFailureSeam {
-    param([Parameter(Mandatory = $true)][string]$ProjectRoot)
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [switch]$FailBeforeBackupRestore
+    )
 
     if (-not (Test-Path -LiteralPath $adapterModule -PathType Leaf)) {
         throw "Adapter module seam is missing: $adapterModule"
@@ -507,11 +517,18 @@ function Invoke-AdapterFailureSeam {
             '^(Root|ProjectRoot)$' { $parameters[$name] = $ProjectRoot; break }
             '^Target$' { $parameters[$name] = "claude-code"; break }
             '^FailureAfterReplacement$' { $parameters[$name] = 1; break }
+            '^FailBeforeBackupRestore$' {
+                if ($FailBeforeBackupRestore.IsPresent) { $parameters[$name] = $true }
+                break
+            }
             '^Json$' { $parameters[$name] = $true; break }
         }
     }
     if (-not $parameters.ContainsKey("FailureAfterReplacement")) {
         throw "Invoke-AdapterOperation does not expose FailureAfterReplacement seam."
+    }
+    if ($FailBeforeBackupRestore.IsPresent -and -not $parameters.ContainsKey("FailBeforeBackupRestore")) {
+        throw "Invoke-AdapterOperation does not expose FailBeforeBackupRestore seam."
     }
     try {
         $output = @(& $command @parameters 2>&1)
@@ -576,6 +593,7 @@ try {
         $run = Invoke-Workspace -Operation "create-adapter" -ProjectRoot $projectRoot
         Assert-InvocationSuccess -Invocation $run -Name "create-adapter"
         Assert-ExactMapping -ProjectRoot $projectRoot -SkillNames @("alpha", "beta")
+        if (@(Get-AdapterTransactionRoots -Root $projectRoot).Count -ne 0) { throw "Successful adapter transaction retained a transaction root." }
         if ((Get-TreeFingerprint -Root (Get-SourcePath -Root $projectRoot)) -cne $beforeCanonical) { throw "Create modified canonical Skills." }
         if (-not (Test-SnapshotEqual -Before $beforeIgnore -After (Get-GitIgnoreSnapshot -Root $projectRoot))) { throw "Create modified Git ignore surfaces." }
         "Managed-copy output exactly mirrors .agents/skills and writes only derived markers."
@@ -716,12 +734,49 @@ try {
             }
             if (((Get-TreeRecords -Root (Get-AdapterRoot -Root $projectRoot)) -join "`n") -cne ($beforeTarget -join "`n")) { throw "Replacement failure left a partial target replacement." }
             if ((Get-TreeFingerprint -Root (Get-SourcePath -Root $projectRoot)) -cne $beforeSource) { throw "Replacement failure modified canonical source." }
+            if (@(Get-AdapterTransactionRoots -Root $projectRoot).Count -ne 0) { throw "Successful rollback retained a transaction root." }
             "Injected replacement failure restores the pre-operation adapter and canonical snapshots."
         }
         finally {
             Restore-AlphaCanonicalFixture
             $recover = Invoke-Workspace -Operation "rebuild-adapter" -ProjectRoot $projectRoot
             Assert-InvocationSuccess -Invocation $recover -Name "post-rollback recovery rebuild-adapter"
+        }
+    }
+
+    Invoke-Case -Name "rollback-failure-retains-recovery-evidence" -Action {
+        $sourceAlpha = Join-Path (Get-SourcePath -Root $projectRoot) "alpha/SKILL.md"
+        try {
+            $clean = Invoke-Workspace -Operation "rebuild-adapter" -ProjectRoot $projectRoot
+            Assert-InvocationSuccess -Invocation $clean -Name "rollback failure clean rebuild"
+            Write-Utf8Bytes -Path $sourceAlpha -Text "---`nname: alpha`ndescription: rollback failure mutation`n---`n`nrollback failure candidate`n"
+            $beforeSource = Get-TreeFingerprint -Root (Get-SourcePath -Root $projectRoot)
+            $seam = Invoke-AdapterFailureSeam -ProjectRoot $projectRoot -FailBeforeBackupRestore
+            $seamPayload = $seam.payload
+            $finding = @($seamPayload.findings | Where-Object {
+                    [string]$_.code -ceq "adapter-rollback-failed-recovery-retained" -and
+                    [string]$_.message -match '(?i)recovery evidence was retained'
+                })
+            if ([int]$seam.exit_code -eq 0 -or $null -eq $seamPayload -or [string]$seamPayload.status -cne "FAIL" -or
+                [string]$seamPayload.rollback -cne "failed" -or [bool]$seamPayload.partial_success -or $finding.Count -ne 1) {
+                throw "Rollback failure seam contract mismatch: $($seam.text)"
+            }
+            $transactionRoots = @(Get-AdapterTransactionRoots -Root $projectRoot)
+            if ($transactionRoots.Count -ne 1) { throw "Rollback failure did not retain exactly one transaction root." }
+            $backupAlpha = Join-Path $transactionRoots[0].FullName "backup/alpha"
+            $recoveryAlpha = Join-Path $transactionRoots[0].FullName "recovery/alpha"
+            Assert-PathPresent -Path (Join-Path $backupAlpha "SKILL.md") -Name "retained rollback backup"
+            Assert-PathPresent -Path (Join-Path $recoveryAlpha "SKILL.md") -Name "retained rollback recovery"
+            if ((Get-TreeFingerprint -Root (Get-SourcePath -Root $projectRoot)) -cne $beforeSource) { throw "Rollback failure modified canonical source." }
+            "Failed rollback reports FAIL without partial success and retains backup/recovery evidence."
+        }
+        finally {
+            Restore-AlphaCanonicalFixture
+            $recover = Invoke-Workspace -Operation "rebuild-adapter" -ProjectRoot $projectRoot
+            Assert-InvocationSuccess -Invocation $recover -Name "post-rollback-failure recovery rebuild-adapter"
+            foreach ($transactionRoot in @(Get-AdapterTransactionRoots -Root $projectRoot)) {
+                Remove-Item -LiteralPath $transactionRoot.FullName -Recurse -Force
+            }
         }
     }
 

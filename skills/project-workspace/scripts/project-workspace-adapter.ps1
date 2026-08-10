@@ -520,12 +520,14 @@ function Build-AdapterStagedOutputs {
 function Restore-AdapterTransaction {
     param(
         [Parameter(Mandatory = $true)][string]$TransactionRoot,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Records
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Records,
+        [switch]$FailBeforeBackupRestore
     )
 
     $recoveryRoot = Join-Path $TransactionRoot "recovery"
     [System.IO.Directory]::CreateDirectory($recoveryRoot) | Out-Null
     $restored = $true
+    $rollbackFailureInjected = $false
     $recordArray = @($Records)
     [Array]::Reverse($recordArray)
     foreach ($record in $recordArray) {
@@ -537,6 +539,10 @@ function Restore-AdapterTransaction {
                 Move-Item -LiteralPath ([string]$record.target) -Destination (Join-Path $recoveryRoot ([string]$record.name)) -ErrorAction Stop
             }
             if ([bool]$record.backup_moved) {
+                if ($FailBeforeBackupRestore.IsPresent -and -not $rollbackFailureInjected) {
+                    $rollbackFailureInjected = $true
+                    throw "injected adapter rollback failure"
+                }
                 if (Test-Path -LiteralPath ([string]$record.target)) { throw "rollback target is occupied" }
                 Move-Item -LiteralPath ([string]$record.backup) -Destination ([string]$record.target) -ErrorAction Stop
             }
@@ -550,7 +556,8 @@ function Invoke-AdapterReplacementTransaction {
     param(
         [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Snapshot,
         [Parameter(Mandatory = $true)][string]$TransactionRoot,
-        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0
+        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0,
+        [switch]$FailBeforeBackupRestore
     )
 
     $targetRoot = [string]$Snapshot.target_root
@@ -588,7 +595,7 @@ function Invoke-AdapterReplacementTransaction {
         return [ordered]@{ success = $true; rollback = "not-required"; replacements = $replacementCount; records = @($records.ToArray()); claude_created = $claudeCreated; skills_created = $skillsCreated }
     }
     catch {
-        $restored = Restore-AdapterTransaction -TransactionRoot $TransactionRoot -Records @($records.ToArray())
+        $restored = Restore-AdapterTransaction -TransactionRoot $TransactionRoot -Records @($records.ToArray()) -FailBeforeBackupRestore:$FailBeforeBackupRestore.IsPresent
         try { Remove-AdapterCreatedParents -Root ([string]$Snapshot.root) -ClaudeCreated $claudeCreated -SkillsCreated $skillsCreated } catch { $restored = $false }
         return [ordered]@{ success = $false; rollback = if ($restored) { "restored" } else { "failed" }; replacements = $replacementCount; records = @($records.ToArray()); claude_created = $claudeCreated; skills_created = $skillsCreated }
     }
@@ -653,7 +660,8 @@ function Invoke-AdapterMutation {
     param(
         [Parameter(Mandatory = $true)][string]$Operation,
         [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Snapshot,
-        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0
+        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0,
+        [switch]$FailBeforeBackupRestore
     )
 
     $blockers = @(Set-AdapterPlanActions -Operation $Operation -Snapshot $Snapshot)
@@ -675,14 +683,18 @@ function Invoke-AdapterMutation {
 
     $transactionRoot = Join-Path ([string]$Snapshot.root) (".agent-ecosystem-adapter-transaction-{0}" -f ([Guid]::NewGuid().ToString("N")))
     $transaction = $null
+    $retainTransactionRoot = $false
     try {
         [System.IO.Directory]::CreateDirectory($transactionRoot) | Out-Null
         if ($Operation -in @("create-adapter", "rebuild-adapter")) { Build-AdapterStagedOutputs -Snapshot $Snapshot -TransactionRoot $transactionRoot }
         $fresh = Get-AdapterSnapshot -Root ([string]$Snapshot.root)
         if ((Get-AdapterSnapshotKey -Snapshot $fresh) -cne (Get-AdapterSnapshotKey -Snapshot $Snapshot)) { throw "adapter candidate set changed after preflight" }
-        $transaction = Invoke-AdapterReplacementTransaction -Snapshot $Snapshot -TransactionRoot $transactionRoot -FailureAfterReplacement $FailureAfterReplacement
+        $transaction = Invoke-AdapterReplacementTransaction -Snapshot $Snapshot -TransactionRoot $transactionRoot -FailureAfterReplacement $FailureAfterReplacement -FailBeforeBackupRestore:$FailBeforeBackupRestore.IsPresent
         if (-not [bool]$transaction.success) {
-            return New-AdapterFailure -Operation $Operation -ReadOnly $false -Code "adapter-replacement-failed" -Message "Adapter replacement failed and rollback was attempted." -Items (Get-AdapterPublicItems -Candidates $Snapshot.candidates) -Extra ([ordered]@{ preflight_complete = $true; mutation_started = $true; rollback = [string]$transaction.rollback; partial_success = $false })
+            $retainTransactionRoot = ([string]$transaction.rollback -ceq "failed")
+            $failureCode = if ($retainTransactionRoot) { "adapter-rollback-failed-recovery-retained" } else { "adapter-replacement-failed" }
+            $failureMessage = if ($retainTransactionRoot) { "Adapter replacement and rollback failed; transaction recovery evidence was retained for manual inspection." } else { "Adapter replacement failed and rollback was attempted." }
+            return New-AdapterFailure -Operation $Operation -ReadOnly $false -Code $failureCode -Message $failureMessage -Items (Get-AdapterPublicItems -Candidates $Snapshot.candidates) -Extra ([ordered]@{ preflight_complete = $true; mutation_started = $true; rollback = [string]$transaction.rollback; partial_success = $false })
         }
         $finalSnapshot = Get-AdapterSnapshot -Root ([string]$Snapshot.root)
         if ($Operation -in @("create-adapter", "rebuild-adapter")) {
@@ -709,13 +721,13 @@ function Invoke-AdapterMutation {
             try { Remove-AdapterCreatedParents -Root ([string]$Snapshot.root) -ClaudeCreated ([bool]$transaction.claude_created) -SkillsCreated ([bool]$transaction.skills_created) } catch { $restored = $false }
             $rollback = if ($restored) { "restored" } else { "failed" }
         }
-        if (Test-Path -LiteralPath $transactionRoot) {
-            try { Remove-AdapterTransactionRoot -Root ([string]$Snapshot.root) -TransactionRoot $transactionRoot } catch { }
-        }
-        return New-AdapterFailure -Operation $Operation -ReadOnly $false -Code "adapter-transaction-failed" -Message "Adapter transaction failed closed before reporting success." -Items (Get-AdapterPublicItems -Candidates $Snapshot.candidates) -Extra ([ordered]@{ preflight_complete = $true; mutation_started = $mutationStarted; rollback = $rollback; partial_success = $false })
+        $retainTransactionRoot = ($rollback -ceq "failed")
+        $failureCode = if ($retainTransactionRoot) { "adapter-rollback-failed-recovery-retained" } else { "adapter-transaction-failed" }
+        $failureMessage = if ($retainTransactionRoot) { "Adapter transaction and rollback failed; transaction recovery evidence was retained for manual inspection." } else { "Adapter transaction failed closed before reporting success." }
+        return New-AdapterFailure -Operation $Operation -ReadOnly $false -Code $failureCode -Message $failureMessage -Items (Get-AdapterPublicItems -Candidates $Snapshot.candidates) -Extra ([ordered]@{ preflight_complete = $true; mutation_started = $mutationStarted; rollback = $rollback; partial_success = $false })
     }
     finally {
-        if (Test-Path -LiteralPath $transactionRoot) {
+        if (-not $retainTransactionRoot -and (Test-Path -LiteralPath $transactionRoot)) {
             try { Remove-AdapterTransactionRoot -Root ([string]$Snapshot.root) -TransactionRoot $transactionRoot } catch { }
         }
     }
@@ -728,7 +740,8 @@ function Invoke-AdapterOperation {
         [AllowEmptyString()][string]$Target = "",
         [System.Collections.IDictionary]$BoundParameters = $null,
         [switch]$Json,
-        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0
+        [ValidateRange(0, 1000)][int]$FailureAfterReplacement = 0,
+        [switch]$FailBeforeBackupRestore
     )
 
     $readOnly = ($Operation -ceq "status-adapter")
@@ -741,5 +754,5 @@ function Invoke-AdapterOperation {
     try { $snapshot = Get-AdapterSnapshot -Root $Root }
     catch { return New-AdapterFailure -Operation $Operation -ReadOnly $readOnly -Code "adapter-workspace-unsafe" -Message "Project adapter source or target paths are missing, unsafe, linked, or otherwise invalid." }
     if ($readOnly) { return Invoke-AdapterStatus -Operation $Operation -Snapshot $snapshot }
-    return Invoke-AdapterMutation -Operation $Operation -Snapshot $snapshot -FailureAfterReplacement $FailureAfterReplacement
+    return Invoke-AdapterMutation -Operation $Operation -Snapshot $snapshot -FailureAfterReplacement $FailureAfterReplacement -FailBeforeBackupRestore:$FailBeforeBackupRestore.IsPresent
 }
