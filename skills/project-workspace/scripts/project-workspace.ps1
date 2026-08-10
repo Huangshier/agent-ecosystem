@@ -339,6 +339,8 @@ function Get-CanonicalFileRecords {
                 Add-Finding -Findings $Findings -Code "unsafe-path" -Path $relative -Message "Canonical asset path cannot be resolved safely inside the project root."
                 continue
             }
+            # NOTE: The exact legacy Context index is preserved documentation, not a canonical asset.
+            if ($relative -ceq ".agents/context/README.md") { continue }
             if (-not $seen.Add($relative)) { continue }
             [void]$records.Add([ordered]@{
                 path = $relative

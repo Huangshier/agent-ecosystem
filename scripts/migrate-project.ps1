@@ -541,7 +541,8 @@ function Invoke-Analyze {
     if (Test-Path -LiteralPath $contextRoot -PathType Container) {
         foreach ($file in @(Get-ChildItem -LiteralPath $contextRoot -File -Filter "*.md" -Recurse -Force)) {
             $relative = ConvertTo-RelativePath $Root $file.FullName
-            if ([IO.Path]::GetFileName($relative) -ine "README.md") { $contextCandidates.Add($relative) }
+            # NOTE: Only the exact legacy Context index is preserved as non-authority documentation.
+            if ($relative -cne ".agents/context/README.md") { $contextCandidates.Add($relative) }
         }
     }
     foreach ($relative in @($contextCandidates.ToArray() | Sort-Object -Unique)) {
@@ -589,8 +590,18 @@ function Invoke-Analyze {
     if (Test-Path -LiteralPath $specRoot -PathType Container) {
         foreach ($file in @(Get-ChildItem -LiteralPath $specRoot -File -Filter "spec.md" -Recurse -Force | Sort-Object FullName)) {
             $relative = ConvertTo-RelativePath $Root $file.FullName
-            if ($relative -notmatch '^docs/specs/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/spec\.md$') { $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_PATH_UNSUPPORTED" }); continue }
-            $id = $Matches.id; $text = Read-Utf8Text $file.FullName
+            if ($relative -match '^docs/specs/(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)/spec\.md$') {
+                $id = $Matches.id
+            }
+            elseif ($relative -cmatch '^docs/specs/archive/.+/spec\.md$') {
+                # NOTE: Nested archive Specs remain evidence-bound historical bytes, never canonical authority.
+                continue
+            }
+            else {
+                $human.Add([ordered]@{ path = $relative; reason_code = "SPEC_PATH_UNSUPPORTED" })
+                continue
+            }
+            $text = Read-Utf8Text $file.FullName
             if ($text -match '(?ms)^---\s*\r?\n.*?^schema:\s*agent-ecosystem/spec/v1\s*$') { Add-PlanAction $actions "preserve" $relative @($relative) $null "CANONICAL_SPEC_PRESERVED"; continue }
             $scope = Get-MarkdownSection $text @("Scope", "Goals", "目标", "范围")
             $nonGoals = Get-MarkdownSection $text @("Non-Goals", "Non Goals", "非目标")

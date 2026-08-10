@@ -664,7 +664,12 @@ function Get-CanonicalAssetPaths {
             continue
         }
         foreach ($file in @(Get-ChildItem -LiteralPath $directory -File -Filter '*.md' -Force)) {
-            $paths.Add((ConvertTo-NormalizedRelativePath -Root $Root -Path $file.FullName))
+            $relativePath = ConvertTo-NormalizedRelativePath -Root $Root -Path $file.FullName
+            # NOTE: The exact legacy Context index is preserved documentation, not a canonical asset.
+            if ($relativePath -ceq '.agents/context/README.md') {
+                continue
+            }
+            $paths.Add($relativePath)
         }
     }
 
