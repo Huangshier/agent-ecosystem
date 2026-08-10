@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet("Analyze", "Apply", "Rollback")][string]$Mode,
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [string]$AnalyzeEvidence,
+    [string]$DispositionEvidence,
     [string]$BackupId,
     [switch]$ConfirmMigration,
     [switch]$ConfirmRollback,
@@ -13,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v3"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v4"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -399,6 +400,257 @@ function Add-PlanAction {
     $entry = [ordered]@{ action = $Action; path = $Path.Replace('\', '/'); source_paths = @($SourcePaths | Sort-Object -Unique); reason_code = $ReasonCode }
     if ($Action -in @("create", "change")) { $entry.content = $Content; $entry.expected_sha256 = Get-Sha256Text $Content }
     $Actions.Add($entry)
+}
+
+function Assert-ExactObjectProperties {
+    param(
+        [Parameter(Mandatory = $true)][object]$Value,
+        [Parameter(Mandatory = $true)][string[]]$Required,
+        [Parameter(Mandatory = $true)][string[]]$Allowed,
+        [Parameter(Mandatory = $true)][string]$ErrorCode
+    )
+    if ($Value -isnot [Collections.IDictionary]) { throw $ErrorCode }
+    $names = @($Value.Keys | ForEach-Object { [string]$_ })
+    if (@($Required | Where-Object { $names -cnotcontains $_ }).Count -gt 0 -or
+        @($names | Where-Object { $Allowed -cnotcontains $_ }).Count -gt 0) { throw $ErrorCode }
+}
+
+function Test-CanonicalProjectRelativePath {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-SafeRelativePath $Path)) { return $false }
+    try { return ((ConvertTo-RelativePath $Root (Get-ProjectPath $Root $Path)) -ceq $Path) }
+    catch { return $false }
+}
+
+function Get-DispositionKey {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$ReasonCode)
+    return "$Path`n$ReasonCode"
+}
+
+function Test-PreserveDispositionAllowed {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$ReasonCode)
+    return ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC" -and $Path -cin @(".agents/process.txt", ".agents/plan.md"))
+}
+
+function Test-RetireDispositionAllowed {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$ReasonCode)
+    if ($ReasonCode -ceq "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED") { return ($Path -ceq ".agents/AGENTS.md") }
+    if ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC") { return ($Path -cin @(".agents/process.txt", ".agents/plan.md")) }
+    if ($ReasonCode -ceq "CONTEXT_MARKERS_MISSING") {
+        return ($Path -ceq ".agents/notes.md" -or $Path -cmatch '^\.agents/context/.+\.md$')
+    }
+    return $false
+}
+
+function Resolve-ReviewedDisposition {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][object]$Candidate,
+        [Parameter(Mandatory = $true)][string]$EvidenceJson
+    )
+    try { $reviewed = $EvidenceJson | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
+    catch { throw "DISPOSITION_EVIDENCE_INVALID" }
+    Assert-ExactObjectProperties $reviewed @("schema_version", "project_root", "migration_revision", "state_digest", "plan_digest", "human_disposition", "decisions") @("schema_version", "project_root", "migration_revision", "state_digest", "plan_digest", "human_disposition", "decisions") "DISPOSITION_EVIDENCE_INVALID"
+    if ([int](Get-HashtableValue $reviewed "schema_version") -ne 1) { throw "DISPOSITION_EVIDENCE_INVALID" }
+    if ([string](Get-HashtableValue $reviewed "project_root") -cne [string](Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "project_root") -or
+        [string](Get-HashtableValue $reviewed "migration_revision") -cne [string](Get-HashtableValue $Candidate "migration_revision") -or
+        [string](Get-HashtableValue $reviewed "state_digest") -cne [string](Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "state_digest") -or
+        [string](Get-HashtableValue $reviewed "plan_digest") -cne [string](Get-HashtableValue (Get-HashtableValue $Candidate "plan") "plan_digest")) { throw "DISPOSITION_EVIDENCE_STALE" }
+
+    $candidateHuman = @((Get-HashtableValue $Candidate "human_disposition"))
+    # Read array-valued fields directly so a single JSON element stays an
+    # IList without accepting an object where the schema requires an array.
+    $suppliedHumanValue = $reviewed["human_disposition"]
+    $decisionsValue = $reviewed["decisions"]
+    if ($suppliedHumanValue -isnot [Collections.IList] -or $suppliedHumanValue -is [string] -or
+        $decisionsValue -isnot [Collections.IList] -or $decisionsValue -is [string]) { throw "DISPOSITION_EVIDENCE_INVALID" }
+    if ($candidateHuman.Count -eq 0) { throw "DISPOSITION_DECISION_EXTRA" }
+
+    $candidateByKey = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    $candidatePaths = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    $normalizedHuman = [Collections.Generic.List[object]]::new()
+    foreach ($item in @($candidateHuman | Sort-Object path, reason_code)) {
+        $path = [string](Get-HashtableValue $item "path")
+        $reason = [string](Get-HashtableValue $item "reason_code")
+        $key = Get-DispositionKey $path $reason
+        if ($candidateByKey.ContainsKey($key)) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        $candidateByKey[$key] = $item
+        $candidatePaths[$path] = $true
+        $normalizedHuman.Add([ordered]@{ path = $path; reason_code = $reason })
+    }
+
+    $suppliedHuman = [Collections.Generic.List[object]]::new()
+    $suppliedHumanKeys = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    foreach ($item in @($suppliedHumanValue)) {
+        Assert-ExactObjectProperties $item @("path", "reason_code") @("path", "reason_code") "DISPOSITION_EVIDENCE_INVALID"
+        $path = [string](Get-HashtableValue $item "path")
+        $reason = [string](Get-HashtableValue $item "reason_code")
+        $key = Get-DispositionKey $path $reason
+        if ($suppliedHumanKeys.ContainsKey($key)) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        $suppliedHumanKeys[$key] = $true
+        $suppliedHuman.Add([ordered]@{ path = $path; reason_code = $reason })
+    }
+    if ($suppliedHumanKeys.Count -ne $candidateByKey.Count -or
+        @($candidateByKey.Keys | Where-Object { -not $suppliedHumanKeys.ContainsKey([string]$_) }).Count -gt 0) { throw "DISPOSITION_EVIDENCE_STALE" }
+
+    $decisionByKey = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    $decisionByPath = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($decision in @($decisionsValue)) {
+        if ($decision -isnot [Collections.IDictionary]) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        foreach ($required in @("path", "reason_code", "disposition")) {
+            if (-not (Test-HashtableProperty $decision $required)) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        }
+        $path = [string](Get-HashtableValue $decision "path")
+        $reason = [string](Get-HashtableValue $decision "reason_code")
+        $key = Get-DispositionKey $path $reason
+        if ($decisionByKey.ContainsKey($key)) { throw "DISPOSITION_DECISION_DUPLICATE" }
+        if (-not $candidateByKey.ContainsKey($key)) {
+            if ($candidatePaths.ContainsKey($path)) { throw "DISPOSITION_PATH_REASON_MISMATCH" }
+            throw "DISPOSITION_DECISION_EXTRA"
+        }
+        if ($decisionByPath.ContainsKey($path)) { throw "DISPOSITION_DECISION_DUPLICATE" }
+        $decisionByKey[$key] = $decision
+        $decisionByPath[$path] = $decision
+    }
+    if ($decisionByKey.Count -ne $candidateByKey.Count) { throw "DISPOSITION_DECISION_MISSING" }
+
+    $groupOwnerBySource = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    foreach ($decision in @($decisionsValue)) {
+        if ([string](Get-HashtableValue $decision "disposition") -cne "create-context-and-retire-sources") { continue }
+        Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_paths", "target", "content") @("path", "reason_code", "disposition", "source_paths", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
+        $leader = [string](Get-HashtableValue $decision "path")
+        $sourcesValue = Get-HashtableValue $decision "source_paths"
+        if ($sourcesValue -isnot [Collections.IList] -or $sourcesValue -is [string]) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        $sources = @($sourcesValue | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+        if ($sources.Count -lt 2 -or $sources -cnotcontains $leader -or $sources.Count -ne @($sourcesValue).Count) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        foreach ($source in $sources) {
+            if ($groupOwnerBySource.ContainsKey($source)) { throw "DISPOSITION_TARGET_COLLISION" }
+            if (-not $decisionByPath.ContainsKey($source)) { throw "DISPOSITION_DECISION_MISSING" }
+            $sourceDecision = $decisionByPath[$source]
+            if ([string](Get-HashtableValue $sourceDecision "reason_code") -cne "CONTEXT_MARKERS_MISSING") { throw "DISPOSITION_PATH_REASON_MISMATCH" }
+            $expectedOperation = if ($source -ceq $leader) { "create-context-and-retire-sources" } else { "retire-legacy-source" }
+            if ([string](Get-HashtableValue $sourceDecision "disposition") -cne $expectedOperation) { throw "DISPOSITION_EVIDENCE_INVALID" }
+            $groupOwnerBySource[$source] = $leader
+        }
+    }
+
+    $resolvedActions = [Collections.Generic.List[object]]::new()
+    $actionPaths = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    foreach ($action in @((Get-HashtableValue (Get-HashtableValue $Candidate "plan") "actions"))) {
+        $path = [string](Get-HashtableValue $action "path")
+        if ($actionPaths.ContainsKey($path)) { throw "DISPOSITION_TARGET_COLLISION" }
+        $actionPaths[$path] = $true
+        $resolvedActions.Add($action)
+    }
+    $normalizedDecisions = [Collections.Generic.List[object]]::new()
+    foreach ($decision in @($decisionsValue | Sort-Object path, reason_code)) {
+        $path = [string](Get-HashtableValue $decision "path")
+        $reason = [string](Get-HashtableValue $decision "reason_code")
+        $operation = [string](Get-HashtableValue $decision "disposition")
+        if (-not (Test-CanonicalProjectRelativePath $Root $path)) { throw "DISPOSITION_TARGET_INVALID" }
+        if ($actionPaths.ContainsKey($path)) { throw "DISPOSITION_TARGET_COLLISION" }
+        switch ($operation) {
+            "preserve-non-authority" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition") @("path", "reason_code", "disposition") "DISPOSITION_EVIDENCE_INVALID"
+                if (-not (Test-PreserveDispositionAllowed $path $reason)) { throw "DISPOSITION_UNSUPPORTED" }
+                Add-PlanAction $resolvedActions "preserve" $path @($path) $null "REVIEWED_NON_AUTHORITY_PRESERVED"
+                $actionPaths[$path] = $true
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation })
+            }
+            "retire-legacy-source" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition") @("path", "reason_code", "disposition") "DISPOSITION_EVIDENCE_INVALID"
+                if (-not (Test-RetireDispositionAllowed $path $reason)) { throw "DISPOSITION_UNSUPPORTED" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
+                Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                $actionPaths[$path] = $true
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation })
+            }
+            "replace-root-contract" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "target", "content") @("path", "reason_code", "disposition", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
+                $target = [string](Get-HashtableValue $decision "target")
+                $contentValue = Get-HashtableValue $decision "content"
+                if ($path -cnotin @("AGENTS.md", ".agents/AGENTS.md") -or $reason -cne "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED") { throw "DISPOSITION_UNSUPPORTED" }
+                if ($target -cne "AGENTS.md") { throw "DISPOSITION_TARGET_INVALID" }
+                if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
+                if ($path -ceq ".agents/AGENTS.md") {
+                    $candidateRootActions = @((Get-HashtableValue (Get-HashtableValue $Candidate "plan") "actions") | Where-Object { [string](Get-HashtableValue $_ "path") -ceq "AGENTS.md" })
+                    if ($candidateRootActions.Count -ne 1 -or
+                        [string](Get-HashtableValue $candidateRootActions[0] "action") -cne "change" -or
+                        [string](Get-HashtableValue $candidateRootActions[0] "reason_code") -cne "LEGACY_ENTRYPOINT_REPLACED") { throw "DISPOSITION_TARGET_COLLISION" }
+                    $resolvedRootIndexes = @(0..($resolvedActions.Count - 1) | Where-Object { [string](Get-HashtableValue $resolvedActions[$_] "path") -ceq "AGENTS.md" })
+                    if ($resolvedRootIndexes.Count -ne 1) { throw "DISPOSITION_TARGET_COLLISION" }
+                    $resolvedActions.RemoveAt([int]$resolvedRootIndexes[0])
+                    [void]$actionPaths.Remove("AGENTS.md")
+                    Add-PlanAction $resolvedActions "change" $target @("AGENTS.md", $path) ([string]$contentValue) "REVIEWED_ROOT_CONTRACT_REPLACED"
+                    $actionPaths[$target] = $true
+                    Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                    $actionPaths[$path] = $true
+                }
+                else {
+                    Add-PlanAction $resolvedActions "change" $target @($path) ([string]$contentValue) "REVIEWED_ROOT_CONTRACT_REPLACED"
+                    $actionPaths[$target] = $true
+                }
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; target = $target; content = [string]$contentValue })
+            }
+            "create-context-and-retire-sources" {
+                $target = [string](Get-HashtableValue $decision "target")
+                $contentValue = Get-HashtableValue $decision "content"
+                $sources = @((Get-HashtableValue $decision "source_paths") | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+                if ((Test-CanonicalProjectRelativePath $Root $target) -and
+                    ($actionPaths.ContainsKey($target) -or (Test-Path -LiteralPath (Get-ProjectPath $Root $target)))) { throw "DISPOSITION_TARGET_COLLISION" }
+                if ($reason -cne "CONTEXT_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
+                if ($target -cnotmatch '^\.agents/context/[a-z0-9]+(?:-[a-z0-9]+)*\.md$' -or
+                    -not (Test-CanonicalProjectRelativePath $Root $target) -or $sources -ccontains $target) { throw "DISPOSITION_TARGET_INVALID" }
+                if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
+                Add-PlanAction $resolvedActions "create" $target $sources ([string]$contentValue) "REVIEWED_CONTEXT_CREATED"
+                $actionPaths[$target] = $true
+                Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                $actionPaths[$path] = $true
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_paths = $sources; target = $target; content = [string]$contentValue })
+            }
+            default { throw "DISPOSITION_UNSUPPORTED" }
+        }
+    }
+
+    $normalizedEvidence = [ordered]@{
+        schema_version = 1
+        project_root = [string](Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "project_root")
+        migration_revision = [string](Get-HashtableValue $Candidate "migration_revision")
+        state_digest = [string](Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "state_digest")
+        plan_digest = [string](Get-HashtableValue (Get-HashtableValue $Candidate "plan") "plan_digest")
+        human_disposition = @($normalizedHuman.ToArray())
+        decisions = @($normalizedDecisions.ToArray())
+    }
+    $dispositionDigest = Get-Sha256Text (ConvertTo-StableJson $normalizedEvidence)
+    $sortedActions = @($resolvedActions.ToArray() | Sort-Object path, action, reason_code)
+    $allPlanPaths = @($sortedActions | ForEach-Object { [string](Get-HashtableValue $_ "path") } | Sort-Object -Unique)
+    $files = @(Get-StateSnapshot $Root $allPlanPaths)
+    $stateDigest = Get-StateDigest $files
+    $planCore = [ordered]@{ sentinel_updated = $script:MigrationSentinel; sentinel_source = "deterministic-migration-sentinel-v1"; reviewed_disposition_digest = $dispositionDigest; actions = $sortedActions }
+    $planDigest = Get-Sha256Text (ConvertTo-StableJson $planCore)
+    $migrationRevision = Get-Sha256Text ("$($script:MigrationRevisionVersion)`n$stateDigest`n$planDigest")
+    $remainingReasons = [Collections.Generic.List[string]]::new()
+    foreach ($reasonCode in @((Get-HashtableValue $Candidate "reason_codes"))) {
+        if ([string]$reasonCode -cnotin @("HUMAN_DISPOSITION_REQUIRED", "NO_MIGRATABLE_AUTHORITY")) { $remainingReasons.Add([string]$reasonCode) }
+    }
+    if (@($sortedActions | Where-Object { [string]$_.action -in @("create", "change") -and [string]$_.path -cne ".agents/hub.lock.json" }).Count -eq 0) { $remainingReasons.Add("NO_MIGRATABLE_AUTHORITY") }
+    $reasonArray = @($remainingReasons.ToArray() | Sort-Object -Unique)
+    if ($reasonArray.Count -eq 0) {
+        try { Assert-ResolvedPlanWorkspaceValid $Root $sortedActions }
+        catch { throw "DISPOSITION_CONTENT_INVALID" }
+    }
+    $eligible = ($reasonArray.Count -eq 0)
+    $normalizedEvidence.reviewed_disposition_digest = $dispositionDigest
+    return [ordered]@{
+        schema_version = $script:MigrationSchemaVersion; operation = "analyze"; status = $(if ($eligible) { "eligible" } else { "blocked" }); eligible = $eligible
+        reason_codes = $reasonArray; migration_revision = $migrationRevision
+        evidence = [ordered]@{ evidence_version = 1; project_root = $Root; project_language = (Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "project_language"); workspace_model = (Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "workspace_model"); workspace_state = (Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "workspace_state"); scaffold_contract = (Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "scaffold_contract"); files = $files; state_digest = $stateDigest; candidate_state_digest = [string](Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "state_digest") }
+        plan = [ordered]@{ plan_version = 2; plan_digest = $planDigest; candidate_plan_digest = [string](Get-HashtableValue (Get-HashtableValue $Candidate "plan") "plan_digest"); reviewed_disposition_digest = $dispositionDigest; sentinel_updated = $script:MigrationSentinel; sentinel_source = "deterministic-migration-sentinel-v1"; actions = $sortedActions; create = @($sortedActions | Where-Object action -eq "create" | ForEach-Object path); create_directories = @($sortedActions | Where-Object action -eq "create-directory" | ForEach-Object path); change = @($sortedActions | Where-Object action -eq "change" | ForEach-Object path); remove = @($sortedActions | Where-Object action -eq "remove" | ForEach-Object path); preserve = @($sortedActions | Where-Object action -in @("preserve", "preserve-directory") | ForEach-Object path) }
+        human_disposition = @($normalizedHuman.ToArray())
+        reviewed_disposition = $normalizedEvidence
+        backup_requirements = [ordered]@{ backup_id = $migrationRevision.Substring(0, 24); path = ".agents/.migration-backups/$($migrationRevision.Substring(0, 24))/"; project_owned = $true; offline = $true; retained_after_rollback = $true; complete_pre_state_required = $true }
+    }
 }
 
 function Get-C33ScaffoldContract {
@@ -867,6 +1119,55 @@ function Write-ExactText {
     [IO.File]::WriteAllText($path, $Content, [Text.UTF8Encoding]::new($false))
 }
 
+function Invoke-PlanMutations {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][object[]]$Actions)
+    foreach ($action in $Actions) {
+        $kind = [string](Get-HashtableValue $action "action")
+        $relative = [string](Get-HashtableValue $action "path")
+        if ($kind -in @("create", "change")) { Write-ExactText $Root $relative ([string](Get-HashtableValue $action "content")) }
+        elseif ($kind -ceq "create-directory") {
+            $path = Get-ProjectPath $Root $relative
+            if (-not (Test-Path -LiteralPath $path)) { [IO.Directory]::CreateDirectory($path) | Out-Null }
+        }
+        elseif ($kind -ceq "remove") {
+            $path = Get-ProjectPath $Root $relative
+            if (Test-Path -LiteralPath $path -PathType Leaf) { [IO.File]::Delete($path) }
+        }
+    }
+}
+
+function Assert-ResolvedPlanWorkspaceValid {
+    param([Parameter(Mandatory = $true)][string]$Root, [Parameter(Mandatory = $true)][object[]]$Actions)
+    $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $stagingRoot = [IO.Path]::GetFullPath((Join-Path $tempBase ("agent-ecosystem-disposition-validation-{0}" -f [Guid]::NewGuid().ToString("N"))))
+    $tempPrefix = $tempBase + [IO.Path]::DirectorySeparatorChar
+    if (-not $stagingRoot.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "DISPOSITION_CONTENT_VALIDATION_UNAVAILABLE" }
+    [IO.Directory]::CreateDirectory($stagingRoot) | Out-Null
+    try {
+        foreach ($relative in @(Get-MigrationRelevantPaths $Root)) {
+            $source = Get-ProjectPath $Root $relative
+            $destination = Get-ProjectPath $stagingRoot $relative
+            $item = Get-Item -LiteralPath $source -Force
+            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "REPARSE_POINT_UNSUPPORTED" }
+            if ($item.PSIsContainer) { [IO.Directory]::CreateDirectory($destination) | Out-Null }
+            else {
+                $parent = Split-Path -Parent $destination
+                if (-not (Test-Path -LiteralPath $parent)) { [IO.Directory]::CreateDirectory($parent) | Out-Null }
+                [IO.File]::Copy($source, $destination, $false)
+            }
+        }
+        Invoke-PlanMutations $stagingRoot $Actions
+        if ((Invoke-MigratedWorkspaceCheck $stagingRoot) -cne "PASS") { throw "MIGRATED_WORKSPACE_INVALID" }
+    }
+    finally {
+        if (Test-Path -LiteralPath $stagingRoot -PathType Container) {
+            $resolvedStaging = [IO.Path]::GetFullPath($stagingRoot)
+            if (-not $resolvedStaging.StartsWith($tempPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "DISPOSITION_CONTENT_VALIDATION_UNAVAILABLE" }
+            [IO.Directory]::Delete($resolvedStaging, $true)
+        }
+    }
+}
+
 function Invoke-MigratedWorkspaceCheck {
     param([Parameter(Mandatory = $true)][string]$Root)
     $runtimeRoot = Split-Path -Parent $PSScriptRoot
@@ -888,8 +1189,12 @@ function Invoke-Apply {
     if ([string]::IsNullOrWhiteSpace($AnalyzeEvidence)) { throw "ANALYZE_EVIDENCE_REQUIRED" }
     try { $held = $AnalyzeEvidence | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
     catch { throw "ANALYZE_EVIDENCE_INVALID" }
-    if ([int](Get-HashtableValue $held "schema_version") -ne 1 -or [string](Get-HashtableValue $held "operation") -cne "analyze" -or -not [bool](Get-HashtableValue $held "eligible")) { throw "ANALYZE_EVIDENCE_INELIGIBLE" }
-    $fresh = Invoke-Analyze $Root
+    if ([int](Get-HashtableValue $held "schema_version") -ne 1 -or [string](Get-HashtableValue $held "operation") -cne "analyze") { throw "ANALYZE_EVIDENCE_INVALID" }
+    if (-not [bool](Get-HashtableValue $held "eligible")) { throw "ANALYZE_EVIDENCE_INELIGIBLE" }
+    $heldReviewed = Get-HashtableValue $held "reviewed_disposition"
+    if ($null -ne $heldReviewed -and [string]::IsNullOrWhiteSpace($DispositionEvidence)) { throw "DISPOSITION_EVIDENCE_REQUIRED" }
+    $freshCandidate = Invoke-Analyze $Root
+    $fresh = if ([string]::IsNullOrWhiteSpace($DispositionEvidence)) { $freshCandidate } else { Resolve-ReviewedDisposition $Root $freshCandidate $DispositionEvidence }
     if (-not $fresh.eligible -or [string]$fresh.migration_revision -cne [string](Get-HashtableValue $held "migration_revision") -or [string]$fresh.evidence.state_digest -cne [string](Get-HashtableValue (Get-HashtableValue $held "evidence") "state_digest") -or [string]$fresh.plan.plan_digest -cne [string](Get-HashtableValue (Get-HashtableValue $held "plan") "plan_digest")) { throw "ANALYZE_EVIDENCE_STALE" }
     $heldPlan = Get-HashtableValue $held "plan"
     if ((ConvertTo-StableJson $heldPlan) -cne (ConvertTo-StableJson $fresh.plan)) { throw "ANALYZE_PLAN_MISMATCH" }
@@ -902,13 +1207,14 @@ function Invoke-Apply {
     $preState = @(Get-StateSnapshot $Root @($fresh.evidence.files.path) -IncludeContent)
     $plannedPostState = @(Get-PlannedPostState $preState @($fresh.plan.actions))
     $managedPaths = @($fresh.plan.actions | Where-Object { [string]$_.action -in @("create", "create-directory", "change", "remove") } | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
-    $manifest = [ordered]@{ schema_version = 1; backup_kind = "c3.3-project-migration"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; project_language = $fresh.evidence.project_language; pre_state = $preState; plan_digest = $fresh.plan.plan_digest }
+    $reviewedDispositionDigest = [string](Get-HashtableValue (Get-HashtableValue $fresh "reviewed_disposition") "reviewed_disposition_digest")
+    $manifest = [ordered]@{ schema_version = 1; backup_kind = "c3.3-project-migration"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; project_language = $fresh.evidence.project_language; pre_state = $preState; plan_digest = $fresh.plan.plan_digest; reviewed_disposition_digest = $reviewedDispositionDigest }
     $manifestText = (ConvertTo-StableJson $manifest) + "`n"
     [IO.File]::WriteAllText((Join-Path $backupRoot "manifest.json"), $manifestText, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $backupRoot "manifest.sha256"), (Get-Sha256Text $manifestText) + "`n", [Text.UTF8Encoding]::new($false))
-    $completion = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-complete"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; expected_post_state_digest = Get-StateDigest $plannedPostState }
+    $completion = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-complete"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; reviewed_disposition_digest = $reviewedDispositionDigest; expected_post_state_digest = Get-StateDigest $plannedPostState }
     $completionText = (ConvertTo-StableJson $completion) + "`n"
-    $record = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-apply"; apply_state = "prepared"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; managed_paths = $managedPaths; expected_post_state = $plannedPostState; expected_post_state_digest = $completion.expected_post_state_digest; completion_marker_sha256 = Get-Sha256Text $completionText }
+    $record = [ordered]@{ schema_version = 1; record_kind = "c3.3-project-migration-apply"; apply_state = "prepared"; backup_id = $backupIdValue; migration_revision = $fresh.migration_revision; plan_digest = $fresh.plan.plan_digest; reviewed_disposition_digest = $reviewedDispositionDigest; managed_paths = $managedPaths; expected_post_state = $plannedPostState; expected_post_state_digest = $completion.expected_post_state_digest; completion_marker_sha256 = Get-Sha256Text $completionText }
     $recordText = (ConvertTo-StableJson $record) + "`n"
     [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.json"), $recordText, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $backupRoot "apply-record.sha256"), (Get-Sha256Text $recordText) + "`n", [Text.UTF8Encoding]::new($false))
@@ -918,17 +1224,7 @@ function Invoke-Apply {
     try { $persistedManifestObject = $persistedManifest | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop; $persistedRecordObject = $persistedRecord | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
     catch { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
     if ([string](Get-HashtableValue $persistedManifestObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "backup_id") -cne $backupIdValue -or [string](Get-HashtableValue $persistedRecordObject "expected_post_state_digest") -cne [string]$completion.expected_post_state_digest) { throw "ROLLBACK_EVIDENCE_INTEGRITY_FAILED" }
-    foreach ($action in @($fresh.plan.actions)) {
-        if ($action.action -in @("create", "change")) { Write-ExactText $Root $action.path ([string]$action.content) }
-        elseif ($action.action -ceq "create-directory") {
-            $path = Get-ProjectPath $Root $action.path
-            if (-not (Test-Path -LiteralPath $path)) { [IO.Directory]::CreateDirectory($path) | Out-Null }
-        }
-        elseif ($action.action -ceq "remove") {
-            $path = Get-ProjectPath $Root $action.path
-            if (Test-Path -LiteralPath $path -PathType Leaf) { [IO.File]::Delete($path) }
-        }
-    }
+    Invoke-PlanMutations $Root @($fresh.plan.actions)
     # Re-read the complete Analyze evidence scope so absent legacy/scaffold
     # paths remain part of the exact planned post-state comparison.
     $postState = @(Get-StateSnapshot $Root @($fresh.evidence.files.path))
@@ -952,7 +1248,7 @@ function Invoke-Apply {
     $completionPath = Join-Path $backupRoot "apply-complete.json"
     [IO.File]::WriteAllText($completionTemp, $completionText, [Text.UTF8Encoding]::new($false))
     [IO.File]::Move($completionTemp, $completionPath)
-    return [ordered]@{ schema_version = 1; operation = "apply"; status = "applied"; reason_codes = @(); migration_revision = $fresh.migration_revision; backup_id = $backupIdValue; backup_path = "$backupRelative/"; backup_before_mutation = $true; workspace_check = $workspaceCheck; expected_post_state_digest = $record.expected_post_state_digest }
+    return [ordered]@{ schema_version = 1; operation = "apply"; status = "applied"; reason_codes = @(); migration_revision = $fresh.migration_revision; reviewed_disposition_digest = $reviewedDispositionDigest; backup_id = $backupIdValue; backup_path = "$backupRelative/"; backup_before_mutation = $true; workspace_check = $workspaceCheck; expected_post_state_digest = $record.expected_post_state_digest }
 }
 
 function Remove-EmptyMigrationDirectories {
@@ -977,7 +1273,7 @@ function Invoke-Rollback {
     if ((Get-Sha256Text $recordText) -cne $expectedRecordHash) { throw "BACKUP_INTEGRITY_FAILED" }
     try { $manifest = $manifestText | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop; $record = $recordText | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
     catch { throw "BACKUP_INVALID" }
-    if ([string](Get-HashtableValue $manifest "backup_id") -cne $BackupId -or [string](Get-HashtableValue $record "backup_id") -cne $BackupId -or [string](Get-HashtableValue $manifest "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $manifest "plan_digest") -cne [string](Get-HashtableValue $record "plan_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
+    if ([string](Get-HashtableValue $manifest "backup_id") -cne $BackupId -or [string](Get-HashtableValue $record "backup_id") -cne $BackupId -or [string](Get-HashtableValue $manifest "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $manifest "plan_digest") -cne [string](Get-HashtableValue $record "plan_digest") -or [string](Get-HashtableValue $manifest "reviewed_disposition_digest") -cne [string](Get-HashtableValue $record "reviewed_disposition_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
     $preState = @(Get-HashtableValue $manifest "pre_state")
     $postState = @(Get-HashtableValue $record "expected_post_state")
     $completedApply = Test-Path -LiteralPath $completionPath -PathType Leaf
@@ -986,7 +1282,7 @@ function Invoke-Rollback {
         if ((Get-Sha256Text $completionText) -cne [string](Get-HashtableValue $record "completion_marker_sha256")) { throw "BACKUP_INTEGRITY_FAILED" }
         try { $completion = $completionText | ConvertFrom-Json -AsHashtable -Depth 50 -ErrorAction Stop }
         catch { throw "BACKUP_INTEGRITY_FAILED" }
-        if ([string](Get-HashtableValue $completion "backup_id") -cne $BackupId -or [string](Get-HashtableValue $completion "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $completion "expected_post_state_digest") -cne [string](Get-HashtableValue $record "expected_post_state_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
+        if ([string](Get-HashtableValue $completion "backup_id") -cne $BackupId -or [string](Get-HashtableValue $completion "migration_revision") -cne [string](Get-HashtableValue $record "migration_revision") -or [string](Get-HashtableValue $completion "reviewed_disposition_digest") -cne [string](Get-HashtableValue $record "reviewed_disposition_digest") -or [string](Get-HashtableValue $completion "expected_post_state_digest") -cne [string](Get-HashtableValue $record "expected_post_state_digest")) { throw "APPLY_IDENTITY_MISMATCH" }
         Assert-StateMatches $Root $postState -ExactScope
     }
     else {
@@ -1051,7 +1347,11 @@ $root = ""
 try {
     $root = Get-NormalizedProjectRoot $ProjectRoot
     $result = switch ($Mode) {
-        "Analyze" { Invoke-Analyze $root }
+        "Analyze" {
+            $candidate = Invoke-Analyze $root
+            if ([string]::IsNullOrWhiteSpace($DispositionEvidence)) { $candidate }
+            else { Resolve-ReviewedDisposition $root $candidate $DispositionEvidence }
+        }
         "Apply" { Invoke-Apply $root }
         "Rollback" { Invoke-Rollback $root }
     }
