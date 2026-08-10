@@ -63,6 +63,112 @@ function Write-Utf8NoBom {
     [IO.File]::WriteAllText($Path, $Text, [Text.UTF8Encoding]::new($false))
 }
 
+function Get-TextSha256 {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text)
+    $bytes = [Text.UTF8Encoding]::new($false).GetBytes($Text)
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
+function New-WorkflowSpecLiteText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Status,
+        [string]$Slug = $Id
+    )
+    return @"
+# Work Spec
+
+- **Title**: $Title
+- **Slug**: $Slug
+- **Status**: $Status
+
+## 1. Summary
+
+This public fixture exercises the official workflow-spec-lite legacy shape.
+
+## 4. Goals
+
+- Preserve the complete legacy Spec body.
+- Map legacy lifecycle metadata deterministically.
+
+## 5. Non-Goals
+
+- Do not infer status from project memory.
+
+## 9. Proposed Approach
+
+Parse the published numbered headings and retain this body sentinel: legacy-body-preserved.
+
+## 10. Acceptance / Evidence
+
+- The canonical Spec has the path-derived id, metadata title, and mapped status.
+"@
+}
+
+function Set-LanguageMigrationProvenance {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][object[]]$Actions,
+        [string]$SourceLanguage = "zh-CN",
+        [string]$TargetLanguage = "en"
+    )
+    $migrationDir = Join-Path $Root ".agents/language-migration/20260810-000000"
+    $proposalPath = Join-Path $migrationDir "proposal.json"
+    $resultPath = Join-Path $migrationDir "result.json"
+    $proposalActions = New-Object 'System.Collections.Generic.List[object]'
+    $resultActions = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($action in $Actions) {
+        $relative = [string]$action.relative_path
+        $actionName = [string]$action.action
+        $manualReview = [bool]$action.manual_review
+        $currentPath = Join-Path $Root $relative
+        $currentText = if (Test-Path -LiteralPath $currentPath -PathType Leaf) { [IO.File]::ReadAllText($currentPath, [Text.UTF8Encoding]::new($false, $true)) } else { "" }
+        $hash = Get-TextSha256 $currentText
+        [void]$proposalActions.Add([ordered]@{
+                relative_path = $relative
+                action = $actionName
+                approved = [bool]($actionName -in @("replace-template", "add-target-template") -or $manualReview)
+                manual_review = $manualReview
+                target_template_hash_sha256 = $hash
+            })
+        $resultText = if ($actionName -ceq "already-target-template") { "preserved" } elseif ($actionName -in @("replace-template", "add-target-template")) { "written-target-template" } else { "written-target-template-with-manual-review-source" }
+        [void]$resultActions.Add([ordered]@{
+                relative_path = $relative
+                action = $actionName
+                result = $resultText
+                final_hash_sha256 = $hash
+            })
+    }
+    Write-Utf8NoBom -Path $proposalPath -Text ([ordered]@{
+            schema_version = 1
+            project = $Root
+            source_language = $SourceLanguage
+            target_language = $TargetLanguage
+            actions = @($proposalActions.ToArray())
+        } | ConvertTo-Json -Depth 20)
+    Write-Utf8NoBom -Path $resultPath -Text ([ordered]@{
+            schema_version = 1
+            project = $Root
+            source_language = $SourceLanguage
+            target_language = $TargetLanguage
+            proposal = $proposalPath
+            actions = @($resultActions.ToArray())
+        } | ConvertTo-Json -Depth 20)
+    $lockPath = Join-Path $Root ".agents/hub.lock.json"
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json -AsHashtable -Depth 30
+    $lock.project_language = $TargetLanguage
+    $lock.language_migration = [ordered]@{
+        schema_version = 1
+        source_language = $SourceLanguage
+        target_language = $TargetLanguage
+        proposal = $proposalPath
+        result = $resultPath
+    }
+    Write-Utf8NoBom -Path $lockPath -Text ($lock | ConvertTo-Json -Depth 30)
+    return [ordered]@{ proposal = $proposalPath; result = $resultPath }
+}
+
 function Get-TreeFingerprint {
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -528,35 +634,7 @@ Review and apply the bounded project-memory migration.
 "@
     # A deterministic legacy-form Spec under docs/specs is normalized in place;
     # it is not duplicated and remains the one canonical Spec authority.
-    Write-Utf8NoBom -Path (Join-Path $Root "docs/specs/legacy-spec/spec.md") -Text @"
----
-id: legacy-spec
-title: Legacy Project Memory Specification
----
-
-## Scope
-
-Move this bounded project-memory record into the C3.3 canonical workspace.
-
-## Goals
-
-- Preserve the project language and public-safe literals.
-- Produce one Work, Context, Procedure, and Spec asset.
-
-## Non-Goals
-
-- Do not alter runtime files or add a compatibility mirror.
-- Do not overwrite project-owned files.
-
-## Acceptance
-
-- The canonical workspace is complete.
-- Rollback restores the exact original tree.
-
-## Design
-
-Use one evidence-gated migration with a retained backup and fail-closed rollback.
-"@
+    Write-Utf8NoBom -Path (Join-Path $Root "docs/specs/legacy-spec/spec.md") -Text (New-WorkflowSpecLiteText -Id "legacy-spec" -Title "Legacy Project Memory Specification" -Status "Done")
     Write-Utf8NoBom -Path (Join-Path $Root "docs/specs/archive/retired-work/spec.md") -Text @"
 # Retired Historical Specification
 
@@ -743,11 +821,177 @@ try {
     )
     Add-Case -Name "archive-spec-preserved-non-authority" -Passed $archiveSpecAnalyzePreserved -Detail "Analyze excludes an archived nested Spec from canonical actions and SPEC_PATH_UNSUPPORTED disposition."
 
-    $immediateSpecCanonical = @($analyzeOne.payload.plan.actions | Where-Object {
+    $immediateSpecActions = @($analyzeOne.payload.plan.actions | Where-Object {
             [string]$_.path -ceq $immediateSpecRelative -and [string]$_.action -ceq "change" -and [string]$_.reason_code -ceq "LEGACY_SPEC_PROMOTED"
-        }).Count -eq 1
-    Add-Case -Name "immediate-spec-remains-canonical" -Passed $immediateSpecCanonical -Detail "An immediate docs/specs/<id>/spec.md keeps its existing canonical migration behavior."
+        })
+    $legacySpecBody = New-WorkflowSpecLiteText -Id "legacy-spec" -Title "Legacy Project Memory Specification" -Status "Done"
+    $immediateSpecCanonical = (
+        $immediateSpecActions.Count -eq 1 -and
+        [string]$immediateSpecActions[0].content -match '(?m)^id: legacy-spec$' -and
+        [string]$immediateSpecActions[0].content -match '(?m)^title: "Legacy Project Memory Specification"$' -and
+        [string]$immediateSpecActions[0].content -match '(?m)^status: implemented$' -and
+        [string]$immediateSpecActions[0].content -match '(?m)^## 10\. Acceptance / Evidence$' -and
+        [string]$immediateSpecActions[0].content -like "*$legacySpecBody*"
+    )
+    Add-Case -Name "workflow-spec-lite-numbered-metadata-promoted" -Passed $immediateSpecCanonical -Detail "The official numbered headings, Acceptance / Evidence, Proposed Approach, metadata Title, path Slug, Done status, and complete legacy body are promoted deterministically."
     $evidence.immediate_spec_canonical = $immediateSpecCanonical
+
+    $statusMappings = [ordered]@{
+        Draft = "draft"
+        Active = "accepted"
+        Done = "implemented"
+        Archived = "archived"
+        Superseded = "superseded"
+    }
+    $statusMappingPass = $true
+    foreach ($legacyStatus in $statusMappings.Keys) {
+        $statusRoot = Join-Path $scratchRoot ("legacy-spec-status-{0}" -f $legacyStatus.ToLowerInvariant())
+        Copy-Fixture -Source $pristineRoot -Destination $statusRoot
+        $statusBody = New-WorkflowSpecLiteText -Id "legacy-spec" -Title ("{0} legacy Spec" -f $legacyStatus) -Status $legacyStatus
+        Write-Utf8NoBom -Path (Join-Path $statusRoot $immediateSpecRelative) -Text $statusBody
+        $statusAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $statusRoot
+        $statusAction = @($statusAnalyze.payload.plan.actions | Where-Object { [string]$_.path -ceq $immediateSpecRelative -and [string]$_.reason_code -ceq "LEGACY_SPEC_PROMOTED" })
+        $mapped = [string]$statusMappings[$legacyStatus]
+        $statusPass = ((Test-InvocationPass -Invocation $statusAnalyze) -and $statusAction.Count -eq 1 -and
+            [string]$statusAction[0].content -match ("(?m)^status: {0}$" -f [regex]::Escape($mapped)) -and
+            [string]$statusAction[0].content -like "*$statusBody*")
+        $statusMappingPass = $statusMappingPass -and $statusPass
+    }
+    Add-Case -Name "workflow-spec-lite-status-mapping" -Passed $statusMappingPass -Detail "Draft, Active, Done, Archived, and Superseded map to canonical lifecycle values without consulting process or plan content."
+
+    $unsupportedStatusPass = $true
+    foreach ($legacyStatus in @("Deferred", "Experimental")) {
+        $statusRoot = Join-Path $scratchRoot ("legacy-spec-blocked-{0}" -f $legacyStatus.ToLowerInvariant())
+        Copy-Fixture -Source $pristineRoot -Destination $statusRoot
+        Write-Utf8NoBom -Path (Join-Path $statusRoot $immediateSpecRelative) -Text (New-WorkflowSpecLiteText -Id "legacy-spec" -Title "Blocked legacy Spec" -Status $legacyStatus)
+        $beforeStatusAnalyze = Get-TreeFingerprint -Root $statusRoot
+        $statusAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $statusRoot
+        $statusDisposition = @($statusAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $immediateSpecRelative -and [string]$_.reason_code -ceq "SPEC_STATUS_REQUIRES_DISPOSITION" }).Count -eq 1
+        $statusClosed = ((Test-InvocationBlocked -Invocation $statusAnalyze) -and $statusDisposition -and $beforeStatusAnalyze -ceq (Get-TreeFingerprint -Root $statusRoot) -and @((Get-BackupFiles -ProjectRoot $statusRoot)).Count -eq 0)
+        $unsupportedStatusPass = $unsupportedStatusPass -and $statusClosed
+    }
+    Add-Case -Name "workflow-spec-lite-unsupported-status-fails-closed" -Passed $unsupportedStatusPass -Detail "Deferred and unknown legacy status values require human disposition without writes."
+
+    $slugRoot = Join-Path $scratchRoot "legacy-spec-slug-mismatch"
+    Copy-Fixture -Source $pristineRoot -Destination $slugRoot
+    Write-Utf8NoBom -Path (Join-Path $slugRoot $immediateSpecRelative) -Text (New-WorkflowSpecLiteText -Id "legacy-spec" -Title "Slug mismatch" -Status "Draft" -Slug "different-spec")
+    $slugBefore = Get-TreeFingerprint -Root $slugRoot
+    $slugAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $slugRoot
+    $slugDisposition = @($slugAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $immediateSpecRelative -and [string]$_.reason_code -ceq "SPEC_SLUG_MISMATCH" }).Count -eq 1
+    $slugClosed = ((Test-InvocationBlocked -Invocation $slugAnalyze) -and $slugDisposition -and $slugBefore -ceq (Get-TreeFingerprint -Root $slugRoot) -and @((Get-BackupFiles -ProjectRoot $slugRoot)).Count -eq 0)
+    Add-Case -Name "workflow-spec-lite-slug-mismatch-fails-closed" -Passed $slugClosed -Detail "A non-empty legacy Slug that differs from docs/specs/<id> requires human disposition without writes."
+
+    # A completed project-bootstrap language migration may prove that custom
+    # scaffold and nested Context index bytes are exact target templates.
+    $provenanceRoot = Join-Path $scratchRoot "verified-language-provenance"
+    Copy-Fixture -Source $pristineRoot -Destination $provenanceRoot
+    $provenanceFiles = [ordered]@{
+        "AGENTS.md" = "# Proven target-language root entrypoint`n`nThis public fixture is not a bundled scaffold byte match.`n"
+        ".agents/context/business/README.md" = [IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-agent/context/business/README.md"), [Text.UTF8Encoding]::new($false, $true))
+        ".agents/context/experience/README.md" = [IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-agent/context/experience/README.md"), [Text.UTF8Encoding]::new($false, $true))
+        ".agents/context/experience/cases/case_template.md" = [IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-agent/context/experience/cases/case_template.md"), [Text.UTF8Encoding]::new($false, $true))
+        ".agents/context/tech/README.md" = [IO.File]::ReadAllText((Join-Path $legacyTemplateRoot "project-agent/context/tech/README.md"), [Text.UTF8Encoding]::new($false, $true))
+    }
+    foreach ($relative in $provenanceFiles.Keys) { Write-Utf8NoBom -Path (Join-Path $provenanceRoot $relative) -Text ([string]$provenanceFiles[$relative]) }
+    $pureActions = @(
+        [ordered]@{ relative_path = "AGENTS.md"; action = "replace-template"; manual_review = $false },
+        [ordered]@{ relative_path = ".agents/context/business/README.md"; action = "replace-template"; manual_review = $false },
+        [ordered]@{ relative_path = ".agents/context/experience/README.md"; action = "already-target-template"; manual_review = $false },
+        [ordered]@{ relative_path = ".agents/context/experience/cases/case_template.md"; action = "replace-template"; manual_review = $false },
+        [ordered]@{ relative_path = ".agents/context/tech/README.md"; action = "add-target-template"; manual_review = $false }
+    )
+    [void](Set-LanguageMigrationProvenance -Root $provenanceRoot -Actions $pureActions)
+    $provenanceBefore = Get-FileSnapshot -Root $provenanceRoot
+    $provenanceAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $provenanceRoot
+    $provenanceAfter = Get-FileSnapshot -Root $provenanceRoot
+    $verifiedRoot = @($provenanceAnalyze.payload.plan.actions | Where-Object { [string]$_.path -ceq "AGENTS.md" -and [string]$_.reason_code -ceq "LEGACY_ENTRYPOINT_REPLACED" }).Count -eq 1
+    $verifiedNested = @($pureActions | Where-Object { [string]$_.relative_path -like ".agents/context/*" } | ForEach-Object {
+            $relative = [string]$_.relative_path
+            @($provenanceAnalyze.payload.plan.actions | Where-Object { [string]$_.path -ceq $relative -and [string]$_.action -ceq "preserve" -and [string]$_.reason_code -ceq "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY" }).Count -eq 1
+        } | Where-Object { -not $_ }).Count -eq 0
+    $provenancePass = ((Test-InvocationPass -Invocation $provenanceAnalyze) -and $verifiedRoot -and $verifiedNested -and (Test-SnapshotEqual -Before $provenanceBefore -After $provenanceAfter))
+    Add-Case -Name "verified-language-migration-templates" -Passed $provenancePass -Detail "All three pure-template actions can prove a custom legacy scaffold and preserve nested Context template/index bytes as non-authority."
+
+    $invalidProvenancePass = $true
+    foreach ($kind in @("missing", "forged", "stale", "outside", "language", "action-path")) {
+        $invalidRoot = Join-Path $scratchRoot ("invalid-language-provenance-{0}" -f $kind)
+        Copy-Fixture -Source $provenanceRoot -Destination $invalidRoot
+        $invalidLockPath = Join-Path $invalidRoot ".agents/hub.lock.json"
+        $invalidLock = Get-Content -LiteralPath $invalidLockPath -Raw | ConvertFrom-Json -AsHashtable -Depth 30
+        $proposalPath = [string]$invalidLock.language_migration.proposal
+        $resultPath = [string]$invalidLock.language_migration.result
+        # Copy-Fixture changes the root, so first rewrite otherwise-valid project/path bindings.
+        $proposal = Get-Content -LiteralPath $proposalPath -Raw | ConvertFrom-Json -AsHashtable -Depth 30
+        $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json -AsHashtable -Depth 30
+        $newProposalPath = Join-Path $invalidRoot ".agents/language-migration/20260810-000000/proposal.json"
+        $newResultPath = Join-Path $invalidRoot ".agents/language-migration/20260810-000000/result.json"
+        $proposal.project = $invalidRoot
+        $result.project = $invalidRoot
+        $result.proposal = $newProposalPath
+        $invalidLock.language_migration.proposal = $newProposalPath
+        $invalidLock.language_migration.result = $newResultPath
+        Write-Utf8NoBom -Path $newProposalPath -Text ($proposal | ConvertTo-Json -Depth 30)
+        Write-Utf8NoBom -Path $newResultPath -Text ($result | ConvertTo-Json -Depth 30)
+        switch ($kind) {
+            "missing" { [IO.File]::Delete($newResultPath) }
+            "forged" {
+                $result.actions[0].final_hash_sha256 = "0" * 64
+                Write-Utf8NoBom -Path $newResultPath -Text ($result | ConvertTo-Json -Depth 30)
+            }
+            "stale" { Add-Content -LiteralPath (Join-Path $invalidRoot "AGENTS.md") -Value "stale bytes" }
+            "outside" { $invalidLock.language_migration.result = "../outside-result.json" }
+            "language" {
+                $result.target_language = "zh-CN"
+                Write-Utf8NoBom -Path $newResultPath -Text ($result | ConvertTo-Json -Depth 30)
+            }
+            "action-path" {
+                $result.actions[0].relative_path = "AGENTS-copy.md"
+                Write-Utf8NoBom -Path $newResultPath -Text ($result | ConvertTo-Json -Depth 30)
+            }
+        }
+        Write-Utf8NoBom -Path $invalidLockPath -Text ($invalidLock | ConvertTo-Json -Depth 30)
+        $invalidBefore = Get-TreeFingerprint -Root $invalidRoot
+        $invalidAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $invalidRoot
+        $untrustedRoot = @($invalidAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq "AGENTS.md" -and [string]$_.reason_code -ceq "SCAFFOLD_CUSTOM_OR_UNRECOGNIZED" }).Count -eq 1
+        $invalidClosed = ((Test-InvocationBlocked -Invocation $invalidAnalyze) -and $untrustedRoot -and $invalidBefore -ceq (Get-TreeFingerprint -Root $invalidRoot) -and @((Get-BackupFiles -ProjectRoot $invalidRoot)).Count -eq 0)
+        $invalidProvenancePass = $invalidProvenancePass -and $invalidClosed
+    }
+    Add-Case -Name "invalid-language-migration-provenance-fails-closed" -Passed $invalidProvenancePass -Detail "Missing, forged, stale, out-of-root, language-mismatched, and action-path-mismatched provenance grants no template trust and produces no writes."
+
+    $manualReviewPass = $true
+    $manualActions = [ordered]@{
+        "merge-with-manual-review" = ".agents/context/business/README.md"
+        "route-hot-memory-manual-review" = ".agents/notes.md"
+        "preserve-manual-review" = ".agents/context/experience/README.md"
+    }
+    foreach ($manualAction in $manualActions.Keys) {
+        $manualRoot = Join-Path $scratchRoot ("manual-review-language-provenance-{0}" -f $manualAction)
+        Copy-Fixture -Source $pristineRoot -Destination $manualRoot
+        $manualRelative = [string]$manualActions[$manualAction]
+        Write-Utf8NoBom -Path (Join-Path $manualRoot $manualRelative) -Text "# Project-specific legacy content`n`nThis content has no deterministic canonical markers and requires a maintainer decision.`n"
+        [void](Set-LanguageMigrationProvenance -Root $manualRoot -Actions @([ordered]@{ relative_path = $manualRelative; action = $manualAction; manual_review = $true }))
+        $manualBefore = Get-TreeFingerprint -Root $manualRoot
+        $manualAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $manualRoot
+        $manualDisposition = @($manualAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $manualRelative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING" }).Count -eq 1
+        $manualPreserve = @($manualAnalyze.payload.plan.actions | Where-Object { [string]$_.path -ceq $manualRelative -and [string]$_.action -ceq "preserve" }).Count
+        $manualClosed = ((Test-InvocationBlocked -Invocation $manualAnalyze) -and $manualDisposition -and $manualPreserve -eq 0 -and $manualBefore -ceq (Get-TreeFingerprint -Root $manualRoot))
+        $manualReviewPass = $manualReviewPass -and $manualClosed
+    }
+    Add-Case -Name "manual-review-language-provenance-stays-human" -Passed $manualReviewPass -Detail "merge, hot-memory routing, and preserve manual-review provenance are never downgraded to preserved non-authority."
+
+    $provenanceApplyBefore = Get-FileSnapshot -Root $provenanceRoot
+    $provenanceApplied = Invoke-Migration -Mode "Apply" -ProjectRoot $provenanceRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $provenanceAnalyze.payload) -ConfirmMigration
+    $provenanceApplyAfter = Get-FileSnapshot -Root $provenanceRoot
+    $nestedBytesPreserved = @($pureActions | Where-Object { [string]$_.relative_path -like ".agents/context/*" } | ForEach-Object {
+            $relative = [string]$_.relative_path
+            [string]$provenanceApplyBefore[$relative] -ceq [string]$provenanceApplyAfter[$relative]
+        } | Where-Object { -not $_ }).Count -eq 0
+    $provenanceBackupId = Get-BackupIdFromResult -Payload $provenanceApplied.payload
+    $provenanceRolledBack = Invoke-Migration -Mode "Rollback" -ProjectRoot $provenanceRoot -BackupId $provenanceBackupId -ConfirmRollback
+    $provenanceRollbackExact = (Test-SnapshotEqual -Before $provenanceApplyBefore -After (Get-FileSnapshot -Root $provenanceRoot))
+    $provenanceLifecyclePass = ((Test-InvocationPass -Invocation $provenanceApplied) -and [string]$provenanceApplied.payload.workspace_check -ceq "PASS" -and
+        $nestedBytesPreserved -and (Test-InvocationPass -Invocation $provenanceRolledBack) -and $provenanceRollbackExact -and @((Get-BackupFiles -ProjectRoot $provenanceRoot)).Count -gt 0)
+    Add-Case -Name "verified-language-template-apply-rollback" -Passed $provenanceLifecyclePass -Detail "Fixture Apply passes the workspace check without changing nested template/index bytes; Rollback restores the exact pre-state and retains the backup."
 
     # Ambiguous and unsupported sources are refused before any target write.
     $ambiguousRoot = Join-Path $scratchRoot "ambiguous-project"
