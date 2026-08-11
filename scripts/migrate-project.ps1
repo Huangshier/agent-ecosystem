@@ -280,7 +280,6 @@ function Test-TemplateText {
 
 function Test-ContextTemplateText {
     param([Parameter(Mandatory = $true)][string]$Text)
-    if ([string]::IsNullOrWhiteSpace($Text)) { return $true }
 
     $deterministicPlaceholder = (
         $Text -match 'sha256:0{64}' -or
@@ -1149,8 +1148,8 @@ function Invoke-Analyze {
         elseif (-not [string]::IsNullOrWhiteSpace($summary) -and -not [string]::IsNullOrWhiteSpace($keywordsText)) {
             $keywords = @($keywordsText -split '[,\r\n]+' | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '').Trim() } | Where-Object { $_ })
         }
-        # NOTE: Filename tokens are ambiguity signals only. Stable Context
-        # markers above remain authoritative; token-only candidates stay human.
+        # NOTE: Filename terms are ambiguity signals only. Stable Context
+        # markers above remain authoritative; filename-only candidates stay human.
         elseif ($filenameOnlyAmbiguous) { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         else { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         $stem = Get-SafeId ([IO.Path]::GetFileNameWithoutExtension($relative)) "context"

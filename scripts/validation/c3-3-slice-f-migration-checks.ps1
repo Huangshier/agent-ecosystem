@@ -922,7 +922,8 @@ $contextReadmeRelative = ".agents/context/README.md"
 $contextTemplateRelative = ".agents/context/decision-template.md"
 $contextStableTemplateRelative = ".agents/context/stable-fact-template.md"
 $contextIndexRelative = ".agents/context/context-index.md"
-$contextAmbiguousTokenRelatives = @(
+$contextBlankTemplateRelative = ".agents/context/blank-template.md"
+$contextAmbiguousFilenameTermRelatives = @(
     ".agents/context/ambiguous-template.md",
     ".agents/context/ambiguous-index.md",
     ".agents/context/ambiguous-placeholder.md"
@@ -1034,7 +1035,7 @@ migration, context, classification
 
 ## Verified Facts
 
-Filename tokens do not override complete stable Context markers.
+Filename terms do not override complete stable Context markers.
 "@
     $contextStableTemplateBefore = Get-TreeFingerprint -Root $contextStableTemplateRoot
     $contextStableTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextStableTemplateRoot
@@ -1076,28 +1077,45 @@ TODO: Add decision keywords.
     )
     Add-Case -Name "context-real-template-preserved-non-authority" -Passed $contextTemplateAnalyzePreserved -Detail "Explicit content-level template and fill-in signals preserve a real synthetic template as non-authority."
 
-    $contextAmbiguousTokenRoot = Join-Path $scratchRoot "context-ambiguous-filename-tokens"
-    Copy-Fixture -Source $baseRoot -Destination $contextAmbiguousTokenRoot
-    foreach ($relative in $contextAmbiguousTokenRelatives) {
-        Write-Utf8NoBom -Path (Join-Path $contextAmbiguousTokenRoot $relative) -Text "# Unclassified context note`n`nThis synthetic note has no stable Context markers or explicit template role.`n"
+    $contextBlankTemplateRoot = Join-Path $scratchRoot "context-blank-template-name"
+    Copy-Fixture -Source $baseRoot -Destination $contextBlankTemplateRoot
+    Write-Utf8NoBom -Path (Join-Path $contextBlankTemplateRoot $contextBlankTemplateRelative) -Text "  `n`t`n"
+    $contextBlankTemplateBefore = Get-TreeFingerprint -Root $contextBlankTemplateRoot
+    $contextBlankTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBlankTemplateRoot
+    $contextBlankTemplateStaysHuman = (
+        @($contextBlankTemplateAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $contextBlankTemplateRelative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count -eq 1 -and
+        @($contextBlankTemplateAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextBlankTemplateRelative -or @($_.source_paths) -ccontains $contextBlankTemplateRelative
+            }).Count -eq 0 -and
+        (Test-InvocationBlocked -Invocation $contextBlankTemplateAnalyze) -and
+        $contextBlankTemplateBefore -ceq (Get-TreeFingerprint -Root $contextBlankTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextBlankTemplateRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-blank-template-name-stays-human" -Passed $contextBlankTemplateStaysHuman -Detail "A whitespace-only Context candidate with template in its filename requires human disposition and is not preserved as non-authority."
+
+    $contextAmbiguousFilenameTermRoot = Join-Path $scratchRoot "context-ambiguous-filename-terms"
+    Copy-Fixture -Source $baseRoot -Destination $contextAmbiguousFilenameTermRoot
+    foreach ($relative in $contextAmbiguousFilenameTermRelatives) {
+        Write-Utf8NoBom -Path (Join-Path $contextAmbiguousFilenameTermRoot $relative) -Text "# Unclassified context note`n`nThis synthetic note has no stable Context markers or explicit template role.`n"
     }
-    $contextAmbiguousTokenBefore = Get-TreeFingerprint -Root $contextAmbiguousTokenRoot
-    $contextAmbiguousTokenAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextAmbiguousTokenRoot
-    $contextAmbiguousTokensStayHuman = $true
-    foreach ($relative in $contextAmbiguousTokenRelatives) {
-        $hasDisposition = @($contextAmbiguousTokenAnalyze.payload.human_disposition | Where-Object {
+    $contextAmbiguousFilenameTermBefore = Get-TreeFingerprint -Root $contextAmbiguousFilenameTermRoot
+    $contextAmbiguousFilenameTermAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextAmbiguousFilenameTermRoot
+    $contextAmbiguousFilenameTermsStayHuman = $true
+    foreach ($relative in $contextAmbiguousFilenameTermRelatives) {
+        $hasDisposition = @($contextAmbiguousFilenameTermAnalyze.payload.human_disposition | Where-Object {
                 [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
             }).Count -eq 1
-        $hasDeterministicAction = @($contextAmbiguousTokenAnalyze.payload.plan.actions | Where-Object {
+        $hasDeterministicAction = @($contextAmbiguousFilenameTermAnalyze.payload.plan.actions | Where-Object {
                 [string]$_.path -ceq $relative -or @($_.source_paths) -ccontains $relative
             }).Count -gt 0
-        $contextAmbiguousTokensStayHuman = $contextAmbiguousTokensStayHuman -and $hasDisposition -and -not $hasDeterministicAction
+        $contextAmbiguousFilenameTermsStayHuman = $contextAmbiguousFilenameTermsStayHuman -and $hasDisposition -and -not $hasDeterministicAction
     }
-    $contextAmbiguousTokensStayHuman = (
-        $contextAmbiguousTokensStayHuman -and (Test-InvocationBlocked -Invocation $contextAmbiguousTokenAnalyze) -and
-        $contextAmbiguousTokenBefore -ceq (Get-TreeFingerprint -Root $contextAmbiguousTokenRoot) -and @((Get-BackupFiles -ProjectRoot $contextAmbiguousTokenRoot)).Count -eq 0
+    $contextAmbiguousFilenameTermsStayHuman = (
+        $contextAmbiguousFilenameTermsStayHuman -and (Test-InvocationBlocked -Invocation $contextAmbiguousFilenameTermAnalyze) -and
+        $contextAmbiguousFilenameTermBefore -ceq (Get-TreeFingerprint -Root $contextAmbiguousFilenameTermRoot) -and @((Get-BackupFiles -ProjectRoot $contextAmbiguousFilenameTermRoot)).Count -eq 0
     )
-    Add-Case -Name "context-filename-only-tokens-stay-human" -Passed $contextAmbiguousTokensStayHuman -Detail "Template, index, and placeholder filename tokens remain ambiguity signals when content provides neither stable Context markers nor explicit non-authority evidence."
+    Add-Case -Name "context-filename-only-terms-stay-human" -Passed $contextAmbiguousFilenameTermsStayHuman -Detail "Template, index, and placeholder filename terms remain ambiguity signals when content provides neither stable Context markers nor explicit non-authority evidence."
 
     $contextIndexRoot = Join-Path $scratchRoot "context-explicit-index"
     Copy-Fixture -Source $baseRoot -Destination $contextIndexRoot
