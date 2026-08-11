@@ -760,12 +760,12 @@ $statusProviderFiles = @(
 )
 $runtimeProviderFiles = @($statusProviderFiles)
 if ($Profile -eq "c3-3-candidate") {
-    $runtimeProviderFiles += "migrate-project.ps1"
+    $runtimeProviderFiles += @("migrate-project.ps1", "validation/powershell-runtime-requirement.ps1")
 }
 $installStatusProvider = $installStrategy -eq "copy" -and ("project-context-gate" -in $skillNames -or $Profile -eq "c3-3-candidate")
 $managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
 if ($Profile -eq "c3-3-candidate") {
-    $managedSourcePaths += "templates/project"
+    $managedSourcePaths += @("templates/project", "schemas/project-workspace")
 }
 if ($installStatusProvider) {
     $managedSourcePaths += @($runtimeProviderFiles | ForEach-Object { "scripts/$_" })
@@ -790,6 +790,12 @@ if ($Profile -eq "c3-3-candidate") {
             destination = "templates/project"
         })
     $desiredItemNames["templates/project"] = $true
+    $itemSpecs.Add([ordered]@{
+            name = "schemas/project-workspace"
+            source = "schemas/project-workspace"
+            destination = "schemas/project-workspace"
+        })
+    $desiredItemNames["schemas/project-workspace"] = $true
 }
 if ($installStatusProvider) {
     $itemSpecs.Add([ordered]@{
@@ -883,7 +889,7 @@ $manifest = [ordered]@{
         architecture = if ($Profile -eq "c3-3-candidate") { "c3.3" } else { "legacy-runtime" }
         lifecycle = if ($Profile -eq "c3-3-candidate") { "dormant" } else { "not-enabled" }
         default_cutover = $false
-        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1") } else { @() }
+        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "schemas/project-workspace", "templates/project", "scripts/migrate-project.ps1") } else { @() }
         c3_3_authority = @($c33Authority)
         legacy_only_compatibility_payload = @($legacyCompatibilityPayload)
         retired_from_c3_3_authority = @($retiredC33AuthoritySkills)
