@@ -920,6 +920,13 @@ $isolatedRuntimeRoot = Join-Path $scratchRoot "isolated-runtime"
 $isolatedMigrationScript = Join-Path $isolatedRuntimeRoot "scripts/migrate-project.ps1"
 $contextReadmeRelative = ".agents/context/README.md"
 $contextTemplateRelative = ".agents/context/decision-template.md"
+$contextStableTemplateRelative = ".agents/context/stable-fact-template.md"
+$contextIndexRelative = ".agents/context/context-index.md"
+$contextAmbiguousTokenRelatives = @(
+    ".agents/context/ambiguous-template.md",
+    ".agents/context/ambiguous-index.md",
+    ".agents/context/ambiguous-placeholder.md"
+)
 $archiveSpecRelative = "docs/specs/archive/retired-work/spec.md"
 $immediateSpecRelative = "docs/specs/legacy-spec/spec.md"
 $evidence = [ordered]@{
@@ -1012,6 +1019,38 @@ try {
     )
     Add-Case -Name "context-readme-preserved-non-authority" -Passed $contextReadmeAnalyzePreserved -Detail "Analyze explicitly preserves a Context README as non-authority without canonical promotion or human disposition."
 
+    $contextStableTemplateRoot = Join-Path $scratchRoot "context-stable-template-name"
+    Copy-Fixture -Source $baseRoot -Destination $contextStableTemplateRoot
+    Write-Utf8NoBom -Path (Join-Path $contextStableTemplateRoot $contextStableTemplateRelative) -Text @"
+# Template classification history
+
+## Summary
+
+Records a stable migration fact about Context classification behavior.
+
+## Keywords
+
+migration, context, classification
+
+## Verified Facts
+
+Filename tokens do not override complete stable Context markers.
+"@
+    $contextStableTemplateBefore = Get-TreeFingerprint -Root $contextStableTemplateRoot
+    $contextStableTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextStableTemplateRoot
+    $contextStableTemplatePromoted = (
+        @($contextStableTemplateAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextStableTemplateRelative }).Count -eq 0 -and
+        @($contextStableTemplateAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $contextStableTemplateRelative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -eq 1 -and
+        @($contextStableTemplateAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextStableTemplateRelative -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+            }).Count -eq 0 -and
+        $contextStableTemplateBefore -ceq (Get-TreeFingerprint -Root $contextStableTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextStableTemplateRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-template-filename-stable-fact-promoted" -Passed $contextStableTemplatePromoted -Detail "A stable Context candidate with template in its filename follows the normal marker contract and is not preserved as non-authority."
+
     $contextTemplateRoot = Join-Path $scratchRoot "context-template"
     Copy-Fixture -Source $baseRoot -Destination $contextTemplateRoot
     Write-Utf8NoBom -Path (Join-Path $contextTemplateRoot $contextTemplateRelative) -Text @"
@@ -1021,7 +1060,7 @@ try {
 Template for documenting a future project decision.
 
 ## Keywords
-decision, placeholder
+TODO: Add decision keywords.
 "@
     $contextTemplateBefore = Get-TreeFingerprint -Root $contextTemplateRoot
     $contextTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextTemplateRoot
@@ -1035,7 +1074,55 @@ decision, placeholder
             }).Count -eq 0 -and
         $contextTemplateBefore -ceq (Get-TreeFingerprint -Root $contextTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextTemplateRoot)).Count -eq 0
     )
-    Add-Case -Name "context-template-preserved-non-authority" -Passed $contextTemplateAnalyzePreserved -Detail "A structurally complete synthetic template is explicitly preserved as non-authority and never auto-promoted."
+    Add-Case -Name "context-real-template-preserved-non-authority" -Passed $contextTemplateAnalyzePreserved -Detail "Explicit content-level template and fill-in signals preserve a real synthetic template as non-authority."
+
+    $contextAmbiguousTokenRoot = Join-Path $scratchRoot "context-ambiguous-filename-tokens"
+    Copy-Fixture -Source $baseRoot -Destination $contextAmbiguousTokenRoot
+    foreach ($relative in $contextAmbiguousTokenRelatives) {
+        Write-Utf8NoBom -Path (Join-Path $contextAmbiguousTokenRoot $relative) -Text "# Unclassified context note`n`nThis synthetic note has no stable Context markers or explicit template role.`n"
+    }
+    $contextAmbiguousTokenBefore = Get-TreeFingerprint -Root $contextAmbiguousTokenRoot
+    $contextAmbiguousTokenAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextAmbiguousTokenRoot
+    $contextAmbiguousTokensStayHuman = $true
+    foreach ($relative in $contextAmbiguousTokenRelatives) {
+        $hasDisposition = @($contextAmbiguousTokenAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count -eq 1
+        $hasDeterministicAction = @($contextAmbiguousTokenAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $relative -or @($_.source_paths) -ccontains $relative
+            }).Count -gt 0
+        $contextAmbiguousTokensStayHuman = $contextAmbiguousTokensStayHuman -and $hasDisposition -and -not $hasDeterministicAction
+    }
+    $contextAmbiguousTokensStayHuman = (
+        $contextAmbiguousTokensStayHuman -and (Test-InvocationBlocked -Invocation $contextAmbiguousTokenAnalyze) -and
+        $contextAmbiguousTokenBefore -ceq (Get-TreeFingerprint -Root $contextAmbiguousTokenRoot) -and @((Get-BackupFiles -ProjectRoot $contextAmbiguousTokenRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-filename-only-tokens-stay-human" -Passed $contextAmbiguousTokensStayHuman -Detail "Template, index, and placeholder filename tokens remain ambiguity signals when content provides neither stable Context markers nor explicit non-authority evidence."
+
+    $contextIndexRoot = Join-Path $scratchRoot "context-explicit-index"
+    Copy-Fixture -Source $baseRoot -Destination $contextIndexRoot
+    Write-Utf8NoBom -Path (Join-Path $contextIndexRoot $contextIndexRelative) -Text @"
+# Context index
+
+This document is an index for context entries.
+
+- [Architecture](architecture.md)
+- [Operations](operations.md)
+"@
+    $contextIndexBefore = Get-TreeFingerprint -Root $contextIndexRoot
+    $contextIndexAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextIndexRoot
+    $contextIndexPreserved = (
+        @($contextIndexAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextIndexRelative }).Count -eq 0 -and
+        @($contextIndexAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextIndexRelative -and [string]$_.action -ceq "preserve" -and
+                [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+            }).Count -eq 1 -and
+        @($contextIndexAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $contextIndexRelative -and [string]$_.action -in @("create", "change")
+            }).Count -eq 0 -and
+        $contextIndexBefore -ceq (Get-TreeFingerprint -Root $contextIndexRoot) -and @((Get-BackupFiles -ProjectRoot $contextIndexRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-explicit-index-preserved-non-authority" -Passed $contextIndexPreserved -Detail "An explicit content-level Context index remains deterministically preserved alongside the README regression fixture."
 
     $archiveSpecAnalyzePreserved = (
         @($analyzeOne.payload.human_disposition | Where-Object { [string]$_.path -ceq $archiveSpecRelative }).Count -eq 0 -and
