@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v6"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v7"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -278,16 +278,49 @@ function Test-TemplateText {
     return ($Text -match '(?im)^\s*(?:#\s+)?(?:template|example|placeholder)(?:\s|$)' -or $Text -match 'sha256:0{64}' -or $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$')
 }
 
+function Test-ContextTemplateText {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $deterministicPlaceholder = (
+        $Text -match 'sha256:0{64}' -or
+        $Text -match '(?im)^\s*#{1,6}\s+(?:template|example|placeholder)\s*$' -or
+        $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$'
+    )
+
+    $explicitFillInstruction = (
+        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:TODO|TBD)\s*:\s*(?:fill|add|replace|describe|document|enter|complete)\b' -or
+        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:待填写|请填写|在此填写|待补充)(?:\s|[:：]|$)'
+    )
+    $explicitTemplateRole = (
+        $Text -match '(?im)^\s*#{1,6}\s+.*\b(?:template|placeholder)\s*$' -and
+        $Text -match '(?im)^\s*(?:template|placeholder)\s+(?:for|to)\b'
+    )
+    return ($deterministicPlaceholder -or $explicitFillInstruction -or $explicitTemplateRole)
+}
+
+function Test-ContextIndexText {
+    param([Parameter(Mandatory = $true)][string]$Text)
+    return (
+        $Text -match '(?im)^\s*#\s+.*\b(?:index|catalog)\s*$' -and
+        $Text -match '(?im)^\s*(?:this (?:file|document|page) (?:is|serves as) (?:an? )?(?:index|catalog)|use this (?:index|catalog) to|(?:index|catalog) of (?:context|entries|documents))\b'
+    )
+}
+
+function Test-ContextFilenameAmbiguous {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+    return ($name -match '(?i)(?:^|[-_.])(?:template|index|placeholder)(?:$|[-_.])')
+}
+
 function Test-ContextNonAuthorityDocument {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Text
     )
-    $name = [IO.Path]::GetFileNameWithoutExtension($Path)
     return (
         [IO.Path]::GetFileName($Path) -ieq "README.md" -or
-        $name -match '(?i)(?:^|[-_.])(?:template|index|placeholder)(?:$|[-_.])' -or
-        (Test-TemplateText $Text)
+        (Test-ContextTemplateText $Text) -or
+        (Test-ContextIndexText $Text)
     )
 }
 
@@ -1104,6 +1137,7 @@ function Invoke-Analyze {
         if ($verifiedLanguageTemplates.ContainsKey($relative)) { Add-PlanAction $actions "preserve" $relative @($relative) $null "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
         if (Test-ContextNonAuthorityDocument $relative $text) { Add-PlanAction $actions "preserve" $relative @($relative) $null "TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
         if (Test-ContextAuthorityAmbiguous $relative $text) { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
+        $filenameOnlyAmbiguous = Test-ContextFilenameAmbiguous $relative
         $summary = Get-MarkdownSection $text @("Summary")
         $keywordsText = Get-MarkdownSection $text @("Keywords")
         $verified = Get-MarkdownSection $text @("Verified Facts", "Verified")
@@ -1114,6 +1148,9 @@ function Invoke-Analyze {
         elseif (-not [string]::IsNullOrWhiteSpace($summary) -and -not [string]::IsNullOrWhiteSpace($keywordsText)) {
             $keywords = @($keywordsText -split '[,\r\n]+' | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '').Trim() } | Where-Object { $_ })
         }
+        # NOTE: Filename terms are ambiguity signals only. Stable Context
+        # markers above remain authoritative; filename-only candidates stay human.
+        elseif ($filenameOnlyAmbiguous) { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         else { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         $stem = Get-SafeId ([IO.Path]::GetFileNameWithoutExtension($relative)) "context"
         $id = "legacy-$stem-$((Get-Sha256Text $relative).Substring(0, 8))"
