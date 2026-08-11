@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v5"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v6"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -719,19 +719,26 @@ function Resolve-ReviewedDisposition {
                 if ($reason -cne "SPEC_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
                 Assert-ReviewedSourceBinding $Candidate $path ([string](Get-HashtableValue $decision "source_sha256"))
                 if ($target -cnotmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$' -or
-                    -not (Test-CanonicalProjectRelativePath $Root $target) -or $target -ceq $path) { throw "DISPOSITION_TARGET_INVALID" }
-                $targetDirectory = $target.Substring(0, $target.LastIndexOf('/'))
-                if ($actionPaths.ContainsKey($target) -or $actionPaths.ContainsKey($targetDirectory) -or
-                    (Test-Path -LiteralPath (Get-ProjectPath $Root $target)) -or
-                    (Test-Path -LiteralPath (Get-ProjectPath $Root $targetDirectory))) { throw "DISPOSITION_TARGET_COLLISION" }
+                    -not (Test-CanonicalProjectRelativePath $Root $target)) { throw "DISPOSITION_TARGET_INVALID" }
                 if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
                 if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
-                Add-PlanAction $resolvedActions "create-directory" $targetDirectory @($path) $null "REVIEWED_SPEC_DIRECTORY_CREATED"
-                $actionPaths[$targetDirectory] = $true
-                Add-PlanAction $resolvedActions "create" $target @($path) ([string]$contentValue) "REVIEWED_SPEC_CREATED"
-                $actionPaths[$target] = $true
-                Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
-                $actionPaths[$path] = $true
+                if ($target -ceq $path) {
+                    if ($actionPaths.ContainsKey($target)) { throw "DISPOSITION_TARGET_COLLISION" }
+                    Add-PlanAction $resolvedActions "change" $target @($path) ([string]$contentValue) "REVIEWED_SPEC_REPLACED"
+                    $actionPaths[$target] = $true
+                }
+                else {
+                    $targetDirectory = $target.Substring(0, $target.LastIndexOf('/'))
+                    if ($actionPaths.ContainsKey($target) -or $actionPaths.ContainsKey($targetDirectory) -or
+                        (Test-Path -LiteralPath (Get-ProjectPath $Root $target)) -or
+                        (Test-Path -LiteralPath (Get-ProjectPath $Root $targetDirectory))) { throw "DISPOSITION_TARGET_COLLISION" }
+                    Add-PlanAction $resolvedActions "create-directory" $targetDirectory @($path) $null "REVIEWED_SPEC_DIRECTORY_CREATED"
+                    $actionPaths[$targetDirectory] = $true
+                    Add-PlanAction $resolvedActions "create" $target @($path) ([string]$contentValue) "REVIEWED_SPEC_CREATED"
+                    $actionPaths[$target] = $true
+                    Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                    $actionPaths[$path] = $true
+                }
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_sha256 = [string](Get-HashtableValue $decision "source_sha256"); target = $target; content = [string]$contentValue })
             }
             default { throw "DISPOSITION_UNSUPPORTED" }

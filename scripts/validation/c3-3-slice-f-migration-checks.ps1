@@ -953,6 +953,7 @@ $evidence = [ordered]@{
     reviewed_disposition_apply = $false
     reviewed_disposition_rollback = $false
     reviewed_disposition_stale = $false
+    reviewed_existing_spec_same_path = $false
     recognized_root_nested_merge = $false
     recognized_root_nested_backup = $false
     recognized_root_nested_rollback = $false
@@ -1510,6 +1511,125 @@ No compatibility mirror.
         (Test-Path -LiteralPath (Join-Path $reviewedRoot (Join-Path ".agents/.migration-backups" $reviewedBackupId)) -PathType Container))
     Add-Case -Name "reviewed-disposition-rollback-exact" -Passed $reviewedRollbackPass -Detail ("Reviewed Rollback exit={0} status={1} reasons={2} backup={3}." -f $reviewedRolledBack.exit_code, (Get-StatusText $reviewedRolledBack.payload), (@($reviewedRolledBack.payload.reason_codes) -join ','), $reviewedBackupId)
     $evidence.reviewed_disposition_rollback = $reviewedRollbackPass
+
+    # A marker-incomplete Spec may already occupy its canonical identity path.
+    # Reviewed replacement must update those bytes in place without inventing a
+    # new Spec id, while retaining the same evidence and rollback boundaries.
+    $existingSpecRoot = Join-Path $scratchRoot "reviewed-existing-immediate-spec"
+    Copy-Fixture -Source $pristineRoot -Destination $existingSpecRoot
+    $existingSpecRelative = "docs/specs/legacy-spec/spec.md"
+    $existingSpecPath = Join-Path $existingSpecRoot $existingSpecRelative
+    $existingSpecLegacy = @"
+# Existing immediate specification
+
+This synthetic Spec already has its durable path identity but lacks canonical frontmatter.
+"@
+    Write-Utf8NoBom -Path $existingSpecPath -Text $existingSpecLegacy
+    $existingSpecCanonical = @"
+---
+schema: agent-ecosystem/spec/v1
+id: legacy-spec
+title: "Reviewed existing specification"
+status: accepted
+updated: 2026-01-01T00:00:00Z
+summary: "Replace an existing immediate Spec without changing its identity."
+related_work: []
+supersedes: []
+---
+
+The reviewed replacement is limited to this synthetic same-path migration fixture.
+"@.TrimStart()
+    $existingSpecBefore = Get-FileSnapshot -Root $existingSpecRoot
+    $existingSpecBeforeDirectories = @(Get-DirectorySnapshot -Root $existingSpecRoot)
+    $existingSpecBeforeTree = Get-TreeFingerprint -Root $existingSpecRoot
+    $existingSpecAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $existingSpecRoot
+    $existingSpecHuman = @($existingSpecAnalyze.payload.human_disposition | ForEach-Object {
+            [ordered]@{ path = [string]$_.path; reason_code = [string]$_.reason_code }
+        })
+    $existingSpecSource = @($existingSpecAnalyze.payload.evidence.files | Where-Object {
+            [string]$_.path -ceq $existingSpecRelative -and [string]$_.presence -ceq "file"
+        })
+    $existingSpecEvidence = [ordered]@{
+        schema_version = 1
+        project_root = [string]$existingSpecAnalyze.payload.evidence.project_root
+        migration_revision = [string]$existingSpecAnalyze.payload.migration_revision
+        state_digest = [string]$existingSpecAnalyze.payload.evidence.state_digest
+        plan_digest = [string]$existingSpecAnalyze.payload.plan.plan_digest
+        human_disposition = $existingSpecHuman
+        decisions = @([ordered]@{
+                path = $existingSpecRelative
+                reason_code = "SPEC_MARKERS_MISSING"
+                disposition = "create-spec-and-retire-source"
+                source_sha256 = [string]$existingSpecSource[0].sha256
+                target = $existingSpecRelative
+                content = $existingSpecCanonical
+            })
+    }
+    $existingSpecEvidenceJson = Get-CanonicalJson -Payload $existingSpecEvidence
+    $existingSpecResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $existingSpecRoot -DispositionEvidence $existingSpecEvidenceJson
+    $existingSpecActions = @($existingSpecResolved.payload.plan.actions | Where-Object { [string]$_.path -ceq $existingSpecRelative })
+    $existingSpecAnalyzeReadOnly = (
+        (Test-InvocationBlocked -Invocation $existingSpecAnalyze) -and
+        $existingSpecHuman.Count -eq 1 -and [string]$existingSpecHuman[0].path -ceq $existingSpecRelative -and
+        [string]$existingSpecHuman[0].reason_code -ceq "SPEC_MARKERS_MISSING" -and
+        $existingSpecSource.Count -eq 1 -and
+        $existingSpecBeforeTree -ceq (Get-TreeFingerprint -Root $existingSpecRoot) -and
+        @((Get-BackupFiles -ProjectRoot $existingSpecRoot)).Count -eq 0
+    )
+    $existingSpecResolvedPlan = (
+        (Test-InvocationPass -Invocation $existingSpecResolved) -and
+        $existingSpecActions.Count -eq 1 -and [string]$existingSpecActions[0].action -ceq "change" -and
+        [string]$existingSpecActions[0].reason_code -ceq "REVIEWED_SPEC_REPLACED" -and
+        (@($existingSpecActions[0].source_paths) -join "`n") -ceq $existingSpecRelative -and
+        [string]$existingSpecActions[0].content -ceq $existingSpecCanonical -and
+        $existingSpecBeforeTree -ceq (Get-TreeFingerprint -Root $existingSpecRoot)
+    )
+
+    $existingSpecInvalidPass = $true
+    foreach ($invalidExistingSpec in @(
+            [ordered]@{ name = "stale-source"; mutate = "source"; code = "DISPOSITION_SOURCE_MISMATCH" },
+            [ordered]@{ name = "malformed-content"; mutate = "malformed"; code = "DISPOSITION_CONTENT_INVALID" },
+            [ordered]@{ name = "id-path-mismatch"; mutate = "id"; code = "DISPOSITION_CONTENT_INVALID" }
+        )) {
+        $invalidEvidence = Copy-JsonObject $existingSpecEvidence
+        switch ([string]$invalidExistingSpec.mutate) {
+            "source" { $invalidEvidence.decisions[0].source_sha256 = "0" * 64 }
+            "malformed" { $invalidEvidence.decisions[0].content = "# Incomplete Spec`n" }
+            "id" { $invalidEvidence.decisions[0].content = $existingSpecCanonical -replace '(?m)^id: legacy-spec$', 'id: different-spec' }
+        }
+        $beforeInvalidExistingSpec = Get-TreeFingerprint -Root $existingSpecRoot
+        $invalidExistingSpecResult = Invoke-Migration -Mode "Analyze" -ProjectRoot $existingSpecRoot -DispositionEvidence (Get-CanonicalJson -Payload $invalidEvidence)
+        $invalidExistingSpecPass = (
+            (Test-InvocationBlocked -Invocation $invalidExistingSpecResult) -and
+            $invalidExistingSpecResult.text -match [regex]::Escape([string]$invalidExistingSpec.code) -and
+            $beforeInvalidExistingSpec -ceq (Get-TreeFingerprint -Root $existingSpecRoot) -and
+            @((Get-BackupFiles -ProjectRoot $existingSpecRoot)).Count -eq 0
+        )
+        $existingSpecInvalidPass = $existingSpecInvalidPass -and $invalidExistingSpecPass
+    }
+
+    $existingSpecApply = Invoke-Migration -Mode "Apply" -ProjectRoot $existingSpecRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $existingSpecResolved.payload) -DispositionEvidence $existingSpecEvidenceJson -ConfirmMigration
+    $existingSpecBackupId = Get-BackupIdFromResult -Payload $existingSpecApply.payload
+    $assetParser = Join-Path $repositoryRoot "skills/project-workspace/scripts/read-project-assets.ps1"
+    $existingSpecParserOutput = @(& $pwshPath -NoProfile -NonInteractive -File $assetParser -ProjectRoot $existingSpecRoot -AssetPath $existingSpecRelative -Json 2>&1 | ForEach-Object { [string]$_ })
+    $existingSpecParserExit = $LASTEXITCODE
+    $existingSpecParserPayload = if ($existingSpecParserExit -eq 0) { (@($existingSpecParserOutput) -join "`n") | ConvertFrom-Json -Depth 100 } else { $null }
+    $existingSpecApplyPass = (
+        (Test-InvocationPass -Invocation $existingSpecApply) -and [string]$existingSpecApply.payload.workspace_check -ceq "PASS" -and
+        [IO.File]::ReadAllText($existingSpecPath, [Text.UTF8Encoding]::new($false, $true)) -ceq $existingSpecCanonical -and
+        $existingSpecParserExit -eq 0 -and [string]$existingSpecParserPayload.status -ceq "PASS" -and
+        [int]$existingSpecParserPayload.asset_count -eq 1 -and [string]$existingSpecParserPayload.assets[0].id -ceq "legacy-spec"
+    )
+    $existingSpecRollback = Invoke-Migration -Mode "Rollback" -ProjectRoot $existingSpecRoot -BackupId $existingSpecBackupId -ConfirmRollback
+    $existingSpecRollbackPass = (
+        (Test-InvocationPass -Invocation $existingSpecRollback) -and
+        (Test-SnapshotEqual -Before $existingSpecBefore -After (Get-FileSnapshot -Root $existingSpecRoot)) -and
+        ($existingSpecBeforeDirectories -join "`n") -ceq ((Get-DirectorySnapshot -Root $existingSpecRoot) -join "`n") -and
+        [IO.File]::ReadAllText($existingSpecPath, [Text.UTF8Encoding]::new($false, $true)) -ceq $existingSpecLegacy
+    )
+    $existingSpecSamePathPass = ($existingSpecAnalyzeReadOnly -and $existingSpecResolvedPlan -and $existingSpecInvalidPass -and $existingSpecApplyPass -and $existingSpecRollbackPass)
+    Add-Case -Name "reviewed-existing-immediate-spec-same-path-replacement" -Passed $existingSpecSamePathPass -Detail ("Analyze_read_only={0} resolved_change={1} invalid_fail_closed={2} parser={3} apply={4} rollback_exact={5}." -f $existingSpecAnalyzeReadOnly, $existingSpecResolvedPlan, $existingSpecInvalidPass, ([string]$existingSpecParserPayload.status -ceq "PASS"), $existingSpecApplyPass, $existingSpecRollbackPass)
+    $evidence.reviewed_existing_spec_same_path = $existingSpecSamePathPass
 
     # A provenance-recognized root already has one automatic replacement
     # action.  A custom nested authority may replace that action with the full
