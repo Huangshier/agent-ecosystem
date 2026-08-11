@@ -15,6 +15,7 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDir "../../.."))
 . (Join-Path $repoRoot "scripts/validation/powershell-runtime-requirement.ps1")
 Assert-AgentEcosystemPowerShellRuntime
 . (Join-Path $repoRoot "scripts/lib/path-guard.ps1")
+. (Join-Path $scriptDir "migration-non-authority.ps1")
 
 $schemaFiles = [ordered]@{
     work = "work-item.v1.schema.json"
@@ -658,6 +659,7 @@ function Get-CanonicalAssetPaths {
     param([Parameter(Mandatory = $true)][string]$Root)
 
     $paths = New-Object 'System.Collections.Generic.List[string]'
+    $migrationNonAuthority = Get-MigrationNonAuthorityPaths -Root $Root
     foreach ($relativeDirectory in @('.agents/work', '.agents/context', '.agents/procedures')) {
         $directory = Join-Path $Root $relativeDirectory
         if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
@@ -669,6 +671,7 @@ function Get-CanonicalAssetPaths {
             if ($relativePath -ceq '.agents/context/README.md') {
                 continue
             }
+            if ($migrationNonAuthority.Contains($relativePath)) { continue }
             $paths.Add($relativePath)
         }
     }

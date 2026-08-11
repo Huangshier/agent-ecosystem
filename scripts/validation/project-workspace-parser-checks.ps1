@@ -26,6 +26,7 @@ $scratchRootFull = [System.IO.Path]::GetFullPath($ScratchRoot)
 New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
 
 $parserPath = Join-Path $repoRoot "skills/project-workspace/scripts/read-project-assets.ps1"
+$nonAuthorityHelperPath = Join-Path $repoRoot "skills/project-workspace/scripts/migration-non-authority.ps1"
 $schemaRoot = Join-Path $repoRoot "schemas/project-workspace"
 $templateRoot = Join-Path $repoRoot "templates/project/assets"
 $fixtureRoot = Join-Path $scriptDir "project-workspace-fixtures"
@@ -388,6 +389,7 @@ function New-ParserRepositoryCopy {
         New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
     Copy-Item -LiteralPath $parserPath -Destination (Join-Path $copyParserDir (Split-Path -Leaf $parserPath))
+    Copy-Item -LiteralPath $nonAuthorityHelperPath -Destination (Join-Path $copyParserDir (Split-Path -Leaf $nonAuthorityHelperPath))
     foreach ($schemaFile in @(Get-ChildItem -LiteralPath $schemaRoot -File -Filter "*.json")) {
         Copy-Item -LiteralPath $schemaFile.FullName -Destination (Join-Path $copySchemaDir $schemaFile.Name)
     }
@@ -396,7 +398,7 @@ function New-ParserRepositoryCopy {
     return $copyRoot
 }
 
-foreach ($requiredPath in @($parserPath, $schemaRoot, $templateRoot, $fixtureProject, $caseManifestPath, $hardeningManifestPath)) {
+foreach ($requiredPath in @($parserPath, $nonAuthorityHelperPath, $schemaRoot, $templateRoot, $fixtureProject, $caseManifestPath, $hardeningManifestPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath)) {
         throw "Required project workspace fixture dependency is missing: $requiredPath"
     }

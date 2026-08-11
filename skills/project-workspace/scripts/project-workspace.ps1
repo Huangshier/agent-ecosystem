@@ -57,6 +57,9 @@ Assert-AgentEcosystemPowerShellRuntime
 . (Join-Path $repoRoot "scripts/lib/path-guard.ps1")
 
 $canonicalParserPath = Join-Path $scriptDir "read-project-assets.ps1"
+$migrationNonAuthorityPath = Join-Path $scriptDir "migration-non-authority.ps1"
+if (-not (Test-Path -LiteralPath $migrationNonAuthorityPath -PathType Leaf)) { throw "Migration non-authority resolver is unavailable." }
+. $migrationNonAuthorityPath
 $schemaRoot = Join-Path $repoRoot "schemas/project-workspace"
 $catalogRelativePath = ".agents/.cache/catalog.json"
 $glossaryRelativePath = ".agents/glossary.yaml"
@@ -321,6 +324,7 @@ function Get-CanonicalFileRecords {
     )
 
     $records = New-Object 'System.Collections.Generic.List[object]'
+    $migrationNonAuthority = Get-MigrationNonAuthorityPaths -Root $Root
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $roots = @(
         [ordered]@{ root = ".agents/work"; type = "work" },
@@ -341,6 +345,7 @@ function Get-CanonicalFileRecords {
             }
             # NOTE: The exact legacy Context index is preserved documentation, not a canonical asset.
             if ($relative -ceq ".agents/context/README.md") { continue }
+            if ($migrationNonAuthority.Contains($relative)) { continue }
             if (-not $seen.Add($relative)) { continue }
             [void]$records.Add([ordered]@{
                 path = $relative
