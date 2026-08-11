@@ -704,6 +704,21 @@ These lines require deliberate consolidation and must not be inferred automatica
 The public fixture has one stable implementation fact and one compatibility boundary.
 The reviewed target must consolidate these bytes with the separate legacy notes source.
 "@
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/context/legacy-reference.md") -Text @"
+# Legacy reference notes
+
+This markerless reference remains useful documentation, but review determined that it is not Context authority.
+"@
+    Write-Utf8NoBom -Path (Join-Path $Root ".agents/commands/legacy-release.md") -Text @"
+# Legacy release notes
+
+This synthetic command note is incomplete and requires a reviewed canonical Procedure replacement.
+"@
+    Write-Utf8NoBom -Path (Join-Path $Root "docs/specs/legacy-proposal/spec.md") -Text @"
+# Legacy proposal
+
+This synthetic proposal lacks the complete canonical Spec contract and requires reviewed replacement.
+"@
 }
 
 function New-ReviewedDispositionEvidence {
@@ -733,6 +748,40 @@ evidence:
 - The fixture migration boundary is project-local.
 - Historical notes remain evidence, not a second durable authority.
 "@.TrimStart()
+    $procedureTarget = @"
+---
+schema: agent-ecosystem/procedure/v1
+id: reviewed-release
+title: "Reviewed release procedure"
+kind: workflow
+exposure: internal
+summary: "Run a bounded synthetic release verification."
+triggers:
+  - "verify the synthetic release fixture"
+side_effects:
+  - "read-only fixture inspection"
+---
+
+Confirm the synthetic fixture state, inspect the expected evidence, and report the result without external writes.
+"@.TrimStart()
+    $specTarget = @"
+---
+schema: agent-ecosystem/spec/v1
+id: reviewed-replacement
+title: "Reviewed replacement specification"
+status: accepted
+updated: 2026-01-01T00:00:00Z
+summary: "Define a bounded synthetic migration replacement."
+related_work: []
+supersedes: []
+---
+
+The replacement covers only the synthetic fixture. It excludes lifecycle changes and succeeds when the canonical asset validates.
+"@.TrimStart()
+    $sourceSha = @{}
+    foreach ($file in @($Analyze.evidence.files)) {
+        if ([string]$file.presence -ceq "file") { $sourceSha[[string]$file.path] = [string]$file.sha256 }
+    }
     return [ordered]@{
         schema_version = 1
         project_root = [string]$Analyze.evidence.project_root
@@ -746,7 +795,10 @@ evidence:
             [ordered]@{ path = ".agents/process.txt"; reason_code = "LEGACY_WORK_NOT_DETERMINISTIC"; disposition = "preserve-non-authority" },
             [ordered]@{ path = ".agents/plan.md"; reason_code = "LEGACY_WORK_NOT_DETERMINISTIC"; disposition = "preserve-non-authority" },
             [ordered]@{ path = ".agents/context/legacy-stable-facts.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "create-context-and-retire-sources"; source_paths = @(".agents/context/legacy-stable-facts.md", ".agents/notes.md"); target = ".agents/context/reviewed-legacy-facts.md"; content = $contextTarget },
-            [ordered]@{ path = ".agents/notes.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "retire-legacy-source" }
+            [ordered]@{ path = ".agents/context/legacy-reference.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "preserve-non-authority" },
+            [ordered]@{ path = ".agents/notes.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "retire-legacy-source" },
+            [ordered]@{ path = ".agents/commands/legacy-release.md"; reason_code = "PROCEDURE_MARKERS_MISSING"; disposition = "create-procedure-and-retire-source"; source_sha256 = $sourceSha[".agents/commands/legacy-release.md"]; target = ".agents/procedures/reviewed-release.md"; content = $procedureTarget },
+            [ordered]@{ path = "docs/specs/legacy-proposal/spec.md"; reason_code = "SPEC_MARKERS_MISSING"; disposition = "create-spec-and-retire-source"; source_sha256 = $sourceSha["docs/specs/legacy-proposal/spec.md"]; target = "docs/specs/reviewed-replacement/spec.md"; content = $specTarget }
         )
     }
 }
@@ -867,6 +919,7 @@ $runtimeRoot = Join-Path $scratchRoot "runtime"
 $isolatedRuntimeRoot = Join-Path $scratchRoot "isolated-runtime"
 $isolatedMigrationScript = Join-Path $isolatedRuntimeRoot "scripts/migrate-project.ps1"
 $contextReadmeRelative = ".agents/context/README.md"
+$contextTemplateRelative = ".agents/context/decision-template.md"
 $archiveSpecRelative = "docs/specs/archive/retired-work/spec.md"
 $immediateSpecRelative = "docs/specs/legacy-spec/spec.md"
 $evidence = [ordered]@{
@@ -951,9 +1004,37 @@ try {
 
     $contextReadmeAnalyzePreserved = (
         @($analyzeOne.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextReadmeRelative }).Count -eq 0 -and
-        @($analyzeOne.payload.plan.actions | Where-Object { [string]$_.path -ceq $contextReadmeRelative }).Count -eq 0
+        @($analyzeOne.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextReadmeRelative -and [string]$_.action -ceq "preserve" -and
+                [string]$_.reason_code -cin @("TEMPLATE_PRESERVED_NON_AUTHORITY", "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY")
+            }).Count -eq 1
     )
-    Add-Case -Name "context-readme-preserved-non-authority" -Passed $contextReadmeAnalyzePreserved -Detail "Analyze excludes only the exact legacy Context README from canonical migration actions and human disposition."
+    Add-Case -Name "context-readme-preserved-non-authority" -Passed $contextReadmeAnalyzePreserved -Detail "Analyze explicitly preserves a Context README as non-authority without canonical promotion or human disposition."
+
+    $contextTemplateRoot = Join-Path $scratchRoot "context-template"
+    Copy-Fixture -Source $baseRoot -Destination $contextTemplateRoot
+    Write-Utf8NoBom -Path (Join-Path $contextTemplateRoot $contextTemplateRelative) -Text @"
+# Decision template
+
+## Summary
+Template for documenting a future project decision.
+
+## Keywords
+decision, placeholder
+"@
+    $contextTemplateBefore = Get-TreeFingerprint -Root $contextTemplateRoot
+    $contextTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextTemplateRoot
+    $contextTemplateAnalyzePreserved = (
+        @($contextTemplateAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextTemplateRelative }).Count -eq 0 -and
+        @($contextTemplateAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextTemplateRelative -and [string]$_.action -ceq "preserve" -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+            }).Count -eq 1 -and
+        @($contextTemplateAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $contextTemplateRelative -and [string]$_.action -in @("create", "change")
+            }).Count -eq 0 -and
+        $contextTemplateBefore -ceq (Get-TreeFingerprint -Root $contextTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextTemplateRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-template-preserved-non-authority" -Passed $contextTemplateAnalyzePreserved -Detail "A structurally complete synthetic template is explicitly preserved as non-authority and never auto-promoted."
 
     $archiveSpecAnalyzePreserved = (
         @($analyzeOne.payload.human_disposition | Where-Object { [string]$_.path -ceq $archiveSpecRelative }).Count -eq 0 -and
@@ -1139,10 +1220,26 @@ try {
     # A markerless candidate requires human disposition; the implementation
     # must not guess how to classify it as canonical Context.
     Write-Utf8NoBom -Path (Join-Path $ambiguousRoot ".agents/context/ambiguous.md") -Text "# Ambiguous legacy context`n`nNo deterministic Summary or Keywords markers.`n"
+    Write-Utf8NoBom -Path (Join-Path $ambiguousRoot ".agents/context/context-guidance.md") -Text @"
+# Context guidance
+
+## Summary
+Use this document to add entries for project knowledge.
+
+## Keywords
+context, instructions
+"@
     $ambiguousBefore = Get-TreeFingerprint -Root $ambiguousRoot
     $ambiguous = Invoke-Migration -Mode "Analyze" -ProjectRoot $ambiguousRoot
-    $ambiguousClosed = ((Test-InvocationBlocked -Invocation $ambiguous) -and $ambiguousBefore -ceq (Get-TreeFingerprint -Root $ambiguousRoot) -and @((Get-BackupFiles -ProjectRoot $ambiguousRoot)).Count -eq 0)
-    Add-Case -Name "ambiguous-input-fails-closed" -Passed $ambiguousClosed -Detail "Ambiguous legacy extraction is rejected without creating a backup or target asset."
+    $ambiguousGuidanceDisposition = @($ambiguous.payload.human_disposition | Where-Object {
+            [string]$_.path -ceq ".agents/context/context-guidance.md" -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+        }).Count -eq 1
+    $ambiguousGuidancePromotion = @($ambiguous.payload.plan.actions | Where-Object {
+            @($_.source_paths) -ccontains ".agents/context/context-guidance.md" -and [string]$_.action -in @("create", "change")
+        }).Count
+    $ambiguousClosed = ((Test-InvocationBlocked -Invocation $ambiguous) -and $ambiguousGuidanceDisposition -and $ambiguousGuidancePromotion -eq 0 -and
+        $ambiguousBefore -ceq (Get-TreeFingerprint -Root $ambiguousRoot) -and @((Get-BackupFiles -ProjectRoot $ambiguousRoot)).Count -eq 0)
+    Add-Case -Name "ambiguous-input-fails-closed" -Passed $ambiguousClosed -Detail "Markerless and structurally complete instructional candidates require human disposition without canonical promotion, backup, or writes."
 
     $unsupportedRoot = Join-Path $scratchRoot "unsupported-project"
     Copy-Fixture -Source $baseRoot -Destination $unsupportedRoot
@@ -1207,7 +1304,10 @@ No compatibility mirror.
         ".agents/process.txt:LEGACY_WORK_NOT_DETERMINISTIC",
         ".agents/plan.md:LEGACY_WORK_NOT_DETERMINISTIC",
         ".agents/context/legacy-stable-facts.md:CONTEXT_MARKERS_MISSING",
-        ".agents/notes.md:CONTEXT_MARKERS_MISSING"
+        ".agents/context/legacy-reference.md:CONTEXT_MARKERS_MISSING",
+        ".agents/notes.md:CONTEXT_MARKERS_MISSING",
+        ".agents/commands/legacy-release.md:PROCEDURE_MARKERS_MISSING",
+        "docs/specs/legacy-proposal/spec.md:SPEC_MARKERS_MISSING"
     ) | Sort-Object
     $actualReviewedHuman = @($reviewedCandidate.payload.human_disposition | ForEach-Object { "{0}:{1}" -f $_.path, $_.reason_code } | Sort-Object)
     $blockedWithoutDisposition = Invoke-Migration -Mode "Apply" -ProjectRoot $reviewedRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $reviewedCandidate.payload) -ConfirmMigration
@@ -1233,7 +1333,12 @@ No compatibility mirror.
         @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/AGENTS.md" -and [string]$_.action -ceq "remove" }).Count -eq 1 -and
         @($resolvedActions | Where-Object { [string]$_.path -cin @(".agents/process.txt", ".agents/plan.md") -and [string]$_.action -ceq "preserve" -and [string]$_.reason_code -ceq "REVIEWED_NON_AUTHORITY_PRESERVED" }).Count -eq 2 -and
         @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/context/reviewed-legacy-facts.md" -and [string]$_.action -ceq "create" -and @($_.source_paths).Count -eq 2 }).Count -eq 1 -and
-        @($resolvedActions | Where-Object { [string]$_.path -cin @(".agents/context/legacy-stable-facts.md", ".agents/notes.md") -and [string]$_.action -ceq "remove" }).Count -eq 2
+        @($resolvedActions | Where-Object { [string]$_.path -cin @(".agents/context/legacy-stable-facts.md", ".agents/notes.md") -and [string]$_.action -ceq "remove" }).Count -eq 2 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/context/legacy-reference.md" -and [string]$_.action -ceq "preserve" -and [string]$_.reason_code -ceq "REVIEWED_NON_AUTHORITY_PRESERVED" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/procedures/reviewed-release.md" -and [string]$_.action -ceq "create" -and [string]$_.reason_code -ceq "REVIEWED_PROCEDURE_CREATED" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq ".agents/commands/legacy-release.md" -and [string]$_.action -ceq "remove" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq "docs/specs/reviewed-replacement/spec.md" -and [string]$_.action -ceq "create" -and [string]$_.reason_code -ceq "REVIEWED_SPEC_CREATED" }).Count -eq 1 -and
+        @($resolvedActions | Where-Object { [string]$_.path -ceq "docs/specs/legacy-proposal/spec.md" -and [string]$_.action -ceq "remove" }).Count -eq 1
     )
     $resolvedReadOnly = ($reviewedBeforeTree -ceq (Get-TreeFingerprint -Root $reviewedRoot) -and @((Get-BackupFiles -ProjectRoot $reviewedRoot)).Count -eq 0)
     $resolvedPlanPass = ((Test-InvocationPass -Invocation $reviewedResolved) -and [bool]$reviewedResolved.payload.eligible -and
@@ -1276,6 +1381,29 @@ No compatibility mirror.
     $invalidContent = Copy-JsonObject $reviewedEvidenceObject
     $invalidContent.decisions[4].content = "# Invalid canonical Context`n"
     $invalidDispositionCases.Add([ordered]@{ name = "invalid-content"; evidence = $invalidContent; code = "DISPOSITION_CONTENT_INVALID" })
+    $missingSourceBinding = Copy-JsonObject $reviewedEvidenceObject
+    [void]$missingSourceBinding.decisions[7].Remove("source_sha256")
+    $invalidDispositionCases.Add([ordered]@{ name = "missing-source-binding"; evidence = $missingSourceBinding; code = "DISPOSITION_EVIDENCE_INVALID" })
+    $candidateMismatch = Copy-JsonObject $reviewedEvidenceObject
+    $candidateMismatch.decisions[7].source_sha256 = "0" * 64
+    $invalidDispositionCases.Add([ordered]@{ name = "candidate-mismatch"; evidence = $candidateMismatch; code = "DISPOSITION_SOURCE_MISMATCH" })
+    $specCandidateMismatch = Copy-JsonObject $reviewedEvidenceObject
+    $specCandidateMismatch.decisions[8].source_sha256 = "0" * 64
+    $invalidDispositionCases.Add([ordered]@{ name = "spec-candidate-mismatch"; evidence = $specCandidateMismatch; code = "DISPOSITION_SOURCE_MISMATCH" })
+    $procedureCollision = Copy-JsonObject $reviewedEvidenceObject
+    $procedureCollision.decisions[7].target = [string](@($reviewedCandidate.payload.plan.actions | Where-Object {
+                [string]$_.path -cmatch '^\.agents/procedures/[a-z0-9]+(?:-[a-z0-9]+)*\.md$'
+            } | Select-Object -First 1)[0].path)
+    $invalidDispositionCases.Add([ordered]@{ name = "procedure-target-collision"; evidence = $procedureCollision; code = "DISPOSITION_TARGET_COLLISION" })
+    $invalidProcedureContent = Copy-JsonObject $reviewedEvidenceObject
+    $invalidProcedureContent.decisions[7].content = "# Incomplete Procedure`n"
+    $invalidDispositionCases.Add([ordered]@{ name = "invalid-procedure-content"; evidence = $invalidProcedureContent; code = "DISPOSITION_CONTENT_INVALID" })
+    $invalidSpecContent = Copy-JsonObject $reviewedEvidenceObject
+    $invalidSpecContent.decisions[8].content = "# Incomplete Spec`n"
+    $invalidDispositionCases.Add([ordered]@{ name = "invalid-spec-content"; evidence = $invalidSpecContent; code = "DISPOSITION_CONTENT_INVALID" })
+    $specTargetCollision = Copy-JsonObject $reviewedEvidenceObject
+    $specTargetCollision.decisions[8].target = "docs/specs/legacy-spec/spec.md"
+    $invalidDispositionCases.Add([ordered]@{ name = "spec-target-collision"; evidence = $specTargetCollision; code = "DISPOSITION_TARGET_COLLISION" })
     $invalidDispositionPass = $true
     foreach ($case in $invalidDispositionCases) {
         $beforeInvalid = Get-TreeFingerprint -Root $reviewedRoot
@@ -1313,7 +1441,7 @@ No compatibility mirror.
     $reviewedBackupPath = Get-BackupPathFromResult -ProjectRoot $reviewedRoot -Payload $reviewedApplied.payload
     $reviewedManifest = if (Test-Path -LiteralPath $reviewedBackupPath -PathType Leaf) { Get-Content -LiteralPath $reviewedBackupPath -Raw | ConvertFrom-Json -Depth 100 } else { $null }
     $reviewedPreStatePaths = @($reviewedManifest.pre_state | ForEach-Object { [string]$_.path })
-    $dispositionScopeBackedUp = (@("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md", ".agents/context/legacy-stable-facts.md", ".agents/notes.md", ".agents/context/reviewed-legacy-facts.md") | Where-Object { $reviewedPreStatePaths -cnotcontains $_ }).Count -eq 0
+    $dispositionScopeBackedUp = (@("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md", ".agents/context/legacy-stable-facts.md", ".agents/context/legacy-reference.md", ".agents/notes.md", ".agents/context/reviewed-legacy-facts.md", ".agents/commands/legacy-release.md", ".agents/procedures/reviewed-release.md", "docs/specs/legacy-proposal/spec.md", "docs/specs/reviewed-replacement/spec.md") | Where-Object { $reviewedPreStatePaths -cnotcontains $_ }).Count -eq 0
     $reviewedBackupOrder = ((Test-InvocationPass -Invocation $reviewedApplied) -and (Test-BackupBeforeApply -Payload $reviewedApplied.payload -ProjectRoot $reviewedRoot) -and
         $dispositionScopeBackedUp -and -not [string]::IsNullOrWhiteSpace([string]$reviewedApplied.payload.reviewed_disposition_digest))
     Add-Case -Name "reviewed-disposition-backup-before-mutation" -Passed $reviewedBackupOrder -Detail ("Reviewed Apply exit={0} reasons={1} backup={2} complete_scope={3}." -f $reviewedApplied.exit_code, (@($reviewedApplied.payload.reason_codes) -join ','), $reviewedBackupId, $dispositionScopeBackedUp)
@@ -1321,17 +1449,59 @@ No compatibility mirror.
 
     $rootTargetContent = [string]$reviewedEvidenceObject.decisions[0].content
     $contextTargetContent = [string]$reviewedEvidenceObject.decisions[4].content
+    $procedureTargetContent = [string]$reviewedEvidenceObject.decisions[7].content
+    $specTargetContent = [string]$reviewedEvidenceObject.decisions[8].content
     $reviewedAfterSnapshot = Get-FileSnapshot -Root $reviewedRoot
+    $workspaceEntrypoint = Join-Path $repositoryRoot "skills/project-workspace/scripts/project-workspace.ps1"
+    $workspaceCheckOutput = @(& pwsh -NoProfile -NonInteractive -File $workspaceEntrypoint -Operation check -ProjectRoot $reviewedRoot -Json 2>&1 | ForEach-Object { [string]$_ })
+    $workspaceCheckExit = $LASTEXITCODE
+    $reviewedDiscoveryRoot = Join-Path $scratchRoot "reviewed-disposition-discovery"
+    Copy-Fixture -Source $reviewedRoot -Destination $reviewedDiscoveryRoot
+    $workspaceDiscoverOutput = @(& pwsh -NoProfile -NonInteractive -File $workspaceEntrypoint -Operation discover -ProjectRoot $reviewedDiscoveryRoot -Json 2>&1 | ForEach-Object { [string]$_ })
+    $workspaceDiscoverExit = $LASTEXITCODE
+    $workspaceCheckPayload = if ($workspaceCheckExit -eq 0) { (@($workspaceCheckOutput) -join "`n") | ConvertFrom-Json -Depth 100 } else { $null }
+    $workspaceDiscoverPayload = if ($workspaceDiscoverExit -eq 0) { (@($workspaceDiscoverOutput) -join "`n") | ConvertFrom-Json -Depth 100 } else { $null }
+    $reviewedLock = Get-Content -LiteralPath (Join-Path $reviewedRoot ".agents/hub.lock.json") -Raw | ConvertFrom-Json -Depth 100
+    $reviewedNonAuthorityEntry = @($reviewedLock.migration_non_authority.entries | Where-Object {
+            [string]$_.path -ceq ".agents/context/legacy-reference.md" -and [string]$_.evidence_kind -ceq "reviewed-disposition" -and
+            [string]$_.evidence_sha256 -ceq [string]$reviewedResolved.payload.reviewed_disposition.reviewed_disposition_digest
+        })
+    $actualWorkspaceNonAuthority = (
+        $workspaceCheckExit -eq 0 -and [string]$workspaceCheckPayload.status -ceq "PASS" -and
+        $workspaceDiscoverExit -eq 0 -and (@($workspaceDiscoverPayload.assets | Where-Object { [string]$_.path -ceq ".agents/context/legacy-reference.md" }).Count -eq 0) -and
+        $reviewedNonAuthorityEntry.Count -eq 1
+    )
     $reviewedMutationPass = ((Test-InvocationPass -Invocation $reviewedApplied) -and [string]$reviewedApplied.payload.workspace_check -ceq "PASS" -and
         [IO.File]::ReadAllText((Join-Path $reviewedRoot "AGENTS.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $rootTargetContent -and
         -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/AGENTS.md")) -and
         [string]$reviewedPreApplySnapshot[".agents/process.txt"] -ceq [string]$reviewedAfterSnapshot[".agents/process.txt"] -and
         [string]$reviewedPreApplySnapshot[".agents/plan.md"] -ceq [string]$reviewedAfterSnapshot[".agents/plan.md"] -and
+        [string]$reviewedPreApplySnapshot[".agents/context/legacy-reference.md"] -ceq [string]$reviewedAfterSnapshot[".agents/context/legacy-reference.md"] -and
         -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/context/legacy-stable-facts.md")) -and
         -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/notes.md")) -and
-        [IO.File]::ReadAllText((Join-Path $reviewedRoot ".agents/context/reviewed-legacy-facts.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $contextTargetContent)
-    Add-Case -Name "reviewed-disposition-apply-mutations" -Passed $reviewedMutationPass -Detail ("Reviewed Apply status={0} reasons={1} workspace={2}." -f (Get-StatusText $reviewedApplied.payload), (@($reviewedApplied.payload.reason_codes) -join ','), [string]$reviewedApplied.payload.workspace_check)
+        [IO.File]::ReadAllText((Join-Path $reviewedRoot ".agents/context/reviewed-legacy-facts.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $contextTargetContent -and
+        -not (Test-Path -LiteralPath (Join-Path $reviewedRoot ".agents/commands/legacy-release.md")) -and
+        [IO.File]::ReadAllText((Join-Path $reviewedRoot ".agents/procedures/reviewed-release.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $procedureTargetContent -and
+        -not (Test-Path -LiteralPath (Join-Path $reviewedRoot "docs/specs/legacy-proposal/spec.md")) -and
+        [IO.File]::ReadAllText((Join-Path $reviewedRoot "docs/specs/reviewed-replacement/spec.md"), [Text.UTF8Encoding]::new($false, $true)) -ceq $specTargetContent -and
+        $actualWorkspaceNonAuthority)
+    Add-Case -Name "reviewed-disposition-apply-mutations" -Passed $reviewedMutationPass -Detail ("Reviewed Apply status={0} reasons={1} workspace={2} actual_non_authority={3}." -f (Get-StatusText $reviewedApplied.payload), (@($reviewedApplied.payload.reason_codes) -join ','), [string]$reviewedApplied.payload.workspace_check, $actualWorkspaceNonAuthority)
     $evidence.reviewed_disposition_apply = $reviewedMutationPass
+
+    $reviewedLockPath = Join-Path $reviewedRoot ".agents/hub.lock.json"
+    $reviewedLockText = [IO.File]::ReadAllText($reviewedLockPath, [Text.UTF8Encoding]::new($false, $true))
+    $staleNonAuthorityLock = $reviewedLockText | ConvertFrom-Json -Depth 100
+    $staleNonAuthorityEntries = @($staleNonAuthorityLock.migration_non_authority.entries | Where-Object { [string]$_.path -ceq ".agents/context/legacy-reference.md" })
+    $staleNonAuthorityClosed = $false
+    if ($staleNonAuthorityEntries.Count -eq 1) {
+        $staleNonAuthorityEntries[0].sha256 = "0" * 64
+        Write-Utf8NoBom -Path $reviewedLockPath -Text (($staleNonAuthorityLock | ConvertTo-Json -Depth 100) + "`n")
+        $staleWorkspaceOutput = @(& pwsh -NoProfile -NonInteractive -File $workspaceEntrypoint -Operation check -ProjectRoot $reviewedRoot -Json 2>&1 | ForEach-Object { [string]$_ })
+        $staleWorkspaceExit = $LASTEXITCODE
+        Write-Utf8NoBom -Path $reviewedLockPath -Text $reviewedLockText
+        $staleNonAuthorityClosed = ($staleWorkspaceExit -ne 0 -and (@($staleWorkspaceOutput) -join "`n") -match [regex]::Escape(".agents/context/legacy-reference.md"))
+    }
+    Add-Case -Name "stale-non-authority-metadata-fails-closed" -Passed $staleNonAuthorityClosed -Detail "A stale source digest grants no parser/discovery exemption and the actual workspace check fails closed."
 
     $reviewedRolledBack = Invoke-Migration -Mode "Rollback" -ProjectRoot $reviewedRoot -BackupId $reviewedBackupId -ConfirmRollback
     $reviewedRollbackPass = ((Test-InvocationPass -Invocation $reviewedRolledBack) -and

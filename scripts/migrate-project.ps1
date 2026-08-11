@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v4"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v5"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -278,6 +278,32 @@ function Test-TemplateText {
     return ($Text -match '(?im)^\s*(?:#\s+)?(?:template|example|placeholder)(?:\s|$)' -or $Text -match 'sha256:0{64}' -or $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$')
 }
 
+function Test-ContextNonAuthorityDocument {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+    $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+    return (
+        [IO.Path]::GetFileName($Path) -ieq "README.md" -or
+        $name -match '(?i)(?:^|[-_.])(?:template|index|placeholder)(?:$|[-_.])' -or
+        (Test-TemplateText $Text)
+    )
+}
+
+function Test-ContextAuthorityAmbiguous {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+    $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+    return (
+        $name -match '(?i)(?:^|[-_.])(?:example|sample)(?:$|[-_.])' -or
+        ($Text -match '(?im)^\s*#{1,6}\s+.*\b(?:guide|guidance|instructions?|catalog|reference)\b' -and
+            $Text -match '(?im)\b(?:use this|add entries|fill in|document .+ here|how to)\b')
+    )
+}
+
 function Get-SafeId {
     param([Parameter(Mandatory = $true)][string]$Value, [string]$Fallback = "legacy")
     $id = $Value.ToLowerInvariant() -replace '[^a-z0-9]+', '-'
@@ -402,6 +428,47 @@ function Add-PlanAction {
     $Actions.Add($entry)
 }
 
+function Set-ResolvedNonAuthorityLockEntries {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][Collections.Generic.List[object]]$Actions,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Entries
+    )
+    if ($Entries.Count -eq 0) { return }
+    $indexes = @(0..($Actions.Count - 1) | Where-Object {
+            [string](Get-HashtableValue $Actions[$_] "path") -ceq ".agents/hub.lock.json" -and
+            [string](Get-HashtableValue $Actions[$_] "action") -ceq "change"
+        })
+    if ($indexes.Count -ne 1) { throw "DISPOSITION_LOCK_ACTION_MISSING" }
+    $index = [int]$indexes[0]
+    $action = $Actions[$index]
+    try { $lock = [string](Get-HashtableValue $action "content") | ConvertFrom-Json -AsHashtable -Depth 100 -ErrorAction Stop }
+    catch { throw "DISPOSITION_LOCK_CONTENT_INVALID" }
+    $existing = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    $section = Get-HashtableValue $lock "migration_non_authority"
+    if ($null -ne $section) {
+        $existingValue = $null
+        if ($section -is [Collections.IDictionary] -and $section.Contains("entries")) { $existingValue = $section["entries"] }
+        if ([int](Get-HashtableValue $section "schema_version") -ne 1 -or $existingValue -isnot [Collections.IList] -or $existingValue -is [string]) { throw "DISPOSITION_LOCK_SECTION_INVALID" }
+        foreach ($entry in @($existingValue)) {
+            $entryPath = [string](Get-HashtableValue $entry "path")
+            if ([string]::IsNullOrWhiteSpace($entryPath) -or $existing.ContainsKey($entryPath)) { throw "DISPOSITION_LOCK_ENTRY_INVALID" }
+            $existing[$entryPath] = $entry
+        }
+    }
+    foreach ($entry in $Entries) {
+        $entryPath = [string](Get-HashtableValue $entry "path")
+        if ($existing.ContainsKey($entryPath)) { throw "DISPOSITION_TARGET_COLLISION" }
+        $existing[$entryPath] = $entry
+    }
+    $lock["migration_non_authority"] = [ordered]@{
+        schema_version = 1
+        entries = [object[]]@($existing.Keys | Sort-Object | ForEach-Object { $existing[$_] })
+    }
+    $Actions.RemoveAt($index)
+    Add-PlanAction $Actions "change" ".agents/hub.lock.json" @($action.source_paths) (($lock | ConvertTo-Json -Depth 100) + "`n") ([string]$action.reason_code)
+}
+
 function Assert-ExactObjectProperties {
     param(
         [Parameter(Mandatory = $true)][object]$Value,
@@ -427,9 +494,27 @@ function Get-DispositionKey {
     return "$Path`n$ReasonCode"
 }
 
+function Assert-ReviewedSourceBinding {
+    param(
+        [Parameter(Mandatory = $true)][object]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$SourceSha256
+    )
+    if ($SourceSha256 -cnotmatch '^[a-f0-9]{64}$') { throw "DISPOSITION_EVIDENCE_INVALID" }
+    $matches = @((Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "files") | Where-Object {
+            [string](Get-HashtableValue $_ "path") -ceq $Path
+        })
+    if ($matches.Count -ne 1 -or [string](Get-HashtableValue $matches[0] "presence") -cne "file" -or
+        [string](Get-HashtableValue $matches[0] "sha256") -cne $SourceSha256) { throw "DISPOSITION_SOURCE_MISMATCH" }
+}
+
 function Test-PreserveDispositionAllowed {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$ReasonCode)
-    return ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC" -and $Path -cin @(".agents/process.txt", ".agents/plan.md"))
+    if ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC") { return ($Path -cin @(".agents/process.txt", ".agents/plan.md")) }
+    if ($ReasonCode -ceq "CONTEXT_MARKERS_MISSING") {
+        return ($Path -ceq ".agents/notes.md" -or $Path -cmatch '^\.agents/context/.+\.md$')
+    }
+    return $false
 }
 
 function Test-RetireDispositionAllowed {
@@ -553,6 +638,7 @@ function Resolve-ReviewedDisposition {
             "preserve-non-authority" {
                 Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition") @("path", "reason_code", "disposition") "DISPOSITION_EVIDENCE_INVALID"
                 if (-not (Test-PreserveDispositionAllowed $path $reason)) { throw "DISPOSITION_UNSUPPORTED" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
                 Add-PlanAction $resolvedActions "preserve" $path @($path) $null "REVIEWED_NON_AUTHORITY_PRESERVED"
                 $actionPaths[$path] = $true
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation })
@@ -609,6 +695,45 @@ function Resolve-ReviewedDisposition {
                 $actionPaths[$path] = $true
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_paths = $sources; target = $target; content = [string]$contentValue })
             }
+            "create-procedure-and-retire-source" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256", "target", "content") @("path", "reason_code", "disposition", "source_sha256", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
+                $target = [string](Get-HashtableValue $decision "target")
+                $contentValue = Get-HashtableValue $decision "content"
+                if ($reason -cne "PROCEDURE_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
+                Assert-ReviewedSourceBinding $Candidate $path ([string](Get-HashtableValue $decision "source_sha256"))
+                if ($target -cnotmatch '^\.agents/procedures/[a-z0-9]+(?:-[a-z0-9]+)*\.md$' -or
+                    -not (Test-CanonicalProjectRelativePath $Root $target) -or $target -ceq $path) { throw "DISPOSITION_TARGET_INVALID" }
+                if ($actionPaths.ContainsKey($target) -or (Test-Path -LiteralPath (Get-ProjectPath $Root $target))) { throw "DISPOSITION_TARGET_COLLISION" }
+                if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
+                Add-PlanAction $resolvedActions "create" $target @($path) ([string]$contentValue) "REVIEWED_PROCEDURE_CREATED"
+                $actionPaths[$target] = $true
+                Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                $actionPaths[$path] = $true
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_sha256 = [string](Get-HashtableValue $decision "source_sha256"); target = $target; content = [string]$contentValue })
+            }
+            "create-spec-and-retire-source" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256", "target", "content") @("path", "reason_code", "disposition", "source_sha256", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
+                $target = [string](Get-HashtableValue $decision "target")
+                $contentValue = Get-HashtableValue $decision "content"
+                if ($reason -cne "SPEC_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
+                Assert-ReviewedSourceBinding $Candidate $path ([string](Get-HashtableValue $decision "source_sha256"))
+                if ($target -cnotmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$' -or
+                    -not (Test-CanonicalProjectRelativePath $Root $target) -or $target -ceq $path) { throw "DISPOSITION_TARGET_INVALID" }
+                $targetDirectory = $target.Substring(0, $target.LastIndexOf('/'))
+                if ($actionPaths.ContainsKey($target) -or $actionPaths.ContainsKey($targetDirectory) -or
+                    (Test-Path -LiteralPath (Get-ProjectPath $Root $target)) -or
+                    (Test-Path -LiteralPath (Get-ProjectPath $Root $targetDirectory))) { throw "DISPOSITION_TARGET_COLLISION" }
+                if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
+                Add-PlanAction $resolvedActions "create-directory" $targetDirectory @($path) $null "REVIEWED_SPEC_DIRECTORY_CREATED"
+                $actionPaths[$targetDirectory] = $true
+                Add-PlanAction $resolvedActions "create" $target @($path) ([string]$contentValue) "REVIEWED_SPEC_CREATED"
+                $actionPaths[$target] = $true
+                Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                $actionPaths[$path] = $true
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_sha256 = [string](Get-HashtableValue $decision "source_sha256"); target = $target; content = [string]$contentValue })
+            }
             default { throw "DISPOSITION_UNSUPPORTED" }
         }
     }
@@ -623,6 +748,18 @@ function Resolve-ReviewedDisposition {
         decisions = @($normalizedDecisions.ToArray())
     }
     $dispositionDigest = Get-Sha256Text (ConvertTo-StableJson $normalizedEvidence)
+    $reviewedNonAuthorityEntries = @($normalizedDecisions.ToArray() | Where-Object {
+            [string](Get-HashtableValue $_ "disposition") -ceq "preserve-non-authority" -and
+            [string](Get-HashtableValue $_ "path") -cmatch '^\.agents/context/.+\.md$'
+        } | ForEach-Object {
+            $entryPath = [string](Get-HashtableValue $_ "path")
+            $candidateFile = @((Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "files") | Where-Object {
+                    [string](Get-HashtableValue $_ "path") -ceq $entryPath
+                })
+            if ($candidateFile.Count -ne 1 -or [string](Get-HashtableValue $candidateFile[0] "presence") -cne "file") { throw "DISPOSITION_SOURCE_MISMATCH" }
+            [ordered]@{ path = $entryPath; sha256 = [string](Get-HashtableValue $candidateFile[0] "sha256"); evidence_kind = "reviewed-disposition"; evidence_sha256 = $dispositionDigest }
+        })
+    Set-ResolvedNonAuthorityLockEntries $Root $resolvedActions $reviewedNonAuthorityEntries
     $sortedActions = @($resolvedActions.ToArray() | Sort-Object path, action, reason_code)
     $allPlanPaths = @($sortedActions | ForEach-Object { [string](Get-HashtableValue $_ "path") } | Sort-Object -Unique)
     $files = @(Get-StateSnapshot $Root $allPlanPaths)
@@ -637,7 +774,7 @@ function Resolve-ReviewedDisposition {
     if (@($sortedActions | Where-Object { [string]$_.action -in @("create", "change") -and [string]$_.path -cne ".agents/hub.lock.json" }).Count -eq 0) { $remainingReasons.Add("NO_MIGRATABLE_AUTHORITY") }
     $reasonArray = @($remainingReasons.ToArray() | Sort-Object -Unique)
     if ($reasonArray.Count -eq 0) {
-        try { Assert-ResolvedPlanWorkspaceValid $Root $sortedActions }
+        try { [void](Assert-ResolvedPlanWorkspaceValid $Root $sortedActions) }
         catch { throw "DISPOSITION_CONTENT_INVALID" }
     }
     $eligible = ($reasonArray.Count -eq 0)
@@ -704,9 +841,12 @@ function Get-VerifiedLanguageMigrationTemplatePaths {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
         [AllowNull()][object]$Lock,
-        [Parameter(Mandatory = $true)][string]$ProjectLanguage
+        [Parameter(Mandatory = $true)][string]$ProjectLanguage,
+        [Parameter(Mandatory = $true)][ref]$ManualReviewPaths
     )
     $verified = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    $manualReview = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    $ManualReviewPaths.Value = $manualReview
     try {
         $migration = Get-HashtableValue $Lock "language_migration"
         if ($null -eq $migration -or [int](Get-HashtableValue $migration "schema_version") -ne 1) { return ,$verified }
@@ -763,7 +903,11 @@ function Get-VerifiedLanguageMigrationTemplatePaths {
             $proposalAction = $proposalByPath[$relative]
             $resultAction = $resultByPath[$relative]
             $actionName = [string](Get-HashtableValue $proposalAction "action")
-            if ($actionName -cnotin $pureActions -or [bool](Get-HashtableValue $proposalAction "manual_review")) { continue }
+            if ([bool](Get-HashtableValue $proposalAction "manual_review")) {
+                $manualReview[$relative] = $true
+                continue
+            }
+            if ($actionName -cnotin $pureActions) { continue }
             $targetHash = [string](Get-HashtableValue $proposalAction "target_template_hash_sha256")
             $finalHash = [string](Get-HashtableValue $resultAction "final_hash_sha256")
             if ($targetHash -notmatch '^[a-f0-9]{64}$' -or $finalHash -cne $targetHash) { continue }
@@ -780,6 +924,7 @@ function Get-VerifiedLanguageMigrationTemplatePaths {
     }
     catch {
         # NOTE: Missing, malformed, stale, or unsafe provenance grants no trust.
+        $ManualReviewPaths.Value = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
         return ,[Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
     }
     return ,$verified
@@ -899,9 +1044,10 @@ function Invoke-Analyze {
 
     $scaffoldContract = $null
     $verifiedLanguageTemplates = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    $languageManualReviewPaths = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
     if ($language -in @("en", "zh-CN")) {
         try {
-            $verifiedLanguageTemplates = Get-VerifiedLanguageMigrationTemplatePaths $Root $lock $language
+            $verifiedLanguageTemplates = Get-VerifiedLanguageMigrationTemplatePaths $Root $lock $language ([ref]$languageManualReviewPaths)
             $scaffoldContract = Get-C33ScaffoldContract $language
             Add-ScaffoldTransitionPlan $Root $language $lock $verifiedLanguageTemplates $scaffoldContract $actions $human $targetPaths
         }
@@ -942,14 +1088,15 @@ function Invoke-Analyze {
     if (Test-Path -LiteralPath $contextRoot -PathType Container) {
         foreach ($file in @(Get-ChildItem -LiteralPath $contextRoot -File -Filter "*.md" -Recurse -Force)) {
             $relative = ConvertTo-RelativePath $Root $file.FullName
-            # NOTE: Only the exact legacy Context index is preserved as non-authority documentation.
-            if ($relative -cne ".agents/context/README.md") { $contextCandidates.Add($relative) }
+            $contextCandidates.Add($relative)
         }
     }
     foreach ($relative in @($contextCandidates.ToArray() | Sort-Object -Unique)) {
         $text = Read-Utf8Text (Get-ProjectPath $Root $relative)
+        if ($languageManualReviewPaths.ContainsKey($relative)) { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         if ($verifiedLanguageTemplates.ContainsKey($relative)) { Add-PlanAction $actions "preserve" $relative @($relative) $null "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
-        if (Test-TemplateText $text) { Add-PlanAction $actions "preserve" $relative @($relative) $null "TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
+        if (Test-ContextNonAuthorityDocument $relative $text) { Add-PlanAction $actions "preserve" $relative @($relative) $null "TEMPLATE_PRESERVED_NON_AUTHORITY"; continue }
+        if (Test-ContextAuthorityAmbiguous $relative $text) { $human.Add([ordered]@{ path = $relative; reason_code = "CONTEXT_MARKERS_MISSING" }); continue }
         $summary = Get-MarkdownSection $text @("Summary")
         $keywordsText = Get-MarkdownSection $text @("Keywords")
         $verified = Get-MarkdownSection $text @("Verified Facts", "Verified")
@@ -1044,6 +1191,18 @@ function Invoke-Analyze {
     if ($null -ne $lock -and $workspaceModel -ne "c3.3" -and $language -in @("en", "zh-CN")) {
         $lock["workspace_model"] = "c3.3"; $lock["workspace_state"] = "dormant"
         $lock["workspace_roots"] = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+        $automaticNonAuthorityEntries = @($actions.ToArray() | Where-Object {
+                [string](Get-HashtableValue $_ "action") -ceq "preserve" -and
+                [string](Get-HashtableValue $_ "path") -cmatch '^\.agents/context/.+\.md$' -and
+                [string](Get-HashtableValue $_ "reason_code") -in @("TEMPLATE_PRESERVED_NON_AUTHORITY", "LANGUAGE_MIGRATION_TEMPLATE_PRESERVED_NON_AUTHORITY")
+            } | ForEach-Object {
+                $entryPath = [string](Get-HashtableValue $_ "path")
+                $entryState = Get-PathState $Root $entryPath
+                [ordered]@{ path = $entryPath; sha256 = [string]$entryState.sha256; evidence_kind = "deterministic-template"; evidence_sha256 = [string]$entryState.sha256 }
+            })
+        if ($automaticNonAuthorityEntries.Count -gt 0) {
+            $lock["migration_non_authority"] = [ordered]@{ schema_version = 1; entries = [object[]]@($automaticNonAuthorityEntries | Sort-Object path) }
+        }
         $lockContent = ($lock | ConvertTo-Json -Depth 50) + "`n"
         Add-PlanAction $actions "change" ".agents/hub.lock.json" @(".agents/hub.lock.json") $lockContent "WORKSPACE_METADATA_MIGRATED"
         $targetPaths.Add(".agents/hub.lock.json")
