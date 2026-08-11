@@ -110,6 +110,7 @@ $evidence = [ordered]@{
     profile = "c3-3-candidate"
     bootstrap = "pass"
     runtime_ownership = "pass"
+    schema_authority = "pass"
     bridge = "pass"
     status = "pass"
     uninstall = "pass"
@@ -139,7 +140,15 @@ try {
     Assert-SliceE -Condition ([bool]$manifest.workspace.default_cutover -eq $false) -Message "Candidate profile changed default cutover state."
     Assert-SliceE -Condition (@($manifest.skills) -contains "project-workspace") -Message "Candidate runtime does not own packaged project-workspace."
     Assert-SliceE -Condition (@($manifest.items | Where-Object { [string]$_.destination -eq "templates/project" }).Count -eq 1) -Message "Candidate runtime template ownership is missing."
+    $schemaItem = @($manifest.items | Where-Object { [string]$_.destination -ceq "schemas/project-workspace" })
+    Assert-SliceE -Condition ($schemaItem.Count -eq 1 -and [string]$schemaItem[0].name -ceq "schemas/project-workspace" -and [bool]$schemaItem[0].managed) -Message "Candidate runtime schema ownership is missing."
+    Assert-SliceE -Condition (@($schemaItem[0].files).Count -eq @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "schemas/project-workspace") -Recurse -File).Count) -Message "Candidate runtime schema ownership does not cover the canonical schema files."
+    $runtimeProviderItem = @($manifest.items | Where-Object { [string]$_.name -ceq "runtime-status-provider" })
+    Assert-SliceE -Condition ($runtimeProviderItem.Count -eq 1 -and @($runtimeProviderItem[0].files | Where-Object { [string]$_.path -ceq "validation/powershell-runtime-requirement.ps1" }).Count -eq 1) -Message "Candidate runtime does not own the PowerShell requirement used by project-workspace."
+    Assert-SliceE -Condition (@($manifest.workspace.packaged_content | Where-Object { [string]$_ -ceq "schemas/project-workspace" }).Count -eq 1) -Message "Candidate runtime schema authority is missing from the workspace contract."
     Assert-SliceE -Condition (@($manifest.workspace.packaged_content | Where-Object { [string]$_ -ceq "scripts/migrate-project.ps1" }).Count -eq 1) -Message "Candidate runtime migration entrypoint is missing from the workspace contract."
+    Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "schemas/project-workspace/work-item.v1.schema.json") -PathType Leaf) -Message "Candidate runtime did not install the canonical project-workspace schemas."
+    Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/validation/powershell-runtime-requirement.ps1") -PathType Leaf) -Message "Candidate runtime did not install the PowerShell requirement used by project-workspace."
     Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/migrate-project.ps1") -PathType Leaf) -Message "Candidate runtime did not install the migration entrypoint."
     Assert-SliceE -Condition (@($manifest.items | Where-Object { [string]$_.destination -in @("AGENTS.md", ".agents", "docs/specs") }).Count -eq 0) -Message "Runtime manifest owns a project-local path."
 
@@ -147,7 +156,20 @@ try {
     Assert-SliceE -Condition ([string]$legacyManifest.profile -ceq "recommended") -Message "Recommended profile was not recorded."
     Assert-SliceE -Condition ([string]$legacyManifest.workspace.architecture -ceq "legacy-runtime" -and [string]$legacyManifest.workspace.lifecycle -ceq "not-enabled") -Message "Recommended runtime did not retain the legacy workspace contract."
     Assert-SliceE -Condition ([bool]$legacyManifest.workspace.default_cutover -eq $false) -Message "Recommended runtime changed default cutover state."
+    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $legacyRuntimeRoot "schemas/project-workspace"))) -Message "Recommended runtime gained the dormant C3.3 schema authority."
     Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $legacyRuntimeRoot "scripts/migrate-project.ps1"))) -Message "Recommended runtime gained the dormant C3.3 migration entrypoint."
+
+    $reinstall = Invoke-PwshScript -Path $installScript -Arguments @(
+        "-Profile", "c3-3-candidate",
+        "-TargetDir", $runtimeRoot
+    )
+    Assert-SliceE -Condition ([int]$reinstall.exit_code -eq 0) -Message "Candidate profile reinstall failed: $(@($reinstall.output) -join "`n")"
+    $reinstallReport = Get-Content -LiteralPath (Join-Path $runtimeRoot "install-report.json") -Raw | ConvertFrom-Json -Depth 40
+    $reinstallManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -Depth 40
+    $reinstalledSchemaItem = @($reinstallManifest.items | Where-Object { [string]$_.destination -ceq "schemas/project-workspace" })
+    Assert-SliceE -Condition ([string]$reinstallReport.status -ceq "success" -and [int]$reinstallReport.counts.conflicts -eq 0 -and [int]$reinstallReport.counts.skipped_locally_modified -eq 0) -Message "Candidate profile reinstall did not preserve current managed ownership."
+    Assert-SliceE -Condition ($reinstalledSchemaItem.Count -eq 1 -and [string]$reinstalledSchemaItem[0].installed_hash -ceq [string]$schemaItem[0].installed_hash) -Message "Candidate profile reinstall lost or changed current schema ownership."
+    Assert-SliceE -Condition (@($reinstallReport.unchanged | Where-Object { [string]$_ -clike "schemas/project-workspace/*" }).Count -eq @($reinstalledSchemaItem[0].files).Count) -Message "Candidate profile reinstall did not report every packaged schema as unchanged."
 
     $bootstrapScript = Join-Path $runtimeRoot "skills/project-bootstrap/scripts/bootstrap_project.ps1"
     $legacyBootstrapScript = Join-Path $legacyRuntimeRoot "skills/project-bootstrap/scripts/bootstrap_project.ps1"
@@ -189,6 +211,40 @@ try {
     Assert-SliceE -Condition ([string]$lock.project_language -ceq "zh-CN" -and [string]$lock.workspace_model -ceq "c3.3" -and [string]$lock.workspace_state -ceq "dormant") -Message "Fresh bootstrap language or workspace metadata is incorrect."
     $agentsText = Get-Content -LiteralPath (Join-Path $projectRoot "AGENTS.md") -Raw
     Assert-SliceE -Condition ($agentsText -notmatch '(?i)current branch|checks|next step') -Message "Fresh bootstrap wrote transient run-state text."
+
+    $installedWorkspaceScript = Join-Path $runtimeRoot "skills/project-workspace/scripts/project-workspace.ps1"
+    $beforeInstalledCheck = Get-ProjectFingerprint -Root $projectRoot
+    $installedCheck = Convert-OutputToJson -Invocation (Invoke-PwshScript -Path $installedWorkspaceScript -Arguments @(
+        "-Operation", "check",
+        "-ProjectRoot", $projectRoot,
+        "-Json"
+    ))
+    $afterInstalledCheck = Get-ProjectFingerprint -Root $projectRoot
+    Assert-SliceE -Condition ([string]$installedCheck.status -ceq "PASS" -and [bool]$installedCheck.read_only) -Message "Installed project-workspace check did not pass against the packaged schema authority."
+    Assert-SliceE -Condition ((@($beforeInstalledCheck) -join "`n") -ceq (@($afterInstalledCheck) -join "`n")) -Message "Installed project-workspace check changed project state."
+
+    $installedSchemaPath = Join-Path $runtimeRoot "schemas/project-workspace/work-item.v1.schema.json"
+    $installedSchemaBytes = [System.IO.File]::ReadAllBytes($installedSchemaPath)
+    try {
+        Write-Utf8NoBom -Path $installedSchemaPath -Text "{ invalid installed schema`n"
+        $invalidInstalledCheck = Invoke-PwshScript -Path $installedWorkspaceScript -Arguments @(
+            "-Operation", "check",
+            "-ProjectRoot", $projectRoot,
+            "-Json"
+        )
+        Assert-SliceE -Condition ([int]$invalidInstalledCheck.exit_code -eq 1) -Message "Installed project-workspace check did not reject its modified installed schema."
+        $invalidInstalledPayload = (@($invalidInstalledCheck.output) -join "`n") | ConvertFrom-Json -Depth 40
+        Assert-SliceE -Condition ([string]$invalidInstalledPayload.status -ceq "FAIL" -and @($invalidInstalledPayload.findings | Where-Object { [string]$_.code -ceq "canonical-schema-load-failed" -and [string]$_.path -ceq "work-item.v1.schema.json" }).Count -ge 1) -Message "Installed project-workspace check did not report the installed schema failure."
+    }
+    finally {
+        [System.IO.File]::WriteAllBytes($installedSchemaPath, $installedSchemaBytes)
+    }
+    $restoredInstalledCheck = Convert-OutputToJson -Invocation (Invoke-PwshScript -Path $installedWorkspaceScript -Arguments @(
+        "-Operation", "check",
+        "-ProjectRoot", $projectRoot,
+        "-Json"
+    ))
+    Assert-SliceE -Condition ([string]$restoredInstalledCheck.status -ceq "PASS") -Message "Installed project-workspace check did not recover after restoring its packaged schema."
 
     $localAgentsText = "# local project edit`n"
     Write-Utf8NoBom -Path (Join-Path $projectRoot "AGENTS.md") -Text $localAgentsText
@@ -233,6 +289,7 @@ try {
     Assert-SliceE -Condition ((@($beforeStatus) -join "`n") -ceq (@($afterStatus) -join "`n")) -Message "Status wrote project state."
     Assert-SliceE -Condition ([string]$status.runtime.manifest_status -ceq "current" -and [string]$status.runtime.profile -ceq "c3-3-candidate") -Message "Status did not report the current candidate runtime."
     Assert-SliceE -Condition ([string]$status.runtime.workspace.architecture -ceq "c3.3" -and [string]$status.runtime.workspace.lifecycle -ceq "dormant" -and [bool]$status.runtime.workspace.default_cutover -eq $false) -Message "Status did not preserve dormant/default-cutover semantics."
+    Assert-SliceE -Condition (@($status.runtime.workspace.packaged_content | Where-Object { [string]$_ -ceq "schemas/project-workspace" }).Count -eq 1) -Message "Status did not report the packaged schema authority."
     Assert-SliceE -Condition (@($status.runtime.workspace.packaged_content | Where-Object { [string]$_ -ceq "scripts/migrate-project.ps1" }).Count -eq 1) -Message "Status did not report the packaged migration entrypoint."
     Assert-SliceE -Condition ([string]$status.project.workspace.status -ceq "current" -and [string]$status.project.workspace.layout -ceq "complete" -and [string]$status.project.workspace.runtime_boundary -ceq "separate" -and [string]$status.project.workspace.readiness -ceq "candidate-dormant-ready") -Message "Status did not distinguish project workspace lifecycle facts."
     Assert-SliceE -Condition (@($manifest.skills | Where-Object { [string]$_ -eq "promoted-local" }).Count -eq 0) -Message "Project-local Skill was merged into packaged runtime authority."
@@ -262,7 +319,7 @@ try {
     Assert-SliceE -Condition ((Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json") -PathType Leaf) -and (Test-Path -LiteralPath $bridgeTargetRoot -PathType Container)) -Message "Stale bridge uninstall removed runtime or bridge content."
     Write-Utf8NoBom -Path $bridgeManifestPath -Text $originalBridgeManifest
 
-    Write-Utf8NoBom -Path (Join-Path $runtimeRoot "skills/project-workspace/local-runtime-note.txt") -Text "unknown runtime content`n"
+    Write-Utf8NoBom -Path (Join-Path $runtimeRoot "schemas/project-workspace/local-runtime-schema.json") -Text "unknown runtime content`n"
     $unknownHumanUninstall = Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot)
     $unknownHumanOutput = @($unknownHumanUninstall.output) -join "`n"
     Assert-SliceE -Condition ([int]$unknownHumanUninstall.exit_code -eq 2) -Message "Unknown runtime content human uninstall did not return the blocked exit code."
@@ -291,12 +348,20 @@ try {
         @($unknownBlocked.locally_modified).Count -eq 0
     ) -Message "Blocked uninstall JSON contract changed."
     Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json") -PathType Leaf) -Message "Unknown runtime content uninstall removed the manifest."
-    Remove-Item -LiteralPath (Join-Path $runtimeRoot "skills/project-workspace/local-runtime-note.txt") -Force
+    Remove-Item -LiteralPath (Join-Path $runtimeRoot "schemas/project-workspace/local-runtime-schema.json") -Force
 
-    $managedRuntimeFile = Join-Path $runtimeRoot "skills/project-workspace/SKILL.md"
+    $managedRuntimeFile = Join-Path $runtimeRoot "schemas/project-workspace/work-item.v1.schema.json"
     $managedRuntimeBytes = [System.IO.File]::ReadAllBytes($managedRuntimeFile)
     try {
         [System.IO.File]::AppendAllText($managedRuntimeFile, "`nlocal modification`n", (New-Object System.Text.UTF8Encoding($false)))
+        $modifiedBytes = [System.IO.File]::ReadAllBytes($managedRuntimeFile)
+        $modifiedReinstall = Invoke-PwshScript -Path $installScript -Arguments @(
+            "-Profile", "c3-3-candidate",
+            "-TargetDir", $runtimeRoot
+        )
+        $modifiedReinstallReport = Get-Content -LiteralPath (Join-Path $runtimeRoot "install-report.json") -Raw | ConvertFrom-Json -Depth 40
+        Assert-SliceE -Condition ([int]$modifiedReinstall.exit_code -eq 0 -and [string]$modifiedReinstallReport.status -ceq "warning" -and @($modifiedReinstallReport.skipped_locally_modified | Where-Object { [string]$_ -ceq "schemas/project-workspace/work-item.v1.schema.json" }).Count -eq 1) -Message "Candidate profile reinstall did not preserve the locally modified managed schema."
+        Assert-SliceE -Condition (([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($managedRuntimeFile))) -ceq ([Convert]::ToBase64String($modifiedBytes))) -Message "Candidate profile reinstall overwrote the locally modified managed schema."
         $modifiedHumanUninstall = Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot)
         $modifiedHumanOutput = @($modifiedHumanUninstall.output) -join "`n"
         Assert-SliceE -Condition ([int]$modifiedHumanUninstall.exit_code -eq 2) -Message "Locally modified runtime content human uninstall did not return the blocked exit code."
@@ -308,7 +373,7 @@ try {
 
     $uninstall = Convert-OutputToJson -Invocation (Invoke-PwshScript -Path $uninstallScript -Arguments @("-TargetDir", $runtimeRoot, "-Json"))
     Assert-SliceE -Condition ([string]$uninstall.status -ceq "uninstalled" -and @($uninstall.bridge_removed).Count -ge 2) -Message "Manifest-owned runtime/bridge uninstall did not complete."
-    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json")) -and -not (Test-Path -LiteralPath $bridgeManifestPath) -and -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/migrate-project.ps1")) -and -not (Test-Path -LiteralPath (Join-Path $bridgeTargetRoot "project-workspace"))) -Message "Uninstall left owned runtime or bridge content."
+    Assert-SliceE -Condition (-not (Test-Path -LiteralPath (Join-Path $runtimeRoot "install-manifest.json")) -and -not (Test-Path -LiteralPath $bridgeManifestPath) -and -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "schemas/project-workspace")) -and -not (Test-Path -LiteralPath (Join-Path $runtimeRoot "scripts/migrate-project.ps1")) -and -not (Test-Path -LiteralPath (Join-Path $bridgeTargetRoot "project-workspace"))) -Message "Uninstall left owned runtime or bridge content."
     foreach ($relative in @("AGENTS.md", ".agents/README.md", ".agents/work/real-work.md", ".agents/context/real-context.md", ".agents/procedures/real-procedure.md", ".agents/skills/promoted-local/SKILL.md", "docs/specs/real-spec/spec.md")) {
         Assert-SliceE -Condition (Test-Path -LiteralPath (Join-Path $projectRoot $relative) -PathType Leaf) -Message "Uninstall deleted project-local asset $relative."
     }

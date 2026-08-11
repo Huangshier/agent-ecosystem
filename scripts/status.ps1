@@ -789,15 +789,15 @@ function Set-RuntimeWorkspaceStatus {
     $packagedContent = Get-ManifestPropertyValue -Manifest $declared -Name "packaged_content"
     $projectAuthority = Get-ManifestPropertyValue -Manifest $declared -Name "project_local_authority"
     $derivedCache = Get-ManifestPropertyValue -Manifest $declared -Name "derived_cache"
-    $expectedPackagedContent = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
+    $expectedPackagedContent = @("skills/project-workspace", "schemas/project-workspace", "templates/project", "scripts/migrate-project.ps1")
     $expectedC33Authority = @("project-bootstrap", "project-workspace")
     $valid = (Test-ManifestObject -Value $declared) -and
         $architecture -is [string] -and [string]$architecture -ceq "c3.3" -and
         $lifecycle -is [string] -and [string]$lifecycle -ceq "dormant" -and
         $defaultCutover -is [bool] -and -not [bool]$defaultCutover -and
         $packagedContent -is [System.Array] -and
-        @($packagedContent).Count -eq 3 -and
-        @($expectedPackagedContent | Where-Object { @($packagedContent) -ccontains $_ }).Count -eq 3 -and
+        @($packagedContent).Count -eq 4 -and
+        @($expectedPackagedContent | Where-Object { @($packagedContent) -ccontains $_ }).Count -eq 4 -and
         $declaredC33Authority -is [System.Array] -and
         (@($declaredC33Authority) -join "`n") -ceq (@($expectedC33Authority) -join "`n") -and
         $declaredLegacyPayload -is [System.Array] -and @($declaredLegacyPayload).Count -eq 0 -and
@@ -827,7 +827,7 @@ function Set-RuntimeWorkspaceStatus {
     $workspace.architecture = "c3.3"
     $workspace.lifecycle = "dormant"
     $workspace.default_cutover = $false
-    $workspace.packaged_content = @("skills/project-workspace", "templates/project", "scripts/migrate-project.ps1")
+    $workspace.packaged_content = @($expectedPackagedContent)
     $workspace.c3_3_authority = @($expectedC33Authority)
     $workspace.legacy_only_compatibility_payload = @()
     $workspace.retired_from_c3_3_authority = @($expectedRetired)
