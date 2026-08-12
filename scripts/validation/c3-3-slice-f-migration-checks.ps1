@@ -923,6 +923,8 @@ $contextTemplateRelative = ".agents/context/decision-template.md"
 $contextStableTemplateRelative = ".agents/context/stable-fact-template.md"
 $contextBracketTemplateRelative = ".agents/context/decision-record.md"
 $contextBracketAmbiguousRelative = ".agents/context/single-field.md"
+$contextBracketLiteralPairRelative = ".agents/context/version-format.md"
+$contextBracketLiteralSingleRelative = ".agents/context/protocol-version.md"
 $contextBracketNegativeRelatives = @(
     ".agents/context/link-reference.md",
     ".agents/context/checklist-state.md",
@@ -1095,7 +1097,7 @@ TODO: Add decision keywords.
 
 ## Keywords
 
-[Add search terms]
+[请填写关键词]
 
 ## Verified Facts
 
@@ -1148,6 +1150,61 @@ No stable facts have been approved.
         @((Get-BackupFiles -ProjectRoot $contextBracketAmbiguousRoot)).Count -eq 0
     )
     Add-Case -Name "context-single-bracket-placeholder-stays-human" -Passed $contextBracketAmbiguousStaysHuman -Detail "One placeholder-style bracket field is insufficient for deterministic template evidence and cannot auto-promote despite complete Summary and Keywords sections."
+
+    $contextBracketLiteralRoot = Join-Path $scratchRoot "context-bracket-standalone-literals"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketLiteralRoot
+    Write-Utf8NoBom -Path (Join-Path $contextBracketLiteralRoot $contextBracketLiteralPairRelative) -Text @"
+# Versioned time format
+
+## Summary
+
+[RFC-3339]
+
+## Keywords
+
+[v1]
+
+## Verified Facts
+
+The synthetic interface uses a stable versioned time format.
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextBracketLiteralRoot $contextBracketLiteralSingleRelative) -Text @"
+# Protocol version
+
+## Summary
+
+Records the stable protocol version used by a synthetic interface.
+
+## Keywords
+
+protocol, version, interface
+
+## Verified Facts
+
+[v1]
+"@
+    $contextBracketLiteralBefore = Get-TreeFingerprint -Root $contextBracketLiteralRoot
+    $contextBracketLiteralAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketLiteralRoot
+    $contextBracketLiteralsPromoted = $true
+    foreach ($relative in @($contextBracketLiteralPairRelative, $contextBracketLiteralSingleRelative)) {
+        $promoted = @($contextBracketLiteralAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -eq 1
+        $preservedOrHuman = (
+            @($contextBracketLiteralAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $relative }).Count -gt 0 -or
+            @($contextBracketLiteralAnalyze.payload.plan.actions | Where-Object {
+                    [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+                }).Count -gt 0
+        )
+        $contextBracketLiteralsPromoted = $contextBracketLiteralsPromoted -and $promoted -and -not $preservedOrHuman
+    }
+    $contextBracketLiteralsPromoted = (
+        $contextBracketLiteralsPromoted -and
+        $contextBracketLiteralBefore -ceq (Get-TreeFingerprint -Root $contextBracketLiteralRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketLiteralRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-standalone-bracket-literals-promoted" -Passed $contextBracketLiteralsPromoted -Detail "Two standalone bracket values in distinct sections and one standalone bracket value remain ordinary Context content without template evidence or human disposition."
 
     $contextBracketNegativeRoot = Join-Path $scratchRoot "context-bracket-negatives"
     Copy-Fixture -Source $baseRoot -Destination $contextBracketNegativeRoot

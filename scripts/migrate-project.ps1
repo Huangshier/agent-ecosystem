@@ -278,6 +278,26 @@ function Test-TemplateText {
     return ($Text -match '(?im)^\s*(?:#\s+)?(?:template|example|placeholder)(?:\s|$)' -or $Text -match 'sha256:0{64}' -or $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$')
 }
 
+function Test-ContextFillInstructionText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [switch]$BracketField
+    )
+
+    if ($BracketField.IsPresent) {
+        $value = $Text.Trim()
+        return (
+            $value -match '^(?i:(?:fill(?:\s+in)?|add|replace|describe|document|enter|complete|record|provide)\b)' -or
+            $value -match '^(?:待填写|请填写|在此填写|待补充|请补充|请添加|请描述|请记录|请输入|请替换)'
+        )
+    }
+
+    return (
+        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:TODO|TBD)\s*:\s*(?:fill|add|replace|describe|document|enter|complete)\b' -or
+        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:待填写|请填写|在此填写|待补充)(?:\s|[:：]|$)'
+    )
+}
+
 function Get-ContextBracketPlaceholderEvidence {
     param([Parameter(Mandatory = $true)][string]$Text)
 
@@ -299,7 +319,7 @@ function Get-ContextBracketPlaceholderEvidence {
         $match = [regex]::Match([string]$regionLines[0], '^\[(?<field>[^\[\]\r\n]+)\]$', 'CultureInvariant')
         if (-not $match.Success) { continue }
         $field = $match.Groups['field'].Value.Trim()
-        if ([string]::IsNullOrWhiteSpace($field) -or $field -match '^(?i:x)$') { continue }
+        if (-not (Test-ContextFillInstructionText -Text $field -BracketField)) { continue }
         $placeholderRegionCount++
     }
 
@@ -322,10 +342,7 @@ function Test-ContextTemplateText {
         [bool]$bracketPlaceholder.deterministic_skeleton
     )
 
-    $explicitFillInstruction = (
-        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:TODO|TBD)\s*:\s*(?:fill|add|replace|describe|document|enter|complete)\b' -or
-        $Text -match '(?im)^\s*(?:[-*]\s*)?(?:待填写|请填写|在此填写|待补充)(?:\s|[:：]|$)'
-    )
+    $explicitFillInstruction = Test-ContextFillInstructionText $Text
     $explicitTemplateRole = (
         $Text -match '(?im)^\s*#{1,6}\s+.*\b(?:template|placeholder)\s*$' -and
         $Text -match '(?im)^\s*(?:template|placeholder)\s+(?:for|to)\b'
