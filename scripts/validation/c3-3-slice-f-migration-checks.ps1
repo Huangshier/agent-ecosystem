@@ -921,6 +921,15 @@ $isolatedMigrationScript = Join-Path $isolatedRuntimeRoot "scripts/migrate-proje
 $contextReadmeRelative = ".agents/context/README.md"
 $contextTemplateRelative = ".agents/context/decision-template.md"
 $contextStableTemplateRelative = ".agents/context/stable-fact-template.md"
+$contextBracketTemplateRelative = ".agents/context/decision-record.md"
+$contextBracketAmbiguousRelative = ".agents/context/single-field.md"
+$contextBracketLiteralPairRelative = ".agents/context/version-format.md"
+$contextBracketLiteralSingleRelative = ".agents/context/protocol-version.md"
+$contextBracketNegativeRelatives = @(
+    ".agents/context/link-reference.md",
+    ".agents/context/checklist-state.md",
+    ".agents/context/literal-syntax.md"
+)
 $contextIndexRelative = ".agents/context/context-index.md"
 $contextBlankTemplateRelative = ".agents/context/blank-template.md"
 $contextAmbiguousFilenameTermRelatives = @(
@@ -1076,6 +1085,159 @@ TODO: Add decision keywords.
         $contextTemplateBefore -ceq (Get-TreeFingerprint -Root $contextTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextTemplateRoot)).Count -eq 0
     )
     Add-Case -Name "context-real-template-preserved-non-authority" -Passed $contextTemplateAnalyzePreserved -Detail "Explicit content-level template and fill-in signals preserve a real synthetic template as non-authority."
+
+    $contextBracketTemplateRoot = Join-Path $scratchRoot "context-bracket-template"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketTemplateRoot
+    Write-Utf8NoBom -Path (Join-Path $contextBracketTemplateRoot $contextBracketTemplateRelative) -Text @"
+# Decision record
+
+## Summary
+
+[Describe the decision]
+
+## Keywords
+
+[请填写关键词]
+
+## Verified Facts
+
+[Record the stable facts]
+"@
+    $contextBracketTemplateBefore = Get-TreeFingerprint -Root $contextBracketTemplateRoot
+    $contextBracketTemplateAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketTemplateRoot
+    $contextBracketTemplatePreserved = (
+        @($contextBracketTemplateAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $contextBracketTemplateRelative }).Count -eq 0 -and
+        @($contextBracketTemplateAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextBracketTemplateRelative -and [string]$_.action -ceq "preserve" -and
+                [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+            }).Count -eq 1 -and
+        @($contextBracketTemplateAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $contextBracketTemplateRelative -and [string]$_.action -in @("create", "change")
+            }).Count -eq 0 -and
+        $contextBracketTemplateBefore -ceq (Get-TreeFingerprint -Root $contextBracketTemplateRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketTemplateRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-repeated-bracket-placeholder-skeleton-preserved" -Passed $contextBracketTemplatePreserved -Detail "Placeholder-only bracket fields across distinct Context sections form deterministic template evidence and remain non-authority."
+
+    $contextBracketAmbiguousRoot = Join-Path $scratchRoot "context-bracket-ambiguous"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketAmbiguousRoot
+    Write-Utf8NoBom -Path (Join-Path $contextBracketAmbiguousRoot $contextBracketAmbiguousRelative) -Text @"
+# Pending decision record
+
+## Summary
+
+Tracks a synthetic decision awaiting classification.
+
+## Keywords
+
+[Add search terms]
+
+## Verified Facts
+
+No stable facts have been approved.
+"@
+    $contextBracketAmbiguousBefore = Get-TreeFingerprint -Root $contextBracketAmbiguousRoot
+    $contextBracketAmbiguousAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketAmbiguousRoot
+    $contextBracketAmbiguousStaysHuman = (
+        @($contextBracketAmbiguousAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $contextBracketAmbiguousRelative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count -eq 1 -and
+        @($contextBracketAmbiguousAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $contextBracketAmbiguousRelative -or @($_.source_paths) -ccontains $contextBracketAmbiguousRelative
+            }).Count -eq 0 -and
+        (Test-InvocationBlocked -Invocation $contextBracketAmbiguousAnalyze) -and
+        $contextBracketAmbiguousBefore -ceq (Get-TreeFingerprint -Root $contextBracketAmbiguousRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketAmbiguousRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-single-bracket-placeholder-stays-human" -Passed $contextBracketAmbiguousStaysHuman -Detail "One placeholder-style bracket field is insufficient for deterministic template evidence and cannot auto-promote despite complete Summary and Keywords sections."
+
+    $contextBracketLiteralRoot = Join-Path $scratchRoot "context-bracket-standalone-literals"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketLiteralRoot
+    Write-Utf8NoBom -Path (Join-Path $contextBracketLiteralRoot $contextBracketLiteralPairRelative) -Text @"
+# Versioned time format
+
+## Summary
+
+[RFC-3339]
+
+## Keywords
+
+[v1]
+
+## Verified Facts
+
+The synthetic interface uses a stable versioned time format.
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextBracketLiteralRoot $contextBracketLiteralSingleRelative) -Text @"
+# Protocol version
+
+## Summary
+
+Records the stable protocol version used by a synthetic interface.
+
+## Keywords
+
+protocol, version, interface
+
+## Verified Facts
+
+[v1]
+"@
+    $contextBracketLiteralBefore = Get-TreeFingerprint -Root $contextBracketLiteralRoot
+    $contextBracketLiteralAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketLiteralRoot
+    $contextBracketLiteralsPromoted = $true
+    foreach ($relative in @($contextBracketLiteralPairRelative, $contextBracketLiteralSingleRelative)) {
+        $promoted = @($contextBracketLiteralAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -eq 1
+        $preservedOrHuman = (
+            @($contextBracketLiteralAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $relative }).Count -gt 0 -or
+            @($contextBracketLiteralAnalyze.payload.plan.actions | Where-Object {
+                    [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+                }).Count -gt 0
+        )
+        $contextBracketLiteralsPromoted = $contextBracketLiteralsPromoted -and $promoted -and -not $preservedOrHuman
+    }
+    $contextBracketLiteralsPromoted = (
+        $contextBracketLiteralsPromoted -and
+        $contextBracketLiteralBefore -ceq (Get-TreeFingerprint -Root $contextBracketLiteralRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketLiteralRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-standalone-bracket-literals-promoted" -Passed $contextBracketLiteralsPromoted -Detail "Two standalone bracket values in distinct sections and one standalone bracket value remain ordinary Context content without template evidence or human disposition."
+
+    $contextBracketNegativeRoot = Join-Path $scratchRoot "context-bracket-negatives"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketNegativeRoot
+    $contextBracketNegativeTexts = [ordered]@{
+        ".agents/context/link-reference.md" = "# Link reference`n`n## Summary`n`nThe stable record links to an [architecture guide](https://example.invalid/architecture).`n`n## Keywords`n`nlinks, context, reference`n"
+        ".agents/context/checklist-state.md" = "# Checklist state`n`n## Summary`n`nRecords a stable completed verification.`n`n## Keywords`n`nchecklist, context, verification`n`n## Verified Facts`n`n- [x] The synthetic verification completed.`n"
+        ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n"
+    }
+    foreach ($relative in $contextBracketNegativeRelatives) {
+        Write-Utf8NoBom -Path (Join-Path $contextBracketNegativeRoot $relative) -Text ([string]$contextBracketNegativeTexts[$relative])
+    }
+    $contextBracketNegativeBefore = Get-TreeFingerprint -Root $contextBracketNegativeRoot
+    $contextBracketNegativeAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketNegativeRoot
+    $contextBracketNegativesPromoted = $true
+    foreach ($relative in $contextBracketNegativeRelatives) {
+        $promoted = @($contextBracketNegativeAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -eq 1
+        $preservedOrHuman = (
+            @($contextBracketNegativeAnalyze.payload.human_disposition | Where-Object { [string]$_.path -ceq $relative }).Count -gt 0 -or
+            @($contextBracketNegativeAnalyze.payload.plan.actions | Where-Object {
+                    [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+                }).Count -gt 0
+        )
+        $contextBracketNegativesPromoted = $contextBracketNegativesPromoted -and $promoted -and -not $preservedOrHuman
+    }
+    $contextBracketNegativesPromoted = (
+        $contextBracketNegativesPromoted -and
+        $contextBracketNegativeBefore -ceq (Get-TreeFingerprint -Root $contextBracketNegativeRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketNegativeRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-bracket-non-placeholder-regressions-promoted" -Passed $contextBracketNegativesPromoted -Detail "Markdown links, checkboxes, and bracket literals in normal technical prose do not become template evidence or human disposition."
 
     $contextBlankTemplateRoot = Join-Path $scratchRoot "context-blank-template-name"
     Copy-Fixture -Source $baseRoot -Destination $contextBlankTemplateRoot
