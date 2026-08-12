@@ -912,6 +912,31 @@ function Set-TargetMutation {
     Add-Content -LiteralPath (Join-Path $Root $path) -Value "`nTarget mutation sentinel.`n"
 }
 
+function New-ContextBracketClusterFixtureText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string[]]$BracketFields,
+        [Parameter(Mandatory = $true)][int]$ProseSectionCount
+    )
+
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("# $Title")
+    for ($index = 0; $index -lt $BracketFields.Count; $index++) {
+        $heading = if ($index -eq 0) { "Summary" } elseif ($index -eq 1) { "Keywords" } else { "Bracket Field $($index + 1)" }
+        $lines.Add("")
+        $lines.Add("## $heading")
+        $lines.Add("")
+        $lines.Add("[$($BracketFields[$index])]")
+    }
+    for ($index = 0; $index -lt $ProseSectionCount; $index++) {
+        $lines.Add("")
+        $lines.Add("## Stable Note $($index + 1)")
+        $lines.Add("")
+        $lines.Add("Synthetic stable prose for boundary verification.")
+    }
+    return ($lines -join "`n")
+}
+
 $scratchRoot = Join-Path ([IO.Path]::GetTempPath()) ("agent-ecosystem-c33-slice-f-{0}" -f ([Guid]::NewGuid().ToString("N")))
 $baseRoot = Join-Path $scratchRoot "base-project"
 $pristineRoot = Join-Path $scratchRoot "pristine-project"
@@ -928,7 +953,9 @@ $contextBracketLiteralSingleRelative = ".agents/context/protocol-version.md"
 $contextBracketNegativeRelatives = @(
     ".agents/context/link-reference.md",
     ".agents/context/checklist-state.md",
-    ".agents/context/literal-syntax.md"
+    ".agents/context/literal-syntax.md",
+    ".agents/context/image-reference.md",
+    ".agents/context/inline-code.md"
 )
 $contextIndexRelative = ".agents/context/context-index.md"
 $contextBlankTemplateRelative = ".agents/context/blank-template.md"
@@ -1017,6 +1044,15 @@ try {
     $readOnly = ($beforeAnalyzeTree -ceq $afterAnalyzeTree -and (Test-SnapshotEqual -Before $beforeAnalyzeSnapshot -After $afterAnalyzeSnapshot) -and
         @((Get-BackupFiles -ProjectRoot $baseRoot)).Count -eq 0)
     Add-Case -Name "analyze-deterministic-read-only" -Passed ($deterministic -and $readOnly -and $scaffoldPlanComplete) -Detail ("Analyze repeatable={0} read_only={1} scaffold_plan={2} first_exit={3} second_exit={4} first_status={5} second_status={6} reasons={7} human={8}." -f $deterministic, $readOnly, $scaffoldPlanComplete, $analyzeOne.exit_code, $analyzeTwo.exit_code, (Get-StatusText $analyzeOne.payload), (Get-StatusText $analyzeTwo.payload), (@($analyzeOne.payload.reason_codes) -join ','), (@($analyzeOne.payload.human_disposition | ForEach-Object { '{0}:{1}' -f $_.path, $_.reason_code }) -join ','))
+    $migrationRevisionSeed = "c3.3-slice-f-v9`n$($analyzeOne.payload.evidence.state_digest)`n$($analyzeOne.payload.plan.plan_digest)"
+    $expectedMigrationRevision = [Convert]::ToHexString(
+        [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($migrationRevisionSeed))
+    ).ToLowerInvariant()
+    $migrationRevisionV9 = (
+        [string]$analyzeOne.payload.migration_revision -ceq $expectedMigrationRevision -and
+        [string]$analyzeTwo.payload.migration_revision -ceq $expectedMigrationRevision
+    )
+    Add-Case -Name "migration-revision-v9" -Passed $migrationRevisionV9 -Detail "Analyze evidence binds the v9 revision seed to the state and plan digests."
     $evidence.analyze_deterministic = $deterministic
     $evidence.analyze_read_only = $readOnly
 
@@ -1151,6 +1187,93 @@ No stable facts have been approved.
     )
     Add-Case -Name "context-single-bracket-placeholder-stays-human" -Passed $contextBracketAmbiguousStaysHuman -Detail "One placeholder-style bracket field is insufficient for deterministic template evidence and cannot auto-promote despite complete Summary and Keywords sections."
 
+    $contextBracketClusterRoot = Join-Path $scratchRoot "context-bracket-cluster-boundaries"
+    Copy-Fixture -Source $baseRoot -Destination $contextBracketClusterRoot
+    $contextBracketClusterFixtures = [ordered]@{
+        positive = [ordered]@{
+            relative = ".agents/context/descriptive-cluster.md"
+            fields = @("合成目标说明", "合成约束范围", "合成证据摘要", "合成预期结果", "合成复核（记录）")
+            prose_sections = 5
+            expect_human = $true
+        }
+        count_exact = [ordered]@{
+            relative = ".agents/context/count-exact.md"
+            fields = @("Decision summary", "Scope boundary", "Review rationale")
+            prose_sections = 2
+            expect_human = $true
+        }
+        count_below = [ordered]@{
+            relative = ".agents/context/count-below.md"
+            fields = @("Decision summary", "Scope boundary")
+            prose_sections = 2
+            expect_human = $false
+        }
+        ratio_exact = [ordered]@{
+            relative = ".agents/context/ratio-exact.md"
+            fields = @("Decision summary", "Scope boundary", "Review rationale", "RFC-3339", "v1")
+            prose_sections = 3
+            expect_human = $true
+        }
+        ratio_below = [ordered]@{
+            relative = ".agents/context/ratio-below.md"
+            fields = @("Decision summary", "Scope boundary", "Review rationale", "RFC-3339", "v1", "API")
+            prose_sections = 3
+            expect_human = $false
+        }
+        density_exact = [ordered]@{
+            relative = ".agents/context/density-exact.md"
+            fields = @("Decision summary", "Scope boundary", "Review rationale", "Supporting evidence")
+            prose_sections = 6
+            expect_human = $true
+        }
+        density_below = [ordered]@{
+            relative = ".agents/context/density-below.md"
+            fields = @("Decision summary", "Scope boundary", "Review rationale", "Supporting evidence")
+            prose_sections = 7
+            expect_human = $false
+        }
+    }
+    foreach ($fixtureName in @($contextBracketClusterFixtures.Keys)) {
+        $fixture = $contextBracketClusterFixtures[$fixtureName]
+        $fixtureText = New-ContextBracketClusterFixtureText `
+            -Title ("Synthetic {0} boundary" -f $fixtureName.Replace('_', ' ')) `
+            -BracketFields @($fixture.fields) `
+            -ProseSectionCount ([int]$fixture.prose_sections)
+        Write-Utf8NoBom -Path (Join-Path $contextBracketClusterRoot ([string]$fixture.relative)) -Text $fixtureText
+    }
+    $contextBracketClusterBefore = Get-TreeFingerprint -Root $contextBracketClusterRoot
+    $contextBracketClusterAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextBracketClusterRoot
+    $contextBracketClusterResults = [ordered]@{}
+    foreach ($fixtureName in @($contextBracketClusterFixtures.Keys)) {
+        $fixture = $contextBracketClusterFixtures[$fixtureName]
+        $relative = [string]$fixture.relative
+        $humanCount = @($contextBracketClusterAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count
+        $promotionCount = @($contextBracketClusterAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count
+        $deterministicCount = @($contextBracketClusterAnalyze.payload.plan.actions | Where-Object {
+                [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "TEMPLATE_PRESERVED_NON_AUTHORITY"
+            }).Count
+        $contextBracketClusterResults[$fixtureName] = if ([bool]$fixture.expect_human) {
+            ($humanCount -eq 1 -and $promotionCount -eq 0 -and $deterministicCount -eq 0)
+        }
+        else {
+            ($humanCount -eq 0 -and $promotionCount -eq 1 -and $deterministicCount -eq 0)
+        }
+    }
+    $contextBracketClusterReadOnly = (
+        (Test-InvocationBlocked -Invocation $contextBracketClusterAnalyze) -and
+        $contextBracketClusterBefore -ceq (Get-TreeFingerprint -Root $contextBracketClusterRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextBracketClusterRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-descriptive-bracket-cluster-stays-human" -Passed ($contextBracketClusterReadOnly -and [bool]$contextBracketClusterResults.positive) -Detail "Five descriptive bracket fields across ten non-empty section bodies are ambiguity evidence only and block silent Context promotion."
+    Add-Case -Name "context-descriptive-bracket-count-boundary" -Passed ($contextBracketClusterReadOnly -and [bool]$contextBracketClusterResults.count_exact -and [bool]$contextBracketClusterResults.count_below) -Detail "Three isolated descriptive sections trigger ambiguity; two remain below the cluster boundary."
+    Add-Case -Name "context-descriptive-bracket-ratio-boundary" -Passed ($contextBracketClusterReadOnly -and [bool]$contextBracketClusterResults.ratio_exact -and [bool]$contextBracketClusterResults.ratio_below) -Detail "A three-of-five descriptive ratio triggers at exactly 60 percent; three-of-six remains ordinary Context content."
+    Add-Case -Name "context-descriptive-bracket-density-boundary" -Passed ($contextBracketClusterReadOnly -and [bool]$contextBracketClusterResults.density_exact -and [bool]$contextBracketClusterResults.density_below) -Detail "Four isolated sections across ten non-empty bodies trigger at exactly 40 percent; four across eleven remain below the boundary."
+
     $contextBracketLiteralRoot = Join-Path $scratchRoot "context-bracket-standalone-literals"
     Copy-Fixture -Source $baseRoot -Destination $contextBracketLiteralRoot
     Write-Utf8NoBom -Path (Join-Path $contextBracketLiteralRoot $contextBracketLiteralPairRelative) -Text @"
@@ -1212,6 +1335,8 @@ protocol, version, interface
         ".agents/context/link-reference.md" = "# Link reference`n`n## Summary`n`nThe stable record links to an [architecture guide](https://example.invalid/architecture).`n`n## Keywords`n`nlinks, context, reference`n"
         ".agents/context/checklist-state.md" = "# Checklist state`n`n## Summary`n`nRecords a stable completed verification.`n`n## Keywords`n`nchecklist, context, verification`n`n## Verified Facts`n`n- [x] The synthetic verification completed.`n"
         ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n"
+        ".agents/context/image-reference.md" = "# Image reference`n`n## Summary`n`nThe stable record embeds a synthetic diagram.`n`n## Keywords`n`nimage, context, reference`n`n## Verified Facts`n`n![Synthetic diagram](https://example.invalid/diagram.svg)`n"
+        ".agents/context/inline-code.md" = "# Inline code`n`n## Summary`n`nThe parser preserves a bracket literal in inline code.`n`n## Keywords`n`ncode, context, parser`n`n## Verified Facts`n`n``[literal]```n"
     }
     foreach ($relative in $contextBracketNegativeRelatives) {
         Write-Utf8NoBom -Path (Join-Path $contextBracketNegativeRoot $relative) -Text ([string]$contextBracketNegativeTexts[$relative])
@@ -1237,7 +1362,7 @@ protocol, version, interface
         $contextBracketNegativeBefore -ceq (Get-TreeFingerprint -Root $contextBracketNegativeRoot) -and
         @((Get-BackupFiles -ProjectRoot $contextBracketNegativeRoot)).Count -eq 0
     )
-    Add-Case -Name "context-bracket-non-placeholder-regressions-promoted" -Passed $contextBracketNegativesPromoted -Detail "Markdown links, checkboxes, and bracket literals in normal technical prose do not become template evidence or human disposition."
+    Add-Case -Name "context-bracket-non-placeholder-regressions-promoted" -Passed $contextBracketNegativesPromoted -Detail "Markdown links, images, checkboxes, inline code, and bracket literals in normal technical prose do not become template evidence or human disposition."
 
     $contextBlankTemplateRoot = Join-Path $scratchRoot "context-blank-template-name"
     Copy-Fixture -Source $baseRoot -Destination $contextBlankTemplateRoot

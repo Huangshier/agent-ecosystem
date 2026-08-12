@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v8"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v9"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -298,6 +298,39 @@ function Test-ContextFillInstructionText {
     )
 }
 
+function Test-ContextTechnicalBracketField {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $value = $Text.Trim()
+    $rfcLike = $value -match '^(?i:RFC(?:[-_ ]?\d+)?)$'
+    $versionLike = $value -match '^(?i:v?\d+(?:\.\d+)*(?:[-_][A-Za-z0-9]+)*)$'
+    $acronymLike = $value -match '^[A-Z][A-Z0-9]{1,11}$'
+    $codeLike = (
+        $value -notmatch '\s' -and
+        $value -match '^[A-Za-z0-9._/:\-]+$' -and
+        $value -match '(?:\p{N}|[-_./:])'
+    )
+    return ($rfcLike -or $versionLike -or $acronymLike -or $codeLike)
+}
+
+function Test-ContextDescriptiveBracketField {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $value = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($value) -or (Test-ContextTechnicalBracketField $value)) { return $false }
+
+    $containsCjk = $value -match '[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]'
+    $characterCount = [Globalization.StringInfo]::ParseCombiningCharacters($value).Count
+    $tokenCount = @($value -split '\s+' | Where-Object { $_ }).Count
+    $hasDigit = $value -match '\p{N}'
+    $hasCodeDelimiter = $value -match '[-_./:]'
+
+    return (
+        ($containsCjk -and $characterCount -ge 4 -and -not $hasDigit -and -not $hasCodeDelimiter) -or
+        ($tokenCount -ge 2 -and -not $hasDigit)
+    )
+}
+
 function Get-ContextBracketPlaceholderEvidence {
     param([Parameter(Mandatory = $true)][string]$Text)
 
@@ -313,20 +346,37 @@ function Get-ContextBracketPlaceholderEvidence {
     }
     $regions.Add(@($bodyLines.ToArray()))
 
-    $placeholderRegionCount = 0
+    $nonEmptyRegionCount = 0
+    $isolatedBracketRegionCount = 0
+    $fillPromptRegionCount = 0
+    $descriptiveRegionCount = 0
     foreach ($regionLines in @($regions.ToArray())) {
+        if (@($regionLines).Count -gt 0) { $nonEmptyRegionCount++ }
         if (@($regionLines).Count -ne 1) { continue }
         $match = [regex]::Match([string]$regionLines[0], '^\[(?<field>[^\[\]\r\n]+)\]$', 'CultureInvariant')
         if (-not $match.Success) { continue }
         $field = $match.Groups['field'].Value.Trim()
-        if (-not (Test-ContextFillInstructionText -Text $field -BracketField)) { continue }
-        $placeholderRegionCount++
+        if ([string]::IsNullOrWhiteSpace($field)) { continue }
+        $isolatedBracketRegionCount++
+        if (Test-ContextFillInstructionText -Text $field -BracketField) { $fillPromptRegionCount++ }
+        if (Test-ContextDescriptiveBracketField $field) { $descriptiveRegionCount++ }
     }
 
+    $descriptiveCluster = (
+        $isolatedBracketRegionCount -ge 3 -and
+        $descriptiveRegionCount -ge 3 -and
+        ($descriptiveRegionCount * 100) -ge ($isolatedBracketRegionCount * 60) -and
+        ($isolatedBracketRegionCount * 100) -ge ($nonEmptyRegionCount * 40)
+    )
+
     return [ordered]@{
-        deterministic_skeleton = $placeholderRegionCount -ge 2
-        ambiguous_candidate = $placeholderRegionCount -eq 1
-        placeholder_region_count = $placeholderRegionCount
+        deterministic_skeleton = $fillPromptRegionCount -ge 2
+        ambiguous_candidate = ($fillPromptRegionCount -eq 1 -or $descriptiveCluster)
+        descriptive_cluster = $descriptiveCluster
+        placeholder_region_count = $fillPromptRegionCount
+        isolated_bracket_region_count = $isolatedBracketRegionCount
+        descriptive_region_count = $descriptiveRegionCount
+        non_empty_region_count = $nonEmptyRegionCount
     }
 }
 
