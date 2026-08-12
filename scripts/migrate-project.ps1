@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v7"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v8"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -278,13 +278,48 @@ function Test-TemplateText {
     return ($Text -match '(?im)^\s*(?:#\s+)?(?:template|example|placeholder)(?:\s|$)' -or $Text -match 'sha256:0{64}' -or $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$')
 }
 
+function Get-ContextBracketPlaceholderEvidence {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $regions = [Collections.Generic.List[object]]::new()
+    $bodyLines = [Collections.Generic.List[string]]::new()
+    foreach ($line in @($Text -split '\r?\n')) {
+        if ($line -match '^\s*#{1,6}\s+.+?\s*#*\s*$') {
+            $regions.Add(@($bodyLines.ToArray()))
+            $bodyLines = [Collections.Generic.List[string]]::new()
+            continue
+        }
+        if (-not [string]::IsNullOrWhiteSpace($line)) { $bodyLines.Add($line.Trim()) }
+    }
+    $regions.Add(@($bodyLines.ToArray()))
+
+    $placeholderRegionCount = 0
+    foreach ($regionLines in @($regions.ToArray())) {
+        if (@($regionLines).Count -ne 1) { continue }
+        $match = [regex]::Match([string]$regionLines[0], '^\[(?<field>[^\[\]\r\n]+)\]$', 'CultureInvariant')
+        if (-not $match.Success) { continue }
+        $field = $match.Groups['field'].Value.Trim()
+        if ([string]::IsNullOrWhiteSpace($field) -or $field -match '^(?i:x)$') { continue }
+        $placeholderRegionCount++
+    }
+
+    return [ordered]@{
+        deterministic_skeleton = $placeholderRegionCount -ge 2
+        ambiguous_candidate = $placeholderRegionCount -eq 1
+        placeholder_region_count = $placeholderRegionCount
+    }
+}
+
 function Test-ContextTemplateText {
     param([Parameter(Mandatory = $true)][string]$Text)
+
+    $bracketPlaceholder = Get-ContextBracketPlaceholderEvidence $Text
 
     $deterministicPlaceholder = (
         $Text -match 'sha256:0{64}' -or
         $Text -match '(?im)^\s*#{1,6}\s+(?:template|example|placeholder)\s*$' -or
-        $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$'
+        $Text -match '(?im)^\s*(?:TODO|TBD):?\s*$' -or
+        [bool]$bracketPlaceholder.deterministic_skeleton
     )
 
     $explicitFillInstruction = (
@@ -330,8 +365,10 @@ function Test-ContextAuthorityAmbiguous {
         [Parameter(Mandatory = $true)][string]$Text
     )
     $name = [IO.Path]::GetFileNameWithoutExtension($Path)
+    $bracketPlaceholder = Get-ContextBracketPlaceholderEvidence $Text
     return (
         $name -match '(?i)(?:^|[-_.])(?:example|sample)(?:$|[-_.])' -or
+        [bool]$bracketPlaceholder.ambiguous_candidate -or
         ($Text -match '(?im)^\s*#{1,6}\s+.*\b(?:guide|guidance|instructions?|catalog|reference)\b' -and
             $Text -match '(?im)\b(?:use this|add entries|fill in|document .+ here|how to)\b')
     )
