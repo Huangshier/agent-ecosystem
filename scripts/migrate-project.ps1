@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v9"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v10"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -645,6 +645,20 @@ function Assert-ReviewedSourceBinding {
         [string](Get-HashtableValue $matches[0] "sha256") -cne $SourceSha256) { throw "DISPOSITION_SOURCE_MISMATCH" }
 }
 
+function Assert-ReviewedTargetBinding {
+    param(
+        [Parameter(Mandatory = $true)][object]$Candidate,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$TargetSha256
+    )
+    if ($TargetSha256 -cnotmatch '^[a-f0-9]{64}$') { throw "DISPOSITION_EVIDENCE_INVALID" }
+    $matches = @((Get-HashtableValue (Get-HashtableValue $Candidate "evidence") "files") | Where-Object {
+            [string](Get-HashtableValue $_ "path") -ceq $Path
+        })
+    if ($matches.Count -ne 1 -or [string](Get-HashtableValue $matches[0] "presence") -cne "file" -or
+        [string](Get-HashtableValue $matches[0] "sha256") -cne $TargetSha256) { throw "DISPOSITION_TARGET_MISMATCH" }
+}
+
 function Test-PreserveDispositionAllowed {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$ReasonCode)
     if ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC") { return ($Path -cin @(".agents/process.txt", ".agents/plan.md")) }
@@ -660,6 +674,9 @@ function Test-RetireDispositionAllowed {
     if ($ReasonCode -ceq "LEGACY_WORK_NOT_DETERMINISTIC") { return ($Path -cin @(".agents/process.txt", ".agents/plan.md")) }
     if ($ReasonCode -ceq "CONTEXT_MARKERS_MISSING") {
         return ($Path -ceq ".agents/notes.md" -or $Path -cmatch '^\.agents/context/.+\.md$')
+    }
+    if ($ReasonCode -ceq "SPEC_MARKERS_MISSING") {
+        return ($Path -cmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$')
     }
     return $false
 }
@@ -756,6 +773,56 @@ function Resolve-ReviewedDisposition {
         }
     }
 
+    $specGroupOwnerBySource = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    $specGroupOwnerByTarget = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    foreach ($decision in @($decisionsValue)) {
+        if ([string](Get-HashtableValue $decision "disposition") -cne "consolidate-specs-and-retire-sources") { continue }
+        Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256", "source_paths", "target", "target_sha256", "content") @("path", "reason_code", "disposition", "source_sha256", "source_paths", "target", "target_sha256", "content") "DISPOSITION_EVIDENCE_INVALID"
+        $leader = [string](Get-HashtableValue $decision "path")
+        $reason = [string](Get-HashtableValue $decision "reason_code")
+        $target = [string](Get-HashtableValue $decision "target")
+        $sourcesValue = Get-HashtableValue $decision "source_paths"
+        if ($reason -cne "SPEC_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
+        if ($sourcesValue -isnot [Collections.IList] -or $sourcesValue -is [string]) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        $sources = @($sourcesValue | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+        if ($sources.Count -lt 2 -or $sources -cnotcontains $leader -or $sources.Count -ne @($sourcesValue).Count) { throw "DISPOSITION_EVIDENCE_INVALID" }
+        if ($target -cnotmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$' -or
+            -not (Test-CanonicalProjectRelativePath $Root $target)) { throw "DISPOSITION_TARGET_INVALID" }
+        $sourceOwnedTarget = ($sources -ccontains $target)
+        if ($sourceOwnedTarget -and $target -cne $leader) { throw "DISPOSITION_TARGET_INVALID" }
+        if ($specGroupOwnerByTarget.ContainsKey($target)) { throw "DISPOSITION_TARGET_COLLISION" }
+        $specGroupOwnerByTarget[$target] = $leader
+
+        foreach ($source in $sources) {
+            if ($source -cnotmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$' -or
+                -not (Test-CanonicalProjectRelativePath $Root $source)) { throw "DISPOSITION_TARGET_INVALID" }
+            if ($specGroupOwnerBySource.ContainsKey($source)) { throw "DISPOSITION_TARGET_COLLISION" }
+            if (-not $decisionByPath.ContainsKey($source)) { throw "DISPOSITION_DECISION_MISSING" }
+            $sourceDecision = $decisionByPath[$source]
+            if ([string](Get-HashtableValue $sourceDecision "reason_code") -cne "SPEC_MARKERS_MISSING") { throw "DISPOSITION_PATH_REASON_MISMATCH" }
+            $expectedOperation = if ($source -ceq $leader) { "consolidate-specs-and-retire-sources" } else { "retire-legacy-source" }
+            if ([string](Get-HashtableValue $sourceDecision "disposition") -cne $expectedOperation) { throw "DISPOSITION_EVIDENCE_INVALID" }
+            if ($source -cne $leader) {
+                Assert-ExactObjectProperties $sourceDecision @("path", "reason_code", "disposition", "source_sha256") @("path", "reason_code", "disposition", "source_sha256") "DISPOSITION_EVIDENCE_INVALID"
+            }
+            Assert-ReviewedSourceBinding $Candidate $source ([string](Get-HashtableValue $sourceDecision "source_sha256"))
+            $specGroupOwnerBySource[$source] = $leader
+        }
+
+        if ($sourceOwnedTarget) {
+            if ([string](Get-HashtableValue $decision "target_sha256") -cne [string](Get-HashtableValue $decision "source_sha256")) { throw "DISPOSITION_TARGET_MISMATCH" }
+        }
+        else {
+            $candidateTargetActions = @((Get-HashtableValue (Get-HashtableValue $Candidate "plan") "actions") | Where-Object {
+                    [string](Get-HashtableValue $_ "path") -ceq $target
+                })
+            if ($candidateTargetActions.Count -ne 1 -or
+                [string](Get-HashtableValue $candidateTargetActions[0] "action") -cne "preserve" -or
+                [string](Get-HashtableValue $candidateTargetActions[0] "reason_code") -cne "CANONICAL_SPEC_PRESERVED") { throw "DISPOSITION_TARGET_COLLISION" }
+            Assert-ReviewedTargetBinding $Candidate $target ([string](Get-HashtableValue $decision "target_sha256"))
+        }
+    }
+
     $resolvedActions = [Collections.Generic.List[object]]::new()
     $actionPaths = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
     foreach ($action in @((Get-HashtableValue (Get-HashtableValue $Candidate "plan") "actions"))) {
@@ -781,12 +848,20 @@ function Resolve-ReviewedDisposition {
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation })
             }
             "retire-legacy-source" {
-                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition") @("path", "reason_code", "disposition") "DISPOSITION_EVIDENCE_INVALID"
+                if ($reason -ceq "SPEC_MARKERS_MISSING") {
+                    Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256") @("path", "reason_code", "disposition", "source_sha256") "DISPOSITION_EVIDENCE_INVALID"
+                    Assert-ReviewedSourceBinding $Candidate $path ([string](Get-HashtableValue $decision "source_sha256"))
+                }
+                else {
+                    Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition") @("path", "reason_code", "disposition") "DISPOSITION_EVIDENCE_INVALID"
+                }
                 if (-not (Test-RetireDispositionAllowed $path $reason)) { throw "DISPOSITION_UNSUPPORTED" }
                 if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
                 Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
                 $actionPaths[$path] = $true
-                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation })
+                $normalized = [ordered]@{ path = $path; reason_code = $reason; disposition = $operation }
+                if ($reason -ceq "SPEC_MARKERS_MISSING") { $normalized.source_sha256 = [string](Get-HashtableValue $decision "source_sha256") }
+                $normalizedDecisions.Add($normalized)
             }
             "replace-root-contract" {
                 Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "target", "content") @("path", "reason_code", "disposition", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
@@ -848,6 +923,42 @@ function Resolve-ReviewedDisposition {
                 Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
                 $actionPaths[$path] = $true
                 $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_sha256 = [string](Get-HashtableValue $decision "source_sha256"); target = $target; content = [string]$contentValue })
+            }
+            "consolidate-specs-and-retire-sources" {
+                Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256", "source_paths", "target", "target_sha256", "content") @("path", "reason_code", "disposition", "source_sha256", "source_paths", "target", "target_sha256", "content") "DISPOSITION_EVIDENCE_INVALID"
+                $target = [string](Get-HashtableValue $decision "target")
+                $contentValue = Get-HashtableValue $decision "content"
+                $sources = @((Get-HashtableValue $decision "source_paths") | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+                if ($reason -cne "SPEC_MARKERS_MISSING") { throw "DISPOSITION_UNSUPPORTED" }
+                Assert-ReviewedSourceBinding $Candidate $path ([string](Get-HashtableValue $decision "source_sha256"))
+                if ($target -cnotmatch '^docs/specs/[a-z0-9]+(?:-[a-z0-9]+)*/spec\.md$' -or
+                    -not (Test-CanonicalProjectRelativePath $Root $target)) { throw "DISPOSITION_TARGET_INVALID" }
+                if ($contentValue -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$contentValue) -or [string]$contentValue -match "`0") { throw "DISPOSITION_CONTENT_INVALID" }
+                if (-not (Test-Path -LiteralPath (Get-ProjectPath $Root $path) -PathType Leaf)) { throw "DISPOSITION_EVIDENCE_STALE" }
+
+                $sourceOwnedTarget = ($sources -ccontains $target)
+                if ($sourceOwnedTarget) {
+                    if ($target -cne $path -or $actionPaths.ContainsKey($target)) { throw "DISPOSITION_TARGET_COLLISION" }
+                }
+                else {
+                    $resolvedTargetIndexes = @(0..($resolvedActions.Count - 1) | Where-Object {
+                            [string](Get-HashtableValue $resolvedActions[$_] "path") -ceq $target
+                        })
+                    if ($resolvedTargetIndexes.Count -ne 1) { throw "DISPOSITION_TARGET_COLLISION" }
+                    $targetAction = $resolvedActions[[int]$resolvedTargetIndexes[0]]
+                    if ([string](Get-HashtableValue $targetAction "action") -cne "preserve" -or
+                        [string](Get-HashtableValue $targetAction "reason_code") -cne "CANONICAL_SPEC_PRESERVED") { throw "DISPOSITION_TARGET_COLLISION" }
+                    $resolvedActions.RemoveAt([int]$resolvedTargetIndexes[0])
+                    [void]$actionPaths.Remove($target)
+                }
+                if ($actionPaths.ContainsKey($target)) { throw "DISPOSITION_TARGET_COLLISION" }
+                Add-PlanAction $resolvedActions "change" $target $sources ([string]$contentValue) "REVIEWED_SPEC_CONSOLIDATED"
+                $actionPaths[$target] = $true
+                if (-not $sourceOwnedTarget) {
+                    Add-PlanAction $resolvedActions "remove" $path @($path) $null "REVIEWED_LEGACY_SOURCE_RETIRED"
+                    $actionPaths[$path] = $true
+                }
+                $normalizedDecisions.Add([ordered]@{ path = $path; reason_code = $reason; disposition = $operation; source_sha256 = [string](Get-HashtableValue $decision "source_sha256"); source_paths = $sources; target = $target; target_sha256 = [string](Get-HashtableValue $decision "target_sha256"); content = [string]$contentValue })
             }
             "create-spec-and-retire-source" {
                 Assert-ExactObjectProperties $decision @("path", "reason_code", "disposition", "source_sha256", "target", "content") @("path", "reason_code", "disposition", "source_sha256", "target", "content") "DISPOSITION_EVIDENCE_INVALID"
@@ -915,7 +1026,12 @@ function Resolve-ReviewedDisposition {
     foreach ($reasonCode in @((Get-HashtableValue $Candidate "reason_codes"))) {
         if ([string]$reasonCode -cnotin @("HUMAN_DISPOSITION_REQUIRED", "NO_MIGRATABLE_AUTHORITY")) { $remainingReasons.Add([string]$reasonCode) }
     }
-    if (@($sortedActions | Where-Object { [string]$_.action -in @("create", "change") -and [string]$_.path -cne ".agents/hub.lock.json" }).Count -eq 0) { $remainingReasons.Add("NO_MIGRATABLE_AUTHORITY") }
+    $hasReviewedSpecRetirement = @($normalizedDecisions.ToArray() | Where-Object {
+            [string](Get-HashtableValue $_ "reason_code") -ceq "SPEC_MARKERS_MISSING" -and
+            [string](Get-HashtableValue $_ "disposition") -ceq "retire-legacy-source"
+        }).Count -gt 0
+    if (@($sortedActions | Where-Object { [string]$_.action -in @("create", "change") -and [string]$_.path -cne ".agents/hub.lock.json" }).Count -eq 0 -and
+        -not $hasReviewedSpecRetirement) { $remainingReasons.Add("NO_MIGRATABLE_AUTHORITY") }
     $reasonArray = @($remainingReasons.ToArray() | Sort-Object -Unique)
     if ($reasonArray.Count -eq 0) {
         try { [void](Assert-ResolvedPlanWorkspaceValid $Root $sortedActions) }

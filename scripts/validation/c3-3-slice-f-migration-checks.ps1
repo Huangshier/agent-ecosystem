@@ -721,6 +721,70 @@ This synthetic proposal lacks the complete canonical Spec contract and requires 
 "@
 }
 
+function Set-ReviewedSpecDispositionFixture {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $fixture = [ordered]@{
+        retire_path = "docs/specs/retired-record/spec.md"
+        owner_path = "docs/specs/umbrella/spec.md"
+        owner_member_path = "docs/specs/slice-one/spec.md"
+        external_source_path = "docs/specs/legacy-alpha/spec.md"
+        external_member_path = "docs/specs/legacy-beta/spec.md"
+        external_target_path = "docs/specs/durable-target/spec.md"
+    }
+    foreach ($relative in @($fixture.retire_path, $fixture.owner_path, $fixture.owner_member_path, $fixture.external_source_path, $fixture.external_member_path)) {
+        Write-Utf8NoBom -Path (Join-Path $Root $relative) -Text @"
+# Reviewed legacy specification
+
+This public synthetic source lacks canonical Spec markers and requires an explicit reviewed decision.
+"@
+    }
+    $fixture.owner_content = @"
+---
+schema: agent-ecosystem/spec/v1
+id: umbrella
+title: "Consolidated umbrella specification"
+status: accepted
+updated: 2026-01-01T00:00:00Z
+summary: "Retain one source-owned Spec authority after reviewed consolidation."
+related_work: []
+supersedes: []
+---
+
+The target owner retains its path and incorporates the stable synthetic slice increment.
+"@.TrimStart()
+    $fixture.external_target_before = @"
+---
+schema: agent-ecosystem/spec/v1
+id: durable-target
+title: "Existing durable target"
+status: accepted
+updated: 2026-01-01T00:00:00Z
+summary: "Provide an existing canonical target for reviewed consolidation."
+related_work: []
+supersedes: []
+---
+
+The existing target is candidate-state bound before consolidation.
+"@.TrimStart()
+    $fixture.external_target_after = @"
+---
+schema: agent-ecosystem/spec/v1
+id: durable-target
+title: "Consolidated durable target"
+status: accepted
+updated: 2026-01-01T00:00:00Z
+summary: "Consolidate two reviewed legacy sources into one existing canonical Spec."
+related_work: []
+supersedes: []
+---
+
+The existing target incorporates the stable synthetic increments from both reviewed sources.
+"@.TrimStart()
+    Write-Utf8NoBom -Path (Join-Path $Root $fixture.external_target_path) -Text ([string]$fixture.external_target_before)
+    return $fixture
+}
+
 function New-ReviewedDispositionEvidence {
     param([Parameter(Mandatory = $true)][object]$Analyze)
 
@@ -799,6 +863,35 @@ The replacement covers only the synthetic fixture. It excludes lifecycle changes
             [ordered]@{ path = ".agents/notes.md"; reason_code = "CONTEXT_MARKERS_MISSING"; disposition = "retire-legacy-source" },
             [ordered]@{ path = ".agents/commands/legacy-release.md"; reason_code = "PROCEDURE_MARKERS_MISSING"; disposition = "create-procedure-and-retire-source"; source_sha256 = $sourceSha[".agents/commands/legacy-release.md"]; target = ".agents/procedures/reviewed-release.md"; content = $procedureTarget },
             [ordered]@{ path = "docs/specs/legacy-proposal/spec.md"; reason_code = "SPEC_MARKERS_MISSING"; disposition = "create-spec-and-retire-source"; source_sha256 = $sourceSha["docs/specs/legacy-proposal/spec.md"]; target = "docs/specs/reviewed-replacement/spec.md"; content = $specTarget }
+        )
+    }
+}
+
+function New-ReviewedSpecDispositionEvidence {
+    param(
+        [Parameter(Mandatory = $true)][object]$Analyze,
+        [Parameter(Mandatory = $true)][object]$Fixture
+    )
+
+    $sourceSha = @{}
+    foreach ($file in @($Analyze.evidence.files)) {
+        if ([string]$file.presence -ceq "file") { $sourceSha[[string]$file.path] = [string]$file.sha256 }
+    }
+    return [ordered]@{
+        schema_version = 1
+        project_root = [string]$Analyze.evidence.project_root
+        migration_revision = [string]$Analyze.migration_revision
+        state_digest = [string]$Analyze.evidence.state_digest
+        plan_digest = [string]$Analyze.plan.plan_digest
+        human_disposition = @($Analyze.human_disposition | Sort-Object path, reason_code | ForEach-Object {
+                [ordered]@{ path = [string]$_.path; reason_code = [string]$_.reason_code }
+            })
+        decisions = @(
+            [ordered]@{ path = [string]$Fixture.retire_path; reason_code = "SPEC_MARKERS_MISSING"; disposition = "retire-legacy-source"; source_sha256 = $sourceSha[[string]$Fixture.retire_path] },
+            [ordered]@{ path = [string]$Fixture.owner_path; reason_code = "SPEC_MARKERS_MISSING"; disposition = "consolidate-specs-and-retire-sources"; source_sha256 = $sourceSha[[string]$Fixture.owner_path]; source_paths = @([string]$Fixture.owner_path, [string]$Fixture.owner_member_path); target = [string]$Fixture.owner_path; target_sha256 = $sourceSha[[string]$Fixture.owner_path]; content = [string]$Fixture.owner_content },
+            [ordered]@{ path = [string]$Fixture.owner_member_path; reason_code = "SPEC_MARKERS_MISSING"; disposition = "retire-legacy-source"; source_sha256 = $sourceSha[[string]$Fixture.owner_member_path] },
+            [ordered]@{ path = [string]$Fixture.external_source_path; reason_code = "SPEC_MARKERS_MISSING"; disposition = "consolidate-specs-and-retire-sources"; source_sha256 = $sourceSha[[string]$Fixture.external_source_path]; source_paths = @([string]$Fixture.external_source_path, [string]$Fixture.external_member_path); target = [string]$Fixture.external_target_path; target_sha256 = $sourceSha[[string]$Fixture.external_target_path]; content = [string]$Fixture.external_target_after },
+            [ordered]@{ path = [string]$Fixture.external_member_path; reason_code = "SPEC_MARKERS_MISSING"; disposition = "retire-legacy-source"; source_sha256 = $sourceSha[[string]$Fixture.external_member_path] }
         )
     }
 }
@@ -998,6 +1091,11 @@ $evidence = [ordered]@{
     reviewed_disposition_rollback = $false
     reviewed_disposition_stale = $false
     reviewed_existing_spec_same_path = $false
+    reviewed_spec_retire_only = $false
+    reviewed_spec_consolidation = $false
+    reviewed_spec_consolidation_fail_closed = $false
+    reviewed_spec_consolidation_stale = $false
+    reviewed_spec_consolidation_backup_rollback = $false
     recognized_root_nested_merge = $false
     recognized_root_nested_backup = $false
     recognized_root_nested_rollback = $false
@@ -1044,15 +1142,15 @@ try {
     $readOnly = ($beforeAnalyzeTree -ceq $afterAnalyzeTree -and (Test-SnapshotEqual -Before $beforeAnalyzeSnapshot -After $afterAnalyzeSnapshot) -and
         @((Get-BackupFiles -ProjectRoot $baseRoot)).Count -eq 0)
     Add-Case -Name "analyze-deterministic-read-only" -Passed ($deterministic -and $readOnly -and $scaffoldPlanComplete) -Detail ("Analyze repeatable={0} read_only={1} scaffold_plan={2} first_exit={3} second_exit={4} first_status={5} second_status={6} reasons={7} human={8}." -f $deterministic, $readOnly, $scaffoldPlanComplete, $analyzeOne.exit_code, $analyzeTwo.exit_code, (Get-StatusText $analyzeOne.payload), (Get-StatusText $analyzeTwo.payload), (@($analyzeOne.payload.reason_codes) -join ','), (@($analyzeOne.payload.human_disposition | ForEach-Object { '{0}:{1}' -f $_.path, $_.reason_code }) -join ','))
-    $migrationRevisionSeed = "c3.3-slice-f-v9`n$($analyzeOne.payload.evidence.state_digest)`n$($analyzeOne.payload.plan.plan_digest)"
+    $migrationRevisionSeed = "c3.3-slice-f-v10`n$($analyzeOne.payload.evidence.state_digest)`n$($analyzeOne.payload.plan.plan_digest)"
     $expectedMigrationRevision = [Convert]::ToHexString(
         [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($migrationRevisionSeed))
     ).ToLowerInvariant()
-    $migrationRevisionV9 = (
+    $migrationRevisionV10 = (
         [string]$analyzeOne.payload.migration_revision -ceq $expectedMigrationRevision -and
         [string]$analyzeTwo.payload.migration_revision -ceq $expectedMigrationRevision
     )
-    Add-Case -Name "migration-revision-v9" -Passed $migrationRevisionV9 -Detail "Analyze evidence binds the v9 revision seed to the state and plan digests."
+    Add-Case -Name "migration-revision-v10" -Passed $migrationRevisionV10 -Detail "Analyze evidence binds the v10 revision seed to the state and plan digests."
     $evidence.analyze_deterministic = $deterministic
     $evidence.analyze_read_only = $readOnly
 
@@ -2022,6 +2120,172 @@ The reviewed replacement is limited to this synthetic same-path migration fixtur
     $existingSpecSamePathPass = ($existingSpecAnalyzeReadOnly -and $existingSpecResolvedPlan -and $existingSpecInvalidPass -and $existingSpecApplyPass -and $existingSpecRollbackPass)
     Add-Case -Name "reviewed-existing-immediate-spec-same-path-replacement" -Passed $existingSpecSamePathPass -Detail ("Analyze_read_only={0} resolved_change={1} invalid_fail_closed={2} parser={3} apply={4} rollback_exact={5}." -f $existingSpecAnalyzeReadOnly, $existingSpecResolvedPlan, $existingSpecInvalidPass, ([string]$existingSpecParserPayload.status -ceq "PASS"), $existingSpecApplyPass, $existingSpecRollbackPass)
     $evidence.reviewed_existing_spec_same_path = $existingSpecSamePathPass
+
+    # Reviewed Spec decisions may retire one source directly or consolidate a
+    # complete source group into exactly one source-owned or external target.
+    $specDispositionRoot = Join-Path $scratchRoot "reviewed-spec-dispositions"
+    Copy-Fixture -Source $pristineRoot -Destination $specDispositionRoot
+    $specDispositionFixture = Set-ReviewedSpecDispositionFixture -Root $specDispositionRoot
+    $specDispositionBefore = Get-FileSnapshot -Root $specDispositionRoot
+    $specDispositionBeforeDirectories = @(Get-DirectorySnapshot -Root $specDispositionRoot)
+    $specDispositionBeforeTree = Get-TreeFingerprint -Root $specDispositionRoot
+    $specDispositionCandidate = Invoke-Migration -Mode "Analyze" -ProjectRoot $specDispositionRoot
+    $specDispositionHuman = @($specDispositionCandidate.payload.human_disposition | ForEach-Object { "{0}:{1}" -f $_.path, $_.reason_code } | Sort-Object)
+    $expectedSpecDispositionHuman = @(
+        [string]$specDispositionFixture.retire_path,
+        [string]$specDispositionFixture.owner_path,
+        [string]$specDispositionFixture.owner_member_path,
+        [string]$specDispositionFixture.external_source_path,
+        [string]$specDispositionFixture.external_member_path
+    ) | ForEach-Object { "{0}:SPEC_MARKERS_MISSING" -f $_ } | Sort-Object
+    $specDispositionCandidateTargetActions = @($specDispositionCandidate.payload.plan.actions | Where-Object {
+            [string]$_.path -ceq [string]$specDispositionFixture.external_target_path
+        })
+    $specDispositionCandidatePass = (
+        (Test-InvocationBlocked -Invocation $specDispositionCandidate) -and
+        ($specDispositionHuman -join "`n") -ceq ($expectedSpecDispositionHuman -join "`n") -and
+        $specDispositionCandidateTargetActions.Count -eq 1 -and
+        [string]$specDispositionCandidateTargetActions[0].action -ceq "preserve" -and
+        [string]$specDispositionCandidateTargetActions[0].reason_code -ceq "CANONICAL_SPEC_PRESERVED" -and
+        $specDispositionBeforeTree -ceq (Get-TreeFingerprint -Root $specDispositionRoot)
+    )
+    $specDispositionEvidence = New-ReviewedSpecDispositionEvidence -Analyze $specDispositionCandidate.payload -Fixture $specDispositionFixture
+    $specDispositionEvidenceJson = Get-CanonicalJson -Payload $specDispositionEvidence
+    $specDispositionResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $specDispositionRoot -DispositionEvidence $specDispositionEvidenceJson
+    $specDispositionActions = @($specDispositionResolved.payload.plan.actions)
+    $retireOnlyActions = @($specDispositionActions | Where-Object { [string]$_.path -ceq [string]$specDispositionFixture.retire_path })
+    $sourceOwnerActions = @($specDispositionActions | Where-Object { [string]$_.path -ceq [string]$specDispositionFixture.owner_path })
+    $sourceOwnerMemberActions = @($specDispositionActions | Where-Object { [string]$_.path -ceq [string]$specDispositionFixture.owner_member_path })
+    $externalTargetActions = @($specDispositionActions | Where-Object { [string]$_.path -ceq [string]$specDispositionFixture.external_target_path })
+    $externalSourceActions = @($specDispositionActions | Where-Object {
+            [string]$_.path -cin @([string]$specDispositionFixture.external_source_path, [string]$specDispositionFixture.external_member_path)
+        })
+    $specDispositionResolvedReadOnly = (
+        $specDispositionBeforeTree -ceq (Get-TreeFingerprint -Root $specDispositionRoot) -and
+        @((Get-BackupFiles -ProjectRoot $specDispositionRoot)).Count -eq 0
+    )
+    $specRetireOnlyPass = (
+        $specDispositionCandidatePass -and (Test-InvocationPass -Invocation $specDispositionResolved) -and
+        $retireOnlyActions.Count -eq 1 -and [string]$retireOnlyActions[0].action -ceq "remove" -and
+        [string]$retireOnlyActions[0].reason_code -ceq "REVIEWED_LEGACY_SOURCE_RETIRED" -and
+        $specDispositionResolvedReadOnly
+    )
+    $sourceOwnedConsolidationPass = (
+        (Test-InvocationPass -Invocation $specDispositionResolved) -and
+        $sourceOwnerActions.Count -eq 1 -and [string]$sourceOwnerActions[0].action -ceq "change" -and
+        [string]$sourceOwnerActions[0].reason_code -ceq "REVIEWED_SPEC_CONSOLIDATED" -and
+        (@($sourceOwnerActions[0].source_paths) -join "`n") -ceq ((@([string]$specDispositionFixture.owner_path, [string]$specDispositionFixture.owner_member_path) | Sort-Object) -join "`n") -and
+        $sourceOwnerMemberActions.Count -eq 1 -and [string]$sourceOwnerMemberActions[0].action -ceq "remove" -and
+        @($sourceOwnerActions | Where-Object { [string]$_.action -ceq "remove" }).Count -eq 0 -and
+        $specDispositionResolvedReadOnly
+    )
+    $externalTargetConsolidationPass = (
+        (Test-InvocationPass -Invocation $specDispositionResolved) -and
+        $externalTargetActions.Count -eq 1 -and [string]$externalTargetActions[0].action -ceq "change" -and
+        [string]$externalTargetActions[0].reason_code -ceq "REVIEWED_SPEC_CONSOLIDATED" -and
+        (@($externalTargetActions[0].source_paths) -join "`n") -ceq ((@([string]$specDispositionFixture.external_source_path, [string]$specDispositionFixture.external_member_path) | Sort-Object) -join "`n") -and
+        $externalSourceActions.Count -eq 2 -and @($externalSourceActions | Where-Object { [string]$_.action -ceq "remove" }).Count -eq 2 -and
+        $specDispositionResolvedReadOnly
+    )
+    Add-Case -Name "reviewed-spec-retire-only-resolves" -Passed $specRetireOnlyPass -Detail ("candidate={0} resolved={1} remove={2} read_only={3}." -f $specDispositionCandidatePass, (Test-InvocationPass -Invocation $specDispositionResolved), $retireOnlyActions.Count, $specDispositionResolvedReadOnly)
+    Add-Case -Name "reviewed-spec-source-owned-consolidation-resolves" -Passed $sourceOwnedConsolidationPass -Detail ("owner_actions={0} member_actions={1} read_only={2}." -f $sourceOwnerActions.Count, $sourceOwnerMemberActions.Count, $specDispositionResolvedReadOnly)
+    Add-Case -Name "reviewed-spec-external-target-consolidation-resolves" -Passed $externalTargetConsolidationPass -Detail ("target_actions={0} source_removals={1} read_only={2}." -f $externalTargetActions.Count, @($externalSourceActions | Where-Object { [string]$_.action -ceq "remove" }).Count, $specDispositionResolvedReadOnly)
+    $evidence.reviewed_spec_retire_only = $specRetireOnlyPass
+    $evidence.reviewed_spec_consolidation = ($sourceOwnedConsolidationPass -and $externalTargetConsolidationPass)
+
+    $specDispositionSha = @{}
+    foreach ($file in @($specDispositionCandidate.payload.evidence.files)) {
+        if ([string]$file.presence -ceq "file") { $specDispositionSha[[string]$file.path] = [string]$file.sha256 }
+    }
+    $invalidSpecDispositionCases = [Collections.Generic.List[object]]::new()
+    $invalidSpecSource = Copy-JsonObject $specDispositionEvidence
+    $invalidSpecSource.decisions[0].source_sha256 = "0" * 64
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "source-binding"; evidence = $invalidSpecSource; code = "DISPOSITION_SOURCE_MISMATCH" })
+    $invalidSpecContent = Copy-JsonObject $specDispositionEvidence
+    $invalidSpecContent.decisions[1].content = "# Incomplete consolidated Spec`n"
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "malformed"; evidence = $invalidSpecContent; code = "DISPOSITION_CONTENT_INVALID" })
+    $duplicateSpecSource = Copy-JsonObject $specDispositionEvidence
+    $duplicateSpecSource.decisions[1].source_paths = @([string]$specDispositionFixture.owner_path, [string]$specDispositionFixture.owner_member_path, [string]$specDispositionFixture.owner_member_path)
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "duplicate-source"; evidence = $duplicateSpecSource; code = "DISPOSITION_EVIDENCE_INVALID" })
+    $overlappingSpecGroups = Copy-JsonObject $specDispositionEvidence
+    $overlappingSpecGroups.decisions[3].source_paths = @([string]$specDispositionFixture.external_source_path, [string]$specDispositionFixture.external_member_path, [string]$specDispositionFixture.owner_member_path)
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "overlap"; evidence = $overlappingSpecGroups; code = "DISPOSITION_TARGET_COLLISION" })
+    $duplicateSpecOwner = Copy-JsonObject $specDispositionEvidence
+    $duplicateSpecOwner.decisions[1].target = [string]$specDispositionFixture.external_target_path
+    $duplicateSpecOwner.decisions[1].target_sha256 = $specDispositionSha[[string]$specDispositionFixture.external_target_path]
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "duplicate-owner"; evidence = $duplicateSpecOwner; code = "DISPOSITION_TARGET_COLLISION" })
+    $undeclaredSpecOverlap = Copy-JsonObject $specDispositionEvidence
+    $undeclaredSpecOverlap.decisions[1].target = [string]$specDispositionFixture.owner_member_path
+    $undeclaredSpecOverlap.decisions[1].target_sha256 = $specDispositionSha[[string]$specDispositionFixture.owner_member_path]
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "undeclared-target-overlap"; evidence = $undeclaredSpecOverlap; code = "DISPOSITION_TARGET_INVALID" })
+    $specTargetMismatch = Copy-JsonObject $specDispositionEvidence
+    $specTargetMismatch.decisions[3].target_sha256 = "0" * 64
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "target-binding"; evidence = $specTargetMismatch; code = "DISPOSITION_TARGET_MISMATCH" })
+    $specTargetCollision = Copy-JsonObject $specDispositionEvidence
+    $specTargetCollision.decisions[3].target = $immediateSpecRelative
+    $specTargetCollision.decisions[3].target_sha256 = $specDispositionSha[$immediateSpecRelative]
+    $invalidSpecDispositionCases.Add([ordered]@{ name = "target-collision"; evidence = $specTargetCollision; code = "DISPOSITION_TARGET_COLLISION" })
+    $specDispositionNegativePass = $true
+    foreach ($case in $invalidSpecDispositionCases) {
+        $beforeInvalidSpecDisposition = Get-TreeFingerprint -Root $specDispositionRoot
+        $invalidSpecDisposition = Invoke-Migration -Mode "Analyze" -ProjectRoot $specDispositionRoot -DispositionEvidence (Get-CanonicalJson -Payload $case.evidence)
+        $casePass = (
+            (Test-InvocationBlocked -Invocation $invalidSpecDisposition) -and
+            $invalidSpecDisposition.text -match [regex]::Escape([string]$case.code) -and
+            $beforeInvalidSpecDisposition -ceq (Get-TreeFingerprint -Root $specDispositionRoot) -and
+            @((Get-BackupFiles -ProjectRoot $specDispositionRoot)).Count -eq 0
+        )
+        $specDispositionNegativePass = $specDispositionNegativePass -and $casePass
+        Add-Case -Name ("reviewed-spec-{0}-fails-closed" -f $case.name) -Passed $casePass -Detail ("expected={0} actual={1} read_only={2}." -f $case.code, (@($invalidSpecDisposition.payload.reason_codes) -join ','), ($beforeInvalidSpecDisposition -ceq (Get-TreeFingerprint -Root $specDispositionRoot)))
+    }
+    $evidence.reviewed_spec_consolidation_fail_closed = $specDispositionNegativePass
+
+    $specDispositionStalePass = $true
+    foreach ($staleKind in @("source", "target")) {
+        $staleSpecRoot = Join-Path $scratchRoot ("reviewed-spec-stale-{0}" -f $staleKind)
+        Copy-Fixture -Source $pristineRoot -Destination $staleSpecRoot
+        $staleSpecFixture = Set-ReviewedSpecDispositionFixture -Root $staleSpecRoot
+        $staleSpecCandidate = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleSpecRoot
+        $staleSpecEvidence = New-ReviewedSpecDispositionEvidence -Analyze $staleSpecCandidate.payload -Fixture $staleSpecFixture
+        $staleSpecEvidenceJson = Get-CanonicalJson -Payload $staleSpecEvidence
+        $staleSpecResolved = Invoke-Migration -Mode "Analyze" -ProjectRoot $staleSpecRoot -DispositionEvidence $staleSpecEvidenceJson
+        $stalePath = if ($staleKind -ceq "source") { [string]$staleSpecFixture.owner_member_path } else { [string]$staleSpecFixture.external_target_path }
+        Add-Content -LiteralPath (Join-Path $staleSpecRoot $stalePath) -Value "`nMutation after reviewed Analyze.`n"
+        $beforeStaleSpecApply = Get-TreeFingerprint -Root $staleSpecRoot
+        $staleSpecApply = Invoke-Migration -Mode "Apply" -ProjectRoot $staleSpecRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $staleSpecResolved.payload) -DispositionEvidence $staleSpecEvidenceJson -ConfirmMigration
+        $staleCasePass = (
+            (Test-InvocationBlocked -Invocation $staleSpecApply) -and
+            $staleSpecApply.text -match "DISPOSITION_EVIDENCE_STALE" -and
+            $beforeStaleSpecApply -ceq (Get-TreeFingerprint -Root $staleSpecRoot) -and
+            @((Get-BackupFiles -ProjectRoot $staleSpecRoot)).Count -eq 0
+        )
+        $specDispositionStalePass = $specDispositionStalePass -and $staleCasePass
+        Add-Case -Name ("reviewed-spec-post-analyze-{0}-mutation-is-stale" -f $staleKind) -Passed $staleCasePass -Detail ("status={0} reasons={1}." -f (Get-StatusText $staleSpecApply.payload), (@($staleSpecApply.payload.reason_codes) -join ','))
+    }
+    $evidence.reviewed_spec_consolidation_stale = $specDispositionStalePass
+
+    $specDispositionApplied = Invoke-Migration -Mode "Apply" -ProjectRoot $specDispositionRoot -AnalyzeEvidence (Get-CanonicalJson -Payload $specDispositionResolved.payload) -DispositionEvidence $specDispositionEvidenceJson -ConfirmMigration
+    $specDispositionBackupId = Get-BackupIdFromResult -Payload $specDispositionApplied.payload
+    $specDispositionApplyPass = (
+        (Test-InvocationPass -Invocation $specDispositionApplied) -and
+        [string]$specDispositionApplied.payload.workspace_check -ceq "PASS" -and
+        (Test-BackupBeforeApply -Payload $specDispositionApplied.payload -ProjectRoot $specDispositionRoot) -and
+        -not (Test-Path -LiteralPath (Join-Path $specDispositionRoot ([string]$specDispositionFixture.retire_path))) -and
+        [IO.File]::ReadAllText((Join-Path $specDispositionRoot ([string]$specDispositionFixture.owner_path)), [Text.UTF8Encoding]::new($false, $true)) -ceq [string]$specDispositionFixture.owner_content -and
+        -not (Test-Path -LiteralPath (Join-Path $specDispositionRoot ([string]$specDispositionFixture.owner_member_path))) -and
+        [IO.File]::ReadAllText((Join-Path $specDispositionRoot ([string]$specDispositionFixture.external_target_path)), [Text.UTF8Encoding]::new($false, $true)) -ceq [string]$specDispositionFixture.external_target_after -and
+        -not (Test-Path -LiteralPath (Join-Path $specDispositionRoot ([string]$specDispositionFixture.external_source_path))) -and
+        -not (Test-Path -LiteralPath (Join-Path $specDispositionRoot ([string]$specDispositionFixture.external_member_path)))
+    )
+    $specDispositionRollback = Invoke-Migration -Mode "Rollback" -ProjectRoot $specDispositionRoot -BackupId $specDispositionBackupId -ConfirmRollback
+    $specDispositionRollbackPass = (
+        (Test-InvocationPass -Invocation $specDispositionRollback) -and
+        (Test-SnapshotEqual -Before $specDispositionBefore -After (Get-FileSnapshot -Root $specDispositionRoot)) -and
+        ($specDispositionBeforeDirectories -join "`n") -ceq ((Get-DirectorySnapshot -Root $specDispositionRoot) -join "`n") -and
+        (Test-Path -LiteralPath (Join-Path $specDispositionRoot (Join-Path ".agents/.migration-backups" $specDispositionBackupId)) -PathType Container)
+    )
+    Add-Case -Name "reviewed-spec-consolidation-apply-and-rollback" -Passed ($specDispositionApplyPass -and $specDispositionRollbackPass) -Detail ("apply={0} backup={1} rollback={2}." -f $specDispositionApplyPass, $specDispositionBackupId, $specDispositionRollbackPass)
+    $evidence.reviewed_spec_consolidation_backup_rollback = ($specDispositionApplyPass -and $specDispositionRollbackPass)
 
     # A provenance-recognized root already has one automatic replacement
     # action.  A custom nested authority may replace that action with the full
