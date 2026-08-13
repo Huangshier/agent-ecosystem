@@ -99,17 +99,19 @@ For an existing project, treat bootstrap as a conservative refresh:
 
 ## 3. Use The Workflow Kernel
 
-- Start non-trivial work with `project-context-gate`.
+- Start non-trivial work by reading root `AGENTS.md`, then use
+  `project-workspace` `discover` / `check` to progressively find canonical
+  Work, Context, Procedure, and Spec assets.
 - For Claude Code projects, keep the generated `CLAUDE.md`,
   `.claude/settings.json`, `.claude/guardrails/`, and `.claude/hooks/` surfaces
   in place. The lifecycle hooks check entry loading, project context, write
   authorization profiles, dangerous memory reset modes, and stop points without
   becoming a security sandbox or bypassing normal permissions.
-- Optionally use `workflow-spec-lite` in the target project for work that needs
+- Use `project-workspace create-spec` in the target project for work that needs
   durable goals, non-goals, acceptance evidence, risks, or multi-phase
   execution.
-- Use `memory-governance` to keep `.agents` files small and route durable
-  lessons into `.agents/context/`.
+- Use the `project-workspace` Work/Context continuity operations to record
+  unfinished work and stable facts at handoff.
 - Use the public `knowledge-hub/knowledge-catalog.md` before opening individual
   reusable knowledge entries.
 - For runtime-specific startup paths (Codex, Claude Code, generic agents), see
@@ -135,9 +137,8 @@ Do not copy the public tree into a private overlay. Add only private increments.
 Recommended checks:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project> -Brief
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
 ```
 
 For release-quality changes to this public repository, run:

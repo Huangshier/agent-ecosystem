@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [ValidateSet("minimal", "recommended", "full", "dev", "c3-3-candidate")]
+    [ValidateSet("minimal", "recommended", "full", "dev")]
     [string]$Profile = "recommended",
 
     [string]$TargetDir = (Join-Path $HOME ".agents"),
@@ -42,12 +42,10 @@ if ($Force.IsPresent) {
     Write-Output $forceWarning
 }
 
-$kernelSkills = @(
-    "project-bootstrap",
-    "project-context-gate",
-    "workflow-spec-lite",
-    "memory-governance"
-)
+# NOTE: `project-context-gate`, `memory-governance`, and `workflow-spec-lite` are
+# retired from C3.3 Runtime authority. After the one-time default cutover they are
+# no longer installed by any public profile; their source directories remain only
+# for historical reading and are never re-installed or newly bridged.
 $retiredC33AuthoritySkills = @(
     "project-context-gate",
     "memory-governance",
@@ -62,13 +60,6 @@ function Get-PublicSkillNames {
     }
 
     if ($SelectedProfile -in @("recommended", "full", "dev")) {
-        return @($kernelSkills)
-    }
-
-    if ($SelectedProfile -eq "c3-3-candidate") {
-        # C3.3 remains an explicit candidate profile. It is never selected by
-        # the default or legacy profiles and therefore cannot perform the
-        # unified default cutover implicitly.
         return @("project-bootstrap", "project-workspace")
     }
 
@@ -741,17 +732,20 @@ function Install-DevLinkItem {
 }
 
 $skillNames = @(Get-PublicSkillNames -SelectedProfile $Profile)
-$legacyCompatibilityPayload = if ($Profile -in @("recommended", "full", "dev")) {
-    @($retiredC33AuthoritySkills)
-}
-else {
-    @()
-}
-$c33Authority = if ($Profile -eq "c3-3-candidate") {
+$isC33Runtime = $Profile -in @("recommended", "full", "dev")
+$c33Authority = if ($isC33Runtime) {
     @("project-bootstrap", "project-workspace")
 }
 else {
-    @()
+    # `minimal` packages only the bootstrap authority; it is a reduced C3.3
+    # runtime, not the full active C3.3 authority runtime.
+    @("project-bootstrap")
+}
+# NOTE: Assign empty arrays as statements rather than if/else expressions so an
+# empty `packaged_content` stays an empty array instead of unrolling to null.
+$c33PackagedContent = [object[]]@()
+if ($isC33Runtime) {
+    $c33PackagedContent = @("skills/project-workspace", "schemas/project-workspace", "templates/project", "scripts/migrate-project.ps1")
 }
 $statusProviderFiles = @(
     "status.ps1",
@@ -759,12 +753,12 @@ $statusProviderFiles = @(
     "lib/runtime-status-action.ps1"
 )
 $runtimeProviderFiles = @($statusProviderFiles)
-if ($Profile -eq "c3-3-candidate") {
+if ($isC33Runtime) {
     $runtimeProviderFiles += @("migrate-project.ps1", "validation/powershell-runtime-requirement.ps1")
 }
-$installStatusProvider = $installStrategy -eq "copy" -and ("project-context-gate" -in $skillNames -or $Profile -eq "c3-3-candidate")
+$installStatusProvider = $installStrategy -eq "copy" -and $isC33Runtime
 $managedSourcePaths = @("knowledge-hub") + @($skillNames | ForEach-Object { "skills/$_" })
-if ($Profile -eq "c3-3-candidate") {
+if ($isC33Runtime) {
     $managedSourcePaths += @("templates/project", "schemas/project-workspace")
 }
 if ($installStatusProvider) {
@@ -783,7 +777,7 @@ foreach ($skillName in $skillNames) {
         })
     $desiredItemNames["skills/$skillName"] = $true
 }
-if ($Profile -eq "c3-3-candidate") {
+if ($isC33Runtime) {
     $itemSpecs.Add([ordered]@{
             name = "templates/project"
             source = "templates/project"
@@ -886,12 +880,12 @@ $manifest = [ordered]@{
     target_dir = "."
     skills = @($skillNames)
     workspace = [ordered]@{
-        architecture = if ($Profile -eq "c3-3-candidate") { "c3.3" } else { "legacy-runtime" }
-        lifecycle = if ($Profile -eq "c3-3-candidate") { "dormant" } else { "not-enabled" }
-        default_cutover = $false
-        packaged_content = if ($Profile -eq "c3-3-candidate") { @("skills/project-workspace", "schemas/project-workspace", "templates/project", "scripts/migrate-project.ps1") } else { @() }
+        architecture = "c3.3"
+        lifecycle = "active"
+        default_cutover = $true
+        packaged_content = $c33PackagedContent
         c3_3_authority = @($c33Authority)
-        legacy_only_compatibility_payload = @($legacyCompatibilityPayload)
+        legacy_only_compatibility_payload = @()
         retired_from_c3_3_authority = @($retiredC33AuthoritySkills)
         compatibility_aliases = $false
         automatic_forwarding = $false

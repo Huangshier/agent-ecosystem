@@ -96,7 +96,7 @@ boundary.
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
-     -Skill project-bootstrap,project-context-gate
+     -Skill project-bootstrap,project-workspace
    ```
 
    Both directories are mandatory; the helper never guesses a client path.
@@ -109,10 +109,12 @@ boundary.
    powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
    ```
 
-4. Run the context gate before the first non-trivial task:
+4. Before the first non-trivial task, discover or check project assets with
+   `project-workspace`:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+   pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
 On non-Windows systems, or when PowerShell 7+ is already available, replace the
@@ -121,10 +123,16 @@ command prefix with `pwsh -NoProfile -File`. See
 
 ### Profiles
 
-- `minimal`: installs the bootstrap skill and public knowledge hub templates.
-- `recommended`: installs the Workflow Kernel and public knowledge hub.
-- `full` and `dev`: currently match `recommended`; they reserve space for
-  future public domain packs and maintainer tooling.
+- `minimal`: installs the bootstrap skill and public knowledge hub templates; a
+  fresh bootstrap produces a minimal C3.3 workspace.
+- `recommended`: installs the active C3.3 Runtime (`project-bootstrap` +
+  `project-workspace`), project workspace templates/schemas, and the public
+  knowledge hub.
+- `full` and `dev`: currently match `recommended`; they reserve space for future
+  public domain packs and maintainer tooling.
+
+`recommended` / `full` / `dev` are the only C3.3 Runtime authority after the
+cutover; there is no `c3-3-candidate` profile and no compatibility alias.
 
 See [Domain pack governance](docs/domain-pack-governance.md) for the profile
 lifecycle.
@@ -134,14 +142,14 @@ lifecycle.
 Use the same short path for every non-trivial task:
 
 1. Read root `AGENTS.md`, the project's only complete behavior contract.
-2. Run `project-context-gate` to load hot memory, active work packages, and
-   relevant context progressively.
+2. Use `project-workspace` `discover` / `check` to progressively find Work,
+   Context, Procedure, and Spec assets.
 3. For work that needs durable goals, non-goals, risks, and acceptance across
-   sessions, use `workflow-spec-lite` to create a target-project-local
-   `docs/specs/<slug>/spec.md`.
+   sessions, use `project-workspace create-spec` to create a
+   target-project-local `docs/specs/<slug>/spec.md`.
 4. Implement the change and run the target project's own validation.
-5. At handoff or phase close, use `memory-governance` to compress hot memory and
-   route stable facts and lessons to the right place.
+5. At handoff or phase close, use the `project-workspace` Work/Context
+   continuity operations to record unfinished work and stable facts.
 
 Follow the [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)
 for a complete empty-project example, and see [How to adapt](docs/how-to-adapt.md)
@@ -182,7 +190,7 @@ Inspect first, then choose conservative refresh, migration, or reset:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 
 - `current`: the checked project baseline and engineering memory need no

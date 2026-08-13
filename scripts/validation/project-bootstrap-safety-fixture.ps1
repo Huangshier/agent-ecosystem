@@ -176,13 +176,12 @@ if ([string]$inheritLock.project_language -ne "zh-CN") {
     throw "Omitted -ProjectLanguage did not inherit zh-CN from hub.lock.json."
 }
 $inheritWorkspaceModel = [string]$inheritLock.workspace_model
-if ($inheritWorkspaceModel -ne "legacy" -or [string]$inheritLock.workspace_state -ne "not-enabled") {
-    throw "Recommended runtime fresh bootstrap did not retain the legacy workspace contract."
+if ($inheritWorkspaceModel -ne "c3.3" -or [string]$inheritLock.workspace_state -ne "active") {
+    throw "Fresh project bootstrap did not produce the active C3.3 workspace contract."
 }
 $expectedZhWorkspace = Join-Path $inheritProject ".agents/context"
-if (-not (Test-Path -LiteralPath $expectedZhWorkspace -PathType Container) -or
-    @(Get-ChildItem -LiteralPath $expectedZhWorkspace -Recurse -File -Force).Count -eq 0) {
-    throw "Inherited bootstrap did not restore the zh-CN legacy context scaffold."
+if (-not (Test-Path -LiteralPath $expectedZhWorkspace -PathType Container)) {
+    throw "Inherited bootstrap did not restore the C3.3 workspace context root."
 }
 $resolvedIndex = [array]::FindIndex([string[]]$inheritOutput, [Predicate[string]]{ param($line) $line -match '^Resolved project dir: ' })
 $completeIndex = [array]::FindIndex([string[]]$inheritOutput, [Predicate[string]]{ param($line) $line -eq 'Project bootstrap complete.' })

@@ -1,7 +1,7 @@
 # Target-Project Spec Lifecycle
 
 This document describes optional `docs/specs/**` lifecycle hygiene for target
-projects that choose to use `workflow-spec-lite`.
+projects that choose to use `project-workspace create-spec`.
 
 It no longer governs this public repository's own maintenance records. Public
 `agent-ecosystem` maintenance uses GitHub issues and pull request bodies as the

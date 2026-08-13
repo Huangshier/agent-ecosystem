@@ -67,16 +67,14 @@ Default behavior:
 - Keep project-local edits untouched.
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
 - Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
-- For a fresh project invoked from the explicit `c3-3-candidate` Runtime,
-  create the minimal C3.3 workspace layout: a short `AGENTS.md`,
-  `.agents/README.md`, empty `work/`, `context/`, `procedures/`, and `skills/`
-  roots, and `docs/specs/`. Do not create placeholder Work, Context,
-  Procedure, Spec, glossary, or promoted Skill content. Fresh projects using
-  `minimal`, `recommended`, `full`, or `dev` retain the legacy scaffold path.
+- For a fresh project, create the minimal C3.3 workspace layout: a short
+  `AGENTS.md`, `.agents/README.md`, empty `work/`, `context/`, `procedures/`,
+  and `skills/` roots, and `docs/specs/`. Do not create placeholder Work,
+  Context, Procedure, Spec, glossary, or promoted Skill content. Fresh projects
+  always use this path after the one-time default cutover.
 - An existing C3.3 workspace is refreshed through the same minimal template
-  contract; an existing legacy project keeps the legacy scaffold path.
-- The C3.3 runtime is exposed only by the explicit `c3-3-candidate` install
-  profile. That profile is dormant and does not change the default runtime.
+  contract; an existing legacy project keeps the legacy scaffold path until an
+  explicit reviewed `migrate-project.ps1` Analyze -> Apply.
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.

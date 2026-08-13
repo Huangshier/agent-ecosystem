@@ -134,21 +134,22 @@ if ([string]$installManifest.target_dir -ne ".") {
     $preflightErrors.Add("Runtime install-manifest.json target_dir must be runtime-relative '.'.")
 }
 $retiredC33AuthoritySkills = @()
-if ([string]$installManifest.profile -ceq "c3-3-candidate") {
+$c33AuthorityContractValid = $false
+if ([string]$installManifest.profile -cin @("recommended", "full", "dev")) {
     $workspace = $installManifest.workspace
     $declaredAuthority = @($workspace.c3_3_authority | ForEach-Object { [string]$_ })
     $retiredC33AuthoritySkills = @($workspace.retired_from_c3_3_authority | ForEach-Object { [string]$_ })
     $expectedAuthority = @("project-bootstrap", "project-workspace")
     $expectedRetired = @("project-context-gate", "memory-governance", "workflow-spec-lite")
-    $authorityContractValid =
+    $c33AuthorityContractValid =
         (@($declaredAuthority) -join "`n") -ceq (@($expectedAuthority) -join "`n") -and
         (@($retiredC33AuthoritySkills) -join "`n") -ceq (@($expectedRetired) -join "`n") -and
         @($workspace.legacy_only_compatibility_payload).Count -eq 0 -and
         $workspace.compatibility_aliases -is [bool] -and -not [bool]$workspace.compatibility_aliases -and
         $workspace.automatic_forwarding -is [bool] -and -not [bool]$workspace.automatic_forwarding -and
         $workspace.dual_write -is [bool] -and -not [bool]$workspace.dual_write
-    if (-not $authorityContractValid) {
-        $preflightErrors.Add("The C3.3 candidate Skill authority contract is invalid.")
+    if (-not $c33AuthorityContractValid) {
+        $preflightErrors.Add("The active C3.3 Runtime Skill authority contract is invalid.")
     }
 }
 $runtimeSkillsRootItem = Get-ExistingItem -Path $runtimeSkillsRoot
@@ -198,8 +199,8 @@ if ($null -ne $agentSkillsRootItem) {
 
 $manifestSkillNames = @($installManifest.skills | ForEach-Object { [string]$_ })
 foreach ($skillName in @($requestedSkills.ToArray())) {
-    if ([string]$installManifest.profile -ceq "c3-3-candidate" -and $skillName -in $retiredC33AuthoritySkills) {
-        $preflightErrors.Add("Skill is retired from C3.3 Runtime authority and cannot be bridged by c3-3-candidate: $skillName")
+    if ([string]$installManifest.profile -cin @("recommended", "full", "dev") -and $skillName -in $retiredC33AuthoritySkills) {
+        $preflightErrors.Add("Skill is retired from C3.3 Runtime authority and cannot be newly bridged: $skillName")
         continue
     }
     $canonicalMatches = @($manifestSkillNames | Where-Object {

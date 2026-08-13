@@ -52,8 +52,8 @@ lightweight routing-contract entrypoint. The complete 17-case sensitive scan
 fixture runs only from the heavy self-protection path when validation control
 surface paths change; the classifier still performs the real PR diff scan.
 
-Slice A also provides a dormant, read-only project asset parser and its
-self-contained fixture suite:
+Slice A provides the read-only project asset parser and its self-contained
+fixture suite:
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\skills\project-workspace\scripts\read-project-assets.ps1 -ProjectRoot <project-root> -Json
@@ -78,7 +78,7 @@ Explicitly bridge installed-copy skills into an agent client's verified skill
 directory:
 
 ```powershell
-.\link-agent-skills.ps1 -RuntimeDir <runtime> -AgentSkillsDir <agent-skills-dir> -Skill project-bootstrap
+.\link-agent-skills.ps1 -RuntimeDir <runtime> -AgentSkillsDir <agent-skills-dir> -Skill project-bootstrap,project-workspace
 ```
 
 This helper is separate from ordinary installation. See
@@ -156,13 +156,19 @@ Context gate benchmark:
 
 Profiles:
 
-- `minimal`: `project-bootstrap` plus the public knowledge hub.
-- `recommended`: the Workflow Kernel plus the public knowledge hub.
+- `minimal`: `project-bootstrap` plus the public knowledge hub; a fresh
+  bootstrap produces a minimal C3.3 workspace.
+- `recommended`: the active C3.3 Runtime (`project-bootstrap` +
+  `project-workspace`), project workspace templates/schemas, and the public
+  knowledge hub.
 - `full`: currently the same public skill set as `recommended`.
 - `dev`: currently the same public skill set as `recommended`, intended for
   future development helpers.
-- `c3-3-candidate`: explicitly packages `project-workspace` and project
-  templates. It remains dormant and never changes the default profile.
+
+`recommended` / `full` / `dev` are the only post-cutover C3.3 Runtime authority;
+there is no `c3-3-candidate` profile and no compatibility alias. The retired
+`project-context-gate`, `memory-governance`, and `workflow-spec-lite` Skills are
+no longer installed or newly bridged.
 
 Install modes and reruns:
 

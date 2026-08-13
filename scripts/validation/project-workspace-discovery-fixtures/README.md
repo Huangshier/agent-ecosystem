@@ -1,6 +1,6 @@
 # Project workspace discovery fixtures
 
-These fixtures exercise the dormant C3.3 Slice B surface through a temporary
+These fixtures exercise the C3.3 Slice B surface through a temporary
 project copy. The verifier owns the temporary files so the checked-in fixture
 remains a small canonical Markdown source set.
 

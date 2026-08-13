@@ -2,34 +2,25 @@
 
 Public reusable skills live here.
 
-First release scope is the Workflow Kernel:
+The active C3.3 Runtime Skill authority is exactly two skills:
 
 - `project-bootstrap`
-- `project-context-gate`
-- `workflow-spec-lite`
-- `memory-governance`
+- `project-workspace`
 
-Domain skills are intentionally deferred.
+The superseded `project-context-gate`, `memory-governance`, and
+`workflow-spec-lite` Skills are retired from C3.3 authority: after the one-time
+default cutover they are no longer installed or newly bridged by any public
+profile, and have no alias, forwarder, or dual-write path into C3.3. Their
+source directories remain only for historical reading and are never re-installed
+or newly bridged.
 
-## C3.3 lifecycle boundary
-
-The dormant `c3-3-candidate` profile has exactly two Runtime Skill authorities:
-`project-bootstrap` and `project-workspace`. The superseded
-`project-context-gate`, `memory-governance`, and `workflow-spec-lite` Skills are
-not installed or bridged by that profile and have no aliases, forwarders, or
-dual-write path into C3.3.
-
-The source directories remain temporarily because the uncut-over
-`recommended`, `full`, and `dev` profiles still install them as a legacy-only
-compatibility payload. Their presence for those profiles does not make them
-C3.3 authority. The frozen replacement mapping is:
+The frozen replacement mapping is:
 
 - `project-context-gate` discovery -> `project-workspace discover`
 - `memory-governance` Work, Context, checkpoint, and migration -> `project-workspace`
 - `workflow-spec-lite` Spec authority -> `project-workspace create-spec`
 
-This compatibility boundary does not switch the default profile and never
-removes user-owned project-local promoted Skills.
+This retirement boundary never removes user-owned project-local promoted Skills.
 
 Kernel `SKILL.md` frontmatter should include:
 

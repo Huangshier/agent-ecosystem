@@ -18,7 +18,7 @@ possibly generated context entries.
 | Upgrade only unmodified old templates | Use `-RefreshUnmodifiedTemplates` after checking the current project memory language. |
 | Change project memory language | Use the conservative language migration Analyze -> Plan -> Apply -> Validate flow. |
 | Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup. |
-| Inspect current state only | Run `project-context-gate` and `memory-governance` diagnostics without apply modes. |
+| Inspect current state only | Run `status.ps1` and `memory_upgrade.ps1 -Mode Analyze` without apply modes. |
 
 ## Command Ownership Boundary
 
@@ -165,8 +165,8 @@ metadata. Do not infer project memory language from the current chat.
 6. Validate the result with the relevant project checks.
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
+   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project>
+   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\memory_upgrade.ps1 -ProjectDir <project> -Mode Analyze
    ```
 
 For project-memory language changes, use the conservative language migration
