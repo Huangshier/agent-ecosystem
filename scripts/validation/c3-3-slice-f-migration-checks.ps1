@@ -1022,8 +1022,9 @@ function New-ContextBracketClusterFixtureText {
         $lines.Add("[$($BracketFields[$index])]")
     }
     for ($index = 0; $index -lt $ProseSectionCount; $index++) {
+        $heading = if ($index -eq 0) { "Verified Facts" } else { "Stable Note $($index + 1)" }
         $lines.Add("")
-        $lines.Add("## Stable Note $($index + 1)")
+        $lines.Add("## $heading")
         $lines.Add("")
         $lines.Add("Synthetic stable prose for boundary verification.")
     }
@@ -1052,6 +1053,10 @@ $contextBracketNegativeRelatives = @(
 )
 $contextIndexRelative = ".agents/context/context-index.md"
 $contextBlankTemplateRelative = ".agents/context/blank-template.md"
+$contextMetadataOnlyRelative = ".agents/context/metadata-only.md"
+$contextRetiredWorkflowRelative = ".agents/context/retired-workflow.md"
+$contextInlineCommandRelative = ".agents/context/inline-command.md"
+$contextFencedMarkdownRelative = ".agents/context/fenced-markdown.md"
 $contextAmbiguousFilenameTermRelatives = @(
     ".agents/context/ambiguous-template.md",
     ".agents/context/ambiguous-index.md",
@@ -1142,15 +1147,15 @@ try {
     $readOnly = ($beforeAnalyzeTree -ceq $afterAnalyzeTree -and (Test-SnapshotEqual -Before $beforeAnalyzeSnapshot -After $afterAnalyzeSnapshot) -and
         @((Get-BackupFiles -ProjectRoot $baseRoot)).Count -eq 0)
     Add-Case -Name "analyze-deterministic-read-only" -Passed ($deterministic -and $readOnly -and $scaffoldPlanComplete) -Detail ("Analyze repeatable={0} read_only={1} scaffold_plan={2} first_exit={3} second_exit={4} first_status={5} second_status={6} reasons={7} human={8}." -f $deterministic, $readOnly, $scaffoldPlanComplete, $analyzeOne.exit_code, $analyzeTwo.exit_code, (Get-StatusText $analyzeOne.payload), (Get-StatusText $analyzeTwo.payload), (@($analyzeOne.payload.reason_codes) -join ','), (@($analyzeOne.payload.human_disposition | ForEach-Object { '{0}:{1}' -f $_.path, $_.reason_code }) -join ','))
-    $migrationRevisionSeed = "c3.3-slice-f-v10`n$($analyzeOne.payload.evidence.state_digest)`n$($analyzeOne.payload.plan.plan_digest)"
+    $migrationRevisionSeed = "c3.3-slice-f-v11`n$($analyzeOne.payload.evidence.state_digest)`n$($analyzeOne.payload.plan.plan_digest)"
     $expectedMigrationRevision = [Convert]::ToHexString(
         [Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($migrationRevisionSeed))
     ).ToLowerInvariant()
-    $migrationRevisionV10 = (
+    $migrationRevisionV11 = (
         [string]$analyzeOne.payload.migration_revision -ceq $expectedMigrationRevision -and
         [string]$analyzeTwo.payload.migration_revision -ceq $expectedMigrationRevision
     )
-    Add-Case -Name "migration-revision-v10" -Passed $migrationRevisionV10 -Detail "Analyze evidence binds the v10 revision seed to the state and plan digests."
+    Add-Case -Name "migration-revision-v11" -Passed $migrationRevisionV11 -Detail "Analyze evidence binds the v11 revision seed to the state and plan digests."
     $evidence.analyze_deterministic = $deterministic
     $evidence.analyze_read_only = $readOnly
 
@@ -1194,6 +1199,109 @@ Filename terms do not override complete stable Context markers.
         $contextStableTemplateBefore -ceq (Get-TreeFingerprint -Root $contextStableTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextStableTemplateRoot)).Count -eq 0
     )
     Add-Case -Name "context-template-filename-stable-fact-promoted" -Passed $contextStableTemplatePromoted -Detail "A stable Context candidate with template in its filename follows the normal marker contract and is not preserved as non-authority."
+
+    $contextAuthorityTighteningRoot = Join-Path $scratchRoot "context-authority-tightening"
+    Copy-Fixture -Source $baseRoot -Destination $contextAuthorityTighteningRoot
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextMetadataOnlyRelative) -Text @"
+# Discovery metadata only
+
+## Summary
+
+This synthetic file has discovery metadata but no stable Context authority evidence.
+
+## Keywords
+
+migration, context
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextRetiredWorkflowRelative) -Text @"
+# Retired workflow record
+
+## Summary
+
+Records a historical command workflow retained for migration review.
+
+## Keywords
+
+workflow, retired-command, history
+
+## Historical Workflow
+
+This is historical operating material only.
+
+## Retired Commands
+
+These commands are retired and current tooling must not execute or adopt them as canonical project-memory authority.
+
+## Steps
+
+1. Run the retired command in the old environment.
+2. Do not execute or adopt these retired steps in current tooling.
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextInlineCommandRelative) -Text @"
+# Inline command metadata
+
+## Summary
+
+Records a command example in inline Markdown for migration review: `pwsh -File migrate-project.ps1 -Mode Analyze`.
+
+## Keywords
+
+migration, command, example
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextFencedMarkdownRelative) -Text @'
+# Stable fenced Markdown example
+
+## Summary
+
+Records stable parser behavior while retaining a fenced Markdown example.
+
+## Keywords
+
+migration, parser, markdown
+
+## Verified Facts
+
+Fenced examples are documentation and do not define migration structure.
+
+## Fenced sample
+
+```markdown
+## Steps
+
+1. This is an example only.
+2. This is not an operational workflow.
+```
+'@
+    $contextAuthorityTighteningBefore = Get-TreeFingerprint -Root $contextAuthorityTighteningRoot
+    $contextAuthorityTighteningAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextAuthorityTighteningRoot
+    $contextAuthorityTighteningPass = $true
+    foreach ($relative in @($contextMetadataOnlyRelative, $contextRetiredWorkflowRelative, $contextInlineCommandRelative)) {
+        $human = @($contextAuthorityTighteningAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count -eq 1
+        $hasPromotion = @($contextAuthorityTighteningAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -gt 0
+        $contextAuthorityTighteningPass = $contextAuthorityTighteningPass -and $human -and -not $hasPromotion
+    }
+    $fencedMarkdownPromoted = (
+        @($contextAuthorityTighteningAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $contextFencedMarkdownRelative
+            }).Count -eq 0 -and
+        @($contextAuthorityTighteningAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $contextFencedMarkdownRelative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -eq 1
+    )
+    $contextAuthorityTighteningPass = (
+        $contextAuthorityTighteningPass -and
+        $fencedMarkdownPromoted -and
+        (Test-InvocationBlocked -Invocation $contextAuthorityTighteningAnalyze) -and
+        $contextAuthorityTighteningBefore -ceq (Get-TreeFingerprint -Root $contextAuthorityTighteningRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextAuthorityTighteningRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-summary-keywords-and-ambiguous-material-stay-human" -Passed $contextAuthorityTighteningPass -Detail "Summary and Keywords plus inline command, metadata-only, or retired workflow material remain CONTEXT_MARKERS_MISSING without canonical promotion; fenced Markdown Steps remain documentation when stable facts are present."
 
     $contextTemplateRoot = Join-Path $scratchRoot "context-template"
     Copy-Fixture -Source $baseRoot -Destination $contextTemplateRoot
@@ -1430,9 +1538,9 @@ protocol, version, interface
     $contextBracketNegativeRoot = Join-Path $scratchRoot "context-bracket-negatives"
     Copy-Fixture -Source $baseRoot -Destination $contextBracketNegativeRoot
     $contextBracketNegativeTexts = [ordered]@{
-        ".agents/context/link-reference.md" = "# Link reference`n`n## Summary`n`nThe stable record links to an [architecture guide](https://example.invalid/architecture).`n`n## Keywords`n`nlinks, context, reference`n"
+        ".agents/context/link-reference.md" = "# Link reference`n`n## Summary`n`nThe stable record links to an [architecture guide](https://example.invalid/architecture).`n`n## Keywords`n`nlinks, context, reference`n`n## Verified Facts`n`nThe synthetic link is a stable reference literal.`n"
         ".agents/context/checklist-state.md" = "# Checklist state`n`n## Summary`n`nRecords a stable completed verification.`n`n## Keywords`n`nchecklist, context, verification`n`n## Verified Facts`n`n- [x] The synthetic verification completed.`n"
-        ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n"
+        ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n`n## Verified Facts`n`nThe synthetic bracket syntax is stable.`n"
         ".agents/context/image-reference.md" = "# Image reference`n`n## Summary`n`nThe stable record embeds a synthetic diagram.`n`n## Keywords`n`nimage, context, reference`n`n## Verified Facts`n`n![Synthetic diagram](https://example.invalid/diagram.svg)`n"
         ".agents/context/inline-code.md" = "# Inline code`n`n## Summary`n`nThe parser preserves a bracket literal in inline code.`n`n## Keywords`n`ncode, context, parser`n`n## Verified Facts`n`n``[literal]```n"
     }
