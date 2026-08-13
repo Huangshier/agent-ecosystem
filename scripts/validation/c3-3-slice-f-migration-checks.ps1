@@ -1540,7 +1540,7 @@ protocol, version, interface
     $contextBracketNegativeTexts = [ordered]@{
         ".agents/context/link-reference.md" = "# Link reference`n`n## Summary`n`nThe stable record links to an [architecture guide](https://example.invalid/architecture).`n`n## Keywords`n`nlinks, context, reference`n`n## Verified Facts`n`nThe synthetic link is a stable reference literal.`n"
         ".agents/context/checklist-state.md" = "# Checklist state`n`n## Summary`n`nRecords a stable completed verification.`n`n## Keywords`n`nchecklist, context, verification`n`n## Verified Facts`n`n- [x] The synthetic verification completed.`n"
-        ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n`n## Verified Facts`n`nThe synthetic bracket token is a stable syntax literal.`n"
+        ".agents/context/literal-syntax.md" = "# Literal syntax`n`n## Summary`n`nThe parser preserves [literal] in normal technical prose.`n`n## Keywords`n`nsyntax, context, parser`n`n## Verified Facts`n`nThe synthetic bracket syntax is stable.`n"
         ".agents/context/image-reference.md" = "# Image reference`n`n## Summary`n`nThe stable record embeds a synthetic diagram.`n`n## Keywords`n`nimage, context, reference`n`n## Verified Facts`n`n![Synthetic diagram](https://example.invalid/diagram.svg)`n"
         ".agents/context/inline-code.md" = "# Inline code`n`n## Summary`n`nThe parser preserves a bracket literal in inline code.`n`n## Keywords`n`ncode, context, parser`n`n## Verified Facts`n`n``[literal]```n"
     }
