@@ -317,3 +317,68 @@ authorized merge.
   refresh.
 - Bridge targets were isolated client directories, not production client
   runtimes.
+
+## Rehearsal: v0.7.1 → current C3.3 main
+
+**Date**: 2026-08-13
+
+**Source tag**: `v0.7.1` (commit
+`df1de467ea0b19ca98d6994b5fb19001d4ec0334`)
+
+**Target**: current `main` (commit
+`96d167321e512bd99bc911e78fd3c7a11e78cf7e`)
+
+**Install mode**: copy
+
+**Profile**: `recommended`, plus an isolated `c3-3-candidate` runtime for the
+project migration stage.
+
+### Runtime upgrade
+
+1. Installed the published `v0.7.1` `recommended` profile into an isolated copy
+   runtime, producing a schema-2 manifest with exact `v0.7.1` provenance.
+2. Re-ran the current-main installer through the ordinary default incremental
+   path, without `-ReplaceManaged` or its deprecated compatibility alias.
+3. The upgrade reported 9 updated and 172 unchanged managed files with 0
+   conflicts. Untracked files and a locally modified managed file were preserved,
+   and the resulting schema-2 manifest recorded the current-main source identity
+   without inventing a release version.
+
+Result: **PASS**. A clean `v0.7.1` copy runtime upgrades directly, while unknown
+and locally modified content remains protected by default.
+
+### Existing project migration to C3.3 workspace
+
+A representative existing project was created from the isolated `v0.7.1` runtime,
+then migrated with the current C3.3 runtime path:
+
+1. `migrate-project.ps1` Analyze reported the project eligible with no human
+   dispositions for its real Work, Context, Procedure, and Spec content.
+2. Apply with explicit confirmation created a complete project-owned backup,
+   applied the reviewed plan, and returned a passing migrated-workspace check.
+3. The final canonical workspace check passed and reported the Work, Context,
+   Procedure, and Spec assets; discovery and read returned the migrated assets
+   with valid canonical schemas and no parser findings.
+4. The project `hub.lock` recorded the C3.3 workspace model and dormant state
+   without enabling `default` or `recommended`.
+
+Result: **PASS**. A `v0.7.1` existing project enters the canonical C3.3 workspace
+through the ordinary Analyze → Apply path, and its canonical assets remain
+checkable, discoverable, and readable.
+
+### Uninstall boundary
+
+After migration, uninstalling the isolated `c3-3-candidate` runtime removed only
+the runtime-owned content and left every project Work, Context, Procedure, and
+Spec file byte-for-byte unchanged.
+
+Result: **PASS**. Runtime uninstall does not delete project canonical assets.
+
+### Limitations
+
+- This rehearsal ran on Windows in copy mode. Cross-platform hosted evidence for
+  the C3.3 runtime and workspace is covered by the Slice G validation closure.
+- The rehearsal exercised one representative existing project. It does not
+  replace project-specific review before accepting a migration plan.
+- C3.3 remains dormant. This rehearsal does not perform the `default` or
+  `recommended` cutover, which requires a separate explicit maintainer decision.
