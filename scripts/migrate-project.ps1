@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $script:MigrationSchemaVersion = 1
-$script:MigrationRevisionVersion = "c3.3-slice-f-v10"
+$script:MigrationRevisionVersion = "c3.3-slice-f-v11"
 $script:MigrationSentinel = "2026-01-01T00:00:00Z"
 $script:Utf8NoBom = [System.Text.UTF8Encoding]::new($false, $true)
 
@@ -426,28 +426,39 @@ function Test-ContextNonAuthorityDocument {
     )
 }
 
+function Get-MarkdownStructuralText {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $lines = [Collections.Generic.List[string]]::new()
+    $fenceCharacter = ""
+    $fenceLength = 0
+    foreach ($line in @($Text -split '\r?\n')) {
+        if ([string]::IsNullOrEmpty($fenceCharacter)) {
+            $opening = [regex]::Match($line, '^\s*(?<mark>`{3,}|~{3,})')
+            if ($opening.Success) {
+                $fenceCharacter = $opening.Groups['mark'].Value.Substring(0, 1)
+                $fenceLength = $opening.Groups['mark'].Value.Length
+                continue
+            }
+            $lines.Add($line)
+            continue
+        }
+
+        $closingPattern = '^\s*' + [regex]::Escape($fenceCharacter) + '{' + $fenceLength + ',}\s*$'
+        if ($line -match $closingPattern) {
+            $fenceCharacter = ""
+            $fenceLength = 0
+        }
+    }
+    return ($lines -join "`n")
+}
+
 function Test-ContextStableAuthorityEvidence {
     param([Parameter(Mandatory = $true)][string]$Text)
 
-    $verifiedFacts = Get-MarkdownSection $Text @("Verified Facts", "Verified", "Stable Facts")
-    if (-not [string]::IsNullOrWhiteSpace($verifiedFacts)) { return $true }
-
-    $bracketEvidence = Get-ContextBracketPlaceholderEvidence $Text
-    $hasUnambiguousBracketLiterals = (
-        [int]$bracketEvidence.isolated_bracket_region_count -ge 2 -and
-        -not [bool]$bracketEvidence.ambiguous_candidate
-    )
-
-    # Summary/Keywords 只是发现元数据。显式稳定事实段或既有技术字面量边界，
-    # 才能提供现有 Context 迁移路径所需的额外确定性结构。
-    $technicalText = [regex]::Replace($Text, '(?m)^\s*#{1,6}\s+.*$', '')
-    $hasTechnicalLiteral = (
-        $technicalText -match '(?m)\[[^\[\]\r\n]+\]\(https?://[^)\r\n]+\)' -or
-        $technicalText -match '(?m)^\s*[-*]\s+\[[ xX]\]\s+\S' -or
-        $technicalText -match '(?m)^\s*[^\[\]\r\n]*\[[^\[\]\r\n]+\][^\[\]\r\n]*\S[^\[\]\r\n]*$' -or
-        $technicalText -match '(?m)^\s*[^`\r\n]*`[^`\r\n]+`[^`\r\n]*$'
-    )
-    return ($hasUnambiguousBracketLiterals -or $hasTechnicalLiteral)
+    $structuralText = Get-MarkdownStructuralText $Text
+    $verifiedFacts = Get-MarkdownSection $structuralText @("Verified Facts", "Verified", "Stable Facts")
+    return (-not [string]::IsNullOrWhiteSpace($verifiedFacts))
 }
 
 function Test-ContextAuthorityAmbiguous {
@@ -456,18 +467,19 @@ function Test-ContextAuthorityAmbiguous {
         [Parameter(Mandatory = $true)][string]$Text
     )
     $name = [IO.Path]::GetFileNameWithoutExtension($Path)
-    $bracketPlaceholder = Get-ContextBracketPlaceholderEvidence $Text
-    $operationalHeading = $Text -match '(?im)^\s*#{2,6}\s+(?:workflow|procedure|runbook|steps?|commands?|command\s+steps?|execution\s+steps?)\s*$'
-    $historyHeading = $Text -match '(?im)^\s*#{2,6}\s+(?:history|historical(?:\s+(?:notes?|record|workflow))?|retired\s+(?:commands?|steps?|workflow)|deprecated\s+(?:commands?|procedure))\s*$'
-    $orderedStepCount = @([regex]::Matches($Text, '(?m)^\s*\d+[.)]\s+\S')).Count
-    $orderedOperationalSteps = ($orderedStepCount -ge 2 -and $Text -match '(?im)^\s*#{2,6}\s+(?:steps?|commands?|workflow|procedure|runbook)\s*$')
+    $structuralText = Get-MarkdownStructuralText $Text
+    $bracketPlaceholder = Get-ContextBracketPlaceholderEvidence $structuralText
+    $operationalHeading = $structuralText -match '(?im)^\s*#{2,6}\s+(?:workflow|procedure|runbook|steps?|commands?|command\s+steps?|execution\s+steps?)\s*$'
+    $historyHeading = $structuralText -match '(?im)^\s*#{2,6}\s+(?:history|historical(?:\s+(?:notes?|record|workflow))?|retired\s+(?:commands?|steps?|workflow)|deprecated\s+(?:commands?|procedure))\s*$'
+    $orderedStepCount = @([regex]::Matches($structuralText, '(?m)^\s*\d+[.)]\s+\S')).Count
+    $orderedOperationalSteps = ($orderedStepCount -ge 2 -and $structuralText -match '(?im)^\s*#{2,6}\s+(?:steps?|commands?|workflow|procedure|runbook)\s*$')
     $retiredCommandLanguage = (
-        $Text -match '(?is)\b(?:retired|deprecated|obsolete)\s+(?:commands?|steps?|workflow|procedure|runbook)\b' -or
-        $Text -match '(?is)\b(?:commands?|steps?|workflow|procedure|runbook)\b.{0,160}\b(?:retired|deprecated|obsolete|historical)\b'
+        $structuralText -match '(?is)\b(?:retired|deprecated|obsolete)\s+(?:commands?|steps?|workflow|procedure|runbook)\b' -or
+        $structuralText -match '(?is)\b(?:commands?|steps?|workflow|procedure|runbook)\b.{0,160}\b(?:retired|deprecated|obsolete|historical)\b'
     )
     $explicitNonAuthority = (
-        $Text -match '(?is)\b(?:must|should|do)\s+not\s+(?:execute|run|adopt|use)\b.{0,160}\b(?:commands?|steps?|workflow|procedure|material|authority|canonical)\b' -or
-        $Text -match '(?is)\b(?:not|never)\b.{0,100}\b(?:canonical|project-memory)\s+authority\b'
+        $structuralText -match '(?is)\b(?:must|should|do)\s+not\s+(?:execute|run|adopt|use)\b.{0,160}\b(?:commands?|steps?|workflow|procedure|material|authority|canonical)\b' -or
+        $structuralText -match '(?is)\b(?:not|never)\b.{0,100}\b(?:canonical|project-memory)\s+authority\b'
     )
     return (
         $name -match '(?i)(?:^|[-_.])(?:example|sample)(?:$|[-_.])' -or
@@ -477,8 +489,8 @@ function Test-ContextAuthorityAmbiguous {
         $orderedOperationalSteps -or
         $retiredCommandLanguage -or
         $explicitNonAuthority -or
-        ($Text -match '(?im)^\s*#{1,6}\s+.*\b(?:guide|guidance|instructions?|catalog|reference)\b' -and
-            $Text -match '(?im)\b(?:use this|add entries|fill in|document .+ here|how to)\b')
+        ($structuralText -match '(?im)^\s*#{1,6}\s+.*\b(?:guide|guidance|instructions?|catalog|reference)\b' -and
+            $structuralText -match '(?im)\b(?:use this|add entries|fill in|document .+ here|how to)\b')
     )
 }
 
