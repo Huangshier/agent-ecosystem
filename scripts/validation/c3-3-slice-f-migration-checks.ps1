@@ -1052,6 +1052,8 @@ $contextBracketNegativeRelatives = @(
 )
 $contextIndexRelative = ".agents/context/context-index.md"
 $contextBlankTemplateRelative = ".agents/context/blank-template.md"
+$contextMetadataOnlyRelative = ".agents/context/metadata-only.md"
+$contextRetiredWorkflowRelative = ".agents/context/retired-workflow.md"
 $contextAmbiguousFilenameTermRelatives = @(
     ".agents/context/ambiguous-template.md",
     ".agents/context/ambiguous-index.md",
@@ -1194,6 +1196,64 @@ Filename terms do not override complete stable Context markers.
         $contextStableTemplateBefore -ceq (Get-TreeFingerprint -Root $contextStableTemplateRoot) -and @((Get-BackupFiles -ProjectRoot $contextStableTemplateRoot)).Count -eq 0
     )
     Add-Case -Name "context-template-filename-stable-fact-promoted" -Passed $contextStableTemplatePromoted -Detail "A stable Context candidate with template in its filename follows the normal marker contract and is not preserved as non-authority."
+
+    $contextAuthorityTighteningRoot = Join-Path $scratchRoot "context-authority-tightening"
+    Copy-Fixture -Source $baseRoot -Destination $contextAuthorityTighteningRoot
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextMetadataOnlyRelative) -Text @"
+# Discovery metadata only
+
+## Summary
+
+This synthetic file has discovery metadata but no stable Context authority evidence.
+
+## Keywords
+
+migration, context
+"@
+    Write-Utf8NoBom -Path (Join-Path $contextAuthorityTighteningRoot $contextRetiredWorkflowRelative) -Text @"
+# Retired workflow record
+
+## Summary
+
+Records a historical command workflow retained for migration review.
+
+## Keywords
+
+workflow, retired-command, history
+
+## Historical Workflow
+
+This is historical operating material only.
+
+## Retired Commands
+
+These commands are retired and current tooling must not execute or adopt them as canonical project-memory authority.
+
+## Steps
+
+1. Run the retired command in the old environment.
+2. Do not execute or adopt these retired steps in current tooling.
+"@
+    $contextAuthorityTighteningBefore = Get-TreeFingerprint -Root $contextAuthorityTighteningRoot
+    $contextAuthorityTighteningAnalyze = Invoke-Migration -Mode "Analyze" -ProjectRoot $contextAuthorityTighteningRoot
+    $contextAuthorityTighteningPass = $true
+    foreach ($relative in @($contextMetadataOnlyRelative, $contextRetiredWorkflowRelative)) {
+        $human = @($contextAuthorityTighteningAnalyze.payload.human_disposition | Where-Object {
+                [string]$_.path -ceq $relative -and [string]$_.reason_code -ceq "CONTEXT_MARKERS_MISSING"
+            }).Count -eq 1
+        $hasPromotion = @($contextAuthorityTighteningAnalyze.payload.plan.actions | Where-Object {
+                @($_.source_paths) -ccontains $relative -and [string]$_.action -in @("create", "change") -and
+                [string]$_.reason_code -ceq "LEGACY_CONTEXT_PROMOTED"
+            }).Count -gt 0
+        $contextAuthorityTighteningPass = $contextAuthorityTighteningPass -and $human -and -not $hasPromotion
+    }
+    $contextAuthorityTighteningPass = (
+        $contextAuthorityTighteningPass -and
+        (Test-InvocationBlocked -Invocation $contextAuthorityTighteningAnalyze) -and
+        $contextAuthorityTighteningBefore -ceq (Get-TreeFingerprint -Root $contextAuthorityTighteningRoot) -and
+        @((Get-BackupFiles -ProjectRoot $contextAuthorityTighteningRoot)).Count -eq 0
+    )
+    Add-Case -Name "context-summary-keywords-and-retired-workflow-stay-human" -Passed $contextAuthorityTighteningPass -Detail "Summary and Keywords alone do not establish Context authority, and explicit retired workflow material remains CONTEXT_MARKERS_MISSING without canonical promotion or writes."
 
     $contextTemplateRoot = Join-Path $scratchRoot "context-template"
     Copy-Fixture -Source $baseRoot -Destination $contextTemplateRoot

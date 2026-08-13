@@ -426,6 +426,30 @@ function Test-ContextNonAuthorityDocument {
     )
 }
 
+function Test-ContextStableAuthorityEvidence {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $verifiedFacts = Get-MarkdownSection $Text @("Verified Facts", "Verified", "Stable Facts")
+    if (-not [string]::IsNullOrWhiteSpace($verifiedFacts)) { return $true }
+
+    $bracketEvidence = Get-ContextBracketPlaceholderEvidence $Text
+    $hasUnambiguousBracketLiterals = (
+        [int]$bracketEvidence.isolated_bracket_region_count -ge 2 -and
+        -not [bool]$bracketEvidence.ambiguous_candidate
+    )
+
+    # Summary/Keywords 只是发现元数据。显式稳定事实段或既有技术字面量边界，
+    # 才能提供现有 Context 迁移路径所需的额外确定性结构。
+    $technicalText = [regex]::Replace($Text, '(?m)^\s*#{1,6}\s+.*$', '')
+    $hasTechnicalLiteral = (
+        $technicalText -match '(?m)\[[^\[\]\r\n]+\]\(https?://[^)\r\n]+\)' -or
+        $technicalText -match '(?m)^\s*[-*]\s+\[[ xX]\]\s+\S' -or
+        $technicalText -match '(?m)^\s*[^\[\]\r\n]*\[[^\[\]\r\n]+\][^\[\]\r\n]*\S[^\[\]\r\n]*$' -or
+        $technicalText -match '(?m)^\s*[^`\r\n]*`[^`\r\n]+`[^`\r\n]*$'
+    )
+    return ($hasUnambiguousBracketLiterals -or $hasTechnicalLiteral)
+}
+
 function Test-ContextAuthorityAmbiguous {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -433,9 +457,26 @@ function Test-ContextAuthorityAmbiguous {
     )
     $name = [IO.Path]::GetFileNameWithoutExtension($Path)
     $bracketPlaceholder = Get-ContextBracketPlaceholderEvidence $Text
+    $operationalHeading = $Text -match '(?im)^\s*#{2,6}\s+(?:workflow|procedure|runbook|steps?|commands?|command\s+steps?|execution\s+steps?)\s*$'
+    $historyHeading = $Text -match '(?im)^\s*#{2,6}\s+(?:history|historical(?:\s+(?:notes?|record|workflow))?|retired\s+(?:commands?|steps?|workflow)|deprecated\s+(?:commands?|procedure))\s*$'
+    $orderedStepCount = @([regex]::Matches($Text, '(?m)^\s*\d+[.)]\s+\S')).Count
+    $orderedOperationalSteps = ($orderedStepCount -ge 2 -and $Text -match '(?im)^\s*#{2,6}\s+(?:steps?|commands?|workflow|procedure|runbook)\s*$')
+    $retiredCommandLanguage = (
+        $Text -match '(?is)\b(?:retired|deprecated|obsolete)\s+(?:commands?|steps?|workflow|procedure|runbook)\b' -or
+        $Text -match '(?is)\b(?:commands?|steps?|workflow|procedure|runbook)\b.{0,160}\b(?:retired|deprecated|obsolete|historical)\b'
+    )
+    $explicitNonAuthority = (
+        $Text -match '(?is)\b(?:must|should|do)\s+not\s+(?:execute|run|adopt|use)\b.{0,160}\b(?:commands?|steps?|workflow|procedure|material|authority|canonical)\b' -or
+        $Text -match '(?is)\b(?:not|never)\b.{0,100}\b(?:canonical|project-memory)\s+authority\b'
+    )
     return (
         $name -match '(?i)(?:^|[-_.])(?:example|sample)(?:$|[-_.])' -or
         [bool]$bracketPlaceholder.ambiguous_candidate -or
+        $operationalHeading -or
+        $historyHeading -or
+        $orderedOperationalSteps -or
+        $retiredCommandLanguage -or
+        $explicitNonAuthority -or
         ($Text -match '(?im)^\s*#{1,6}\s+.*\b(?:guide|guidance|instructions?|catalog|reference)\b' -and
             $Text -match '(?im)\b(?:use this|add entries|fill in|document .+ here|how to)\b')
     )
@@ -1365,7 +1406,9 @@ function Invoke-Analyze {
             $summary = "Verified legacy project facts migrated from notes."
             $keywords = @("legacy", "verified-facts")
         }
-        elseif (-not [string]::IsNullOrWhiteSpace($summary) -and -not [string]::IsNullOrWhiteSpace($keywordsText)) {
+        elseif (-not [string]::IsNullOrWhiteSpace($summary) -and
+            -not [string]::IsNullOrWhiteSpace($keywordsText) -and
+            (Test-ContextStableAuthorityEvidence $text)) {
             $keywords = @($keywordsText -split '[,\r\n]+' | ForEach-Object { ($_ -replace '^\s*[-*]\s*', '').Trim() } | Where-Object { $_ })
         }
         # NOTE: Filename terms are ambiguity signals only. Stable Context
