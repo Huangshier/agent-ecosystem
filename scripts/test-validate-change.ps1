@@ -202,7 +202,6 @@ function Invoke-ClassifierOutputContractFixtures {
 }
 
 function Invoke-PowerShellEncodingFixtures {
-    $fixtureDirectory = Join-Path $PSScriptRoot "validation/lineage-verifier-fixtures"
     $fixtureId = [Guid]::NewGuid().ToString("N")
     $createdPaths = New-Object 'System.Collections.Generic.List[string]'
     $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
@@ -219,9 +218,9 @@ function Invoke-PowerShellEncodingFixtures {
     }
 
     try {
-        $asciiRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-ascii.ps1"
-        $bomRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-bom.ps1"
-        $noBomRelative = "scripts/validation/lineage-verifier-fixtures/encoding-$fixtureId-no-bom.ps1"
+        $asciiRelative = "scripts/validation/required-validation-gate-fixtures/encoding-$fixtureId-ascii.ps1"
+        $bomRelative = "scripts/validation/required-validation-gate-fixtures/encoding-$fixtureId-bom.ps1"
+        $noBomRelative = "scripts/validation/required-validation-gate-fixtures/encoding-$fixtureId-no-bom.ps1"
         $asciiPath = Join-Path $repoRoot $asciiRelative
         $bomPath = Join-Path $repoRoot $bomRelative
         $noBomPath = Join-Path $repoRoot $noBomRelative
@@ -824,7 +823,7 @@ if (-not $heavyRegression.Contains("validation/test-sensitive-scan.ps1") -or -no
 if ($workflow.Contains("test-sensitive-scan.ps1")) { throw "The hosted classifier workflow must not invoke the full sensitive scan directly." }
 if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier base boundary." }
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier head boundary." }
-if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection != 'false'")).Count -ne 1) { throw "Self-protection job must use the fail-closed classifier decision." }
+if (@([regex]::Matches($workflow, "outputs\.run_validation_self_protection == 'true'")).Count -ne 1) { throw "Self-protection job must run only for a successful classifier control-plane decision." }
 if (-not $workflow.Contains("fromJSON(needs.classify.outputs.required_hosts_json")) { throw "Affected Hosted execution must use the classifier host matrix." }
 if (-not $workflow.Contains("github.event_name == 'push' && github.run_id") -or
     -not $workflow.Contains('cancel-in-progress: ${{ github.event_name != ''push'' }}')) {

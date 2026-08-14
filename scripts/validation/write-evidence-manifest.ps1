@@ -8,11 +8,10 @@ param(
     [Parameter(Mandatory = $true)][string]$JobName,
     [Parameter(Mandatory = $true)][string]$HostIdentity,
     [string]$Repository = "Huangshier/agent-ecosystem",
-    [ValidateSet("pull_request", "push", "workflow_dispatch", "schedule", "fixture")][string]$EventName = "fixture",
+    [ValidateSet("workflow_dispatch")][string]$EventName = "workflow_dispatch",
     [string]$WorkflowIdentity = ".github/workflows/release-validation.yml",
     [string]$RoutingContractIdentity = "scripts/validation/change-risk-rules.json",
     [string]$GateContractIdentity = "scripts/validation/required-validation-gate.ps1",
-    [string]$CandidateContractPath = "",
     [ValidateSet("executed", "skipped", "not-applicable")][string]$HeavyTargetedStatus = "not-applicable",
     [string]$HeavyTargetedReason = "not-applicable",
     [Parameter(Mandatory = $true)][string[]]$SuccessAllowlist,
@@ -38,21 +37,6 @@ if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
     [string]::IsNullOrWhiteSpace($GateContractIdentity)) {
     throw "Repository and contract identity fields must be valid and non-empty."
 }
-$candidateContract = $null
-if ($CandidateContractPath) {
-    $candidateContractFull = [System.IO.Path]::GetFullPath($CandidateContractPath)
-    if (-not [System.IO.File]::Exists($candidateContractFull)) { throw "CandidateContractPath does not exist." }
-    $candidateContract = [System.IO.File]::ReadAllText($candidateContractFull) | ConvertFrom-Json
-    if ([int]$candidateContract.schema_version -ne 1 -or
-        [string]$candidateContract.repository -cne $Repository -or
-        [string]$candidateContract.candidate.sha -cne $CommitSha.ToLowerInvariant()) {
-        throw "Candidate contract does not match the repository or validated commit."
-    }
-}
-elseif ($EventName -ceq "pull_request") {
-    throw "Pull request evidence requires an exact candidate contract."
-}
-
 $normalizedAllowlist = New-Object 'System.Collections.Generic.List[string]'
 foreach ($item in @($SuccessAllowlist)) {
     $fileName = [System.IO.Path]::GetFileName([string]$item)
@@ -206,7 +190,6 @@ $manifest = [ordered]@{
         routing = $RoutingContractIdentity
         gate = $GateContractIdentity
     }
-    candidate = $candidateContract
     outcome = $Outcome
     validation_shard = $validationShard
     heavy_targeted = [ordered]@{

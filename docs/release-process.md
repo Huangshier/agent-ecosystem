@@ -115,56 +115,52 @@ The validator checks:
 ## CI Gate
 
 The repository runs `.github/workflows/release-validation.yml` for pull
-requests, pushes to `main`, weekly schedules, and manual dispatches. These
+requests, pushes to `main`, and manual dispatches. These
 events have deliberately different validation responsibilities:
 
 | Surface | Responsibility | Hosted path |
 |---|---|---|
 | Pull request | Prove the diff and its affected behavior | Classifier-selected quick/affected suites, plus control-plane self-protection when required; validation-routing changes also execute the Windows main-health smoke; PR A's direct bootstrap regression remains on the affected path. |
 | `main` push | Prove that the repository is healthy | One Windows `main health` job for PowerShell/JSON parsing, public-safe/sensitive scanning, and a small copy-install/bootstrap/C3.3 workspace smoke. |
-| Release/checkpoint | Prove the complete publication surface | Manual and scheduled runs retain the `RepositoryCheckpointNeutral` and `RepositoryCheckpointRuntime` validator shards, including the required cross-platform runtime matrix and release-only checks. |
+| Release/checkpoint | Prove the complete publication surface | Manual runs retain the `RepositoryCheckpointNeutral` and `RepositoryCheckpointRuntime` validator shards, including the required cross-platform runtime matrix and release-only checks. |
 
 The main health job is intentionally not a Release candidate. A `main` push
 does not run the `PlatformNeutral` or three-platform `RuntimePlatform` release
 shards and does not call the complete `scripts/validate-release.ps1` suite.
-The main lineage shadow, validation self-protection, candidate evidence, job
-evidence, and fixed gate remain in place for this phase; their later cleanup is
-outside the current change.
+The fixed `validation gate` remains the single required result check. Main does
+not run a lineage shadow, and ordinary PR jobs do not upload per-job evidence
+manifests for a later aggregation step.
 
 For pull requests, the deterministic classifier selects the affected suites
 and the hosts declared by those suites. Changes to validation routing or
 other validation control-plane surfaces also run an independent
 self-protection oracle; validation-routing changes additionally execute the
-Windows main-health smoke before merge. Ordinary pull requests do not schedule
-that job. See
+Windows main-health smoke before merge. Other PRs do not run that job. See
 [PR validation risk tiers](pr-validation-risk-tiers.md) for the authoritative
 routing and conservative fallback rules.
 
 The fixed `validation gate` evaluates the classifier-selected jobs and fails
-closed when classification, required execution, or evidence is incomplete.
-After that gate succeeds, the workflow finalizes one canonical
-candidate-evidence artifact. It binds the exact merge candidate, classifier
-closure, selected artifacts, and the actual base guard, identity guard, and
-final gate run/job identities. The fixed gate and canonical evidence remain the
-required merge evidence; a complete hosted release-validation matrix is not a
-per-PR hard gate.
+closed when classification, required execution, or the conditional main-health
+or self-protection result is incomplete. The classifier and the selected PR
+validation jobs retain the direct exact-candidate identity checks; the gate
+only aggregates job results. A complete hosted release-validation matrix is
+not a per-PR hard gate.
 
-Every `main` push runs the thin main health contract and a lineage shadow over
-the complete first-parent range. The shadow reports only `proven` or
-conservative `full-fallback`; it remains an observation/control-plane check and
-does not turn main health into Release validation. Weekly and manually
-dispatched runs use the broader `RepositoryCheckpoint` profile for release
+Every `main` push runs only the thin main health contract and does not select a
+Release profile. Manually dispatched runs use the broader `RepositoryCheckpoint`
+profile for release
 archive, governance, evaluation, benchmark, historical, and other
 checkpoint-only assertions.
 
-The workflow uses event-aware GitHub Actions concurrency. New pull-request,
-scheduled, and manually dispatched runs may cancel an older same-event,
-same-ref run, while every `push` to `main` has a unique concurrency identity
-and must finish observing its complete `before..sha` range.
+The workflow uses event-aware GitHub Actions concurrency. New pull-request and
+manually dispatched runs may cancel an older same-event, same-ref run, while
+every `push` to `main` has a unique concurrency identity.
 
-Successful validation jobs upload explicit evidence allowlists, while failed
-jobs preserve their complete scratch directory for diagnosis. Treat evaluator
-failures and other required CI failures as release blockers unless the
+Successful manual Release/checkpoint jobs upload explicit evidence allowlists,
+while failed Release jobs preserve their complete scratch directory for
+diagnosis. Ordinary PR validation is represented by job results and direct
+candidate checks. Treat evaluator failures and other required CI failures as
+release blockers unless the
 maintainer explicitly records a platform-specific deferral for a pre-release
 calibration run.
 
@@ -202,8 +198,8 @@ surfaces, not a separate approval process.
 
 ## Validation Tiers
 
-The fixed hosted `validation gate` and canonical candidate evidence remain the
-fail-closed merge evidence for pull requests to `main`. The classifier chooses
+The fixed hosted `validation gate` remains the fail-closed merge result for
+pull requests to `main`. The classifier and selected validation jobs choose
 which affected suites and hosts must satisfy that gate; skipped suites are not
 reported as passing. Pull requests must also report validation evidence in the
 PR body. The tiers below guide local validation depth before opening or
@@ -338,7 +334,7 @@ but this is not required for `v0.5.0`.
 4. Review `validation-result.json` and any public diff.
 5. Open or update a pull request when using CI for release review.
 6. Confirm the PR classifier-selected suites and hosts, the fixed
-   `validation gate`, and canonical candidate evidence pass for the final head.
+   `validation gate`, and direct candidate identity checks pass for the final head.
 7. Record only public-safe release status in this repository.
 8. After maintainer authorization, complete release-finalization alignment and
    rerun the full local gate with `-TargetVersion <target-version>`.

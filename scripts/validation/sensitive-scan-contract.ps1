@@ -16,7 +16,6 @@ $SensitiveScanHighRiskPatterns = @(
 $SensitiveScanKeywordPattern = '(?i)\b(secret|password|api[_ -]?key|credential|credentials|cookie|cookies|token|tokens|private key|private keys)\b'
 
 $SensitiveScanAllowedReferences = @{
-    ".github/workflows/release-validation.yml" = '^\s*LINEAGE_GITHUB_AUTH:\s+\$\{\{\s*github\.token\s*\}\}\s*$'
     "scripts/validate-change.ps1" = '^\s*\$scanScript = Join-Path \$scriptDir "validation/pr-secret-keyword-scan\.ps1"\s*$'
 }
 

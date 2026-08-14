@@ -225,8 +225,8 @@ $sensitiveResult = [ordered]@{
 if ([bool]$sensitiveDecision.execute) {
     $fixtureResult = Invoke-JsonChild -ScriptPath $sensitiveScanTester -Arguments @("-Json")
     $fixtureCaseCount = @($fixtureResult.cases).Count
-    if ([string]$fixtureResult.status -cne "PASS" -or [int]$fixtureResult.pass -ne 17 -or [int]$fixtureResult.fail -ne 0 -or $fixtureCaseCount -ne 17) {
-        throw "Sensitive scan self-protection requires 17/17 PASS; got status=$($fixtureResult.status) cases=$fixtureCaseCount pass=$($fixtureResult.pass) fail=$($fixtureResult.fail)."
+    if ([string]$fixtureResult.status -cne "PASS" -or [int]$fixtureResult.pass -ne 16 -or [int]$fixtureResult.fail -ne 0 -or $fixtureCaseCount -ne 16) {
+        throw "Sensitive scan self-protection requires 16/16 PASS; got status=$($fixtureResult.status) cases=$fixtureCaseCount pass=$($fixtureResult.pass) fail=$($fixtureResult.fail)."
     }
     $sensitiveResult = [ordered]@{
         status = [string]$fixtureResult.status

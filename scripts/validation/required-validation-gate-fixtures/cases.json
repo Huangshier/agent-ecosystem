@@ -87,7 +87,7 @@
     "classify": "success",
     "quick": "skipped",
     "targeted": "skipped",
-    "self_protection": "success",
+    "self_protection": "skipped",
     "self_protection_required": "true",
     "main_health": "success",
     "platform_neutral": "skipped",
@@ -111,19 +111,6 @@
   {
     "name": "workflow-dispatch-checkpoint-pass",
     "event_name": "workflow_dispatch",
-    "tier": "3",
-    "classify": "success",
-    "quick": "skipped",
-    "targeted": "skipped",
-    "self_protection": "skipped",
-    "self_protection_required": "true",
-    "platform_neutral": "success",
-    "pwsh_matrix": "success",
-    "should_pass": true
-  },
-  {
-    "name": "weekly-checkpoint-pass",
-    "event_name": "schedule",
     "tier": "3",
     "classify": "success",
     "quick": "skipped",
@@ -215,7 +202,7 @@
   },
   {
     "name": "checkpoint-non-tier3",
-    "event_name": "schedule",
+    "event_name": "workflow_dispatch",
     "tier": "2",
     "classify": "success",
     "quick": "skipped",

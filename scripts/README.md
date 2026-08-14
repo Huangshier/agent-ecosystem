@@ -48,9 +48,9 @@ dual-host or dual-semantics support.
 
 The heavyweight classifier regression entrypoint is
 `test-heavy-targeted-regression.ps1`; `test-validate-change.ps1` remains the
-lightweight routing-contract entrypoint. The complete 17-case sensitive scan
-fixture runs only from the heavy self-protection path when validation control
-surface paths change; the classifier still performs the real PR diff scan.
+lightweight routing-contract entrypoint. The complete sensitive scan fixture
+runs only from the heavy self-protection path when validation control surface
+paths change; the classifier still performs the real PR diff scan.
 
 Slice A provides the read-only project asset parser and its self-contained
 fixture suite:

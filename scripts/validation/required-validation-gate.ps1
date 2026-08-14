@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$knownEvents = @("pull_request", "push", "workflow_dispatch", "schedule")
+$knownEvents = @("pull_request", "push", "workflow_dispatch")
 $knownTiers = @("0", "1", "2", "3")
 $knownResults = @("success", "failure", "cancelled", "skipped")
 $results = [ordered]@{
@@ -34,14 +34,15 @@ if ($knownEvents -cnotcontains $EventName) {
 if ($knownTiers -cnotcontains $Tier) {
     throw "Required validation gate received missing or invalid Tier '$Tier'."
 }
-if ($EventName -in @("workflow_dispatch", "schedule") -and $Tier -cne "3") {
+if ($EventName -ceq "workflow_dispatch" -and $Tier -cne "3") {
     throw "Required validation gate requires Tier '3' for checkpoint events, got '$Tier'."
 }
 $booleanValues = @("true", "false")
 if ($booleanValues -cnotcontains $SelfProtectionRequired) {
     throw "Required validation gate received an invalid suite/oracle routing decision."
 }
-$expectedSelfProtection = if ($SelfProtectionRequired -ceq "true" -and $EventName -in @("pull_request", "push")) { "success" } else { "skipped" }
+# NOTE: self-protection 只属于验证控制面 PR；main 与手动 Release/checkpoint 不重复运行。
+$expectedSelfProtection = if ($SelfProtectionRequired -ceq "true" -and $EventName -ceq "pull_request") { "success" } else { "skipped" }
 foreach ($entry in $results.GetEnumerator()) {
     if ($knownResults -cnotcontains [string]$entry.Value) {
         throw "Required validation gate received unknown result '$($entry.Value)' for '$($entry.Key)'."

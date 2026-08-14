@@ -7,8 +7,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-  schedule:
-    - cron: '17 3 * * 1'
 
 permissions:
   contents: read
@@ -121,17 +119,6 @@ jobs:
           "run_heavy_targeted_regression=$(([bool]$result.run_heavy_targeted_regression).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "heavy_targeted_reason=$($result.heavy_targeted_reason)" >> $env:GITHUB_OUTPUT
 
-      - name: Upload classification evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ github.event_name == 'pull_request' && format('change-risk-classification-attempt-{0}', github.run_attempt) || 'change-risk-classification' }}
-          path: |
-            ${{ runner.temp }}/change-routing-tests.json
-            ${{ runner.temp }}/change-classification.json
-            ${{ runner.temp }}/candidate-contract.json
-          if-no-files-found: error
-
   quick-validation:
     name: quick validation
     needs: classify
@@ -168,42 +155,6 @@ jobs:
             -Mode quick `
             -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-      - name: Write quick validation evidence manifest
-        if: always()
-        shell: pwsh
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-quick-validation"
-          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
-          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          ./scripts/validation/write-evidence-manifest.ps1 `
-            -ScratchRoot $scratch `
-            -Outcome $outcome `
-            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}" `
-            -JobName "${{ github.job }}" `
-            -HostIdentity $hostIdentity `
-            -Repository "${{ github.repository }}" `
-            -EventName "${{ github.event_name }}" `
-            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
-            -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
-      - name: Upload quick validation success evidence
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: quick-validation-attempt-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/agent-ecosystem-quick-validation/targeted-validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-quick-validation/evidence-manifest.json
-          if-no-files-found: error
-      - name: Upload quick validation failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: quick-validation-failure-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/agent-ecosystem-quick-validation
-          if-no-files-found: error
-
   targeted-validation:
     name: affected validation (${{ matrix.os }})
     needs: classify
@@ -245,46 +196,10 @@ jobs:
              -ExecutionHost "${{ matrix.os }}" `
              -ScratchRoot $scratch `
             -Json | Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
-      - name: Write targeted validation evidence manifest
-        if: always()
-        shell: pwsh
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-targeted-validation"
-          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
-          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          ./scripts/validation/write-evidence-manifest.ps1 `
-            -ScratchRoot $scratch `
-            -Outcome $outcome `
-            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}" `
-            -JobName "${{ github.job }}" `
-            -HostIdentity $hostIdentity `
-            -Repository "${{ github.repository }}" `
-            -EventName "${{ github.event_name }}" `
-            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
-            -SuccessAllowlist @("targeted-validation-result.json", "evidence-manifest.json")
-      - name: Upload targeted validation success evidence
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: affected-validation-${{ matrix.os }}-attempt-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/agent-ecosystem-targeted-validation/targeted-validation-result.json
-            ${{ runner.temp }}/agent-ecosystem-targeted-validation/evidence-manifest.json
-          if-no-files-found: error
-      - name: Upload targeted validation failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: affected-validation-${{ matrix.os }}-failure-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/agent-ecosystem-targeted-validation
-          if-no-files-found: error
-
   validation-self-protection:
     name: validation self-protection
     needs: classify
-    if: always() && (github.event_name == 'pull_request' || github.event_name == 'push') && (needs.classify.result != 'success' || needs.classify.outputs.run_validation_self_protection != 'false')
+    if: always() && github.event_name == 'pull_request' && needs.classify.result == 'success' && needs.classify.outputs.run_validation_self_protection == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -311,51 +226,12 @@ jobs:
       - name: Run independent validation mutation oracle
         shell: pwsh
         run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-validation-self-protection"
-          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          ./scripts/test-heavy-targeted-regression.ps1 -Json |
-            Tee-Object -FilePath (Join-Path $scratch "validation-self-protection.json")
-      - name: Write self-protection evidence manifest
-        if: always()
-        shell: pwsh
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-validation-self-protection"
-          $outcome = if ("${{ job.status }}" -eq "success") { "success" } else { "failure" }
-          $hostIdentity = "${{ runner.os }}-$($PSVersionTable.PSEdition)-$($PSVersionTable.PSVersion)"
-          $candidatePath = if ("${{ github.event_name }}" -eq "pull_request") { Join-Path $env:RUNNER_TEMP "candidate-contract.json" } else { "" }
-          ./scripts/validation/write-evidence-manifest.ps1 `
-            -ScratchRoot $scratch `
-            -Outcome $outcome `
-            -CommitSha "${{ needs.classify.outputs.validation_sha }}" `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}" `
-            -JobName "${{ github.job }}" `
-            -HostIdentity $hostIdentity `
-            -Repository "${{ github.repository }}" `
-            -EventName "${{ github.event_name }}" `
-            -CandidateContractPath $candidatePath `
-            -SuccessAllowlist @("validation-self-protection.json", "evidence-manifest.json")
-      - name: Upload self-protection success evidence
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ github.event_name == 'pull_request' && format('validation-self-protection-attempt-{0}', github.run_attempt) || 'validation-self-protection' }}
-          path: |
-            ${{ runner.temp }}/agent-ecosystem-validation-self-protection/validation-self-protection.json
-            ${{ runner.temp }}/agent-ecosystem-validation-self-protection/evidence-manifest.json
-          if-no-files-found: error
-      - name: Upload self-protection failure evidence
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ github.event_name == 'pull_request' && format('validation-self-protection-failure-attempt-{0}', github.run_attempt) || 'validation-self-protection-failure' }}
-          path: ${{ runner.temp }}/agent-ecosystem-validation-self-protection
-          if-no-files-found: error
+          ./scripts/test-heavy-targeted-regression.ps1 -Json
 
   validate-platform-neutral:
     name: validate platform-neutral contracts
     needs: classify
-    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -390,6 +266,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -EventName "${{ github.event_name }}" `
             -SuccessAllowlist @("validation-result.json", "evidence-manifest.json")
       - name: Upload platform-neutral validation success evidence
         if: success()
@@ -430,7 +307,7 @@ jobs:
   validate:
     name: validate pwsh (${{ matrix.os }})
     needs: classify
-    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -473,6 +350,7 @@ jobs:
             -RunAttempt "${{ github.run_attempt }}" `
             -JobName "${{ github.job }}" `
             -HostIdentity $hostIdentity `
+            -EventName "${{ github.event_name }}" `
             -HeavyTargetedStatus $heavyStatus `
             -HeavyTargetedReason $heavyReason `
             -SuccessAllowlist $successAllowlist
@@ -506,28 +384,6 @@ jobs:
       - main-health
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.classify.outputs.validation_sha }}
-      - name: Verify exact candidate identity
-        if: github.event_name == 'pull_request'
-        shell: pwsh
-        run: |
-          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
-          ./scripts/validation/resolve-pull-request-candidate.ps1 `
-            -Repository "${{ github.repository }}" `
-            -PullRequestNumber ([int]$env:PR_NUMBER) `
-            -BaseRef $env:PR_BASE_REF `
-            -BaseSha $env:PR_BASE_SHA `
-            -HeadRef $env:PR_HEAD_REF `
-            -HeadSha $env:PR_HEAD_SHA `
-            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
-            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
-            -ExpectedCandidateParents $expectedParents `
-            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
-
       - name: Evaluate required validation contract
         shell: pwsh
         env:
@@ -553,161 +409,3 @@ jobs:
             -MainHealthResult $env:MAIN_HEALTH_RESULT `
             -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
-
-      - name: Write current-generation final gate evidence
-        if: success() && github.event_name == 'pull_request'
-        shell: pwsh
-        run: |
-          $outputRoot = Join-Path $env:RUNNER_TEMP "final-validation-gate"
-          New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-          [ordered]@{
-            schema_version = 1
-            proof_kind = "final-validation-gate"
-            repository = "${{ github.repository }}"
-            pr_number = [int]$env:PR_NUMBER
-            head_sha = "${{ github.event.pull_request.head.sha }}"
-            run_id = "${{ github.run_id }}"
-            run_attempt = "${{ github.run_attempt }}"
-            job = "validation-gate"
-            check_name = "validation gate"
-            conclusion = "success"
-          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputRoot "final-gate.json") -Encoding UTF8
-
-      - name: Upload current-generation final gate evidence
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
-        with:
-          name: final-validation-gate-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/final-validation-gate/final-gate.json
-          if-no-files-found: error
-
-  canonical-candidate-evidence:
-    name: canonical candidate evidence
-    needs:
-      - classify
-      - validation-gate
-    if: always() && github.event_name == 'pull_request' && needs.classify.result == 'success' && needs.validation-gate.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout exact candidate
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.classify.outputs.validation_sha }}
-
-      - name: Verify final candidate identity
-        shell: pwsh
-        run: |
-          $expectedParents = '${{ needs.classify.outputs.candidate_parents_json }}' | ConvertFrom-Json
-          ./scripts/validation/resolve-pull-request-candidate.ps1 `
-            -Repository "${{ github.repository }}" `
-            -PullRequestNumber ([int]$env:PR_NUMBER) `
-            -BaseRef $env:PR_BASE_REF `
-            -BaseSha $env:PR_BASE_SHA `
-            -HeadRef $env:PR_HEAD_REF `
-            -HeadSha $env:PR_HEAD_SHA `
-            -ExpectedCandidateSha "${{ needs.classify.outputs.validation_sha }}" `
-            -ExpectedCandidateTree "${{ needs.classify.outputs.candidate_tree }}" `
-            -ExpectedCandidateParents $expectedParents `
-            -OutputPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json")
-
-      - name: Download current-run evidence fragments
-        uses: actions/download-artifact@v8
-        with:
-          path: ${{ runner.temp }}/candidate-fragments
-          pattern: '*-attempt-${{ github.run_attempt }}'
-
-      - name: Finalize canonical candidate evidence
-        shell: pwsh
-        run: |
-          $outputRoot = Join-Path $env:RUNNER_TEMP "canonical-candidate-evidence"
-          New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-          ./scripts/validation/finalize-candidate-evidence.ps1 `
-            -CandidateContractPath (Join-Path $env:RUNNER_TEMP "candidate-contract.json") `
-            -ClassificationPath (Join-Path $env:RUNNER_TEMP "candidate-fragments/change-risk-classification-attempt-${{ github.run_attempt }}/change-classification.json") `
-            -FragmentsRoot (Join-Path $env:RUNNER_TEMP "candidate-fragments") `
-            -FinalGatePath (Join-Path $env:RUNNER_TEMP "candidate-fragments/final-validation-gate-attempt-${{ github.run_attempt }}/final-gate.json") `
-            -Repository "${{ github.repository }}" `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}" `
-            -WorkflowIdentity ".github/workflows/release-validation.yml" `
-            -RoutingContractIdentity "scripts/validation/change-risk-rules.json" `
-            -GateContractIdentity "scripts/validation/required-validation-gate.ps1" `
-            -OutputPath (Join-Path $outputRoot "evidence-manifest.json")
-
-      - name: Summarize canonical identity
-        shell: pwsh
-        run: |
-          $evidence = Get-Content -Raw (Join-Path $env:RUNNER_TEMP "canonical-candidate-evidence/evidence-manifest.json") | ConvertFrom-Json
-          @(
-            "### Canonical candidate evidence"
-            ""
-            "- candidate: ``$($evidence.candidate.sha)``"
-            "- tree: ``$($evidence.candidate.tree)``"
-            "- ordered parents: ``$(@($evidence.candidate.ordered_parents) -join ', ')``"
-            "- base/head: ``$($evidence.base.sha)`` / ``$($evidence.head.sha)``"
-            "- digest: ``$($evidence.canonical_evidence_digest)``"
-          ) >> $env:GITHUB_STEP_SUMMARY
-
-      - name: Upload canonical candidate evidence
-        uses: actions/upload-artifact@v7
-        with:
-          name: canonical-candidate-evidence-pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/canonical-candidate-evidence/evidence-manifest.json
-          if-no-files-found: error
-          retention-days: 30
-
-  main-lineage-shadow:
-    name: main lineage shadow
-    needs: classify
-    if: always() && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout pushed main range
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ github.sha }}
-
-      - name: Evaluate full first-parent lineage
-        shell: pwsh
-        env:
-          LINEAGE_GITHUB_AUTH: ${{ github.token }}
-        run: |
-          $scratch = Join-Path $env:RUNNER_TEMP "main-lineage-shadow"
-          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $forced = [System.Convert]::ToBoolean("${{ github.event.forced }}")
-          ./scripts/validation/lineage-verifier.ps1 `
-            -Repository "${{ github.repository }}" `
-            -Before "${{ github.event.before }}" `
-            -Sha "${{ github.sha }}" `
-            -GitHubToken $env:LINEAGE_GITHUB_AUTH `
-            -Forced:$forced `
-            -ScratchRoot (Join-Path $scratch "downloads") `
-            -OutputPath (Join-Path $scratch "lineage-observation.json") `
-            -RunId "${{ github.run_id }}" `
-            -RunAttempt "${{ github.run_attempt }}"
-
-      - name: Summarize shadow observation
-        if: always()
-        shell: pwsh
-        run: |
-          $path = Join-Path $env:RUNNER_TEMP "main-lineage-shadow/lineage-observation.json"
-          if (-not (Test-Path $path)) { throw "Lineage evaluator did not produce an observation." }
-          $observation = Get-Content -Raw $path | ConvertFrom-Json
-          @(
-            "### Main lineage shadow"
-            ""
-            "- decision: **$($observation.decision)**"
-            "- range: ``$($observation.before)..$($observation.sha)``"
-            "- commits: $(@($observation.first_parent_range).Count)"
-            "- fallback reasons: $(@($observation.fallback_reasons) -join ', ')"
-          ) >> $env:GITHUB_STEP_SUMMARY
-
-      - name: Upload lineage observation
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: main-lineage-shadow-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/main-lineage-shadow/lineage-observation.json
-          if-no-files-found: error
