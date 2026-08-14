@@ -1,36 +1,36 @@
 ---
-name: Bug report
-about: Report a bug or unexpected behavior.
+name: Bug 报告
+about: 报告 bug 或 unexpected behavior。
 title: ""
 labels: bug, triage:needs-human
 assignees: ""
 ---
 
-# Bug Report
+# Bug 报告（Bug Report）
 
-## Description
+## 描述（Description）
 
-<!-- Describe the bug clearly and concisely. -->
+<!-- 清晰、简洁地描述 bug。 -->
 
-## Steps to Reproduce
+## 复现步骤（Steps to Reproduce）
 
 1.
 2.
 3.
 
-## Expected Behavior
+## 预期行为（Expected Behavior）
 
-<!-- What should happen? -->
+<!-- 应该发生什么？ -->
 
-## Actual Behavior
+## 实际行为（Actual Behavior）
 
-<!-- What actually happens? Include error messages, logs, or screenshots if helpful. -->
+<!-- 实际发生了什么？必要时附上原始错误、logs 或 screenshots。 -->
 
 ## Environment
 
-- OS:
-- Shell / Terminal:
-- Agent Ecosystem version (if applicable):
+- OS：
+- Shell / Terminal：
+- Agent Ecosystem version (if applicable)：
 
 ## Validation
 

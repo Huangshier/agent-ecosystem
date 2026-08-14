@@ -47,7 +47,7 @@ catch {
 
 try {
     $rootGuidanceFiles = [ordered]@{
-        "AGENTS.md" = @('Root `.agents/` is local runtime memory', 'If local `.agents/` files are absent or stale', '`.agents/commands/README.md`', 'Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.')
+        "AGENTS.md" = @('唯一 public agent behavior entry', 'GitHub issues and pull requests', '## Project Language Policy', 'docs/agent-governance.md', 'docs/language-policy.md', 'docs/release-process.md', 'Actor Boundary')
         "knowledge-hub/templates/languages/en/project-root/AGENTS.md" = @("single authoritative project behavior contract", "## Working Philosophy", "## On Stopping to Ask", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Verification And Completion", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "## Project Work Packages", '`.agents/commands/README.md`')
         "knowledge-hub/templates/languages/zh-CN/project-root/AGENTS.md" = @("唯一权威的项目行为契约", "## 工作方式", "## 何时停下来询问", "## 写入授权边界", "## 模糊任务入口", "## 验证与完成", "## 交付流程", "## PR 就绪与阶段收尾记忆同步门禁", "## 项目工作包", '`.agents/commands/README.md`')
         "skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/en/project-root/AGENTS.md" = @("single authoritative project behavior contract", "## Working Philosophy", "## On Stopping to Ask", "## Write Authorization Boundaries", "## Ambiguous Task Gate", "## Verification And Completion", "## Delivery Protocol & Working Loop", "## PR-Ready And Phase-Close Memory Sync Gate", "## Project Work Packages", '`.agents/commands/README.md`')

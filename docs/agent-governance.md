@@ -30,9 +30,12 @@ An agent may:
 An agent must not:
 
 - merge to `main`;
+- mark a pull request ready for review;
+- create tags;
 - publish releases;
 - modify repository settings;
 - manage repository secrets;
+- publish a GitHub Release;
 - bypass required review or CI;
 - present an unreviewed agent decision as a maintainer decision.
 
@@ -68,6 +71,12 @@ one of:
   that explicitly requires the operation for this work type;
 - an already-approved work item or workflow step that names the operation and
   actor boundary.
+
+普通公开写入优先使用既有 bot workflow / GitHub App 路径。如果 workflow、
+repository settings、secrets 或 permission 限制导致 bot 无法完成公开写入，
+只有 maintainer 明确授权该 fallback 后才可使用 maintainer fallback。此时
+pull request 必须包含 `## Actor Boundary`，记录失败原因、不可用的 bot
+路径和实际使用的 maintainer actor。bot 路径失败不等于可以静默切换身份。
 
 Authorization must come from evidence outside the agent's own output. The
 following are not sufficient by themselves to authorize an external write:
@@ -113,10 +122,10 @@ over-authorizes under uncertainty. Instead:
 ### Actor Verification
 
 When an external write requires a specific actor identity (bot account, service
-account, or maintainer account), the agent should verify the actor before
-writing when possible. If the actor cannot be verified, stop before writing and
-report the missing verification. If post-write metadata does not match the
-intended actor, stop before further external writes and report the mismatch.
+account, or maintainer account), the agent must verify the actor before writing
+when possible. If the actor cannot be verified, stop before writing and report
+the missing verification. If post-write metadata does not match the intended
+actor, stop before further external writes and report the mismatch.
 
 ## Automation Identity
 
@@ -128,7 +137,9 @@ The configured automation identity is the `agent-ecosystem-bot` GitHub App,
 installed only on this repository with least-privilege permissions. Work is not
 trusted only because it comes from the App. Agent-assisted issues and pull
 requests must still state the actor boundary in the issue or pull request body,
-and maintainer authority remains required for merge and release decisions.
+maintainer authority remains required for merge and release decisions。通过
+bot-backed public write flow 时，commit author、committer 和 pull request
+author 应保持为 `agent-ecosystem-bot[bot]`。
 
 ## Pull Request Identity Guard
 
@@ -155,12 +166,12 @@ A mismatch fails the hosted check with the affected commit and field. Repair the
 branch by amending the affected commits so both author and committer use the bot
 identity, then update the branch through the bot-backed public write flow.
 
-Actor Boundary exceptions are allowed only when they are explicit and
-reviewable. If a bot-authored pull request needs a maintainer-authored commit
-because of workflow, repository setting, secret, or permission limits, the pull
-request body must include an `## Actor Boundary` section explaining the reason.
-The guard will surface the mismatch as a warning instead of failing, leaving the
-exception visible for maintainer review. Do not infer exceptions silently.
+Actor Boundary exception 仅限 maintainer fallback。只有 workflow、repository
+setting、secret 或 permission 限制阻断 bot-backed public write flow，且
+maintainer 已明确授权 fallback 时才允许例外。pull request body 必须包含
+`## Actor Boundary`，说明原因和确切的 actor boundary。guard 会将该 mismatch
+作为 warning 暴露而不是直接失败，以便 maintainer review；不得静默推断
+例外，未获授权时 bot 路径失败就必须停止。
 
 ## Required Labels
 
@@ -360,6 +371,12 @@ may be tightened as the automation identity matures.
 
 The configured GitHub App identity is `agent-ecosystem-bot`.
 
+普通 public branch 和 pull request 写入应使用既有 bot-backed workflow /
+GitHub App 路径。本 PR 不新增永久 `workflows: write` permission，也不改变
+GitHub App permissions。如果 bot 因 workflow、settings、secrets 或 permission
+限制无法完成写入，除非 maintainer 已明确授权 maintainer fallback 且 PR
+记录 `Actor Boundary`，否则必须停止。
+
 Initial repository permissions should be limited to the abilities actually
 needed for issue and pull request preparation:
 
@@ -369,8 +386,9 @@ needed for issue and pull request preparation:
 - pull requests: read/write for pull request creation and updates;
 - checks, statuses, or actions: read only when the automation reads CI state.
 
-Do not grant administration, secrets, members, deployments, release publishing,
-or branch-protection modification permissions for the first phase.
+第一阶段不得授予 administration、secrets、members、deployments、release
+publishing、workflow dispatch、`workflows: write` 或 branch-protection
+modification permissions。
 
 The GitHub App private key, installation token, and repository secrets must not
 be committed, pasted into issues or pull requests, or stored in project memory.

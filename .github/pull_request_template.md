@@ -1,4 +1,7 @@
-# Pull Request
+# Pull Request（Pull Request）
+
+解释性标题和正文默认使用简体中文；`paths`、commands、code/API/config
+fields、labels、state 以及其他机器可读值保留英文或原文。
 
 ## Actor
 
@@ -6,23 +9,26 @@
 - Implemented by: agent / human
 - Reviewed by: pending / human / second-agent
 - Merge authority: maintainer
+- Actor Boundary: bot-backed public write flow / maintainer fallback (reason required)
 
 ## Linked Issues
 
-Fixes #
+Refs #<number>
+
+<!-- 只有确实应在 merge 后自动关闭 Issue 时才使用 `Fixes #<number>`。 -->
 
 ## Issue-To-Change Mapping
 
-| Change | Source issue | Required? | Validation |
+| 变更 | Source issue | Required? | Validation |
 |---|---:|---|---|
 |  |  | yes/no |  |
 
 ## Necessity Assessment
 
-- Why this is needed:
-- Risk if not fixed:
-- Why now:
-- Alternatives considered:
+- Why this is needed：
+- Risk if not fixed：
+- Why now：
+- Alternatives considered：
 
 ## Scope Control
 
@@ -30,6 +36,10 @@ Fixes #
 - [ ] Public/private boundary checked
 - [ ] Documentation updated if needed
 - [ ] Release metadata updated if needed
+
+Release impact: none
+
+<!-- Allowed values: none / patch / minor / major。详见 docs/release-process.md。 -->
 
 ## Base / Stack Safety
 
@@ -40,7 +50,8 @@ Fixes #
 
 ## Validation
 
-- Validation tier:
+- Validation tier：
+- Affected-surface command(s)：
 
 ```text
 # command output summary
@@ -48,10 +59,10 @@ Fixes #
 
 ## Rollback Plan
 
-- Revert commit:
-- Files affected:
-- User-facing compatibility risk:
-- Safe rollback window:
+- Revert commit：
+- Files affected：
+- User-facing compatibility risk：
+- Safe rollback window：
 
 ## Human Decision
 

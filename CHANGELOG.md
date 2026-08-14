@@ -4,7 +4,16 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.7.1` release.
+- Completed the C3.3 implementation and the public `project-workspace`
+  capability, including the current project asset and discovery boundaries.
+- Completed the one-time default / recommended runtime cutover and converged
+  active Runtime authority to `project-bootstrap` and `project-workspace`.
+- Converged post-#333 validation responsibility: pull requests prove the diff
+  and affected behavior, `main` push health remains a separate boundary, and
+  full Release/checkpoint validation is explicit.
+- These post-`v0.7.1` C3.3 and default-cutover changes provide a minor-level basis
+  for the next Release review. This section remains `Unreleased` and does not
+  publish a version or date.
 
 ## v0.7.1 - 2026-08-04
 
