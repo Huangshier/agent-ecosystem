@@ -384,6 +384,11 @@ jobs:
       - main-health
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout validation gate script
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
       - name: Evaluate required validation contract
         shell: pwsh
         env:
