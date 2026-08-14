@@ -33,6 +33,7 @@ $classification = if (@($ChangedPath).Count -gt 0) {
 
 $checks = New-Object 'System.Collections.Generic.List[object]'
 $telemetry = New-Object 'System.Collections.Generic.List[object]'
+$suiteEvidence = [ordered]@{}
 $script:targetedCheckStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $script:targetedCheckCheckpointMs = 0L
 $script:targetedCheckCheckpointUtc = [DateTimeOffset]::UtcNow
@@ -338,12 +339,40 @@ if ([int]$classification.detected_tier -ge 1) {
         $executedSuites.Add("agent-skill-bridge")
     }
     if ($requiredSuites -contains "bootstrap-safety") {
-        & (Join-Path $scriptDir "validation/project-bootstrap-safety-fixture.ps1") `
-            -RepositoryRoot $repoRoot `
-            -ScratchRoot (Join-Path $ScratchRoot "bootstrap") `
-            -Json | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Project bootstrap safety fixtures failed." }
-        Add-Result "bootstrap-safety" "PASS" "Project bootstrap proposal, backup, and write-boundary fixtures passed."
+        $bootstrapSafetyOutput = @(
+            & (Join-Path $scriptDir "validation/project-bootstrap-safety-fixture.ps1") `
+                -RepositoryRoot $repoRoot `
+                -ScratchRoot (Join-Path $ScratchRoot "bootstrap") `
+                -Json
+        ) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Project bootstrap safety fixtures failed.`n$bootstrapSafetyOutput" }
+        $bootstrapSafetyEvidence = $bootstrapSafetyOutput | ConvertFrom-Json
+        if ([string]$bootstrapSafetyEvidence.status -cne "PASS" -or
+            [int]$bootstrapSafetyEvidence.fixture_count -lt 6) {
+            throw "Project bootstrap safety fixture suite returned incomplete evidence."
+        }
+
+        . (Join-Path $scriptDir "validation/release-bootstrap-checks.ps1")
+        $directBootstrapEvidence = Invoke-DirectBootstrapRegressionChecks `
+            -ScratchRoot (Join-Path $ScratchRoot "bootstrap-direct-regression") `
+            -BootstrapScript (Join-Path $repoRoot "skills/project-bootstrap/scripts/bootstrap_project.ps1") `
+            -HubDir (Join-Path $repoRoot "knowledge-hub")
+        if ([string]$directBootstrapEvidence.status -cne "PASS" -or
+            [int]$directBootstrapEvidence.fixture_count -ne 2) {
+            throw "Direct bootstrap regression entrypoint returned incomplete evidence."
+        }
+
+        $suiteEvidence.bootstrap_safety = [ordered]@{
+            direct_regression = $directBootstrapEvidence
+            supporting_safety_fixtures = [ordered]@{
+                status = [string]$bootstrapSafetyEvidence.status
+                fixture_count = [int]$bootstrapSafetyEvidence.fixture_count
+                fixture_names = @($bootstrapSafetyEvidence.fixtures | ForEach-Object { [string]$_.name })
+            }
+        }
+        Add-Result "bootstrap-safety" "PASS" ("Executed direct bootstrap regression fixtures: {0}; supporting safety fixtures: {1}." -f `
+            (@($directBootstrapEvidence.fixtures | ForEach-Object { [string]$_.name }) -join ", "),
+            (@($bootstrapSafetyEvidence.fixtures | ForEach-Object { [string]$_.name }) -join ", "))
         $executedSuites.Add("bootstrap-safety")
     }
     if ($requiredSuites -contains "template-consistency") {
@@ -408,6 +437,7 @@ $result = [ordered]@{
     classification = $classification
     checks = @($checks.ToArray())
     telemetry = @($telemetry.ToArray())
+    suite_evidence = $suiteEvidence
     executed_suites = $(if ($null -eq $executedSuites) { @() } else { @($executedSuites.ToArray()) })
     module_coverage = $(if ($null -eq $moduleCoverage) { @() } else { @($moduleCoverage.ToArray()) })
     executed_suite_count = $(if ($null -eq $executedSuites) { 0 } else { $executedSuites.Count })
