@@ -1,7 +1,6 @@
 ﻿# Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks: No parameters; runs runtime behavior, upgrade/migration flow checks in the original order.
 # Knowledge hub checks (catalog, experience search, promote closure, duplicate helper hash) were extracted to
 # release-knowledge-hub-checks.ps1 (Phase 3) and are now invoked via Invoke-ReleaseKnowledgeHubChecks.
-function Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks {
 
 # New-LegacyProjectSeed: 显式建立 existing legacy project fixture，使 bootstrap 走 legacy
 # scaffold 路径，而不是 post-cutover 后的 C3.3 fresh bootstrap。写入 .agents/notes.md 作为
@@ -16,6 +15,106 @@ function New-LegacyProjectSeed {
     New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
     Set-Content -LiteralPath (Join-Path $agentDir "notes.md") -Value "# Legacy project memory fixture." -Encoding UTF8
 }
+
+# Invoke-DirectBootstrapRegressionChecks: 直接执行 bootstrap 的 fresh 与 existing
+# legacy 主路径。该小型入口复用 release bootstrap checks 的 legacy seed，供 PR
+# targeted validation 直接证明行为覆盖，而不依赖完整 Release validator。
+function Invoke-DirectBootstrapRegressionChecks {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ScratchRoot,
+        [Parameter(Mandatory = $true)][string]$BootstrapScript,
+        [Parameter(Mandatory = $true)][string]$HubDir
+    )
+
+    if (-not (Test-Path -LiteralPath $BootstrapScript -PathType Leaf)) {
+        throw "Direct bootstrap regression entrypoint could not find bootstrap script: $BootstrapScript"
+    }
+    if (-not (Test-Path -LiteralPath $HubDir -PathType Container)) {
+        throw "Direct bootstrap regression entrypoint could not find hub: $HubDir"
+    }
+
+    $scratchFull = [System.IO.Path]::GetFullPath($ScratchRoot)
+    New-Item -ItemType Directory -Force -Path $scratchFull | Out-Null
+    $freshProject = Join-Path $scratchFull "fresh-bootstrap"
+    $legacyProject = Join-Path $scratchFull "existing-legacy-bootstrap"
+    foreach ($project in @($freshProject, $legacyProject)) {
+        if (Test-Path -LiteralPath $project) {
+            Remove-Item -LiteralPath $project -Recurse -Force
+        }
+        New-Item -ItemType Directory -Force -Path $project | Out-Null
+    }
+
+    & $BootstrapScript -ProjectDir $freshProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fresh bootstrap regression fixture failed with exit code $LASTEXITCODE."
+    }
+    $freshLockPath = Join-Path $freshProject ".agents\hub.lock.json"
+    if (-not (Test-Path -LiteralPath $freshLockPath -PathType Leaf)) {
+        throw "Fresh bootstrap regression fixture did not create hub.lock.json."
+    }
+    $freshLock = Get-Content -LiteralPath $freshLockPath -Raw | ConvertFrom-Json
+    $freshRequiredRoots = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    $missingFreshRoots = @($freshRequiredRoots | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $freshProject $_) -PathType Container)
+    })
+    if ([string]$freshLock.workspace_model -cne "c3.3" -or
+        [string]$freshLock.workspace_state -cne "active" -or
+        $missingFreshRoots.Count -gt 0) {
+        throw "Fresh bootstrap regression fixture did not produce the active C3.3 workspace contract. Missing roots: $($missingFreshRoots -join ', ')"
+    }
+
+    New-LegacyProjectSeed -ProjectDir $legacyProject
+    & $BootstrapScript -ProjectDir $legacyProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Existing legacy bootstrap regression fixture failed with exit code $LASTEXITCODE."
+    }
+    $legacyLockPath = Join-Path $legacyProject ".agents\hub.lock.json"
+    if (-not (Test-Path -LiteralPath $legacyLockPath -PathType Leaf)) {
+        throw "Existing legacy bootstrap regression fixture did not create hub.lock.json."
+    }
+    $legacyLock = Get-Content -LiteralPath $legacyLockPath -Raw | ConvertFrom-Json
+    $legacyRequiredPaths = @("AGENTS.md", ".agents\AGENTS.md", ".agents\process.txt", ".agents\context", "docs\specs\README.md")
+    $missingLegacyPaths = @($legacyRequiredPaths | Where-Object {
+        $path = Join-Path $legacyProject $_
+        $type = if ($_ -match '\.[^\\/]+$') { "Leaf" } else { "Container" }
+        -not (Test-Path -LiteralPath $path -PathType $type)
+    })
+    $legacyWorkspaceRoots = @()
+    if ($null -ne $legacyLock.workspace_roots) {
+        $legacyWorkspaceRoots = @($legacyLock.workspace_roots)
+    }
+    if ([string]$legacyLock.workspace_model -cne "legacy" -or
+        [string]$legacyLock.workspace_state -cne "not-enabled" -or
+        $legacyWorkspaceRoots.Count -ne 0 -or
+        $missingLegacyPaths.Count -gt 0) {
+        throw "Existing legacy bootstrap regression fixture did not retain the legacy workspace contract. Missing paths: $($missingLegacyPaths -join ', ')"
+    }
+
+    return [ordered]@{
+        status = "PASS"
+        source = "scripts/validation/release-bootstrap-checks.ps1::Invoke-DirectBootstrapRegressionChecks"
+        fixture_count = 2
+        fixtures = @(
+            [ordered]@{
+                name = "fresh-bootstrap"
+                status = "PASS"
+                workspace_model = [string]$freshLock.workspace_model
+                workspace_state = [string]$freshLock.workspace_state
+                asserted_roots = $freshRequiredRoots
+            },
+            [ordered]@{
+                name = "existing-legacy-bootstrap"
+                status = "PASS"
+                workspace_model = [string]$legacyLock.workspace_model
+                workspace_state = [string]$legacyLock.workspace_state
+                asserted_paths = @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/context", "docs/specs/README.md")
+            }
+        )
+    }
+}
+
+function Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks {
 
 try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
