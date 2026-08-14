@@ -8,7 +8,7 @@ metadata:
   category: kernel
   stability: stable
   scope: cross-project
-compatibility: Bundled scripts require PowerShell 7+. The metadata map is an additive compatibility layer; top-level category, stability, and scope aliases remain supported.
+compatibility: Bundled scripts require PowerShell 7.6+. The metadata map is an additive compatibility layer; top-level category, stability, and scope aliases remain supported.
 ---
 
 # Agent Project Bootstrap
@@ -20,17 +20,14 @@ compatibility: Bundled scripts require PowerShell 7+. The metadata map is an add
 3. Write `.agents/hub.lock.json` with the pinned hub commit.
 4. Keep project-local files as higher-priority overrides by default.
 
-Command examples use Windows PowerShell 5.1-compatible invocation. On
-non-Windows systems, or when PowerShell 7+ is already available, replace
-`powershell -NoProfile -ExecutionPolicy Bypass -File` with
-`pwsh -NoProfile -File`.
+Command examples use `pwsh -NoProfile -File` (PowerShell 7.6+).
 
 ## Step 1: Initialize Global Hub
 
 Run the initialization script when `%USERPROFILE%\\.agents\\knowledge-hub` is missing or when you want to refresh hub templates from this skill's assets.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init_hub.ps1
+pwsh -NoProfile -File scripts/init_hub.ps1
 ```
 
 Optional flags:
@@ -49,7 +46,7 @@ Notes:
 Run the project bootstrap script from any location:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path>
 ```
 
 Default behavior:
@@ -67,16 +64,14 @@ Default behavior:
 - Keep project-local edits untouched.
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
 - Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
-- For a fresh project invoked from the explicit `c3-3-candidate` Runtime,
-  create the minimal C3.3 workspace layout: a short `AGENTS.md`,
-  `.agents/README.md`, empty `work/`, `context/`, `procedures/`, and `skills/`
-  roots, and `docs/specs/`. Do not create placeholder Work, Context,
-  Procedure, Spec, glossary, or promoted Skill content. Fresh projects using
-  `minimal`, `recommended`, `full`, or `dev` retain the legacy scaffold path.
+- For a fresh project, create the minimal C3.3 workspace layout: a short
+  `AGENTS.md`, `.agents/README.md`, empty `work/`, `context/`, `procedures/`,
+  and `skills/` roots, and `docs/specs/`. Do not create placeholder Work,
+  Context, Procedure, Spec, glossary, or promoted Skill content. Fresh projects
+  always use this path after the one-time default cutover.
 - An existing C3.3 workspace is refreshed through the same minimal template
-  contract; an existing legacy project keeps the legacy scaffold path.
-- The C3.3 runtime is exposed only by the explicit `c3-3-candidate` install
-  profile. That profile is dormant and does not change the default runtime.
+  contract; an existing legacy project keeps the legacy scaffold path until an
+  explicit reviewed `migrate-project.ps1` Analyze -> Apply.
 - Record the installed template tree hash and whether the hub worktree was dirty at install time.
 - Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
@@ -150,7 +145,7 @@ Intent semantics:
 Standalone body-level language audit:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit_memory_language.ps1 -ProjectDir <project_path> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+pwsh -NoProfile -File scripts/audit_memory_language.ps1 -ProjectDir <project_path> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
 ```
 
 Use this helper when review needs to verify narrative body language without
@@ -173,7 +168,7 @@ Operating modes:
 Standalone language update:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
+pwsh -NoProfile -File scripts/set_project_language.ps1 -ProjectDir <project_path> -ProjectLanguage zh-CN -OverwriteScaffold
 ```
 
 Use `-OverwriteScaffold` only for bootstrap-era scaffolds or intentional reset scenarios. It backs up existing files before rewriting initial memory scaffold files. For established project memory, use conservative migration instead of treating language selection as scaffold overwrite.
@@ -211,7 +206,7 @@ If needed, review `references/maintenance-model.md` for long-term update rules.
 Check whether a project's pinned `hub.lock.json` still matches the currently installed hub:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check_hub_lock.ps1 -ProjectDir <project_path>
+pwsh -NoProfile -File scripts/check_hub_lock.ps1 -ProjectDir <project_path>
 ```
 
 Behavior:
@@ -231,16 +226,16 @@ Use this when re-running bootstrap in a project that already has old `.agents` m
 Recommended flow:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memory_upgrade.ps1 -ProjectDir <project_path> -Mode Analyze
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeMemoryUpgrade
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanMemoryUpgrade
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
+pwsh -NoProfile -File scripts/memory_upgrade.ps1 -ProjectDir <project_path> -Mode Analyze
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeMemoryUpgrade
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanMemoryUpgrade
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyMemoryUpgrade -UpgradePlan <proposal_path>
 ```
 
 Caller-approved non-interactive flow:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AutoUpgrade
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AutoUpgrade
 ```
 
 Behavior:
@@ -269,13 +264,13 @@ memory.
 English to Simplified Chinese:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyLanguageMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateLanguageMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanNarrativeMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyLanguageMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -PlanNarrativeMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
+pwsh -NoProfile -File scripts/bootstrap_project.ps1 -ProjectDir <project_path> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
 ```
 
 Simplified Chinese to English reverses the source and target languages.

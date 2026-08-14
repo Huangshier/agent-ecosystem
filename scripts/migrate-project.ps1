@@ -1508,7 +1508,7 @@ function Invoke-Analyze {
     }
 
     if ($null -ne $lock -and $workspaceModel -ne "c3.3" -and $language -in @("en", "zh-CN")) {
-        $lock["workspace_model"] = "c3.3"; $lock["workspace_state"] = "dormant"
+        $lock["workspace_model"] = "c3.3"; $lock["workspace_state"] = "active"
         $lock["workspace_roots"] = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
         $automaticNonAuthorityEntries = @($actions.ToArray() | Where-Object {
                 [string](Get-HashtableValue $_ "action") -ceq "preserve" -and

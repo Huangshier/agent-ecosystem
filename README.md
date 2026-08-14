@@ -60,13 +60,13 @@ Release → installed Runtime → optional Agent bridge → Project
    独立副本，并可安全增量重跑：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended
    ```
 
    评估时可以先使用隔离目录：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
    ```
 
    只有贡献者需要 runtime 直接跟随 source checkout 时才使用 `-DevLink`。`-Copy` 仍是
@@ -75,10 +75,10 @@ Release → installed Runtime → optional Agent bridge → Project
 2. 如 agent client 需要专用 skill 目录，显式创建可选 bridge：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
+   pwsh -NoProfile -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
-     -Skill project-bootstrap,project-context-gate
+     -Skill project-bootstrap,project-workspace
    ```
 
    两个目录都必须显式提供；工具不会猜测 client 路径。完整预检、冲突与 metadata 契约见
@@ -87,24 +87,26 @@ Release → installed Runtime → optional Agent bridge → Project
 3. 初始化目标项目，并明确项目记忆语言：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
    ```
 
-4. 在首次非平凡任务前运行 context gate：
+4. 在首次非平凡任务前，用 `project-workspace` 只读发现或检查项目资产：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+   pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-非 Windows 系统或已安装 PowerShell 7+ 时，可将命令前缀换为
-`pwsh -NoProfile -File`。参见 [Shell strategy](docs/shell-strategy.md)。
+C3.3 入口统一使用 `pwsh -NoProfile -File`（PowerShell 7.6+）。参见
+[Shell strategy](docs/shell-strategy.md)。
 
 ### Profiles
 
-- `minimal`：安装 bootstrap skill 和 public knowledge hub templates。
-- `recommended`：安装工作流内核和 public knowledge hub。
+- `minimal`：安装 bootstrap skill 和 public knowledge hub templates；fresh bootstrap 产生最小 C3.3 workspace。
+- `recommended`：安装 active C3.3 Runtime（`project-bootstrap` + `project-workspace`）、project workspace templates/schemas 和 public knowledge hub。
 - `full`、`dev`：当前与 `recommended` 相同，为未来 public domain packs 和维护工具预留。
-- `c3-3-candidate`：显式安装 `project-workspace` 与 project templates；C3.3 保持 dormant，不改变默认 Runtime/profile。
+
+`recommended` / `full` / `dev` 是 cutover 后唯一的 C3.3 Runtime authority；不再提供 `c3-3-candidate` profile，也不提供任何兼容 alias。
 
 Profile 生命周期见 [Domain pack governance](docs/domain-pack-governance.md)。
 
@@ -113,12 +115,11 @@ Profile 生命周期见 [Domain pack governance](docs/domain-pack-governance.md)
 每次非平凡任务使用同一条短路径：
 
 1. 从项目根 `AGENTS.md` 读取唯一完整的行为契约。
-2. 运行 `project-context-gate`，渐进加载热记忆、active work package 和相关上下文。
-3. 对需要跨会话保留目标、非目标、风险与验收的任务，使用 `workflow-spec-lite` 在目标
+2. 用 `project-workspace` 只读 `discover` / `check` 渐进发现 Work、Context、Procedure、Spec 资产。
+3. 对需要跨会话保留目标、非目标、风险与验收的任务，用 `project-workspace create-spec` 在目标
    项目本地创建 `docs/specs/<slug>/spec.md`。
 4. 实现并运行项目自己的验证。
-5. 在交接或阶段收尾时使用 `memory-governance`，压缩热记忆并把稳定事实和经验路由到
-   正确位置。
+5. 在交接或阶段收尾时，用 `project-workspace` 的 Work/Context 连续性操作整理未完成工作与稳定事实。
 
 空项目的完整示例见
 [Minimal project adoption walkthrough](docs/walkthroughs/minimal-project-adoption.md)；适配原则见
@@ -132,7 +133,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 1. 获取目标 release/source revision，并从该 checkout 重跑安装器：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
    ```
 
 2. 查看 `install-report.json`。默认增量更新会恢复缺失的受管文件、更新 source 已变化但
@@ -140,7 +141,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 3. 检查 runtime 与 bridge 的只读状态：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
+   pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
    ```
 
 4. 只有在审阅冲突后才选择 `-ReplaceManaged`；只有 bridge 预检仍满足时才按既有显式参数
@@ -153,8 +154,8 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 先检查，再选择保守刷新、迁移或重置：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 
 - `current`：已检查的项目基线与工程记忆不需要刷新。

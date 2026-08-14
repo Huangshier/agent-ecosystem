@@ -6,8 +6,7 @@ function Invoke-ReleaseValidationLanguageTemplateChecks {
 try {
     $repoGuide = Get-FileText -RelativePath "AGENTS.md"
     $languagePolicyPresent = $repoGuide -match '(?m)^## Project Language Policy\s*$'
-    $hotMemoryExists = $false
-    $bootstrapLanguagePolicyPresent = $false
+    $c33WorkspaceBootstrapPresent = $false
     $autoWriteEvidence = @()
     $fileTemplateEvidence = @()
     $fallbackEvidence = @()
@@ -28,29 +27,19 @@ try {
         } else {
             [string]$smokeEvidence[0].project
         }
-        $hotMemoryExists = @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md") |
-            ForEach-Object { Test-Path -LiteralPath (Join-PathParts $projectDir $_) } |
-            Where-Object { $_ -eq $true } |
-            Measure-Object |
-            Select-Object -ExpandProperty Count
-        $hotMemoryExists = ($hotMemoryExists -eq 4)
-
-        $bootstrapAgentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
-        if (Test-Path -LiteralPath $bootstrapAgentGuidePath) {
-            $bootstrapAgentGuide = Get-Content -LiteralPath $bootstrapAgentGuidePath -Raw
-            $bootstrapLanguagePolicyPresent = $bootstrapAgentGuide -match '(?m)^## Project Memory Language\s*$'
+        $lockPath = Join-PathParts $projectDir ".agents" "hub.lock.json"
+        if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+            $smokeLock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+            $c33WorkspaceBootstrapPresent = ([string]$smokeLock.workspace_model -ceq "c3.3") -and
+                (Test-Path -LiteralPath (Join-PathParts $projectDir "AGENTS.md")) -and
+                (Test-Path -LiteralPath (Join-PathParts $projectDir ".agents" "README.md"))
         }
     }
 
     function Test-ProjectLanguageBootstrap {
         param(
             [Parameter(Mandatory = $true)][string]$Language,
-            [Parameter(Mandatory = $true)][string]$ExpectedMarker,
-            [Parameter(Mandatory = $true)][string]$ExpectedRootContractToken,
-            [Parameter(Mandatory = $true)][string]$ExpectedGlobalExperienceHeading,
-            [Parameter(Mandatory = $true)][string]$ExpectedContextToken,
-            [Parameter(Mandatory = $true)][string]$ExpectedCommandToken,
-            [Parameter(Mandatory = $true)][string]$ExpectedSpecToken
+            [Parameter(Mandatory = $true)][string]$ExpectedLockLanguage
         )
 
         if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
@@ -66,62 +55,30 @@ try {
         $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
         & $bootstrapScript -ProjectDir $languageProjectDir -HubDir $hubDir -ProjectLanguage $Language -SkipMemoryUpgradeAnalysis | Out-Host
 
-        $requiredMarkers = [ordered]@{
-            "AGENTS.md" = $ExpectedRootContractToken
-            ".agents/AGENTS.md" = $ExpectedMarker
-            ".agents/process.txt" = $ExpectedMarker
-            ".agents/plan.md" = $ExpectedMarker
-            ".agents/notes.md" = $ExpectedMarker
-            ".agents/context/README.md" = $ExpectedContextToken
-            ".agents/context/tech/README.md" = $ExpectedMarker
-            ".agents/context/tech/testing-conventions.md" = "test framework"
-            ".agents/context/business/README.md" = $ExpectedMarker
-            ".agents/context/experience/README.md" = $ExpectedMarker
-            ".agents/context/experience/cases/README.md" = $ExpectedMarker
-            ".agents/context/experience/cases/case_template.md" = $ExpectedMarker
-            ".agents/commands/README.md" = $ExpectedCommandToken
-            ".agents/commands/test-workflow.md" = "test evidence"
-            ".agents/commands/skills.md" = "SKILL.md"
-            "docs/specs/README.md" = $ExpectedSpecToken
-            "docs/specs/_templates/spec-lite.md" = $ExpectedMarker
-            "docs/specs/_templates/tasks-lite.md" = $ExpectedMarker
-        }
-
+        $lock = Get-Content -LiteralPath (Join-PathParts $languageProjectDir ".agents" "hub.lock.json") -Raw | ConvertFrom-Json
         $missing = New-Object 'System.Collections.Generic.List[string]'
-        foreach ($relativePath in $requiredMarkers.Keys) {
-            $path = Join-PathParts $languageProjectDir $relativePath
-            if (-not (Test-Path -LiteralPath $path)) {
-                $missing.Add("$relativePath missing")
-                continue
-            }
-            $text = Get-Content -LiteralPath $path -Raw
-            if ($text -notlike ("*{0}*" -f $requiredMarkers[$relativePath])) {
-                $missing.Add("$relativePath missing expected language marker")
-            }
+        if ([string]$lock.project_language -cne $ExpectedLockLanguage) {
+            $missing.Add("project_language=$($lock.project_language) expected=$ExpectedLockLanguage")
         }
-
-        $rootGuideText = Get-Content -LiteralPath (Join-PathParts $languageProjectDir "AGENTS.md") -Raw
-        $agentGuideText = Get-Content -LiteralPath (Join-PathParts $languageProjectDir ".agents" "AGENTS.md") -Raw
-        if (-not $rootGuideText.Contains($ExpectedGlobalExperienceHeading)) {
-            $missing.Add("AGENTS.md missing global experience discovery contract")
+        if ([string]$lock.workspace_model -cne "c3.3" -or [string]$lock.workspace_state -cne "active") {
+            $missing.Add("workspace_model=$($lock.workspace_model)/$($lock.workspace_state) expected c3.3/active")
         }
-        if ($agentGuideText.Contains($ExpectedGlobalExperienceHeading)) {
-            $missing.Add(".agents/AGENTS.md must not duplicate the global experience discovery contract")
+        foreach ($relative in @("AGENTS.md", ".agents/README.md", ".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")) {
+            if (-not (Test-Path -LiteralPath (Join-PathParts $languageProjectDir $relative))) {
+                $missing.Add("$relative missing")
+            }
         }
 
         if ($missing.Count -gt 0) {
-            throw ("Language bootstrap failed for {0}: {1}" -f $Language, ($missing.ToArray() -join "; "))
+            throw ("C3.3 language bootstrap failed for {0}: {1}" -f $Language, ($missing.ToArray() -join "; "))
         }
 
         return [ordered]@{
             language = $Language
             project = $languageProjectDir
-            checked_files = @($requiredMarkers.Keys)
-            marker = $ExpectedMarker
-            global_experience_contract = [ordered]@{
-                root_present = $true
-                project_agent_absent = $true
-            }
+            project_language = [string]$lock.project_language
+            workspace_model = [string]$lock.workspace_model
+            workspace_state = [string]$lock.workspace_state
         }
     }
 
@@ -433,18 +390,10 @@ try {
                 }
             }
         }
-        $workflowSpecReference = Join-PathParts $RuntimeDir "skills" "workflow-spec-lite" "references" "spec-template.md"
-        if (-not (Test-Path -LiteralPath $workflowSpecReference)) {
-            $testingGuidanceErrors.Add("missing workflow-spec-lite reference template: $workflowSpecReference")
-        }
-        else {
-            $workflowSpecReferenceText = Get-Content -LiteralPath $workflowSpecReference -Raw
-            foreach ($token in $testingGuidanceTokens) {
-                if ($workflowSpecReferenceText -notlike ("*{0}*" -f $token)) {
-                    $testingGuidanceErrors.Add("$workflowSpecReference missing testing guidance token: $token")
-                }
-            }
-        }
+        # workflow-spec-lite is retired from C3.3 authority and no longer
+        # installed, so the testing-guidance contract is validated only against
+        # the spec-lite templates still present in the runtime snapshot.
+        $workflowSpecReference = ""
         foreach ($legacyRoot in $legacyRoots) {
             if (Test-Path -LiteralPath $legacyRoot) {
                 $missing.Add("legacy template directory should not exist: $legacyRoot")
@@ -537,52 +486,50 @@ try {
         $bootstrapScript = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
         & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
 
-        $rootText = Get-Content -LiteralPath (Join-PathParts $projectDir "AGENTS.md") -Raw
-        $agentText = Get-Content -LiteralPath (Join-PathParts $projectDir ".agents" "AGENTS.md") -Raw
         $lock = Get-Content -LiteralPath (Join-PathParts $projectDir ".agents" "hub.lock.json") -Raw | ConvertFrom-Json
-
-        if ($rootText -notlike "*single authoritative project behavior contract*") {
-            throw "Plain bootstrap root template did not install the authoritative behavior contract."
-        }
-        if ($agentText -notlike "*Project memory language: English.*") {
-            throw "Plain bootstrap project-agent template did not use English."
-        }
         if ([string]$lock.project_language -ne "en") {
             throw "Plain bootstrap lock did not record project_language=en."
+        }
+        if ([string]$lock.workspace_model -ne "c3.3" -or [string]$lock.workspace_state -ne "active") {
+            throw "Plain bootstrap did not produce the active C3.3 workspace contract."
+        }
+        if (-not (Test-Path -LiteralPath (Join-PathParts $projectDir "AGENTS.md")) -or -not (Test-Path -LiteralPath (Join-PathParts $projectDir ".agents" "README.md"))) {
+            throw "Plain bootstrap did not write the C3.3 workspace entrypoint files."
         }
 
         return [ordered]@{
             project = $projectDir
             project_language = [string]$lock.project_language
+            workspace_model = [string]$lock.workspace_model
+            workspace_state = [string]$lock.workspace_state
             template_source = [string]$lock.template_source
         }
     }
 
-    if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
+    if ($languagePolicyPresent -and $c33WorkspaceBootstrapPresent) {
         $fileTemplateEvidence += Test-ProjectMemoryTemplateFiles -RuntimeDir $script:recommendedCopyRuntime
         $autoWriteEvidence += Test-PlainBootstrapDefaultsToEnglish -RuntimeDir $script:recommendedCopyRuntime
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedMarker "Project memory language: English." -ExpectedRootContractToken "single authoritative project behavior contract" -ExpectedGlobalExperienceHeading "## Global Experience Discovery" -ExpectedContextToken "Use this folder as the long-term memory base." -ExpectedCommandToken "Use this folder for reusable high-frequency project workflows." -ExpectedSpecToken "Use this directory for long-lived work packages"
-        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedMarker "项目记忆语言：简体中文。" -ExpectedRootContractToken "唯一权威的项目行为契约" -ExpectedGlobalExperienceHeading "## 全局经验发现" -ExpectedContextToken "此目录是长期项目记忆入口。" -ExpectedCommandToken "此目录用于沉淀高频、可复用的项目工作流命令。" -ExpectedSpecToken "此目录用于保存需要跨会话延续的长期工作包。"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "en" -ExpectedLockLanguage "en"
+        $autoWriteEvidence += Test-ProjectLanguageBootstrap -Language "zh-CN" -ExpectedLockLanguage "zh-CN"
         $fallbackEvidence += Test-ProjectLanguageTemplateFallback -RuntimeDir $script:recommendedCopyRuntime
     }
 
     $script:evidence.language_policy = [ordered]@{
         project_language_policy_present = [bool]$languagePolicyPresent
-        bootstrap_hot_memory_present = [bool]$hotMemoryExists
-        bootstrap_project_language_policy_present = [bool]$bootstrapLanguagePolicyPresent
+        c33_workspace_bootstrap_present = [bool]$c33WorkspaceBootstrapPresent
         file_template_sources = @($fileTemplateEvidence)
         auto_language_write_behavior = if ($autoWriteEvidence.Count -gt 0) { "passed" } else { "not_checked" }
         auto_language_write_projects = @($autoWriteEvidence)
         missing_template_fallback = @($fallbackEvidence)
     }
-    if ($languagePolicyPresent -and $hotMemoryExists -and $bootstrapLanguagePolicyPresent) {
-        Add-Check "language policy templates" "PASS" "Project Language Policy is present in root guidance and bootstrap output; bootstrap hot memory files are generated in temporary projects." $evidence.language_policy
+    if ($languagePolicyPresent -and $c33WorkspaceBootstrapPresent) {
+        Add-Check "language policy templates" "PASS" "Project Language Policy is present in root guidance; fresh bootstrap produces the active C3.3 workspace with the recorded project language." $evidence.language_policy
         Add-Check "file-based memory template sources" "PASS" "English and Simplified Chinese project memory templates exist as files for root, hot memory, context, commands, testing surfaces, and spec scaffolds." @($fileTemplateEvidence)
-        Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap can write English and Simplified Chinese project memory scaffolds when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
+        Add-Check "first-session language auto-write behavior" "PASS" "Bootstrap records English and Simplified Chinese project language in the C3.3 workspace lock when the agent/workflow supplies the first-session language." @($autoWriteEvidence)
         Add-Check "missing language template fallback" "PASS" "A missing Simplified Chinese template file falls back to the English template with fallback metadata." @($fallbackEvidence)
     }
     else {
-        Add-Check "language policy templates" "FAIL" "Language policy guidance or bootstrap hot memory generation check failed." $evidence.language_policy
+        Add-Check "language policy templates" "FAIL" "Language policy guidance or C3.3 workspace bootstrap generation check failed." $evidence.language_policy
         Add-Check "file-based memory template sources" "FAIL" "Language template validation did not complete the file-based source contract." @($fileTemplateEvidence)
         Add-Check "first-session language auto-write behavior" "FAIL" "Language template validation did not complete the first-session auto-write contract." @($autoWriteEvidence)
         Add-Check "missing language template fallback" "FAIL" "Language template validation did not complete the missing-template fallback contract." @($fallbackEvidence)

@@ -162,10 +162,9 @@ facts take precedence over Work summary text.
 The external surface remains one `project-workspace` Skill. Internally, the
 implementation separates Catalog/cache, Glossary/query, shared Git facts,
 revision checks, Work continuity, and authoring responsibilities; those
-internal scripts are not additional commands or Skills. The explicit
-`c3-3-candidate` runtime profile packages this Skill and its templates, while
-the capability remains dormant and does not change default bootstrap/runtime
-selection.
+internal scripts are not additional commands or Skills. `project-workspace` and
+`project-bootstrap` are the active C3.3 Runtime Skill authority after the
+one-time default cutover.
 
 The workspace dispatcher does not trigger migration and does not provide
 orchestration, releases, automatic Skill calls, Skill chains, or schedulers.

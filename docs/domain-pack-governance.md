@@ -139,7 +139,7 @@ the release process:
 
 ```powershell
 git diff --check
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>
+pwsh -NoProfile -File scripts\validate-release.ps1 -ScratchRoot <scratch>
 ```
 
 Future PRs that create installable domain-pack content must add validation for:
@@ -157,14 +157,21 @@ Maintainer approval remains required before merge or release.
 
 ## Profile Boundary
 
-Current public profile behavior is unchanged:
+Post-cutover public profile behavior:
 
-- `minimal` installs bootstrap support and public knowledge hub templates.
-- `recommended` installs the Workflow Kernel and public knowledge hub.
+- `minimal` installs bootstrap support and public knowledge hub templates; a
+  fresh bootstrap produces a minimal C3.3 workspace.
+- `recommended` installs the active C3.3 Runtime (`project-bootstrap` +
+  `project-workspace`), project workspace templates/schemas, and the public
+  knowledge hub.
 - `full` currently installs the same public content as `recommended`.
 - `dev` currently installs the same public content as `recommended`.
-- `c3-3-candidate` is an explicit dormant candidate profile for the C3.3
-  workspace package; it is not a default profile and does not perform cutover.
+
+`recommended` / `full` / `dev` are the only C3.3 Runtime authority after the
+one-time default cutover. The `c3-3-candidate` profile has been removed and no
+compatibility alias or second default exists. The retired
+`project-context-gate`, `memory-governance`, and `workflow-spec-lite` Skills are
+no longer installed or newly bridged by any public profile.
 
 The `full` and `dev` names remain reserved for future public domain packs and
 developer maintenance tooling. A domain pack reaching `installable` maturity is

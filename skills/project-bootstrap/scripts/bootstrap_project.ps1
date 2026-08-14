@@ -173,53 +173,6 @@ function Read-BootstrapWorkspaceModel {
     return ([string]$lock.workspace_model).Trim().ToLowerInvariant()
 }
 
-# Test-BootstrapC33CandidateRuntime: 只信任当前安装 Runtime 的 manifest contract；
-# source checkout、legacy profile 或不完整/损坏的 manifest 均保持 legacy bootstrap。
-function Test-BootstrapC33CandidateRuntime {
-    param([Parameter(Mandatory = $true)][string]$BootstrapScriptRoot)
-
-    try {
-        $runtimeRoot = $BootstrapScriptRoot
-        for ($index = 0; $index -lt 3; $index++) {
-            $runtimeRoot = Split-Path -Parent $runtimeRoot
-        }
-
-        $manifestPath = Join-Path $runtimeRoot "install-manifest.json"
-        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
-            return $false
-        }
-
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        $schemaProperty = $manifest.PSObject.Properties["schema_version"]
-        $profileProperty = $manifest.PSObject.Properties["profile"]
-        $workspaceProperty = $manifest.PSObject.Properties["workspace"]
-        if ($null -eq $schemaProperty -or $null -eq $profileProperty -or $null -eq $workspaceProperty) {
-            return $false
-        }
-
-        $workspace = $workspaceProperty.Value
-        if ($null -eq $workspace) {
-            return $false
-        }
-        $architectureProperty = $workspace.PSObject.Properties["architecture"]
-        $lifecycleProperty = $workspace.PSObject.Properties["lifecycle"]
-        $defaultCutoverProperty = $workspace.PSObject.Properties["default_cutover"]
-        if ($null -eq $architectureProperty -or $null -eq $lifecycleProperty -or $null -eq $defaultCutoverProperty) {
-            return $false
-        }
-
-        return ([int]$schemaProperty.Value -eq 2 -and
-            [string]$profileProperty.Value -ceq "c3-3-candidate" -and
-            [string]$architectureProperty.Value -ceq "c3.3" -and
-            [string]$lifecycleProperty.Value -ceq "dormant" -and
-            $defaultCutoverProperty.Value -is [bool] -and
-            $defaultCutoverProperty.Value -eq $false)
-    }
-    catch {
-        return $false
-    }
-}
-
 # Read-ProjectGuideLanguage: 读取 .agents/AGENTS.md 的语言声明；参数 ProjectPath 为已解析的项目目录。
 function Read-ProjectGuideLanguage {
     param([string]$ProjectPath)
@@ -596,10 +549,11 @@ if (-not $projectLanguageWasProvided) {
 $projectLanguageCode = Resolve-BootstrapProjectLanguage -Language $ProjectLanguage
 $existingWorkspaceModel = Read-BootstrapWorkspaceModel -LockPath $preflightLockPath
 $hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
-$runtimeIsC33Candidate = Test-BootstrapC33CandidateRuntime -BootstrapScriptRoot $PSScriptRoot
-# Freshness only selects the branch after an explicit candidate Runtime contract
-# has opted in; an existing c3.3 lock remains authoritative on later bootstrap.
-$useC33Workspace = $existingWorkspaceModel -eq "c3.3" -or ($runtimeIsC33Candidate -and -not $hadExistingProjectMemory)
+# Post-cutover: a fresh project (no existing project memory) always bootstraps into
+# the canonical C3.3 workspace. An existing c3.3 lock stays authoritative on later
+# bootstrap, and an existing legacy project keeps the legacy scaffold path until an
+# explicit reviewed migrate-project.ps1 Analyze -> Apply.
+$useC33Workspace = ($existingWorkspaceModel -eq "c3.3") -or (-not $hadExistingProjectMemory)
 
 $templateRoot = Join-PathParts $HubDir "templates" "languages"
 $projectRootTemplate = ""
@@ -955,7 +909,7 @@ $lockData = [ordered]@{
     language_template_fallback_paths = if ($null -ne $languageResult) { @($languageResult.fallback_paths) } else { @() }
     project_language = $projectLanguageValue
     workspace_model = if ($useC33Workspace) { "c3.3" } else { "legacy" }
-    workspace_state = if ($useC33Workspace) { "dormant" } else { "not-enabled" }
+    workspace_state = if ($useC33Workspace) { "active" } else { "not-enabled" }
     workspace_roots = if ($useC33Workspace) { @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs") } else { @() }
 }
 

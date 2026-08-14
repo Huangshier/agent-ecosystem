@@ -4,6 +4,12 @@ This document answers issue #116. It explains how different agent runtimes
 enter the same Workflow Kernel project memory model without changing runtime
 behavior or adding runtime-specific configuration to bootstrap templates.
 
+After the one-time C3.3 default cutover, a fresh project bootstraps directly
+into the canonical C3.3 workspace (`project-bootstrap` + `project-workspace`).
+The legacy runtime-class paths below (`project-context-gate`,
+`workflow-spec-lite`, `memory-governance`) describe legacy projects that have
+not yet been explicitly migrated; they are no longer the normal workflow.
+
 For the first-use installation and bootstrap path, see
 [how-to-adapt](how-to-adapt.md). For the full adoption walkthrough, see
 [minimal project adoption](walkthroughs/minimal-project-adoption.md).
@@ -15,8 +21,8 @@ This bridge covers three runtime classes:
 - **Codex** (OpenAI): native `AGENTS.md` support, skill discovery.
 - **Claude Code** (Anthropic): native `CLAUDE.md` loading, optional
   `@AGENTS.md` import shim.
-- **Generic agents**: unknown startup surface; use `project-context-gate`
-  script as the explicit context reconstruction entry.
+- **Generic agents**: unknown startup surface; legacy projects use the
+  `project-context-gate` script as the explicit context reconstruction entry.
 
 This document does not:
 
@@ -27,25 +33,23 @@ This document does not:
 - control any runtime's internal loading behavior;
 - include private overlay paths, local runtime state, or sensitive material.
 
-## C3.3 Candidate Boundary
+## C3.3 Runtime Boundary
 
-The explicit `c3-3-candidate` runtime profile packages the public
-`project-workspace` Skill and its project templates. Its manifest records the
-workspace capability as `dormant` with `default_cutover: false`. The packaged
-runtime owns only its manifest-managed runtime content; `AGENTS.md`, the
-`.agents/` workspace, canonical Work/Context/Procedure/Spec assets,
-project-local Skills, and `docs/specs/` remain project-local and are outside
-runtime uninstall ownership. A later unified cutover is a separate decision;
-Slice E does not perform it.
+The one-time default cutover made `recommended` (and `full` / `dev`) the active
+C3.3 Runtime. Its manifest records the workspace capability as `active` with
+`default_cutover: true`, and it packages the `project-workspace` Skill and its
+project templates. The packaged runtime owns only its manifest-managed runtime
+content; `AGENTS.md`, the `.agents/` workspace, canonical
+Work/Context/Procedure/Spec assets, project-local Skills, and `docs/specs/`
+remain project-local and are outside runtime uninstall ownership.
 
-For C3.3, Runtime Skill authority is limited to `project-bootstrap` and
+Runtime Skill authority is limited to `project-bootstrap` and
 `project-workspace`. `project-context-gate`, `memory-governance`, and
-`workflow-spec-lite` are retired from C3.3 authority: the candidate profile
-does not install or bridge them and provides no alias, forwarder, or dual-write
-path. They remain installable only through the uncut-over `recommended`,
-`full`, and `dev` profiles as a legacy-only compatibility payload. The legacy
-paths described below therefore apply to those profiles, not to the new C3.3
-authority model.
+`workflow-spec-lite` are retired from C3.3 authority: no public profile installs
+or bridges them, and there is no alias, forwarder, or dual-write path. The
+legacy project-loading paths described below apply to legacy projects that have
+not yet been explicitly migrated; a fresh project bootstraps directly into the
+canonical C3.3 workspace.
 
 ## Shared Entry Point
 

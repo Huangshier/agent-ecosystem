@@ -523,19 +523,27 @@ function Invoke-AgentSkillBridgeFixtureChecks {
     $multiRuntime = Join-PathParts $fixtureRoot "multi-runtime"
     $multiTarget = Join-PathParts $fixtureRoot "multi-agent-skills"
     New-AgentSkillBridgeFixtureRuntime -Installer $installer -Root $multiRuntime -Profile recommended | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-PathParts $multiTarget "project-context-gate") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-PathParts $multiTarget "project-workspace") | Out-Null
     $multiFailed = $false
     try {
-        & $bridgeScript -RuntimeDir $multiRuntime -AgentSkillsDir $multiTarget -Skill @("project-bootstrap", "project-context-gate") -Json | Out-Null
+        & $bridgeScript -RuntimeDir $multiRuntime -AgentSkillsDir $multiTarget -Skill @("project-bootstrap", "project-workspace") -Json | Out-Null
     }
     catch {
         $multiFailed = $true
     }
     Assert-AgentSkillBridgeCondition -Condition $multiFailed -Message "Multi-skill conflict did not fail."
     Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $multiTarget "project-bootstrap"))) -Message "Multi-skill preflight left a partial bridge."
-    Assert-AgentSkillBridgeCondition -Condition (-not (Test-AgentSkillBridgeReparsePoint -Path (Join-PathParts $multiTarget "project-context-gate"))) -Message "Multi-skill preflight replaced the conflicting path."
+    Assert-AgentSkillBridgeCondition -Condition (-not (Test-AgentSkillBridgeReparsePoint -Path (Join-PathParts $multiTarget "project-workspace"))) -Message "Multi-skill preflight replaced the conflicting path."
     Assert-AgentSkillBridgeCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $multiRuntime "agent-skill-bridge-manifest.json"))) -Message "Multi-skill preflight conflict wrote bridge metadata."
     $evidence.Add([ordered]@{ scenario = "multi-skill-preflight-zero-partial-write"; status = "PASS" })
+
+    # Retired legacy-only Skills cannot be newly bridged by the active C3.3 runtime.
+    $retiredRuntime = Join-PathParts $fixtureRoot "retired-skill-runtime"
+    $retiredTarget = Join-PathParts $fixtureRoot "retired-skill-agent-skills"
+    New-AgentSkillBridgeFixtureRuntime -Installer $installer -Root $retiredRuntime -Profile recommended | Out-Null
+    $retiredRun = Invoke-AgentSkillBridgeFixtureFailure -BridgeScript $bridgeScript -Runtime $retiredRuntime -Target $retiredTarget -SkillName "project-context-gate"
+    Assert-AgentSkillBridgeCondition -Condition ($retiredRun.exit_code -ne 0 -and -not (Test-Path -LiteralPath (Join-PathParts $retiredTarget "project-context-gate")) -and -not (Test-Path -LiteralPath (Join-PathParts $retiredRuntime "agent-skill-bridge-manifest.json"))) -Message "Retired legacy-only skill was newly bridged by the active C3.3 runtime."
+    $evidence.Add([ordered]@{ scenario = "retired-skill-new-bridge-rejected"; exit_code = $retiredRun.exit_code })
 
     # Force a deterministic manifest commit failure after the valid link has
     # been created, without adding a production fault-injection parameter.

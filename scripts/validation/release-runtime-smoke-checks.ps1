@@ -65,8 +65,9 @@ function Test-Manifest {
     }
 
     $items = @($manifest.items)
-    $expectsStatusProvider = $mode -eq "copy" -and "project-context-gate" -in $ExpectedSkills
-    $expectedItemCount = 1 + $ExpectedSkills.Count + $(if ($expectsStatusProvider) { 1 } else { 0 })
+    $expectsStatusProvider = $mode -eq "copy" -and "project-workspace" -in $ExpectedSkills
+    $expectsWorkspacePackage = "project-workspace" -in $ExpectedSkills
+    $expectedItemCount = 1 + $ExpectedSkills.Count + $(if ($expectsStatusProvider) { 1 } else { 0 }) + $(if ($expectsWorkspacePackage) { 2 } else { 0 })
     if ($items.Count -ne $expectedItemCount) {
         $errors.Add(("item count mismatch: expected {0}, got {1}" -f $expectedItemCount, $items.Count))
     }
@@ -98,7 +99,7 @@ function Test-Manifest {
         if ($statusProviderItems.Count -ne 1) {
             $errors.Add("copy install did not record exactly one runtime status provider item")
         }
-        elseif (-not (Test-ExactArray -Actual @($statusProviderItems[0].files | ForEach-Object { [string]$_.path }) -Expected @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1"))) {
+        elseif (-not (Test-ExactArray -Actual @($statusProviderItems[0].files | ForEach-Object { [string]$_.path }) -Expected @("lib/path-guard.ps1", "lib/runtime-status-action.ps1", "status.ps1", "migrate-project.ps1", "validation/powershell-runtime-requirement.ps1"))) {
             $errors.Add("runtime status provider item did not contain the exact dependency closure")
         }
     }
@@ -114,9 +115,9 @@ function Invoke-ReleaseValidationInstallerRuntimeChecks {
 
 $script:profileExpectations = [ordered]@{
     minimal = @("project-bootstrap")
-    recommended = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
-    full = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
-    dev = @("project-bootstrap", "project-context-gate", "workflow-spec-lite", "memory-governance")
+    recommended = @("project-bootstrap", "project-workspace")
+    full = @("project-bootstrap", "project-workspace")
+    dev = @("project-bootstrap", "project-workspace")
 }
 
 $script:installModes = @("copy")
@@ -193,46 +194,12 @@ else {
     Add-Check "installer profile matrix" "FAIL" "Profile or install mode validation failed." @($installFailures.ToArray())
 }
 
-function Test-InstalledProjectTemplateStatus {
-    param(
-        [Parameter(Mandatory = $true)][string]$ContextGateScript,
-        [Parameter(Mandatory = $true)][string]$ProjectDir,
-        [Parameter(Mandatory = $true)][string]$Entry,
-        [Parameter(Mandatory = $true)][string]$ProviderProvenance,
-        [string]$ExpectedStatus = "current",
-        [string]$ExpectedReason = "in-sync"
-    )
-
-    $contextJsonText = & $ContextGateScript -ProjectRoot $ProjectDir -Json
-    $contextJson = $contextJsonText | ConvertFrom-Json
-    if ([string]$contextJson.project_template.status -ne $ExpectedStatus) {
-        throw "$Entry context gate did not report project_template.status=$ExpectedStatus."
-    }
-    if ([string]$contextJson.project_template.reason -ne $ExpectedReason) {
-        throw "$Entry context gate did not report reason=$ExpectedReason."
-    }
-    if ([string]$contextJson.project_template.helper.availability -ne "available" -or [string]$contextJson.project_template.helper.trust -ne "trusted") {
-        throw "$Entry context gate did not report an available trusted status helper."
-    }
-    if ([string]$contextJson.project_template.helper.provenance -ne $ProviderProvenance) {
-        throw "$Entry context gate did not report helper provenance=$ProviderProvenance."
-    }
-    return [ordered]@{
-        entry = $Entry
-        status = [string]$contextJson.project_template.status
-        reason = [string]$contextJson.project_template.reason
-        helper_availability = [string]$contextJson.project_template.helper.availability
-        helper_trust = [string]$contextJson.project_template.helper.trust
-        helper_provenance = [string]$contextJson.project_template.helper.provenance
-        helper_relative_path = "scripts/status.ps1"
-    }
-}
-
 function Invoke-RuntimeSmoke {
     param(
         [Parameter(Mandatory = $true)][string]$RuntimeDir,
         [Parameter(Mandatory = $true)][string]$Name,
-        [switch]$CheckHubLock
+        [switch]$CheckHubLock,
+        [switch]$SkipWorkspaceCheck
     )
 
     $projectDir = Join-PathParts $scratchRootFull ("runtime-smoke-project-{0}" -f $Name)
@@ -243,99 +210,44 @@ function Invoke-RuntimeSmoke {
     $bootstrapScript = Join-PathParts $RuntimeDir "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
     & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Host
 
-    $contextGateScript = Join-PathParts $RuntimeDir "skills" "project-context-gate" "scripts" "context_gate.ps1"
-    $contextJsonText = & $contextGateScript -ProjectRoot $projectDir -Json
-    $contextJson = $contextJsonText | ConvertFrom-Json
-    if ($Name -eq "copy") {
-        $projectTemplateEvidence = Test-InstalledProjectTemplateStatus `
-            -ContextGateScript $contextGateScript `
-            -ProjectDir $projectDir `
-            -Entry $Name `
-            -ProviderProvenance "manifest-managed-copy"
+    $lockPath = Join-PathParts $projectDir ".agents" "hub.lock.json"
+    if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) {
+        throw "$Name bootstrap did not write .agents/hub.lock.json."
     }
-    else {
-        if ([string]$contextJson.project_template.helper.availability -ne "available" -or [string]$contextJson.project_template.helper.trust -ne "trusted") {
-            throw "$Name context gate did not report an available trusted source status helper."
-        }
-        $projectTemplateEvidence = [ordered]@{
-            entry = $Name
-            status = [string]$contextJson.project_template.status
-            reason = [string]$contextJson.project_template.reason
-            helper_availability = [string]$contextJson.project_template.helper.availability
-            helper_trust = [string]$contextJson.project_template.helper.trust
-            helper_provenance = [string]$contextJson.project_template.helper.provenance
-            helper_relative_path = "scripts/status.ps1"
-        }
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+    if ([string]$lock.workspace_model -cne "c3.3" -or [string]$lock.workspace_state -cne "active") {
+        throw ("$Name bootstrap did not produce the active C3.3 workspace contract: {0}/{1}" -f $lock.workspace_model, $lock.workspace_state)
     }
-    $hotPaths = @($contextJson.hot_files | ForEach-Object { [string]$_.path })
-    $expectedHotNames = @("AGENTS.md", ".agents/AGENTS.md", ".agents/process.txt", ".agents/plan.md")
-    foreach ($expectedName in $expectedHotNames) {
-        $expectedPath = (Resolve-Path -LiteralPath (Join-PathParts $projectDir $expectedName)).Path
-        if ($expectedPath -notin $hotPaths) {
-            throw "Context gate hot files did not include $expectedName"
+
+    $expectedLayout = @("AGENTS.md", ".agents/README.md", ".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    foreach ($relative in $expectedLayout) {
+        if (-not (Test-Path -LiteralPath (Join-PathParts $projectDir $relative))) {
+            throw "$Name bootstrap did not create the C3.3 workspace path: $relative"
         }
     }
 
-    # Verify CLAUDE.md shim was generated
-    $claudeMdPath = Join-PathParts $projectDir "CLAUDE.md"
-    if (-not (Test-Path -LiteralPath $claudeMdPath)) {
-        throw "Bootstrap did not generate CLAUDE.md shim at project root."
-    }
-    $claudeMdText = Get-Content -LiteralPath $claudeMdPath -Raw
-    $expectedClaudeImports = @("@AGENTS.md", "@.agents/AGENTS.md", "@.agents/process.txt", "@.agents/plan.md", "@.agents/context/README.md", "@.agents/commands/README.md")
-    foreach ($import in $expectedClaudeImports) {
-        if ($claudeMdText -notlike "*$import*") {
-            throw "CLAUDE.md shim is missing expected import: $import"
+    # project-workspace check is strictly read-only and must accept the fresh
+    # canonical C3.3 workspace. It depends on the copy-installed scripts closure
+    # (`scripts/validation/powershell-runtime-requirement.ps1`), which a source
+    # dev-link runtime resolves from the repository instead of a copied scripts
+    # item; skip it there.
+    $checkResult = "skipped"
+    if (-not $SkipWorkspaceCheck.IsPresent) {
+        $checkScript = Join-PathParts $RuntimeDir "skills" "project-workspace" "scripts" "check-project-workspace.ps1"
+        if (-not (Test-Path -LiteralPath $checkScript -PathType Leaf)) {
+            throw "$Name runtime did not install project-workspace check."
         }
-    }
-
-    $contextBriefText = (& $contextGateScript -ProjectRoot $projectDir -Brief) -join [Environment]::NewLine
-    $expectedBriefMarkers = @(
-        "Project Context Gate Brief",
-        "Gate: start",
-        "Project root:",
-        "Git:",
-        "Hot files (load now):",
-        "Active work package files:",
-        "Cold discovery-only files:",
-        "Warnings / boundary notes:",
-        "Next action:"
-    )
-    foreach ($marker in $expectedBriefMarkers) {
-        if ($contextBriefText -notmatch [regex]::Escape($marker)) {
-            throw "Context gate brief output did not include marker: $marker"
+        $checkJson = (& $checkScript -ProjectRoot $projectDir -Json) | ConvertFrom-Json
+        if ([string]$checkJson.status -cne "PASS") {
+            throw "$Name project-workspace check did not report status=PASS."
         }
-    }
+        $checkResult = [string]$checkJson.status
 
-    $specDir = Join-PathParts $projectDir "docs" "specs" ("validation-smoke-{0}" -f $Name)
-    New-Item -ItemType Directory -Force -Path $specDir | Out-Null
-    $specSource = Join-PathParts $RuntimeDir "skills" "workflow-spec-lite" "references" "spec-template.md"
-    $tasksSource = Join-PathParts $RuntimeDir "skills" "workflow-spec-lite" "references" "tasks-template.md"
-    $specTarget = Join-PathParts $specDir "spec.md"
-    $tasksTarget = Join-PathParts $specDir "tasks.md"
-    $specText = Get-Content -LiteralPath $specSource -Raw
-    $tasksText = Get-Content -LiteralPath $tasksSource -Raw
-    $specText = $specText -replace '- \*\*Title\*\*:', ("- **Title**: Validation smoke {0}" -f $Name)
-    $specText = $specText -replace '- \*\*Slug\*\*:', ("- **Slug**: validation-smoke-{0}" -f $Name)
-    $specText = $specText -replace '- \*\*Status\*\*: Draft / Active / Done / Archived', '- **Status**: Active'
-    $specText = $specText -replace '- \*\*Owner\*\*:', '- **Owner**: release validation'
-    $specText = $specText -replace '- \*\*Updated\*\*:', ("- **Updated**: {0}" -f (Get-Date).ToString("yyyy-MM-dd"))
-    $tasksText = $tasksText -replace '- \*\*Spec\*\*:', ("- **Spec**: docs/specs/validation-smoke-{0}/spec.md" -f $Name)
-    $tasksText = $tasksText -replace '- \*\*Status\*\*: Draft / Active / Done', '- **Status**: Active'
-    $tasksText = $tasksText -replace '- \*\*Updated\*\*:', ("- **Updated**: {0}" -f (Get-Date).ToString("yyyy-MM-dd"))
-    Set-Content -LiteralPath $specTarget -Value $specText -Encoding UTF8
-    Set-Content -LiteralPath $tasksTarget -Value $tasksText -Encoding UTF8
-
-    if (-not (Test-Path -LiteralPath $specTarget) -or -not (Test-Path -LiteralPath $tasksTarget)) {
-        throw "workflow-spec-lite smoke spec/tasks were not created."
-    }
-
-    $memoryDiagnoseScript = Join-PathParts $RuntimeDir "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
-    $memoryJsonText = & $memoryDiagnoseScript -ProjectRoot $projectDir -Json
-    $memoryJson = $memoryJsonText | ConvertFrom-Json
-    $findingCount = [int]$memoryJson.summary.finding_count
-    if ($findingCount -ne 0) {
-        throw "memory-governance diagnose returned $findingCount findings."
+        $discoverScript = Join-PathParts $RuntimeDir "skills" "project-workspace" "scripts" "discover-project-assets.ps1"
+        if (-not (Test-Path -LiteralPath $discoverScript -PathType Leaf)) {
+            throw "$Name runtime did not install project-workspace discover."
+        }
+        & $discoverScript -ProjectRoot $projectDir -Query "work" -Json | Out-Null
     }
 
     $hubLockStatus = "not_checked"
@@ -354,12 +266,10 @@ function Invoke-RuntimeSmoke {
         runtime = $RuntimeDir
         project = $projectDir
         bootstrap = "passed"
-        context_gate_hot_file_count = @($contextJson.hot_files).Count
-        context_gate_brief = "passed"
-        project_template = $projectTemplateEvidence
-        spec = $specTarget
-        tasks = $tasksTarget
-        memory_diagnose_findings = $findingCount
+        workspace_model = [string]$lock.workspace_model
+        workspace_state = [string]$lock.workspace_state
+        project_workspace_check = $checkResult
+        project_workspace_discover = if ($SkipWorkspaceCheck.IsPresent) { "skipped" } else { "passed" }
         hub_lock_status = $hubLockStatus
     }
 }
@@ -373,141 +283,33 @@ try {
     $copySmoke = Invoke-RuntimeSmoke -RuntimeDir $script:recommendedCopyRuntime -Name "copy"
     $runtimeSmokeResults.Add($copySmoke)
 
-    $copyLockPath = Join-PathParts $copySmoke.project ".agents" "hub.lock.json"
-    $copyLockOriginal = [System.IO.File]::ReadAllText($copyLockPath)
-    try {
-        $legacyLock = $copyLockOriginal | ConvertFrom-Json
-        $legacyLock.hub_remote = "https://example.invalid/legacy-hub.git"
-        $legacyLock.hub_branch = "main"
-        $legacyLock.hub_commit = "0123456789abcdef0123456789abcdef01234567"
-        [System.IO.File]::WriteAllText($copyLockPath, ($legacyLock | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
-
-        $sourceStatusScript = Join-PathParts $repoRoot "scripts" "status.ps1"
-        $installedStatusScript = Join-PathParts $script:recommendedCopyRuntime "scripts" "status.ps1"
-        $sourceLegacyCurrent = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
-        $installedLegacyCurrent = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
-        foreach ($payload in @($sourceLegacyCurrent, $installedLegacyCurrent)) {
-            if ([string]$payload.project.status -ne "current" -or [string]$payload.project.reason -ne "in-sync" -or
-                [string]$payload.recommended_next_action -ne "none") {
-                throw "Source and installed status providers did not accept the same trusted legacy managed-copy lock contract."
-            }
+    $sourceStatusScript = Join-PathParts $repoRoot "scripts" "status.ps1"
+    $installedStatusScript = Join-PathParts $script:recommendedCopyRuntime "scripts" "status.ps1"
+    $sourceRuntimeStatus = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -Json | ConvertFrom-Json)
+    $installedRuntimeStatus = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -Json | ConvertFrom-Json)
+    foreach ($payload in @($sourceRuntimeStatus, $installedRuntimeStatus)) {
+        if ([string]$payload.runtime.workspace.architecture -cne "c3.3" -or
+            [string]$payload.runtime.workspace.lifecycle -cne "active" -or
+            -not [bool]$payload.runtime.workspace.default_cutover) {
+            throw "Status did not report the active C3.3 default runtime workspace contract."
         }
-
-        $legacyLock.template_tree_hash_sha256 = "0" * 64
-        [System.IO.File]::WriteAllText($copyLockPath, ($legacyLock | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
-        $sourceLegacyDrift = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
-        $installedLegacyDrift = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
-        foreach ($payload in @($sourceLegacyDrift, $installedLegacyDrift)) {
-            if ([string]$payload.project.status -ne "optional-refresh" -or [string]$payload.project.reason -ne "template-baseline-drift" -or
-                [string]$payload.recommended_next_action -ne "refresh-project-templates") {
-                throw "Source and installed status providers did not map the same trusted managed-copy template drift contract."
-            }
-        }
-        $runtimeSmokeResults.Add([ordered]@{
-                name = "legacy-managed-copy-provider-contract"
-                source_current = [string]$sourceLegacyCurrent.project.status
-                installed_current = [string]$installedLegacyCurrent.project.status
-                source_drift = [string]$sourceLegacyDrift.project.status
-                installed_drift = [string]$installedLegacyDrift.project.status
-            })
-    }
-    finally {
-        [System.IO.File]::WriteAllText($copyLockPath, $copyLockOriginal, (New-Object System.Text.UTF8Encoding($false)))
-    }
-
-    $sourceContextGate = Join-PathParts $repoRoot "skills" "project-context-gate" "scripts" "context_gate.ps1"
-    $runtimeSmokeResults.Add([ordered]@{
-            name = "source"
-            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $sourceContextGate -ProjectDir $copySmoke.project -Entry "source" -ProviderProvenance "source-checkout"
-        })
-
-    $bridgeRoot = Join-PathParts $scratchRootFull "runtime-smoke-agent-bridge"
-    $bridgeSkill = Join-PathParts $bridgeRoot "skills" "project-context-gate"
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $bridgeSkill) | Out-Null
-    $bridgeItemType = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { "Junction" } else { "SymbolicLink" }
-    New-Item -ItemType $bridgeItemType -Path $bridgeSkill -Target (Join-PathParts $script:recommendedCopyRuntime "skills" "project-context-gate") -ErrorAction Stop | Out-Null
-    $runtimeSmokeResults.Add([ordered]@{
-            name = "bridge"
-            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript (Join-PathParts $bridgeSkill "scripts" "context_gate.ps1") -ProjectDir $copySmoke.project -Entry "bridge" -ProviderProvenance "manifest-managed-copy"
-        })
-
-    $copyContextGate = Join-PathParts $script:recommendedCopyRuntime "skills" "project-context-gate" "scripts" "context_gate.ps1"
-    $optionalProject = Join-PathParts $scratchRootFull "runtime-smoke-project-optional-refresh"
-    Copy-Item -LiteralPath $copySmoke.project -Destination $optionalProject -Recurse
-    $optionalLockPath = Join-PathParts $optionalProject ".agents" "hub.lock.json"
-    $optionalLock = Get-Content -LiteralPath $optionalLockPath -Raw | ConvertFrom-Json
-    $optionalLock.template_tree_hash_sha256 = "0" * 64
-    $optionalLock | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $optionalLockPath -Encoding UTF8
-    $runtimeSmokeResults.Add([ordered]@{
-            name = "copy-optional-refresh"
-            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $optionalProject -Entry "copy-optional-refresh" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "optional-refresh" -ExpectedReason "template-baseline-drift"
-        })
-
-    $migrationProject = Join-PathParts $scratchRootFull "runtime-smoke-project-migration-required"
-    Copy-Item -LiteralPath $copySmoke.project -Destination $migrationProject -Recurse
-    Add-Content -LiteralPath (Join-PathParts $migrationProject ".agents" "notes.md") -Value "`n- TODO: historical session state fixture"
-    $runtimeSmokeResults.Add([ordered]@{
-            name = "copy-migration-required"
-            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $migrationProject -Entry "copy-migration-required" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "migration-required" -ExpectedReason "structural-memory-findings"
-        })
-
-    $unknownProject = Join-PathParts $scratchRootFull "runtime-smoke-project-unknown"
-    Copy-Item -LiteralPath $copySmoke.project -Destination $unknownProject -Recurse
-    Remove-Item -LiteralPath (Join-PathParts $unknownProject ".agents" "hub.lock.json") -Force
-    $runtimeSmokeResults.Add([ordered]@{
-            name = "copy-unknown"
-            project_template = Test-InstalledProjectTemplateStatus -ContextGateScript $copyContextGate -ProjectDir $unknownProject -Entry "copy-unknown" -ProviderProvenance "manifest-managed-copy" -ExpectedStatus "unknown" -ExpectedReason "missing-lock"
-        })
-
-    $missingManifestRuntime = Join-PathParts $scratchRootFull "runtime-recommended-missing-manifest"
-    Assert-NotLiveRuntime -Path $missingManifestRuntime
-    Assert-PathInsideRoot -Path $missingManifestRuntime -Root $scratchRootFull
-    & (Join-PathParts $repoRoot "scripts" "install.ps1") -Profile recommended -TargetDir $missingManifestRuntime | Out-Host
-    $missingManifestPath = Join-PathParts $missingManifestRuntime "install-manifest.json"
-    if (-not (Test-Path -LiteralPath $missingManifestPath -PathType Leaf)) {
-        throw "Missing-manifest regression setup did not produce install-manifest.json."
-    }
-    Remove-Item -LiteralPath $missingManifestPath -Force
-    $providerMarker = Join-PathParts $missingManifestRuntime "STATUS_PROVIDER_EXECUTED"
-    $residualProvider = Join-PathParts $missingManifestRuntime "scripts" "status.ps1"
-    $markerLiteral = $providerMarker.Replace("'", "''")
-    Set-Content -LiteralPath $residualProvider -Encoding UTF8 -Value @(
-        "param([string]`$ProjectDir, [switch]`$Json)",
-        "Set-Content -LiteralPath '$markerLiteral' -Value executed",
-        "'{`"schema_version`":1,`"project`":{`"status`":`"current`",`"reason`":`"in-sync`"}}'"
-    )
-    $missingManifestContextGate = Join-PathParts $missingManifestRuntime "skills" "project-context-gate" "scripts" "context_gate.ps1"
-    $missingManifestPayload = (& $missingManifestContextGate -ProjectRoot $copySmoke.project -Json) | ConvertFrom-Json
-    if (Test-Path -LiteralPath $providerMarker) {
-        throw "Installed context gate executed the residual provider after install-manifest.json was deleted."
-    }
-    if ([string]$missingManifestPayload.project_template.status -ne "unknown" -or
-        [string]$missingManifestPayload.project_template.reason -ne "status-helper-missing" -or
-        [string]$missingManifestPayload.project_template.helper.availability -ne "unavailable" -or
-        [string]$missingManifestPayload.project_template.helper.provenance -ne "unresolved") {
-        throw "Installed context gate did not fail soft with unresolved provenance after install-manifest.json was deleted."
     }
     $runtimeSmokeResults.Add([ordered]@{
-            name = "copy-missing-manifest"
-            project_template = [ordered]@{
-                status = [string]$missingManifestPayload.project_template.status
-                reason = [string]$missingManifestPayload.project_template.reason
-                helper_availability = [string]$missingManifestPayload.project_template.helper.availability
-                helper_trust = [string]$missingManifestPayload.project_template.helper.trust
-                helper_provenance = [string]$missingManifestPayload.project_template.helper.provenance
-                provider_executed = $false
-            }
+            name = "active-c3-3-runtime-status"
+            architecture = [string]$sourceRuntimeStatus.runtime.workspace.architecture
+            lifecycle = [string]$sourceRuntimeStatus.runtime.workspace.lifecycle
+            default_cutover = [bool]$sourceRuntimeStatus.runtime.workspace.default_cutover
         })
 
     if (-not $SkipLinkMode.IsPresent) {
         if ([string]::IsNullOrWhiteSpace($script:recommendedLinkRuntime)) {
             throw "Recommended link runtime was not created."
         }
-        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedLinkRuntime -Name "dev-link"))
+        $runtimeSmokeResults.Add((Invoke-RuntimeSmoke -RuntimeDir $script:recommendedLinkRuntime -Name "dev-link" -SkipWorkspaceCheck))
     }
 
     $script:evidence.runtime_smoke = @($runtimeSmokeResults.ToArray())
-    Add-Check "runtime smoke" "PASS" "Bootstrap, context gate, workflow-spec-lite, and memory-governance smoke checks passed for recommended runtime installs." $evidence.runtime_smoke
+    Add-Check "runtime smoke" "PASS" "Bootstrap, project-workspace check/discover, hub-lock drift, and active C3.3 runtime status smoke checks passed for recommended runtime installs." $evidence.runtime_smoke
 }
 catch {
     Add-Check "runtime smoke" "FAIL" $_.Exception.Message
@@ -532,135 +334,6 @@ try {
 }
 catch {
     Add-Check "project context gate targeted suite" "FAIL" $_.Exception.Message
-}
-
-try {
-    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
-        throw "Recommended copy runtime was not created."
-    }
-
-    # Test 1: Existing CLAUDE.md is preserved during re-bootstrap
-    $preserveProject = Join-PathParts $scratchRootFull "claude-md-preserve-test"
-    New-Item -ItemType Directory -Force -Path $preserveProject | Out-Null
-    Assert-PathInsideRoot -Path $preserveProject -Root $scratchRootFull
-
-    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
-
-    # Initial bootstrap to create scaffold
-    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
-
-    # Overwrite CLAUDE.md with custom content
-    $customClaudeContent = "# Custom CLAUDE.md`n`n@AGENTS.md`n"
-    Set-Content -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Value $customClaudeContent -Encoding UTF8
-    $customHash = (Get-FileHash -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Algorithm SHA256).Hash
-
-    # Re-bootstrap (default mode should not overwrite existing files)
-    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
-
-    $postHash = (Get-FileHash -LiteralPath (Join-Path $preserveProject "CLAUDE.md") -Algorithm SHA256).Hash
-    if ($customHash -ne $postHash) {
-        throw "Bootstrap overwrote existing CLAUDE.md in default refresh mode."
-    }
-
-    # Test 2: Memory upgrade analyze reports missing CLAUDE.md as advisory
-    $noShimProject = Join-PathParts $scratchRootFull "claude-md-advisory-test"
-    New-Item -ItemType Directory -Force -Path $noShimProject | Out-Null
-    Assert-PathInsideRoot -Path $noShimProject -Root $scratchRootFull
-
-    # Bootstrap, then remove CLAUDE.md to simulate pre-shim project
-    & $bootstrapScript -ProjectDir $noShimProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
-    Remove-Item -LiteralPath (Join-Path $noShimProject "CLAUDE.md") -Force
-
-    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
-    $analyzeJsonText = & $memoryUpgradeScript -ProjectDir $noShimProject -Mode Analyze -Json
-    $analyzeJson = $analyzeJsonText | ConvertFrom-Json
-    $hasShimAdvisory = @($analyzeJson.findings | Where-Object { $_.code -eq "missing_claude_shim" }).Count -gt 0
-    if (-not $hasShimAdvisory) {
-        throw "Memory upgrade analyze did not report missing_claude_shim advisory for project without CLAUDE.md."
-    }
-
-    # Test 3: Memory upgrade analyze reports incomplete CLAUDE.md as advisory
-    $incompleteProject = Join-PathParts $scratchRootFull "claude-md-incomplete-test"
-    New-Item -ItemType Directory -Force -Path $incompleteProject | Out-Null
-    Assert-PathInsideRoot -Path $incompleteProject -Root $scratchRootFull
-
-    & $bootstrapScript -ProjectDir $incompleteProject -HubDir $hubDir -SkipMemoryUpgradeAnalysis | Out-Null
-    Set-Content -LiteralPath (Join-Path $incompleteProject "CLAUDE.md") -Value "# CLAUDE.md`n`n@AGENTS.md`n" -Encoding UTF8
-
-    $incompleteJsonText = & $memoryUpgradeScript -ProjectDir $incompleteProject -Mode Analyze -Json
-    $incompleteJson = $incompleteJsonText | ConvertFrom-Json
-    $hasIncompleteAdvisory = @($incompleteJson.findings | Where-Object { $_.code -eq "incomplete_claude_shim" }).Count -gt 0
-    if (-not $hasIncompleteAdvisory) {
-        throw "Memory upgrade analyze did not report incomplete_claude_shim advisory for project with partial CLAUDE.md imports."
-    }
-
-    Add-Check "CLAUDE.md shim adoption" "PASS" "Bootstrap preserves existing CLAUDE.md; memory upgrade analyze reports missing_claude_shim and incomplete_claude_shim advisories." ([ordered]@{
-        preserve_hash_match = ($customHash -eq $postHash)
-        missing_advisory_detected = $hasShimAdvisory
-        incomplete_advisory_detected = $hasIncompleteAdvisory
-    })
-}
-catch {
-    Add-Check "CLAUDE.md shim adoption" "FAIL" $_.Exception.Message
-}
-
-try {
-    if ([string]::IsNullOrWhiteSpace($script:recommendedCopyRuntime)) {
-        throw "Recommended copy runtime was not created."
-    }
-
-    $localizedProject = Join-PathParts $scratchRootFull "localized-context-discovery"
-    New-Item -ItemType Directory -Force -Path $localizedProject | Out-Null
-    Assert-PathInsideRoot -Path $localizedProject -Root $scratchRootFull
-
-    $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
-    $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
-    & $bootstrapScript -ProjectDir $localizedProject -HubDir $hubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis | Out-Host
-
-    $summaryHeading = -join @([char]0x6458, [char]0x8981)
-    $keywordsHeading = -join @([char]0x5173, [char]0x952E, [char]0x8BCD)
-    $localizedContextPath = Join-PathParts $localizedProject ".agents" "context" "experience" "localized-discovery.md"
-    $localizedContextText = @(
-        "# Localized Discovery Fixture",
-        "",
-        "## $summaryHeading",
-        "Temporary context entry used by release validation.",
-        "",
-        "## $keywordsHeading",
-        "localized discovery metadata, memory diagnosis, memory upgrade",
-        "",
-        "## Notes",
-        "Both memory diagnostics should recognize the localized discovery headings."
-    )
-    Set-Content -LiteralPath $localizedContextPath -Value $localizedContextText -Encoding UTF8
-
-    $memoryDiagnoseScript = Join-PathParts $script:recommendedCopyRuntime "skills" "memory-governance" "scripts" "memory_diagnose.ps1"
-    $diagnose = & $memoryDiagnoseScript -ProjectRoot $localizedProject -Json | ConvertFrom-Json
-    $diagnoseMetadataFindings = @($diagnose.findings | Where-Object { [string]$_.code -eq "context_missing_discovery_metadata" })
-
-    $memoryUpgradeScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "memory_upgrade.ps1"
-    $upgrade = & $memoryUpgradeScript -ProjectDir $localizedProject -Mode Analyze -Json | ConvertFrom-Json
-    $upgradeMetadataFindings = @($upgrade.findings | Where-Object { [string]$_.code -eq "context_metadata_missing" })
-
-    $script:evidence.memory_metadata = [ordered]@{
-        project = $localizedProject
-        context_file = $localizedContextPath
-        memory_diagnose_findings = @($diagnose.findings).Count
-        memory_upgrade_findings = @($upgrade.findings).Count
-        diagnose_metadata_findings = $diagnoseMetadataFindings.Count
-        upgrade_metadata_findings = $upgradeMetadataFindings.Count
-    }
-
-    if ($diagnoseMetadataFindings.Count -gt 0 -or $upgradeMetadataFindings.Count -gt 0) {
-        Add-Check "localized context discovery metadata" "FAIL" "Localized discovery headings were reported as missing metadata." $evidence.memory_metadata
-    }
-    else {
-        Add-Check "localized context discovery metadata" "PASS" "Memory diagnosis and upgrade analysis accept localized Summary/Keywords discovery headings." $evidence.memory_metadata
-    }
-}
-catch {
-    Add-Check "localized context discovery metadata" "FAIL" $_.Exception.Message
 }
 
 try {

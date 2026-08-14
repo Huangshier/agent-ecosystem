@@ -13,13 +13,13 @@ For projects that already have `.agents` memory, use the
 Install the recommended public runtime:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended
 ```
 
 For evaluation, use a temporary runtime first:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
 The default is a standalone copy. Rerunning the same command restores missing
@@ -34,14 +34,12 @@ accept skipped conflicts, or `-ReplaceManaged` to overwrite managed files while
 still preserving unknown files. `-Force` remains a deprecated compatibility
 alias for `-ReplaceManaged`.
 
-On non-Windows systems, or when PowerShell 7+ is already available, replace
-`powershell -NoProfile -ExecutionPolicy Bypass -File` with
-`pwsh -NoProfile -File`.
+C3.3 entrypoints use `pwsh -NoProfile -File` (PowerShell 7.6+).
 
 To remove a generated runtime later, use the manifest-based uninstaller:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -TargetDir <runtime>
+pwsh -NoProfile -File .\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
 For schema-2 copy items, the uninstaller first checks every managed destination
@@ -57,15 +55,15 @@ is performed automatically.
 Run `project-bootstrap` from the installed runtime:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
 ```
 
 Set project memory language explicitly during the first non-trivial memory
 write when the agent or workflow knows the user's primary language:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
 The script does not infer chat language by itself.
@@ -99,17 +97,19 @@ For an existing project, treat bootstrap as a conservative refresh:
 
 ## 3. Use The Workflow Kernel
 
-- Start non-trivial work with `project-context-gate`.
+- Start non-trivial work by reading root `AGENTS.md`, then use
+  `project-workspace` `discover` / `check` to progressively find canonical
+  Work, Context, Procedure, and Spec assets.
 - For Claude Code projects, keep the generated `CLAUDE.md`,
   `.claude/settings.json`, `.claude/guardrails/`, and `.claude/hooks/` surfaces
   in place. The lifecycle hooks check entry loading, project context, write
   authorization profiles, dangerous memory reset modes, and stop points without
   becoming a security sandbox or bypassing normal permissions.
-- Optionally use `workflow-spec-lite` in the target project for work that needs
+- Use `project-workspace create-spec` in the target project for work that needs
   durable goals, non-goals, acceptance evidence, risks, or multi-phase
   execution.
-- Use `memory-governance` to keep `.agents` files small and route durable
-  lessons into `.agents/context/`.
+- Use the `project-workspace` Work/Context continuity operations to record
+  unfinished work and stable facts at handoff.
 - Use the public `knowledge-hub/knowledge-catalog.md` before opening individual
   reusable knowledge entries.
 - For runtime-specific startup paths (Codex, Claude Code, generic agents), see
@@ -135,15 +135,14 @@ Do not copy the public tree into a private overlay. Add only private increments.
 Recommended checks:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project>
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-context-gate\scripts\context_gate.ps1 -ProjectRoot <project> -Brief
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\memory-governance\scripts\memory_diagnose.ps1 -ProjectRoot <project>
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
 ```
 
 For release-quality changes to this public repository, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
 ## Example

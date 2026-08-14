@@ -13,10 +13,12 @@ selected runtime has a schema-2 `install-manifest.json`, uses
 unlisted skills, linked runtime skill sources, and manifest items whose managed
 destination is not exactly `skills/<skill>`.
 
-The explicit `c3-3-candidate` profile packages `project-workspace`, so that
-Skill may be exposed through this existing bridge while C3.3 remains dormant.
-Project-local or promoted Skills are separate project authority and must not be
-represented as packaged runtime ownership by this bridge.
+The active C3.3 Runtime packages `project-workspace`, so that Skill and
+`project-bootstrap` may be exposed through this existing bridge. The retired
+`project-context-gate`, `memory-governance`, and `workflow-spec-lite` Skills are
+not installed by the active runtime and cannot be newly bridged. Project-local
+or promoted Skills are separate project authority and must not be represented
+as packaged runtime ownership by this bridge.
 
 Skill ownership is canonical and case-exact across the manifest's `skills`,
 `items[].name`, and `items[].destination` fields. A differently cased request
@@ -31,16 +33,7 @@ client-specific user directory:
 pwsh -NoProfile -File ./scripts/link-agent-skills.ps1 `
   -RuntimeDir <runtime> `
   -AgentSkillsDir <agent-skills-dir> `
-  -Skill project-bootstrap,project-context-gate
-```
-
-Windows PowerShell 5.1 is also supported:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
-  -RuntimeDir <runtime> `
-  -AgentSkillsDir <agent-skills-dir> `
-  -Skill project-bootstrap
+  -Skill project-bootstrap,project-workspace
 ```
 
 Use `-Json` when a caller needs a structured result. Without `-Json`, the helper

@@ -307,7 +307,7 @@ bodies should carry issue-to-change mapping, validation evidence, rollback
 notes, and human decision state.
 
 The public repository no longer tracks root `docs/specs/**` work packages for
-its own maintenance. `workflow-spec-lite` remains available for target projects
+its own maintenance. `project-workspace` remains available for target projects
 that choose project-local `docs/specs/<slug>/` work packages, and examples or
 templates may still include those paths when clearly marked as target-project
 artifacts.

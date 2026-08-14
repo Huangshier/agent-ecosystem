@@ -19,12 +19,17 @@ and project-local memory.
 
 ## Workflow Kernel
 
-The Workflow Kernel is the reusable core:
+The Workflow Kernel is the reusable core. After the one-time C3.3 default
+cutover, the active Runtime Skill authority is exactly:
 
-- `project-bootstrap`: install project memory scaffolds.
-- `project-context-gate`: load project context progressively.
-- `workflow-spec-lite`: route non-trivial work into lightweight specs.
-- `memory-governance`: maintain project memory and reusable lessons.
+- `project-bootstrap`: initialize and maintain the project-local `.agents`
+  workspace scaffold.
+- `project-workspace`: discover, check, author, and maintain canonical
+  Work/Context/Procedure/Spec assets.
+
+The retired `project-context-gate`, `workflow-spec-lite`, and
+`memory-governance` Skills are no longer installed or newly bridged by any
+public profile; their source directories remain only for historical reading.
 
 Domain-specific skills should not be required by the kernel.
 
