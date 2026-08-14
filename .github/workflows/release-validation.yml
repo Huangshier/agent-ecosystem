@@ -410,7 +410,8 @@ jobs:
 
   main-health:
     name: main health
-    if: github.event_name == 'push'
+    needs: classify
+    if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && contains(needs.classify.outputs.modules, 'validation-routing')))
     runs-on: windows-latest
     steps:
       - name: Checkout pushed main

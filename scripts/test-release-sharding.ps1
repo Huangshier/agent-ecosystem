@@ -102,7 +102,9 @@ Assert-Fixture (@([regex]::Matches($workflow, 'CommitSha "\$\{\{ needs\.classify
 Assert-Fixture (-not $workflow.Contains('-CommitSha "${{ github.sha }}"')) "no-event-sha-evidence-fallback"
 Assert-Fixture (@([regex]::Matches($workflow, '\$shard = if \("\$\{\{ github\.event_name \}\}" -eq "push"\)')).Count -eq 0) "main-push-does-not-route-release-shards"
 Assert-Fixture (@([regex]::Matches($workflow, "if: always\(\) && \(github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'schedule'\)")).Count -eq 2) "release-shards-manual-and-scheduled-only"
-Assert-Fixture ($workflow.Contains("if: github.event_name == 'push'") -and $workflow.Contains("scripts/validate-main-health.ps1")) "main-health-push-entrypoint"
+Assert-Fixture ($workflow.Contains("needs: classify") -and
+    $workflow.Contains("if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && contains(needs.classify.outputs.modules, 'validation-routing')))") -and
+    $workflow.Contains("scripts/validate-main-health.ps1")) "main-health-control-plane-entrypoint"
 
 $summary = [ordered]@{
     schema_version = 2

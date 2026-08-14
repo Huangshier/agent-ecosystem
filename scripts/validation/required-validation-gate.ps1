@@ -73,6 +73,11 @@ else {
 
 $mismatches = New-Object 'System.Collections.Generic.List[string]'
 foreach ($name in $expected.Keys) {
+    if ($EventName -ceq "pull_request" -and
+        $name -ceq "main_health" -and
+        [string]$results[$name] -in @("skipped", "success")) {
+        continue
+    }
     if ([string]$results[$name] -cne [string]$expected[$name]) {
         $mismatches.Add(("{0}: expected '{1}', got '{2}'" -f $name, $expected[$name], $results[$name]))
     }

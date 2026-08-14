@@ -39,6 +39,34 @@
     "should_pass": true
   },
   {
+    "name": "tier-3-control-plane-main-health-pass",
+    "event_name": "pull_request",
+    "tier": "3",
+    "classify": "success",
+    "quick": "skipped",
+    "targeted": "success",
+    "self_protection": "success",
+    "self_protection_required": "true",
+    "main_health": "success",
+    "platform_neutral": "skipped",
+    "pwsh_matrix": "skipped",
+    "should_pass": true
+  },
+  {
+    "name": "tier-3-control-plane-main-health-failure",
+    "event_name": "pull_request",
+    "tier": "3",
+    "classify": "success",
+    "quick": "skipped",
+    "targeted": "success",
+    "self_protection": "success",
+    "self_protection_required": "true",
+    "main_health": "failure",
+    "platform_neutral": "skipped",
+    "pwsh_matrix": "skipped",
+    "should_pass": false
+  },
+  {
     "name": "push-product-full-pass",
     "event_name": "push",
     "tier": "2",

@@ -80,9 +80,10 @@ $mainHealthJobMatch = [regex]::Match($workflow, '(?ms)^  main-health:\s*\r?\n(?<
 if (-not $mainHealthJobMatch.Success) { throw "Workflow is missing the main-health job." }
 $mainHealthJob = $mainHealthJobMatch.Groups['body'].Value
 if (-not $mainHealthJob.Contains("name: main health") -or
-    -not $mainHealthJob.Contains("if: github.event_name == 'push'") -or
+    -not $mainHealthJob.Contains("needs: classify") -or
+    -not $mainHealthJob.Contains("if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && contains(needs.classify.outputs.modules, 'validation-routing')))") -or
     -not $mainHealthJob.Contains("scripts/validate-main-health.ps1")) {
-    throw "main-health job does not expose the thin push-only health contract."
+    throw "main-health job does not expose the thin push and validation-routing health contract."
 }
 
 $summary = [ordered]@{

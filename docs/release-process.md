@@ -120,7 +120,7 @@ events have deliberately different validation responsibilities:
 
 | Surface | Responsibility | Hosted path |
 |---|---|---|
-| Pull request | Prove the diff and its affected behavior | Classifier-selected quick/affected suites, plus control-plane self-protection when required; PR A's direct bootstrap regression remains on the affected path. |
+| Pull request | Prove the diff and its affected behavior | Classifier-selected quick/affected suites, plus control-plane self-protection when required; validation-routing changes also execute the Windows main-health smoke; PR A's direct bootstrap regression remains on the affected path. |
 | `main` push | Prove that the repository is healthy | One Windows `main health` job for PowerShell/JSON parsing, public-safe/sensitive scanning, and a small copy-install/bootstrap/C3.3 workspace smoke. |
 | Release/checkpoint | Prove the complete publication surface | Manual and scheduled runs retain the `RepositoryCheckpointNeutral` and `RepositoryCheckpointRuntime` validator shards, including the required cross-platform runtime matrix and release-only checks. |
 
@@ -134,7 +134,9 @@ outside the current change.
 For pull requests, the deterministic classifier selects the affected suites
 and the hosts declared by those suites. Changes to validation routing or
 other validation control-plane surfaces also run an independent
-self-protection oracle. See
+self-protection oracle; validation-routing changes additionally execute the
+Windows main-health smoke before merge. Ordinary pull requests do not schedule
+that job. See
 [PR validation risk tiers](pr-validation-risk-tiers.md) for the authoritative
 routing and conservative fallback rules.
 
