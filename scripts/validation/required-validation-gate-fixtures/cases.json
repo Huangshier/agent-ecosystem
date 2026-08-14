@@ -47,8 +47,9 @@
     "targeted": "skipped",
     "self_protection": "skipped",
     "self_protection_required": "false",
-    "platform_neutral": "success",
-    "pwsh_matrix": "success",
+    "main_health": "success",
+    "platform_neutral": "skipped",
+    "pwsh_matrix": "skipped",
     "should_pass": true
   },
   {
@@ -60,9 +61,24 @@
     "targeted": "skipped",
     "self_protection": "success",
     "self_protection_required": "true",
-    "platform_neutral": "success",
-    "pwsh_matrix": "success",
+    "main_health": "success",
+    "platform_neutral": "skipped",
+    "pwsh_matrix": "skipped",
     "should_pass": true
+  },
+  {
+    "name": "push-main-health-missing",
+    "event_name": "push",
+    "tier": "2",
+    "classify": "success",
+    "quick": "skipped",
+    "targeted": "skipped",
+    "self_protection": "skipped",
+    "self_protection_required": "false",
+    "main_health": "skipped",
+    "platform_neutral": "skipped",
+    "pwsh_matrix": "skipped",
+    "should_pass": false
   },
   {
     "name": "workflow-dispatch-checkpoint-pass",
@@ -156,7 +172,7 @@
     "should_pass": false
   },
   {
-    "name": "push-product-full-missing",
+    "name": "push-main-health-failure",
     "event_name": "push",
     "tier": "0",
     "classify": "success",
@@ -164,8 +180,9 @@
     "targeted": "skipped",
     "self_protection": "skipped",
     "self_protection_required": "false",
+    "main_health": "failure",
     "platform_neutral": "skipped",
-    "pwsh_matrix": "success",
+    "pwsh_matrix": "skipped",
     "should_pass": false
   },
   {

@@ -11,7 +11,7 @@ Pull requests are classified before expensive validation starts. The classifier 
 
 `scripts/validation/change-risk-rules.json` is the single path-routing source. Workflows consume schema-2 `scripts/validate-change.ps1` output and do not maintain a second path table. The classifier returns affected suites, each suite's host dependencies, the required host union, and the independent self-protection decision. Unknown suites, hosts, mappings, or classifier failures fail closed.
 
-`scripts/validate-release.ps1` owns two explicit authority profiles defined by `scripts/validation/release-shard-contract.json`. `Full` is the smaller product-runtime full used by every `main` push. `RepositoryCheckpoint` adds release archive, governance, evaluation, benchmark, historical, compatibility-observation, and roadmap-adjacent assertions for weekly and manual checkpoints. The executable contract requires exact coverage and disjoint shards before either profile can pass.
+`scripts/validate-release.ps1` owns two explicit Release authority profiles defined by `scripts/validation/release-shard-contract.json`. `Full` is the smaller product-runtime Release profile. `RepositoryCheckpoint` adds release archive, governance, evaluation, benchmark, historical, compatibility-observation, and roadmap-adjacent assertions for weekly and manual checkpoints. `main` pushes use the separate thin `main health` contract; they do not select either Release profile. The executable contract requires exact coverage and disjoint shards before either Release profile can pass.
 
 ## Output contract
 
@@ -46,20 +46,20 @@ A validation helper's risk follows its actual failure model, owner module, host 
 
 The control plane remains Tier 3: classifier and routing code, workflows, local validation planning, the fixed gate, evidence writing, sharding contracts, and the top-level release validator. These changes run the affected suites plus `test-heavy-targeted-regression.ps1` as an independent oracle. New or unmapped helpers, fixtures, and tests conservatively route every affected suite, every host, and that oracle; no empty or generic PASS is possible.
 
-This ownership contract preserves `main` push full product-runtime validation and the fixed validation gate, while removing the old rule that every Tier 3 PR must run the release validator.
+This ownership contract preserves the thin `main health` contract and fixed validation gate, while removing the old rule that every Tier 3 PR must run the release validator. The main-lineage shadow, self-protection, candidate evidence, job evidence, and gate remain separate control-plane surfaces for the later reduction work.
 
 ## Validation authority migration
 
-| Concern | Product-runtime full (`main` push) | Repository checkpoint (weekly/manual) |
+| Concern | Main health (`main` push) | Release profile (weekly/manual or publication) |
 |---|---|---|
-| Product safety and public boundary | Authoritative | Reused |
-| Installer, bootstrap, runtime, templates, hooks | Authoritative | Reused plus scheduled observations |
+| PowerShell/JSON parse and public boundary | Thin parse and public-safe/sensitive scan | Authoritative and reused |
+| Installer, bootstrap, and C3.3 runtime | One single-host copy-install/bootstrap/workspace smoke | Authoritative and reused plus scheduled observations |
 | Governance and repository policy | — | Authoritative |
 | Release archive and historical notes | — | Authoritative |
 | Evaluation and benchmark artifacts | — | Authoritative |
 | Knowledge candidate/search lifecycle | — | Authoritative |
 
-The previous 92-check checkpoint inventory is reduced to 60 public check authorities: 6 obsolete checks are retired and 26 duplicate results are merged into existing authorities while their assertions and detailed evidence continue to execute. Product-runtime full is 25 authorities (7 platform-neutral and 18 runtime), so `main` remains fully checked without carrying checkpoint-only history and governance work on every host.
+The previous 92-check checkpoint inventory is reduced to 60 public check authorities: 6 obsolete checks are retired and 26 duplicate results are merged into existing authorities while their assertions and detailed evidence continue to execute. The 25-check product-runtime Release profile (7 platform-neutral and 18 runtime) remains available for Release validation; `main` health intentionally does not claim that coverage.
 
 Rollback is contract-first: restore the prior `release-shard-contract.json`, validator shard routing, workflow job conditions, and gate fixtures together. Partial rollback is forbidden because classifier outputs, workflow matrices, shard coverage, and the fixed gate form one fail-closed contract.
 
@@ -78,14 +78,14 @@ The baseline before risk routing was three complete validator calls for every PR
 | Release content | 3 complete validators + 2 guards | classifier + affected release-checkpoint suite on Ubuntu + 2 guards |
 | Validation routing | 3 complete validators + 2 guards | classifier + affected suites on declared hosts + 1 independent self-protection oracle + 2 guards |
 
-The classifier adds one auditable job. Pull requests run only real affected suites on their declared hosts, while `main` runs the complete product-runtime profile and weekly/manual events run the complete repository checkpoint. The reduction comes from authority separation, host-aware execution, retirement, and duplicate aggregation—not from relabeling skipped work.
+The classifier adds one auditable job. Pull requests run only real affected suites on their declared hosts, while `main` runs the thin health contract and weekly/manual events run the complete repository checkpoint. The reduction comes from authority separation, host-aware execution, retirement, and duplicate aggregation—not from relabeling skipped work.
 
 ## Conservative boundaries
 
 - Empty diffs, unresolved refs, malformed Git diff records, unknown paths, unmapped runtime skills or fixtures, and classifier failures escalate to Tier 3.
 - Every Tier 1 or Tier 2 affected module must execute at least one mapped suite. Zero module checks fail validation; classification or parsing alone cannot produce a targeted PASS.
 - Renames classify both the old and new path; deletions classify the deleted path.
-- `main` pushes run the product-runtime full profile and bind evidence to the pushed SHA. Weekly schedules and manual dispatches run the repository checkpoint profile.
+- `main` pushes run main health and bind the push observation to the pushed SHA. Weekly schedules and manual dispatches run the repository checkpoint profile; Release publication retains the complete Release validator path.
 - Pull-request classification uses the exact event base/head diff, while every selected validation job checks out and re-verifies `refs/pull/<number>/merge`. Candidate evidence binds the merge-ref commit, tree, ordered parents, base/head identities, latest Release run generation, and current-generation final gate; base and identity guards remain independent of the canonical producer closure.
 - Push jobs use the pushed SHA. Candidate evidence and push observations are never reused across identities or attempts.
 - Base and identity guards remain independent fail-closed workflow surfaces.

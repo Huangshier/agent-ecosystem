@@ -89,8 +89,9 @@ foreach ($marker in @(
     'validation_sha: ${{ steps.target.outputs.sha }}',
     '${{ github.event.pull_request.head.sha }}',
     "github.event_name == 'schedule'",
-    '"PlatformNeutral" } else { "RepositoryCheckpointNeutral" }',
-    '"RuntimePlatform" } else { "RepositoryCheckpointRuntime" }',
+    '"RepositoryCheckpointNeutral"',
+    '"RepositoryCheckpointRuntime"',
+    "if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')",
     'PLATFORM_NEUTRAL_RESULT: ${{ needs.validate-platform-neutral.result }}',
     'PWSH_MATRIX_RESULT: ${{ needs.validate.result }}'
 )) {
@@ -99,7 +100,9 @@ foreach ($marker in @(
 Assert-Fixture (@([regex]::Matches($workflow, 'ref: \$\{\{ needs\.classify\.outputs\.validation_sha \}\}')).Count -eq 7) "downstream-checkouts-bind-validation-sha"
 Assert-Fixture (@([regex]::Matches($workflow, 'CommitSha "\$\{\{ needs\.classify\.outputs\.validation_sha \}\}"')).Count -eq 5) "evidence-binds-validation-sha"
 Assert-Fixture (-not $workflow.Contains('-CommitSha "${{ github.sha }}"')) "no-event-sha-evidence-fallback"
-Assert-Fixture (@([regex]::Matches($workflow, '\$shard = if \("\$\{\{ github\.event_name \}\}" -eq "push"\)')).Count -eq 2) "main-product-full-checkpoint-routing"
+Assert-Fixture (@([regex]::Matches($workflow, '\$shard = if \("\$\{\{ github\.event_name \}\}" -eq "push"\)')).Count -eq 0) "main-push-does-not-route-release-shards"
+Assert-Fixture (@([regex]::Matches($workflow, "if: always\(\) && \(github\.event_name == 'workflow_dispatch' \|\| github\.event_name == 'schedule'\)")).Count -eq 2) "release-shards-manual-and-scheduled-only"
+Assert-Fixture ($workflow.Contains("if: github.event_name == 'push'") -and $workflow.Contains("scripts/validate-main-health.ps1")) "main-health-push-entrypoint"
 
 $summary = [ordered]@{
     schema_version = 2

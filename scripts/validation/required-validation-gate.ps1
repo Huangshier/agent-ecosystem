@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$TargetedResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$SelfProtectionResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$SelfProtectionRequired,
+    [AllowEmptyString()][string]$MainHealthResult = "skipped",
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PlatformNeutralResult,
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$PwshMatrixResult,
     [switch]$Json
@@ -22,6 +23,7 @@ $results = [ordered]@{
     quick = $QuickResult
     targeted = $TargetedResult
     self_protection = $SelfProtectionResult
+    main_health = $MainHealthResult
     platform_neutral = $PlatformNeutralResult
     pwsh_matrix = $PwshMatrixResult
 }
@@ -49,24 +51,24 @@ foreach ($entry in $results.GetEnumerator()) {
 $expected = if ($EventName -ceq "pull_request") {
     switch ($Tier) {
         { $_ -ceq "0" -or $_ -ceq "1" } {
-            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
+            [ordered]@{ classify = "success"; quick = "success"; targeted = "skipped"; self_protection = $expectedSelfProtection; main_health = "skipped"; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
         "2" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; main_health = "skipped"; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
         "3" {
-            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
+            [ordered]@{ classify = "success"; quick = "skipped"; targeted = "success"; self_protection = $expectedSelfProtection; main_health = "skipped"; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
             break
         }
     }
 }
 elseif ($EventName -ceq "push") {
-    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = $expectedSelfProtection; platform_neutral = "success"; pwsh_matrix = "success" }
+    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = $expectedSelfProtection; main_health = "success"; platform_neutral = "skipped"; pwsh_matrix = "skipped" }
 }
 else {
-    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = "skipped"; platform_neutral = "success"; pwsh_matrix = "success" }
+    [ordered]@{ classify = "success"; quick = "skipped"; targeted = "skipped"; self_protection = "skipped"; main_health = "skipped"; platform_neutral = "success"; pwsh_matrix = "success" }
 }
 
 $mismatches = New-Object 'System.Collections.Generic.List[string]'

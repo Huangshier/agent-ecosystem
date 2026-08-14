@@ -18,6 +18,15 @@ foreach ($case in $cases) {
         TargetedResult = [string]$case.targeted
         SelfProtectionResult = [string]$case.self_protection
         SelfProtectionRequired = [string]$case.self_protection_required
+        MainHealthResult = if ($case.PSObject.Properties.Name -contains "main_health") {
+            [string]$case.main_health
+        }
+        elseif ([string]$case.event_name -ceq "push") {
+            "success"
+        }
+        else {
+            "skipped"
+        }
         PlatformNeutralResult = [string]$case.platform_neutral
         PwshMatrixResult = [string]$case.pwsh_matrix
         Json = $true
@@ -51,6 +60,7 @@ foreach ($marker in @(
     "if: always()",
     'EVENT_NAME: ${{ github.event_name }}',
     'TIER: ${{ needs.classify.outputs.tier }}',
+    'MAIN_HEALTH_RESULT: ${{ needs.main-health.result }}',
     "./scripts/validation/required-validation-gate.ps1"
 )) {
     if (-not $job.Contains($marker)) { throw "validation-gate job is missing contract marker: $marker" }
@@ -58,7 +68,7 @@ foreach ($marker in @(
 $needsMatch = [regex]::Match($job, '(?ms)^    needs:\s*\r?\n(?<body>(?:      - [^\r\n]+\r?\n)+)')
 if (-not $needsMatch.Success) { throw "validation-gate job is missing its needs list." }
 $actualNeeds = @([regex]::Matches($needsMatch.Groups['body'].Value, '(?m)^      - (?<name>[^\r\n]+)$') | ForEach-Object { $_.Groups['name'].Value })
-$expectedNeeds = @("classify", "quick-validation", "targeted-validation", "validation-self-protection", "validate-platform-neutral", "validate")
+$expectedNeeds = @("classify", "quick-validation", "targeted-validation", "validation-self-protection", "validate-platform-neutral", "validate", "main-health")
 if (($actualNeeds -join ',') -cne ($expectedNeeds -join ',')) {
     throw "validation-gate needs must be exactly: $($expectedNeeds -join ', ')."
 }
@@ -66,15 +76,25 @@ if ($job -match '(?m)^\s+matrix:') { throw "validation-gate must not use a matri
 if (@([regex]::Matches($job, '(?m)^\s+name: validation gate\s*$')).Count -ne 1) { throw "validation-gate must expose exactly one fixed check name." }
 if (@([regex]::Matches($job, '(?m)^\s+if: always\(\)\s*$')).Count -ne 1) { throw "validation-gate must use exactly one unconditional always() job guard." }
 
+$mainHealthJobMatch = [regex]::Match($workflow, '(?ms)^  main-health:\s*\r?\n(?<body>.*?)(?=^  [a-zA-Z0-9_-]+:\s*\r?$|\z)')
+if (-not $mainHealthJobMatch.Success) { throw "Workflow is missing the main-health job." }
+$mainHealthJob = $mainHealthJobMatch.Groups['body'].Value
+if (-not $mainHealthJob.Contains("name: main health") -or
+    -not $mainHealthJob.Contains("if: github.event_name == 'push'") -or
+    -not $mainHealthJob.Contains("scripts/validate-main-health.ps1")) {
+    throw "main-health job does not expose the thin push-only health contract."
+}
+
 $summary = [ordered]@{
     schema_version = 1
-    pass = $results.Count + 4
+    pass = $results.Count + 5
     fail = 0
     cases = @($results.ToArray())
     workflow_job_name = "PASS"
     workflow_always = "PASS"
     workflow_needs = "PASS"
     workflow_no_matrix = "PASS"
+    workflow_main_health = "PASS"
 }
 if ($Json.IsPresent) {
     $summary | ConvertTo-Json -Depth 5

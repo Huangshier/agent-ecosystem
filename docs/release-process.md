@@ -116,8 +116,20 @@ The validator checks:
 
 The repository runs `.github/workflows/release-validation.yml` for pull
 requests, pushes to `main`, weekly schedules, and manual dispatches. These
-events use different authority profiles rather than running one universal
-hosted release matrix for every pull request.
+events have deliberately different validation responsibilities:
+
+| Surface | Responsibility | Hosted path |
+|---|---|---|
+| Pull request | Prove the diff and its affected behavior | Classifier-selected quick/affected suites, plus control-plane self-protection when required; PR A's direct bootstrap regression remains on the affected path. |
+| `main` push | Prove that the repository is healthy | One Windows `main health` job for PowerShell/JSON parsing, public-safe/sensitive scanning, and a small copy-install/bootstrap/C3.3 workspace smoke. |
+| Release/checkpoint | Prove the complete publication surface | Manual and scheduled runs retain the `RepositoryCheckpointNeutral` and `RepositoryCheckpointRuntime` validator shards, including the required cross-platform runtime matrix and release-only checks. |
+
+The main health job is intentionally not a Release candidate. A `main` push
+does not run the `PlatformNeutral` or three-platform `RuntimePlatform` release
+shards and does not call the complete `scripts/validate-release.ps1` suite.
+The main lineage shadow, validation self-protection, candidate evidence, job
+evidence, and fixed gate remain in place for this phase; their later cleanup is
+outside the current change.
 
 For pull requests, the deterministic classifier selects the affected suites
 and the hosts declared by those suites. Changes to validation routing or
@@ -135,13 +147,13 @@ final gate run/job identities. The fixed gate and canonical evidence remain the
 required merge evidence; a complete hosted release-validation matrix is not a
 per-PR hard gate.
 
-Every `main` push runs the `Full` product-runtime profile and a lineage shadow
-over the complete first-parent range. The shadow reports only `proven` or
-conservative `full-fallback`; neither decision controls or skips the
-unconditional product-runtime validation. Weekly and manually dispatched runs
-use the broader `RepositoryCheckpoint` profile for release archive,
-governance, evaluation, benchmark, historical, and other checkpoint-only
-assertions.
+Every `main` push runs the thin main health contract and a lineage shadow over
+the complete first-parent range. The shadow reports only `proven` or
+conservative `full-fallback`; it remains an observation/control-plane check and
+does not turn main health into Release validation. Weekly and manually
+dispatched runs use the broader `RepositoryCheckpoint` profile for release
+archive, governance, evaluation, benchmark, historical, and other
+checkpoint-only assertions.
 
 The workflow uses event-aware GitHub Actions concurrency. New pull-request,
 scheduled, and manually dispatched runs may cancel an older same-event,
