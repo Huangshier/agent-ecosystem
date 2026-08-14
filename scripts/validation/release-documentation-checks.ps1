@@ -251,8 +251,8 @@ try {
             "Profiles",
             "示例和常见任务路径",
             "Release notes",
-            "project-context-gate",
-            "workflow-spec-lite"
+            "project-bootstrap",
+            "project-workspace"
         )
         "README.en.md" = @(
             "Simplified Chinese: [README.md](README.md)",
@@ -263,8 +263,8 @@ try {
             "Profiles",
             "Examples And Common Paths",
             "Release notes",
-            "project-context-gate",
-            "workflow-spec-lite"
+            "project-bootstrap",
+            "project-workspace"
         )
         "README.zh-CN.md" = @(
             "简体中文首页已迁移到 [README.md](README.md)",

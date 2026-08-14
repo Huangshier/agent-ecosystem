@@ -534,6 +534,14 @@ else {
 }
 
 # Slice 3: verify compatibility field exists with stable tokens
+# C3.3 active runtime uses PowerShell 7.6+; retired skill records retain their
+# historical compatibility wording and are not the active runtime baseline.
+$compatibilityBaselineBySkill = [ordered]@{
+    "project-bootstrap" = "PowerShell 7.6+"
+    "project-context-gate" = "PowerShell 7+"
+    "workflow-spec-lite" = "PowerShell 7+"
+    "memory-governance" = "PowerShell 7+"
+}
 $compatErrors = New-Object 'System.Collections.Generic.List[string]'
 foreach ($skillName in $skillNames) {
     $skillPath = "skills/$skillName/SKILL.md"
@@ -542,7 +550,7 @@ foreach ($skillName in $skillNames) {
         $compatErrors.Add("$skillPath missing compatibility field")
     }
     else {
-        foreach ($token in @("PowerShell 7+", "metadata", "aliases")) {
+        foreach ($token in @($compatibilityBaselineBySkill[$skillName], "metadata", "aliases")) {
             if ($content -notmatch [regex]::Escape($token)) {
                 $compatErrors.Add("$skillPath compatibility field missing token: $token")
             }

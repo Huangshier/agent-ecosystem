@@ -355,7 +355,7 @@ jobs:
   validate-platform-neutral:
     name: validate platform-neutral contracts
     needs: classify
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
 
     steps:
@@ -369,7 +369,7 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-platform-neutral-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $shard = if ("${{ github.event_name }}" -eq "push") { "PlatformNeutral" } else { "RepositoryCheckpointNeutral" }
+          $shard = "RepositoryCheckpointNeutral"
           ./scripts/validate-release.ps1 `
             -ValidationShard $shard `
             -ScratchRoot $scratch `
@@ -408,10 +408,29 @@ jobs:
           path: ${{ runner.temp }}/agent-ecosystem-platform-neutral-validation
           if-no-files-found: error
 
+  main-health:
+    name: main health
+    needs: classify
+    if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && contains(needs.classify.outputs.modules, 'validation-routing')))
+    runs-on: windows-latest
+    steps:
+      - name: Checkout pushed main
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Run thin main health
+        shell: pwsh
+        run: |
+          $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-main-health"
+          ./scripts/validate-main-health.ps1 `
+            -ScratchRoot $scratch `
+            -Json | Tee-Object -FilePath (Join-Path $scratch "main-health-result.json")
+
   validate:
     name: validate pwsh (${{ matrix.os }})
     needs: classify
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
+    if: always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -432,7 +451,7 @@ jobs:
         run: |
           $scratch = Join-Path $env:RUNNER_TEMP "agent-ecosystem-release-validation"
           New-Item -ItemType Directory -Force -Path $scratch | Out-Null
-          $shard = if ("${{ github.event_name }}" -eq "push") { "RuntimePlatform" } else { "RepositoryCheckpointRuntime" }
+          $shard = "RepositoryCheckpointRuntime"
           ./scripts/validate-release.ps1 -ValidationShard $shard -ScratchRoot $scratch -Json |
             Tee-Object -FilePath (Join-Path $scratch "validation-output.json")
 
@@ -484,6 +503,7 @@ jobs:
       - validation-self-protection
       - validate-platform-neutral
       - validate
+      - main-health
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -518,6 +538,7 @@ jobs:
           TARGETED_RESULT: ${{ needs.targeted-validation.result }}
           SELF_PROTECTION_RESULT: ${{ needs.validation-self-protection.result }}
           SELF_PROTECTION_REQUIRED: ${{ needs.classify.outputs.run_validation_self_protection }}
+          MAIN_HEALTH_RESULT: ${{ needs.main-health.result }}
           PLATFORM_NEUTRAL_RESULT: ${{ needs.validate-platform-neutral.result }}
           PWSH_MATRIX_RESULT: ${{ needs.validate.result }}
         run: |
@@ -529,6 +550,7 @@ jobs:
             -TargetedResult $env:TARGETED_RESULT `
             -SelfProtectionResult $env:SELF_PROTECTION_RESULT `
             -SelfProtectionRequired $env:SELF_PROTECTION_REQUIRED `
+            -MainHealthResult $env:MAIN_HEALTH_RESULT `
             -PlatformNeutralResult $env:PLATFORM_NEUTRAL_RESULT `
             -PwshMatrixResult $env:PWSH_MATRIX_RESULT `
 

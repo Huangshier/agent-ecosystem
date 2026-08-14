@@ -69,10 +69,13 @@ The schemas use JSON Schema Draft 2020-12 syntax. The read-only parser determini
 The centralized Tier 0–3 contract and hosted-cost examples are documented in
 [`docs/pr-validation-risk-tiers.md`](../docs/pr-validation-risk-tiers.md).
 `validate-release.ps1` remains the authoritative validator and accepts
-`-ValidationShard Full`, `PlatformNeutral`, or `RuntimePlatform`. Hosted Tier 3
-validation runs the platform-neutral shard once and the runtime/platform shard
-on the required host matrix. Manual dispatch and release checkpoints retain the
-complete validator on every required host.
+`-ValidationShard Full`, `PlatformNeutral`, `RuntimePlatform`,
+`RepositoryCheckpoint`, `RepositoryCheckpointNeutral`, or
+`RepositoryCheckpointRuntime`. Hosted Tier 3
+pull-request validation runs the classifier-selected affected suites and the
+independent self-protection oracle when required. Pushes to `main` use the
+thin `validate-main-health.ps1` entrypoint; manual dispatch and release
+checkpoints retain the complete validator on every required host.
 
 Explicitly bridge installed-copy skills into an agent client's verified skill
 directory:

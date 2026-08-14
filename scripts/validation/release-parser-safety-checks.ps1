@@ -16,7 +16,7 @@ param(
 
 if ($ValidationShard -ceq "PlatformNeutral") {
 try {
-    $gitDiffCheck = & git -c core.autocrlf=false -c core.safecrlf=false -C $repoRoot diff --check 2>&1
+    $gitDiffCheck = & git -c core.autocrlf=false -c core.safecrlf=false -c core.whitespace=cr-at-eol -C $repoRoot diff --check 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw ($gitDiffCheck -join "`n")
     }
