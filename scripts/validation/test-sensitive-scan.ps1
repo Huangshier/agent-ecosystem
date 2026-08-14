@@ -125,34 +125,28 @@ try {
     $out5 = Invoke-ScanFixture $scanInRepo $historyHead $allowedHead
     Assert-ScanCase -Name "allowed-path-pass" -Condition ([string]$out5.output.status -ceq "PASS") -Detail "Expected PASS for a keyword in an allowed path, got $($out5.output.status)"
 
-    # --- Case 6: Exact allowed reference -> PASS ---
-    $workflowText = '  LINEAGE_GITHUB_AUTH: ${{ github.' + 'token }}'
-    $exactHead = Add-GitFixtureCommit $scratch ".github/workflows/release-validation.yml" $workflowText "exact reference"
-    $out6 = Invoke-ScanFixture $scanInRepo $allowedHead $exactHead
-    Assert-ScanCase -Name "exact-reference-pass" -Condition ([string]$out6.output.status -ceq "PASS") -Detail "Expected PASS for an exact allowed reference, got $($out6.output.status)"
-
-    # --- Case 7: Added content beginning with +++ is still scanned -> FAIL ---
+    # --- Case 6: Added content beginning with +++ is still scanned -> FAIL ---
     $plusHead = Add-GitFixtureCommit $scratch "plus.txt" "+++ token" "add plus content"
-    $out7 = Invoke-ScanFixture $scanInRepo $exactHead $plusHead
-    Assert-ScanCase -Name "triple-plus-added-line-fail" -Condition ([string]$out7.output.status -ceq "FAIL" -and [int]$out7.output.violation_count -ge 1 -and [int]$out7.exit_code -ne 0) -Detail "Expected FAIL for added content beginning with +++, got $($out7.output.status) with exit $($out7.exit_code)"
+    $out6 = Invoke-ScanFixture $scanInRepo $allowedHead $plusHead
+    Assert-ScanCase -Name "triple-plus-added-line-fail" -Condition ([string]$out6.output.status -ceq "FAIL" -and [int]$out6.output.violation_count -ge 1 -and [int]$out6.exit_code -ne 0) -Detail "Expected FAIL for added content beginning with +++, got $($out6.output.status) with exit $($out6.exit_code)"
 
-    # --- Case 8: Added content beginning with ++++ is still scanned -> FAIL ---
+    # --- Case 7: Added content beginning with ++++ is still scanned -> FAIL ---
     $plus4Head = Add-GitFixtureCommit $scratch "plus4.txt" "++++ token" "add four-plus content"
-    $out8 = Invoke-ScanFixture $scanInRepo $plusHead $plus4Head
-    Assert-ScanCase -Name "four-plus-added-line-fail" -Condition ([string]$out8.output.status -ceq "FAIL" -and [int]$out8.output.violation_count -ge 1 -and [int]$out8.exit_code -ne 0) -Detail "Expected FAIL for added content beginning with ++++, got $($out8.output.status) with exit $($out8.exit_code)"
+    $out7 = Invoke-ScanFixture $scanInRepo $plusHead $plus4Head
+    Assert-ScanCase -Name "four-plus-added-line-fail" -Condition ([string]$out7.output.status -ceq "FAIL" -and [int]$out7.output.violation_count -ge 1 -and [int]$out7.exit_code -ne 0) -Detail "Expected FAIL for added content beginning with ++++, got $($out7.output.status) with exit $($out7.exit_code)"
 
-    # --- Case 9: Missing shared contract remains a scanner failure ---
+    # --- Case 8: Missing shared contract remains a scanner failure ---
     $contractBackup = Join-Path $scratch "sensitive-scan-contract.backup.ps1"
     Copy-Item -LiteralPath $contractInRepo -Destination $contractBackup
     Remove-Item -LiteralPath $contractInRepo -Force
-    $out9 = Invoke-ScanFixture $scanInRepo $plusHead $plus4Head
-    Assert-ScanCase -Name "contract-missing-fail" -Condition ([string]$out9.output.status -ceq "FAIL" -and [string]$out9.output.reason -ceq "contract-missing" -and [int]$out9.exit_code -ne 0) -Detail "Expected contract-missing failure, got $($out9.output.reason) with exit $($out9.exit_code)"
+    $out8 = Invoke-ScanFixture $scanInRepo $plusHead $plus4Head
+    Assert-ScanCase -Name "contract-missing-fail" -Condition ([string]$out8.output.status -ceq "FAIL" -and [string]$out8.output.reason -ceq "contract-missing" -and [int]$out8.exit_code -ne 0) -Detail "Expected contract-missing failure, got $($out8.output.reason) with exit $($out8.exit_code)"
     Copy-Item -LiteralPath $contractBackup -Destination $contractInRepo
     Remove-Item -LiteralPath $contractBackup -Force
 
-    # --- Case 10: Unavailable diff remains a scanner failure ---
-    $out10 = Invoke-ScanFixture $scanInRepo "nonexistent-ref-abc" $plus4Head
-    Assert-ScanCase -Name "diff-unavailable-fail" -Condition ([string]$out10.output.status -ceq "FAIL" -and [string]$out10.output.reason -ceq "diff-unavailable" -and [int]$out10.exit_code -ne 0) -Detail "Expected diff-unavailable failure, got $($out10.output.reason) with exit $($out10.exit_code)"
+    # --- Case 9: Unavailable diff remains a scanner failure ---
+    $out9 = Invoke-ScanFixture $scanInRepo "nonexistent-ref-abc" $plus4Head
+    Assert-ScanCase -Name "diff-unavailable-fail" -Condition ([string]$out9.output.status -ceq "FAIL" -and [string]$out9.output.reason -ceq "diff-unavailable" -and [int]$out9.exit_code -ne 0) -Detail "Expected diff-unavailable failure, got $($out9.output.reason) with exit $($out9.exit_code)"
 
     # Build an isolated copy of validate-change.ps1 so missing-file cases do not touch the source checkout.
     $integration = Join-Path $scratch "validate-change-integration"
@@ -170,12 +164,12 @@ try {
     $integrationHead = Add-GitFixtureCommit $integration "new-file.ps1" '$token = "leaked"' "add violating keyword"
     $validatorInRepo = Join-Path $integration "scripts" "validate-change.ps1"
 
-    # --- Case 11: validate-change propagates a real scanner violation ---
+    # --- Case 10: validate-change propagates a real scanner violation ---
     $validatorViolation = Invoke-ValidatorFixture $validatorInRepo $integration $integrationBase $integrationHead
     $validatorViolationText = ($validatorViolation.raw | ForEach-Object { [string]$_ }) -join "`n"
     Assert-ScanCase -Name "validate-change-keyword-fails" -Condition ($validatorViolation.exit_code -ne 0 -and $validatorViolationText -match "Sensitive scan failure" -and $validatorViolationText -notmatch 'detected_tier.{0,20}3') -Detail "Expected validate-change to fail on scanner violation, got exit $($validatorViolation.exit_code): $validatorViolationText"
 
-    # --- Case 12: validate-change propagates a missing scan script ---
+    # --- Case 11: validate-change propagates a missing scan script ---
     $integrationScan = Join-Path $integration "scripts" "validation" "pr-secret-keyword-scan.ps1"
     $scanBackup = Join-Path $integration "scan-script.backup.ps1"
     Move-Item -LiteralPath $integrationScan -Destination $scanBackup
@@ -184,7 +178,7 @@ try {
     Assert-ScanCase -Name "validate-change-scan-script-missing-fails" -Condition ($validatorMissingScan.exit_code -ne 0 -and $validatorMissingScanText -match "scan script is missing") -Detail "Expected validate-change to fail when the scan script is missing, got exit $($validatorMissingScan.exit_code): $validatorMissingScanText"
     Move-Item -LiteralPath $scanBackup -Destination $integrationScan
 
-    # --- Case 13: validate-change propagates a missing shared contract ---
+    # --- Case 12: validate-change propagates a missing shared contract ---
     $integrationContract = Join-Path $integration "scripts" "validation" "sensitive-scan-contract.ps1"
     $contractIntegrationBackup = Join-Path $integration "contract.backup.ps1"
     Move-Item -LiteralPath $integrationContract -Destination $contractIntegrationBackup
@@ -201,7 +195,7 @@ try {
     $contractHighRisk = $SensitiveScanHighRiskPatterns
     Assert-ScanCase -Name "shared-contract-keyword" -Condition ($contractKeywords -match 'token') -Detail "Shared contract must define the keyword pattern"
     Assert-ScanCase -Name "shared-contract-paths" -Condition ($contractPaths.Count -gt 30) -Detail "Shared contract must define the allowed paths"
-    Assert-ScanCase -Name "shared-contract-refs" -Condition ($contractRefs.ContainsKey(".github/workflows/release-validation.yml")) -Detail "Shared contract must define allowed references"
+    Assert-ScanCase -Name "shared-contract-refs" -Condition ($contractRefs.ContainsKey("scripts/validate-change.ps1")) -Detail "Shared contract must define allowed references"
     Assert-ScanCase -Name "shared-contract-highrisk" -Condition ($contractHighRisk.Count -eq 7) -Detail "Shared contract must define 7 high-risk patterns"
 }
 finally {

@@ -71,15 +71,15 @@
       ]
     },
     "RepositoryCheckpointNeutral": {
-      "authority": "release-archive-governance-eval-scheduled-checkpoint",
+      "authority": "release-archive-governance-eval-manual-checkpoint",
       "responsibility": "Repository, governance, release archive, documentation, eval, benchmark artifact, and platform-neutral drift checks.",
       "checks": [
         "public structure", "root agents runtime boundary", "spec state boundary", "skill metadata", "required validation gate", "validation evidence contract", "release body contract", "spec-lite validator", "anti-drift hardening", "agent template startup guidance", "context index guidance", "readme language entrypoints", "publish-ready release alignment", "cross-platform shell strategy", "directory index governance", "structural memory diagnostics fixtures", "hot memory soft-length fixtures", "directory index health fixtures", "eval iteration fixtures", "eval report artifact", "eval baseline artifact", "runner output contract", "runner output regeneration", "benchmark artifact", "benchmark regeneration", "eval report regeneration", "issue triage label sync", "PR identity guard", "Claude hooks guardrails contract", "Claude hooks guardrails templates", "Claude hooks guardrails fixtures", "knowledge hub catalog", "experience lifecycle metadata", "experience promote closure", "git diff check", "high-risk sensitive scan", "secret keyword scan", "bilingual public/private routing"
       ]
     },
     "RepositoryCheckpointRuntime": {
-      "authority": "release-archive-governance-eval-scheduled-checkpoint",
-      "responsibility": "Complete runtime/platform checkpoint including scheduled performance, retention, knowledge, and compatibility observations.",
+      "authority": "release-archive-governance-eval-manual-checkpoint",
+      "responsibility": "Complete runtime/platform checkpoint including performance, retention, knowledge, and compatibility observations.",
       "checks": [
         "hub initialization git mode", "installer contract fixtures", "runtime status fixtures", "agent skill bridge fixtures", "runtime smoke", "project context gate targeted suite", "body-level memory language audit", "context gate large context benchmark", "validation scratch retention pruning", "hub.lock drift check", "uninstall behavior", "memory upgrade flow", "project bootstrap safety", "conservative language migration", "knowledge candidate intake", "knowledge hub experience search", "PowerShell script encoding", "PowerShell parse", "JSON parse", "language policy templates", "missing language template fallback", "Claude hooks runtime fixtures"
       ]
