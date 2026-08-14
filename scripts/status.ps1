@@ -788,26 +788,38 @@ function Set-RuntimeWorkspaceStatus {
         $isFullPackage = $packagedValid -and @($packagedContent).Count -eq 4 -and
             @($fullPackagedContent | Where-Object { @($packagedContent) -ccontains $_ }).Count -eq 4
         $isMinimalPackage = $packagedValid -and @($packagedContent).Count -eq 0
-        # Authority and packaged payload must be consistent: full authority pairs
-        # with the four packaged workspace items, reduced authority with none.
-        $authorityValid = ($isFullAuthority -and $isFullPackage) -or ($isMinimalAuthority -and $isMinimalPackage)
 
-        if ([string]$lifecycle -ceq "active" -and $defaultCutover -is [bool] -and [bool]$defaultCutover -and $commonValid -and $authorityValid) {
-            $workspace.architecture = "c3.3"
-            $workspace.lifecycle = "active"
-            $workspace.default_cutover = $true
-            $workspace.packaged_content = @($packagedContent)
-            $workspace.c3_3_authority = @($declaredAuthority)
-            $workspace.legacy_only_compatibility_payload = @()
-            $workspace.retired_from_c3_3_authority = @($expectedRetired)
-            $workspace.compatibility_aliases = $false
-            $workspace.automatic_forwarding = $false
-            $workspace.dual_write = $false
-            $workspace.ownership = "manifest-scoped"
-            return
+        # NOTE: profile must bind to the exact authority/package contract. A
+        # `recommended` manifest cannot masquerade as `minimal` (or vice versa),
+        # and a historical `c3-3-candidate` must satisfy its full frozen contract.
+        $profile = [string]$Payload.runtime.profile
+
+        if ([string]$lifecycle -ceq "active" -and $defaultCutover -is [bool] -and [bool]$defaultCutover -and $commonValid) {
+            $activeProfileValid = $false
+            if ($profile -cin @("recommended", "full", "dev")) {
+                $activeProfileValid = $isFullAuthority -and $isFullPackage
+            }
+            elseif ($profile -ceq "minimal") {
+                $activeProfileValid = $isMinimalAuthority -and $isMinimalPackage
+            }
+            if ($activeProfileValid) {
+                $workspace.architecture = "c3.3"
+                $workspace.lifecycle = "active"
+                $workspace.default_cutover = $true
+                $workspace.packaged_content = @($packagedContent)
+                $workspace.c3_3_authority = @($declaredAuthority)
+                $workspace.legacy_only_compatibility_payload = @()
+                $workspace.retired_from_c3_3_authority = @($expectedRetired)
+                $workspace.compatibility_aliases = $false
+                $workspace.automatic_forwarding = $false
+                $workspace.dual_write = $false
+                $workspace.ownership = "manifest-scoped"
+                return
+            }
         }
 
-        if ([string]$lifecycle -ceq "dormant" -and $defaultCutover -is [bool] -and -not [bool]$defaultCutover -and $commonValid -and $isFullAuthority) {
+        if ([string]$lifecycle -ceq "dormant" -and $defaultCutover -is [bool] -and -not [bool]$defaultCutover -and $commonValid -and
+            $profile -ceq "c3-3-candidate" -and $isFullAuthority -and $isFullPackage) {
             # Historical dormant `c3-3-candidate` runtime. Report its frozen
             # contract without rewriting it or promoting it to active authority.
             $workspace.architecture = "c3.3"

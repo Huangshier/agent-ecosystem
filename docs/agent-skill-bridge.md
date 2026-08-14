@@ -36,15 +36,6 @@ pwsh -NoProfile -File ./scripts/link-agent-skills.ps1 `
   -Skill project-bootstrap,project-workspace
 ```
 
-Windows PowerShell 5.1 is also supported:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
-  -RuntimeDir <runtime> `
-  -AgentSkillsDir <agent-skills-dir> `
-  -Skill project-bootstrap
-```
-
 Use `-Json` when a caller needs a structured result. Without `-Json`, the helper
 prints one `[created]` or `[unchanged]` line per requested skill.
 

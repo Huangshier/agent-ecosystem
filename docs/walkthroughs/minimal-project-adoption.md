@@ -15,14 +15,7 @@ durable specs, work continuity, and reusable public knowledge.
 - A runtime target directory, referred to as `<runtime>`.
 - PowerShell.
 
-On Windows, the examples use Windows PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <script> <arguments>
-```
-
-On Linux, macOS, or Windows systems that already use PowerShell 7+, replace the
-launcher with:
+C3.3 entrypoints use `pwsh -NoProfile -File` (PowerShell 7.6+):
 
 ```powershell
 pwsh -NoProfile -File <script> <arguments>
@@ -38,7 +31,7 @@ Start with the default copy runtime so evaluation does not alter your normal
 agent home or point back to the source checkout:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
+pwsh -NoProfile -File <repo>\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
 ```
 
 The `recommended` profile installs the active C3.3 Runtime: the
@@ -60,7 +53,7 @@ Expected result:
 Create the canonical C3.3 workspace:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
 ```
 
 Use `-ProjectLanguage zh-CN` instead when the project memory should be written
@@ -151,7 +144,7 @@ Start with:
 For reusable workflow lessons, use the public search script:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\knowledge-hub\scripts\search_experience.ps1 -HubDir <runtime>\knowledge-hub -Query "PowerShell command chaining"
+pwsh -NoProfile -File <runtime>\knowledge-hub\scripts\search_experience.ps1 -HubDir <runtime>\knowledge-hub -Query "PowerShell command chaining"
 ```
 
 When a lesson is project-specific, keep it under:
@@ -175,7 +168,7 @@ pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -Projec
 If you are changing this public repository itself, use the full release gate:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\validate-release.ps1 -ScratchRoot <scratch>
+pwsh -NoProfile -File <repo>\scripts\validate-release.ps1 -ScratchRoot <scratch>
 ```
 
 For an ordinary adopted project, define validation in that project's own spec.
@@ -187,7 +180,7 @@ If the temporary runtime was only for evaluation, uninstall it with the
 manifest-based uninstaller:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\uninstall.ps1 -TargetDir <runtime>
+pwsh -NoProfile -File <repo>\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
 For schema-2 copy installs, nested unknown or locally modified files inside a

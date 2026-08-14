@@ -139,7 +139,7 @@ the release process:
 
 ```powershell
 git diff --check
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-release.ps1 -ScratchRoot <scratch>
+pwsh -NoProfile -File scripts\validate-release.ps1 -ScratchRoot <scratch>
 ```
 
 Future PRs that create installable domain-pack content must add validation for:

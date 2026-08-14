@@ -774,6 +774,104 @@
     Assert-StatusCondition -Condition (-not $invalidProfileText.Contains("RECOMMENDED")) -Message "Non-canonical profile was echoed."
     $evidence.Add([ordered]@{ scenario = "non-canonical-profile"; status = [string]$invalidProfilePayload.runtime.manifest_status })
 
+    # --- C3.3 active profile matrix + historical dormant candidate ---
+    $expectedRetiredForStatus = @("project-context-gate", "memory-governance", "workflow-spec-lite")
+    $fullAuthorityForStatus = @("project-bootstrap", "project-workspace")
+    $minimalAuthorityForStatus = @("project-bootstrap")
+    $fullPackagedForStatus = @("skills/project-workspace", "schemas/project-workspace", "templates/project", "scripts/migrate-project.ps1")
+
+    function New-C33Workspace {
+        param(
+            [string]$Lifecycle = "active",
+            [bool]$DefaultCutover = $true,
+            [object[]]$Authority = @(),
+            [object[]]$Packaged = @()
+        )
+        return [ordered]@{
+            architecture = "c3.3"
+            lifecycle = $Lifecycle
+            default_cutover = $DefaultCutover
+            packaged_content = @($Packaged)
+            c3_3_authority = @($Authority)
+            legacy_only_compatibility_payload = @()
+            retired_from_c3_3_authority = @($expectedRetiredForStatus)
+            compatibility_aliases = $false
+            automatic_forwarding = $false
+            dual_write = $false
+            project_local_authority = "project-local"
+            derived_cache = ".agents/.cache/catalog.json"
+        }
+    }
+
+    function New-C33StatusManifest {
+        param(
+            [Parameter(Mandatory = $true)][string]$Profile,
+            [Parameter(Mandatory = $true)][object]$Workspace
+        )
+        $manifest = New-CurrentManifest
+        $manifest.profile = $Profile
+        $manifest.workspace = $Workspace
+        return $manifest
+    }
+
+    function Assert-C33ContractInvalid {
+        param(
+            [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+            [Parameter(Mandatory = $true)][string]$Scenario
+        )
+        $payload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $RuntimeRoot)
+        Assert-StatusCondition -Condition (@($payload.findings | Where-Object code -eq "runtime.workspace.contract_invalid").Count -eq 1 -and
+            [string]$payload.runtime.workspace.lifecycle -eq "unknown") -Message "C3.3 $Scenario did not fail closed as contract_invalid."
+        $evidence.Add([ordered]@{ scenario = "c33-$Scenario-contract-invalid"; lifecycle = [string]$payload.runtime.workspace.lifecycle })
+    }
+
+    $recActive = New-C33StatusManifest -Profile "recommended" -Workspace (New-C33Workspace -Authority $fullAuthorityForStatus -Packaged $fullPackagedForStatus)
+    $recActiveRuntime = Join-PathParts $fixtureRoot "c33-active-recommended"
+    Write-StatusManifest -RuntimeRoot $recActiveRuntime -Value $recActive
+    $recActivePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime)
+    Assert-StatusCondition -Condition ([string]$recActivePayload.runtime.workspace.architecture -eq "c3.3" -and
+        [string]$recActivePayload.runtime.workspace.lifecycle -eq "active" -and
+        [bool]$recActivePayload.runtime.workspace.default_cutover -and
+        @($recActivePayload.findings | Where-Object code -eq "runtime.workspace.contract_invalid").Count -eq 0) -Message "Valid recommended active C3.3 contract was not accepted."
+    $evidence.Add([ordered]@{ scenario = "c33-active-recommended"; lifecycle = [string]$recActivePayload.runtime.workspace.lifecycle })
+
+    $minActive = New-C33StatusManifest -Profile "minimal" -Workspace (New-C33Workspace -Authority $minimalAuthorityForStatus)
+    $minActiveRuntime = Join-PathParts $fixtureRoot "c33-active-minimal"
+    Write-StatusManifest -RuntimeRoot $minActiveRuntime -Value $minActive
+    $minActivePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $minActiveRuntime)
+    Assert-StatusCondition -Condition ([string]$minActivePayload.runtime.workspace.architecture -eq "c3.3" -and
+        [string]$minActivePayload.runtime.workspace.lifecycle -eq "active" -and
+        [bool]$minActivePayload.runtime.workspace.default_cutover -and
+        @($minActivePayload.runtime.workspace.c3_3_authority).Count -eq 1 -and
+        @($minActivePayload.runtime.workspace.packaged_content).Count -eq 0 -and
+        @($minActivePayload.findings | Where-Object code -eq "runtime.workspace.contract_invalid").Count -eq 0) -Message "Valid minimal active C3.3 contract was not accepted."
+    $evidence.Add([ordered]@{ scenario = "c33-active-minimal"; lifecycle = [string]$minActivePayload.runtime.workspace.lifecycle })
+
+    $recAsMinimal = New-C33StatusManifest -Profile "recommended" -Workspace (New-C33Workspace -Authority $minimalAuthorityForStatus)
+    $recAsMinimalRuntime = Join-PathParts $fixtureRoot "c33-recommended-minimal-contract"
+    Write-StatusManifest -RuntimeRoot $recAsMinimalRuntime -Value $recAsMinimal
+    Assert-C33ContractInvalid -RuntimeRoot $recAsMinimalRuntime -Scenario "recommended-minimal-contract"
+
+    $minAsFull = New-C33StatusManifest -Profile "minimal" -Workspace (New-C33Workspace -Authority $fullAuthorityForStatus -Packaged $fullPackagedForStatus)
+    $minAsFullRuntime = Join-PathParts $fixtureRoot "c33-minimal-full-contract"
+    Write-StatusManifest -RuntimeRoot $minAsFullRuntime -Value $minAsFull
+    Assert-C33ContractInvalid -RuntimeRoot $minAsFullRuntime -Scenario "minimal-full-contract"
+
+    $dormantCandidate = New-C33StatusManifest -Profile "c3-3-candidate" -Workspace (New-C33Workspace -Lifecycle "dormant" -DefaultCutover $false -Authority $fullAuthorityForStatus -Packaged $fullPackagedForStatus)
+    $dormantCandidateRuntime = Join-PathParts $fixtureRoot "c33-dormant-candidate"
+    Write-StatusManifest -RuntimeRoot $dormantCandidateRuntime -Value $dormantCandidate
+    $dormantPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $dormantCandidateRuntime)
+    Assert-StatusCondition -Condition ([string]$dormantPayload.runtime.workspace.architecture -eq "c3.3" -and
+        [string]$dormantPayload.runtime.workspace.lifecycle -eq "dormant" -and
+        [bool]$dormantPayload.runtime.workspace.default_cutover -eq $false -and
+        @($dormantPayload.findings | Where-Object code -eq "runtime.workspace.contract_invalid").Count -eq 0) -Message "Historical dormant candidate contract was not reported read-only."
+    $evidence.Add([ordered]@{ scenario = "c33-dormant-candidate-readonly"; lifecycle = [string]$dormantPayload.runtime.workspace.lifecycle })
+
+    $dormantWrongPackage = New-C33StatusManifest -Profile "c3-3-candidate" -Workspace (New-C33Workspace -Lifecycle "dormant" -DefaultCutover $false -Authority $fullAuthorityForStatus)
+    $dormantWrongPackageRuntime = Join-PathParts $fixtureRoot "c33-dormant-candidate-wrong-package"
+    Write-StatusManifest -RuntimeRoot $dormantWrongPackageRuntime -Value $dormantWrongPackage
+    Assert-C33ContractInvalid -RuntimeRoot $dormantWrongPackageRuntime -Scenario "dormant-candidate-wrong-package"
+
     $invalidTimestampRuntime = Join-PathParts $fixtureRoot "invalid-timestamp"
     $invalidTimestampManifest = New-CurrentManifest
     $invalidTimestampManifest.installed_at_utc = "private-user yesterday"

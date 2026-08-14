@@ -75,13 +75,13 @@ boundary.
    rerun incrementally:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended
    ```
 
    For evaluation, start with an isolated directory:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
    ```
 
    Use `-DevLink` only when a contributor explicitly wants the runtime to
@@ -93,7 +93,7 @@ boundary.
    bridge explicitly:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
+   pwsh -NoProfile -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
      -Skill project-bootstrap,project-workspace
@@ -106,7 +106,7 @@ boundary.
 3. Bootstrap the target project with an explicit project-memory language:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
    ```
 
 4. Before the first non-trivial task, discover or check project assets with
@@ -117,8 +117,7 @@ boundary.
    pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-On non-Windows systems, or when PowerShell 7+ is already available, replace the
-command prefix with `pwsh -NoProfile -File`. See
+C3.3 entrypoints use `pwsh -NoProfile -File` (PowerShell 7.6+). See
 [Shell strategy](docs/shell-strategy.md).
 
 ### Profiles
@@ -165,7 +164,7 @@ an Agent bridge automatically.
    checkout:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
    ```
 
 2. Review `install-report.json`. The default incremental update restores
@@ -175,7 +174,7 @@ an Agent bridge automatically.
 3. Inspect the runtime and bridge without changing them:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
+   pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
    ```
 
 4. Use `-ReplaceManaged` only after reviewing conflicts. Rerun the bridge helper
@@ -189,7 +188,7 @@ For upgrades from an older version, read the
 Inspect first, then choose conservative refresh, migration, or reset:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
 pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 

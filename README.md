@@ -60,13 +60,13 @@ Release → installed Runtime → optional Agent bridge → Project
    独立副本，并可安全增量重跑：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended
    ```
 
    评估时可以先使用隔离目录：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
    ```
 
    只有贡献者需要 runtime 直接跟随 source checkout 时才使用 `-DevLink`。`-Copy` 仍是
@@ -75,7 +75,7 @@ Release → installed Runtime → optional Agent bridge → Project
 2. 如 agent client 需要专用 skill 目录，显式创建可选 bridge：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\link-agent-skills.ps1 `
+   pwsh -NoProfile -File .\scripts\link-agent-skills.ps1 `
      -RuntimeDir <runtime> `
      -AgentSkillsDir <agent-skills-dir> `
      -Skill project-bootstrap,project-workspace
@@ -87,7 +87,7 @@ Release → installed Runtime → optional Agent bridge → Project
 3. 初始化目标项目，并明确项目记忆语言：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
    ```
 
 4. 在首次非平凡任务前，用 `project-workspace` 只读发现或检查项目资产：
@@ -97,8 +97,8 @@ Release → installed Runtime → optional Agent bridge → Project
    pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-非 Windows 系统或已安装 PowerShell 7+ 时，可将命令前缀换为
-`pwsh -NoProfile -File`。参见 [Shell strategy](docs/shell-strategy.md)。
+C3.3 入口统一使用 `pwsh -NoProfile -File`（PowerShell 7.6+）。参见
+[Shell strategy](docs/shell-strategy.md)。
 
 ### Profiles
 
@@ -133,7 +133,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 1. 获取目标 release/source revision，并从该 checkout 重跑安装器：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
+   pwsh -NoProfile -File .\scripts\install.ps1 -Profile recommended -TargetDir <runtime>
    ```
 
 2. 查看 `install-report.json`。默认增量更新会恢复缺失的受管文件、更新 source 已变化但
@@ -141,7 +141,7 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 3. 检查 runtime 与 bridge 的只读状态：
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
+   pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime>
    ```
 
 4. 只有在审阅冲突后才选择 `-ReplaceManaged`；只有 bridge 预检仍满足时才按既有显式参数
@@ -154,8 +154,8 @@ Runtime 更新与项目刷新是两个独立动作。更新 runtime 不会自动
 先检查，再选择保守刷新、迁移或重置：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
-powershell -NoProfile -ExecutionPolicy Bypass -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 
 - `current`：已检查的项目基线与工程记忆不需要刷新。
