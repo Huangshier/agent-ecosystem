@@ -3,6 +3,20 @@
 # release-knowledge-hub-checks.ps1 (Phase 3) and are now invoked via Invoke-ReleaseKnowledgeHubChecks.
 function Invoke-ReleaseValidationRuntimeAndKnowledgeHubChecks {
 
+# New-LegacyProjectSeed: 显式建立 existing legacy project fixture，使 bootstrap 走 legacy
+# scaffold 路径，而不是 post-cutover 后的 C3.3 fresh bootstrap。写入 .agents/notes.md 作为
+# legacy 记忆标记（避免预置根 AGENTS.md 与模板冲突导致其无法进入 template_installed_hashes_sha256），
+# 让 Test-ExistingProjectMemory 判定为"已有项目记忆"；bootstrap 据此沿用历史 template / hub.lock 契约。
+# missing-lock 等负例仍需空目录，故不在这里调用。
+# ! 不得用于恢复 fresh-legacy-bootstrap：cutover 后 fresh project 必须保持 c3.3/active。
+function New-LegacyProjectSeed {
+    param([Parameter(Mandatory = $true)][string]$ProjectDir)
+
+    $agentDir = Join-Path $ProjectDir ".agents"
+    New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+    Set-Content -LiteralPath (Join-Path $agentDir "notes.md") -Value "# Legacy project memory fixture." -Encoding UTF8
+}
+
 try {
     $hubFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-hub"
     $projectFixture = Join-PathParts $scratchRootFull "hub-lock-fixture-project"
@@ -20,8 +34,11 @@ try {
         }
     }
     Copy-Item -LiteralPath (Join-PathParts $repoRoot "knowledge-hub") -Destination $hubFixture -Recurse -Force
-    New-Item -ItemType Directory -Force -Path $projectFixture | Out-Null
-    New-Item -ItemType Directory -Force -Path $batchProjectFixture | Out-Null
+    # NOTE: cutover 后 fresh bootstrap 只会产出 C3.3 workspace，其 lock 不记录 git hub 元数据；
+    # 本检查验证的是 existing legacy project 的 hub.lock 漂移语义，故显式建立 legacy fixture，
+    # 让 bootstrap 走 legacy 路径写入历史契约（hub_dir/remote/branch/commit + template tree hash）。
+    New-LegacyProjectSeed -ProjectDir $projectFixture
+    New-LegacyProjectSeed -ProjectDir $batchProjectFixture
     New-Item -ItemType Directory -Force -Path $missingLockProject | Out-Null
 
     & git -C $hubFixture init | Out-Null
@@ -681,8 +698,10 @@ try {
         )
 
         $projectDir = Join-PathParts $scratchRootFull $Name
-        New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+        # NOTE: 保守语言迁移依赖 legacy 模板（docs/specs/_templates、.agents/AGENTS.md 等）作为源模板；
+        # 显式建立 legacy fixture，使 bootstrap 写出源语言模板，供 language_migration 识别 replace-template。
         Assert-PathInsideRoot -Path $projectDir -Root $scratchRootFull
+        New-LegacyProjectSeed -ProjectDir $projectDir
         & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -ProjectLanguage $SourceLanguage -SkipMemoryUpgradeAnalysis | Out-Host
 
         $agentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
@@ -963,7 +982,9 @@ try {
     }
 
     $preserveProject = Join-PathParts $scratchRootFull "bootstrap-memory-preservation-project"
-    New-Item -ItemType Directory -Force -Path $preserveProject | Out-Null
+    # NOTE: 本检查验证 existing legacy project 的模板保留/强制重置语义；显式建立 legacy fixture，
+    # 避免 fresh bootstrap 产出 C3.3 workspace 而缺少 .agents/AGENTS.md、.agents/process.txt、docs/specs/README.md。
+    New-LegacyProjectSeed -ProjectDir $preserveProject
     Assert-PathInsideRoot -Path $preserveProject -Root $scratchRootFull
 
     $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
@@ -1149,7 +1170,9 @@ try {
             [Parameter(Mandatory = $true)][bool]$RecordPriorHashes
         )
 
-        New-Item -ItemType Directory -Force -Path $ProjectDir | Out-Null
+        # NOTE: ownership guides（AGENTS.md + .agents/AGENTS.md）的保守刷新只存在于 legacy 路径；
+        # 显式建立 legacy fixture，使 bootstrap 写出两份 ownership guide 及对应 prior hash。
+        New-LegacyProjectSeed -ProjectDir $ProjectDir
         & $bootstrapScript -ProjectDir $ProjectDir -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
 
         $rootPath = Join-PathParts $ProjectDir "AGENTS.md"
