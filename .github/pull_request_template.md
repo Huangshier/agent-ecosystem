@@ -1,72 +1,76 @@
-# Pull Request（Pull Request）
+# 拉取请求
 
 解释性标题和正文默认使用简体中文；`paths`、commands、code/API/config
 fields、labels、state 以及其他机器可读值保留英文或原文。
 
-## Actor
+## 参与者
 
-- Proposed by: agent / human
-- Implemented by: agent / human
-- Reviewed by: pending / human / second-agent
-- Merge authority: maintainer
-- Actor Boundary: bot-backed public write flow / maintainer fallback (reason required)
+- 提议者：agent / human
+- 实施者：agent / human
+- 审查者：pending / human / second-agent
+- 合并权限：maintainer
 
-## Linked Issues
+<!-- 默认保持 None.；只有 maintainer 明确授权 fallback 时才替换为实际原因。 -->
+## Actor Boundary
+
+None.
+
+## 关联议题
 
 Refs #<number>
 
 <!-- 只有确实应在 merge 后自动关闭 Issue 时才使用 `Fixes #<number>`。 -->
 
-## Issue-To-Change Mapping
+## 议题与变更映射
 
-| 变更 | Source issue | Required? | Validation |
+| 变更 | 来源议题 | 是否必填 | 验证 |
 |---|---:|---|---|
 |  |  | yes/no |  |
 
-## Necessity Assessment
+## 必要性评估
 
-- Why this is needed：
-- Risk if not fixed：
-- Why now：
-- Alternatives considered：
+- 为什么需要：
+- 未修复风险：
+- 为什么现在：
+- 已考虑的替代方案：
 
-## Scope Control
+## 范围控制
 
-- [ ] No unrelated opportunistic edits
-- [ ] Public/private boundary checked
-- [ ] Documentation updated if needed
-- [ ] Release metadata updated if needed
+- [ ] 没有夹带无关修改
+- [ ] 已核对公共/私有边界
+- [ ] 必要时已更新文档
+- [ ] 必要时已更新 Release 元数据
 
-Release impact: none
+Release impact:
 
-<!-- Allowed values: none / patch / minor / major。详见 docs/release-process.md。 -->
+<!-- 必填且仅填写：none / patch / minor / major；详见 docs/release-process.md。 -->
 
-## Base / Stack Safety
+## 基线/堆叠安全
 
-- Target base branch: `main`
-- Is this intentionally stacked? yes/no
-- If yes, why is a non-main base required?
-- Before merge, confirm expected files will land on `main`.
+- 目标基线分支：`main`
+- 是否有意堆叠：yes/no
+- 如果是，为何需要非 `main` 基线？
+- 合并前确认预期文件会进入 `main`。
 
-## Validation
+## 验证
 
-- Validation tier：
-- Affected-surface command(s)：
+- 验证层级：
+- 受影响表面命令：
 
 ```text
 # command output summary
 ```
 
-## Rollback Plan
+## 回滚计划
 
-- Revert commit：
-- Files affected：
-- User-facing compatibility risk：
-- Safe rollback window：
+- 回滚提交：
+- 受影响文件：
+- 面向用户的兼容性风险：
+- 安全回滚窗口：
 
-## Human Decision
+## 人工决策
 
-- [ ] Maintainer accepted scope
-- [ ] Maintainer reviewed diff
-- [ ] Maintainer verified CI
-- [ ] Maintainer approved merge
+- [ ] 维护者已接受范围
+- [ ] 维护者已审查 diff
+- [ ] 维护者已核对 CI
+- [ ] 维护者已批准 merge
