@@ -110,6 +110,30 @@ function Test-Manifest {
     return @($errors.ToArray())
 }
 
+function Get-RuntimeSmokeTreeFingerprint {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
+        return "missing"
+    }
+
+    $records = @(
+        Get-ChildItem -LiteralPath $Root -Recurse -Force |
+            ForEach-Object {
+                $relative = [System.IO.Path]::GetRelativePath($Root, $_.FullName).Replace('\', '/')
+                if ($_.PSIsContainer) {
+                    "directory|$relative"
+                }
+                else {
+                    "file|$relative|$($_.Length)|$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
+                }
+            } |
+            Sort-Object
+    )
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($records -join "`n")
+    return [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+}
+
 # Invoke-ReleaseValidationInstallerRuntimeChecks: No parameters; runs installer matrix, runtime smoke, and temporary project support checks in the original order.
 function Invoke-ReleaseValidationInstallerRuntimeChecks {
 
@@ -286,7 +310,34 @@ try {
     $sourceStatusScript = Join-PathParts $repoRoot "scripts" "status.ps1"
     $installedStatusScript = Join-PathParts $script:recommendedCopyRuntime "scripts" "status.ps1"
     $sourceRuntimeStatus = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -Json | ConvertFrom-Json)
-    $installedRuntimeStatus = (& $installedStatusScript -RuntimeDir $script:recommendedCopyRuntime -Json | ConvertFrom-Json)
+    $retiredSkills = @("project-context-gate", "memory-governance", "workflow-spec-lite")
+    $installedRetiredSkills = @($retiredSkills | Where-Object { Test-Path -LiteralPath (Join-PathParts $script:recommendedCopyRuntime "skills" $_) })
+    if ($installedRetiredSkills.Count -ne 0) {
+        throw ("Recommended copy runtime installed retired Skills: {0}" -f ($installedRetiredSkills -join ", "))
+    }
+
+    $runtimeFingerprintBefore = Get-RuntimeSmokeTreeFingerprint -Root $script:recommendedCopyRuntime
+    $projectFingerprintBefore = Get-RuntimeSmokeTreeFingerprint -Root $copySmoke.project
+    $pwshPath = (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $global:LASTEXITCODE = 0
+    $installedStatusOutput = @(
+        & $pwshPath `
+            -NoProfile `
+            -NonInteractive `
+            -File $installedStatusScript `
+            -RuntimeDir $script:recommendedCopyRuntime `
+            -ProjectDir $copySmoke.project `
+            -Json 2>&1 |
+            ForEach-Object { [string]$_ }
+    )
+    $installedStatusExitCode = [int]$LASTEXITCODE
+    if ($installedStatusExitCode -ne 0) {
+        throw ("Installed C3.3 project status failed with exit code {0}: {1}" -f $installedStatusExitCode, ($installedStatusOutput -join "`n"))
+    }
+    $installedStatusText = $installedStatusOutput -join "`n"
+    $installedRuntimeStatus = $installedStatusText | ConvertFrom-Json
+    $runtimeFingerprintAfter = Get-RuntimeSmokeTreeFingerprint -Root $script:recommendedCopyRuntime
+    $projectFingerprintAfter = Get-RuntimeSmokeTreeFingerprint -Root $copySmoke.project
     foreach ($payload in @($sourceRuntimeStatus, $installedRuntimeStatus)) {
         if ([string]$payload.runtime.workspace.architecture -cne "c3.3" -or
             [string]$payload.runtime.workspace.lifecycle -cne "active" -or
@@ -294,11 +345,32 @@ try {
             throw "Status did not report the active C3.3 default runtime workspace contract."
         }
     }
+    if ($installedStatusText.Contains("memory-helper-unavailable")) {
+        throw "Installed active C3.3 status still depended on a retired memory helper."
+    }
+    if ([string]$installedRuntimeStatus.project.status -cne "current" -or
+        [string]$installedRuntimeStatus.project.reason -cne "canonical-layout-present" -or
+        [string]$installedRuntimeStatus.project.workspace.status -cne "current" -or
+        [string]$installedRuntimeStatus.project.workspace.readiness -cne "active-ready") {
+        throw "Installed active C3.3 Project status did not align with workspace readiness."
+    }
+    if ($runtimeFingerprintBefore -cne $runtimeFingerprintAfter -or
+        $projectFingerprintBefore -cne $projectFingerprintAfter) {
+        throw "Installed status modified the Runtime or project tree."
+    }
     $runtimeSmokeResults.Add([ordered]@{
             name = "active-c3-3-runtime-status"
             architecture = [string]$sourceRuntimeStatus.runtime.workspace.architecture
             lifecycle = [string]$sourceRuntimeStatus.runtime.workspace.lifecycle
             default_cutover = [bool]$sourceRuntimeStatus.runtime.workspace.default_cutover
+            installed_status_exit_code = $installedStatusExitCode
+            project_status = [string]$installedRuntimeStatus.project.status
+            project_reason = [string]$installedRuntimeStatus.project.reason
+            workspace_status = [string]$installedRuntimeStatus.project.workspace.status
+            workspace_readiness = [string]$installedRuntimeStatus.project.workspace.readiness
+            retired_skills_absent = $true
+            runtime_fingerprint_unchanged = ($runtimeFingerprintBefore -ceq $runtimeFingerprintAfter)
+            project_fingerprint_unchanged = ($projectFingerprintBefore -ceq $projectFingerprintAfter)
         })
 
     if (-not $SkipLinkMode.IsPresent) {
@@ -309,7 +381,7 @@ try {
     }
 
     $script:evidence.runtime_smoke = @($runtimeSmokeResults.ToArray())
-    Add-Check "runtime smoke" "PASS" "Bootstrap, project-workspace check/discover, hub-lock drift, and active C3.3 runtime status smoke checks passed for recommended runtime installs." $evidence.runtime_smoke
+    Add-Check "runtime smoke" "PASS" "Bootstrap, project-workspace check/discover, retired-Skill absence, installed Project status, read-only fingerprints, and active C3.3 runtime status smoke checks passed for recommended runtime installs." $evidence.runtime_smoke
 }
 catch {
     Add-Check "runtime smoke" "FAIL" $_.Exception.Message

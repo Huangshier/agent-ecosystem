@@ -185,6 +185,31 @@
         return [ordered]@{ root = $root; hub = $hub; lock = $lock }
     }
 
+    function New-C33ProjectStatusFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$Name,
+            [ValidateSet("c3.3", "legacy")][string]$WorkspaceModel = "c3.3",
+            [string]$WorkspaceState = "active"
+        )
+
+        $root = Join-PathParts $fixtureRoot "c33-project-$Name"
+        Write-StatusText -Path (Join-PathParts $root "AGENTS.md") -Text "# Fixture"
+        Write-StatusText -Path (Join-PathParts $root ".agents" "README.md") -Text "# Workspace"
+        foreach ($relative in @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")) {
+            New-Item -ItemType Directory -Force -Path (Join-PathParts $root $relative) | Out-Null
+        }
+        $lock = [ordered]@{
+            schema_version = 1
+            project_language = "en"
+            workspace_model = $WorkspaceModel
+            workspace_state = $WorkspaceState
+            workspace_roots = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+        }
+        $lockPath = Join-PathParts $root ".agents" "hub.lock.json"
+        Write-StatusText -Path $lockPath -Text ($lock | ConvertTo-Json -Depth 8)
+        return [ordered]@{ root = $root; lock = $lock; lock_path = $lockPath }
+    }
+
     function Read-StatusPayload {
         param([Parameter(Mandatory = $true)][object]$Run)
         Assert-StatusCondition -Condition ([int]$Run.exit_code -eq 0) -Message "Runtime status fixture returned non-zero."
@@ -380,7 +405,7 @@
             project = [pscustomobject]@{ status = $Project; reason = $ProjectReason }
         }
     }
-    $allowedActions = @("none", "inspect-manually", "reinstall-runtime", "review-managed-conflicts", "repair-bridge", "refresh-project-templates", "run-memory-migration-analysis")
+    $allowedActions = @("none", "inspect-manually", "reinstall-runtime", "review-managed-conflicts", "repair-bridge", "refresh-project-templates", "run-project-migration-analysis")
     $actionCases = @(
         @{ name = "healthy"; expected = "none" },
         @{ name = "not-configured-not-requested"; bridge = "not-configured"; project = "unknown"; reason = "not-requested"; expected = "none" },
@@ -396,7 +421,7 @@
         @{ name = "bridge-broken-migration"; bridge = "broken"; project = "migration-required"; expected = "repair-bridge" },
         @{ name = "bridge-conflict"; bridge = "conflict"; expected = "repair-bridge" },
         @{ name = "bridge-unknown-refresh"; bridge = "unknown"; project = "optional-refresh"; expected = "inspect-manually" },
-        @{ name = "project-migration"; project = "migration-required"; expected = "run-memory-migration-analysis" },
+        @{ name = "project-migration"; project = "migration-required"; expected = "run-project-migration-analysis" },
         @{ name = "project-refresh"; project = "optional-refresh"; expected = "refresh-project-templates" },
         @{ name = "project-unknown"; project = "unknown"; reason = "missing-lock"; expected = "inspect-manually" },
         @{ name = "manifest-unrecognized"; manifest = "future"; expected = "inspect-manually" },
@@ -834,6 +859,63 @@
         [bool]$recActivePayload.runtime.workspace.default_cutover -and
         @($recActivePayload.findings | Where-Object code -eq "runtime.workspace.contract_invalid").Count -eq 0) -Message "Valid recommended active C3.3 contract was not accepted."
     $evidence.Add([ordered]@{ scenario = "c33-active-recommended"; lifecycle = [string]$recActivePayload.runtime.workspace.lifecycle })
+
+    $absentRetiredHelper = Join-PathParts $fixtureRoot "helpers" "retired-helper-absent.ps1"
+    $c33CurrentProject = New-C33ProjectStatusFixture -Name "current"
+    $c33CurrentBefore = @(Get-ProjectFixtureTreeState -Root $c33CurrentProject.root)
+    $c33CurrentRun = Invoke-Status `
+        -RuntimeRoot $recActiveRuntime `
+        -ProjectRoot $c33CurrentProject.root `
+        -LockHelper $absentRetiredHelper `
+        -UpgradeHelper $absentRetiredHelper `
+        -DiagnoseHelper $absentRetiredHelper
+    $c33CurrentText = @($c33CurrentRun.output) -join "`n"
+    $c33CurrentPayload = Read-StatusPayload -Run $c33CurrentRun
+    Assert-StatusCondition -Condition (
+        [string]$c33CurrentPayload.project.status -ceq "current" -and
+        [string]$c33CurrentPayload.project.reason -ceq "canonical-layout-present" -and
+        [string]$c33CurrentPayload.project.workspace.status -ceq "current" -and
+        [string]$c33CurrentPayload.project.workspace.layout -ceq "complete" -and
+        [string]$c33CurrentPayload.project.workspace.runtime_boundary -ceq "separate" -and
+        [string]$c33CurrentPayload.project.workspace.readiness -ceq "active-ready" -and
+        [string]$c33CurrentPayload.recommended_next_action -ceq "none"
+    ) -Message "Active C3.3 workspace did not own the top-level Project status."
+    Assert-StatusCondition -Condition (-not $c33CurrentText.Contains("memory-helper-unavailable")) -Message "Active C3.3 status still depended on a retired memory helper."
+    Assert-StatusCondition -Condition ((@($c33CurrentBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState -Root $c33CurrentProject.root) -join "`n")) -Message "Active C3.3 status modified the project fixture."
+    $evidence.Add([ordered]@{ scenario = "c33-project-current-retired-helpers-absent"; status = [string]$c33CurrentPayload.project.status; readiness = [string]$c33CurrentPayload.project.workspace.readiness })
+
+    $c33LegacyProject = New-C33ProjectStatusFixture -Name "legacy" -WorkspaceModel "legacy" -WorkspaceState "not-enabled"
+    $c33LegacyPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33LegacyProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+    Assert-StatusCondition -Condition (
+        [string]$c33LegacyPayload.project.status -ceq "migration-required" -and
+        [string]$c33LegacyPayload.project.reason -ceq "legacy-workspace" -and
+        [string]$c33LegacyPayload.project.workspace.readiness -ceq "not-c3-3" -and
+        [string]$c33LegacyPayload.recommended_next_action -ceq "run-project-migration-analysis"
+    ) -Message "Legacy project did not route exclusively to the C3.3 project migration authority."
+    $evidence.Add([ordered]@{ scenario = "c33-project-legacy-migration"; status = [string]$c33LegacyPayload.project.status; next_action = [string]$c33LegacyPayload.recommended_next_action })
+
+    $c33MalformedProject = New-C33ProjectStatusFixture -Name "malformed"
+    Write-StatusText -Path $c33MalformedProject.lock_path -Text '{"schema_version":'
+    $c33MalformedPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33MalformedProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+    Assert-StatusCondition -Condition (
+        [string]$c33MalformedPayload.project.status -ceq "unknown" -and
+        [string]$c33MalformedPayload.project.reason -ceq "invalid-workspace-metadata" -and
+        [string]$c33MalformedPayload.project.workspace.status -ceq "unknown" -and
+        [string]$c33MalformedPayload.project.workspace.readiness -ceq "unknown"
+    ) -Message "Malformed C3.3 workspace metadata did not fail closed."
+    $evidence.Add([ordered]@{ scenario = "c33-project-malformed"; status = [string]$c33MalformedPayload.project.status })
+
+    $c33SchemaProject = New-C33ProjectStatusFixture -Name "schema-missing"
+    $c33SchemaProject.lock.Remove("schema_version")
+    Write-StatusText -Path $c33SchemaProject.lock_path -Text ($c33SchemaProject.lock | ConvertTo-Json -Depth 8)
+    $c33SchemaPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33SchemaProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+    Assert-StatusCondition -Condition ([string]$c33SchemaPayload.project.status -ceq "unknown" -and [string]$c33SchemaPayload.project.reason -ceq "invalid-workspace-metadata") -Message "Schema-less C3.3 workspace metadata was reported as current."
+    $evidence.Add([ordered]@{ scenario = "c33-project-schema-missing"; status = [string]$c33SchemaPayload.project.status })
+
+    $c33MissingRoot = Join-PathParts $fixtureRoot "c33-project-missing"
+    $c33MissingPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33MissingRoot -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+    Assert-StatusCondition -Condition ([string]$c33MissingPayload.project.status -ceq "unknown" -and [string]$c33MissingPayload.project.reason -ceq "project-not-found" -and [string]$c33MissingPayload.project.workspace.status -ceq "missing") -Message "Missing C3.3 project did not fail closed."
+    $evidence.Add([ordered]@{ scenario = "c33-project-missing"; status = [string]$c33MissingPayload.project.status })
 
     $minActive = New-C33StatusManifest -Profile "minimal" -Workspace (New-C33Workspace -Authority $minimalAuthorityForStatus)
     $minActiveRuntime = Join-PathParts $fixtureRoot "c33-active-minimal"
