@@ -20,6 +20,20 @@ repository.
 在 `0.x` 阶段，重大不兼容变化至少按 `minor` 处理，并要求迁移或兼容性说明；
 如果公开兼容性承诺需要，maintainer 可选择更高影响级别。
 
+从最近已发布版本 `vX.Y.Z` 出发，按 `Unreleased` 中的最高 impact 确定目标版本：
+
+- `none`：本身不产生版本号递增；如果 `Unreleased` 全部为 `none`，默认不创建版本化 Release。maintainer 若明确决定仍需发布，最低使用 `patch`。
+- `patch`：`vX.Y.Z` -> `vX.Y.(Z+1)`。
+- `minor`：`vX.Y.Z` -> `vX.(Y+1).0`。
+- `major`：`vX.Y.Z` -> `v(X+1).0.0`，必须由 maintainer 显式决定。
+
+对于 `0.x`：
+
+- `breaking change` 可以按 `minor` 表达，并要求迁移或兼容性说明；
+- 只有 maintainer 明确决定进入新的 `major/stability line` 时才使用 `major`。
+
+当前事实可按同一规则确定推导：`v0.7.1` + highest impact `minor` -> `v0.8.0`。
+
 Release trigger 仅限：
 
 1. 完整且可消费的功能或架构批次完成；
