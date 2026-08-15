@@ -1,33 +1,46 @@
 # Language Policy
 
-## Public Documentation
+本文件明确区分两种语言行为：本公开仓库的治理语言，以及
+target-project 的 `ProjectLanguage` / Runtime 语言行为。两者不是同一套
+产品语义。
 
-`README.md` is the project's chosen Simplified Chinese repository homepage.
-`README.en.md` is the English entrypoint. `README.zh-CN.md` is kept as a
-compatibility redirect for older links.
+## A. Public Repository Governance Language
 
-Deeper public documentation may remain English-first unless a file, issue, or
-translation effort explicitly targets another language.
+本公开仓库的 maintainer-facing Issue/PR body、review、decision 和 closeout
+默认使用简体中文。解释性正文优先中文，但不要求把整个仓库翻译成中文。
+
+- Issue / PR title 可以使用简洁、稳定的英文技术标题，不强制双语。
+- commit message 默认使用简洁英文，不重复写中英文两份。
+- `labels`、`state`、`paths`、`commands`、code/API/config/JSON/YAML fields、
+  `Refs #<number>` / `Fixes #<number>` 以及 raw errors/logs 保留英文或原文，
+  以免破坏 GitHub、脚本和其他机器消费者。
+- `README.md` 是项目选定的 Simplified Chinese repository homepage；
+  `README.en.md` 是英文入口，`README.zh-CN.md` 保留为旧链接兼容 redirect。
+- 新增或大幅改写的 maintainer-facing governance prose 默认遵循上述中文优先
+  规则；既有英文文档不因本规则被要求全仓翻译。
 
 ## Conversation And Artifact Routing
 
-User-facing conversation can follow the user's current language. Repository
-artifacts should follow the target artifact's audience and project policy
-instead of copying the conversation language automatically.
+用户对话可以遵循当前对话语言；public governance artifact 则遵循本段的
+受众和机器契约，不把对话语言机械复制到所有文件。
 
-For public/private workflows:
+在 public/private workflow 中：
 
-- root README routing follows the public documentation policy above
-- deeper public community-facing docs, release notes, and knowledge hub entries
-  may stay English-first unless they are explicit translations
-- private control docs and private memory follow the private repository's
-  `.agents/AGENTS.md`
-- project-local memory follows the target project's `.agents/AGENTS.md`
-- code identifiers, commands, paths, APIs, file names, Markdown field labels,
-  and raw error text may stay in English or their original form
+- public GitHub Issue/PR 的解释性维护记录默认使用简体中文；
+- private control docs 和 private memory 遵循 private repository 的
+  `.agents/AGENTS.md`；
+- project-local memory 遵循 target-project 的 `.agents/AGENTS.md`；
+- code identifiers、commands、paths、APIs、file names、Markdown field labels
+  和 raw error text 可以保留英文或原文。
 
-The reusable knowledge standard is
-[Bilingual Public/Private Routing](../knowledge-hub/knowledge/standards/bilingual-public-private-routing.md).
+可复用的双边界说明见
+[Bilingual Public/Private Routing](../knowledge-hub/knowledge/standards/bilingual-public-private-routing.md)。
+
+## B. Target-Project ProjectLanguage And Runtime Language Behavior
+
+以下规则只描述 target-project 的工程记忆和 Runtime 行为，不规定本公开仓库
+的 Issue/PR 治理语言。本 PR 不改变 existing runtime fallback、language
+migration 或 `ProjectLanguage` product semantics。
 
 ## Project Memory
 
@@ -40,8 +53,8 @@ Bootstrap templates install a `Project Language Policy` section into
 non-trivial session that writes engineering memory should fill that section
 from the user's primary language.
 
-`project-bootstrap` provides a script-driven closeout path for that first
-write. An agent or workflow can pass the user's primary language explicitly:
+`project-bootstrap` provides a script-driven closeout path for that first write.
+An agent or workflow can pass the user's primary language explicitly:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
@@ -61,10 +74,10 @@ Project memory scaffolds are backed by tracked file templates under
 the repository authority, with a bundled runtime snapshot under
 `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
 The only first-class template languages are `en` and `zh-CN`; this is not
-arbitrary-language i18n. English is the public default and fallback language,
-so plain bootstrap is equivalent to `-ProjectLanguage en`. If a `zh-CN`
-template file is missing, the helper falls back to the matching English
-template and reports fallback metadata so validation can flag the gap.
+arbitrary-language i18n. For target-project memory, English remains the default
+and fallback language, so plain bootstrap is equivalent to `-ProjectLanguage en`.
+If a `zh-CN` template file is missing, the helper falls back to the matching
+English template and reports fallback metadata so validation can flag the gap.
 
 For established project memory, changing the project memory language is a
 conservative migration task, not a scaffold overwrite. Bootstrap preserves
@@ -123,10 +136,9 @@ The audit ignores `Summary` / `Keywords` discovery metadata, fenced code, and
 protected literals before reporting heuristic findings. It is read-only and
 does not translate or rewrite project memory. Language migration validation
 records this audit evidence and treats blocking source-language leftovers as a
-completion failure.
-When using `-Json`, the output includes the resolved `project_dir`. Review or
-redact local paths before copying audit output into public issues, pull
-requests, or documents.
+completion failure. When using `-Json`, the output includes the resolved
+`project_dir`; review or redact local paths before copying audit output into
+public issues, pull requests, or documents.
 
 The file templates are structural baselines for scaffold generation, language
 updates, and conservative migration planning. They are not a reason to replace
@@ -135,12 +147,13 @@ can be replaced with target-language templates. Project-specific narrative that
 cannot be safely migrated deterministically is preserved verbatim and routed to
 manual review instead of being silently translated or dropped. Concise hot
 memory files route original source content to migration artifacts instead of
-appending the full source back into `.agents/plan.md`,
-`.agents/process.txt`, or `.agents/notes.md`.
+appending the full source back into `.agents/plan.md`, `.agents/process.txt`, or
+`.agents/notes.md`.
 
 Memory governance and upgrade diagnostics recognize English discovery headings
 and localized Simplified Chinese equivalents for context discovery metadata.
-Public templates remain English-first.
+For target-project memory only, Public templates remain English-first; this
+existing runtime rule does not govern the public GitHub templates in `.github/`.
 
 Filenames, directory names, Markdown field labels, commands, paths, API names,
 and error text should remain in English or in their original form.

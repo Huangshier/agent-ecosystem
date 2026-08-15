@@ -4,10 +4,53 @@ This process keeps public releases repeatable while keeping private migration
 state, sensitive audit details, and local runtime paths out of the public
 repository.
 
+## Release impact 与版本决策
+
+每个拉取请求记录一个机器可读的决策字段：
+`Release impact: none / patch / minor / major`。
+
+下一版本类型取上一个已发布 Release 之后所有公开变更的最高影响级别，
+不按拉取请求数量或固定日历决定。
+
+- `none`：不单独触发 Release。
+- `patch`：向后兼容修复，不改变公开默认架构或行为。
+- `minor`：新增公开能力，或改变默认 Runtime、项目或安装器契约。
+- `major`：重大稳定性或兼容性承诺，由 maintainer 显式决定。
+
+在 `0.x` 阶段，重大不兼容变化至少按 `minor` 处理，并要求迁移或兼容性说明；
+如果公开兼容性承诺需要，maintainer 可选择更高影响级别。
+
+从最近已发布版本 `vX.Y.Z` 出发，按 `Unreleased` 中的最高 impact 确定目标版本：
+
+- `none`：本身不产生版本号递增；如果 `Unreleased` 全部为 `none`，默认不创建版本化 Release。maintainer 若明确决定仍需发布，最低使用 `patch`。
+- `patch`：`vX.Y.Z` -> `vX.Y.(Z+1)`。
+- `minor`：`vX.Y.Z` -> `vX.(Y+1).0`。
+- `major`：`vX.Y.Z` -> `v(X+1).0.0`，必须由 maintainer 显式决定。
+
+对于 `0.x`：
+
+- `breaking change` 可以按 `minor` 表达，并要求迁移或兼容性说明；
+- 只有 maintainer 明确决定进入新的 `major/stability line` 时才使用 `major`。
+
+当前事实可按同一规则确定推导：`v0.7.1` + highest impact `minor` -> `v0.8.0`。
+
+Release trigger 仅限：
+
+1. 完整且可消费的功能或架构批次完成；
+2. 需要及时交付的修复；或
+3. maintainer 判断 `Unreleased` 已形成稳定点。
+
+不按拉取请求数量或固定周期强制发布。普通治理类拉取请求不会仅因修改治理文本
+就默认运行完整 Release 验证。通过
+`scripts/invoke-local-validation.ps1` 在 `iteration` 和 `pre-push` 阶段执行
+分类器选择的 affected-surface 路径；只有明确作出 Release/checkpoint 决定时才
+使用 `release` stage 或完整验证。
+
 ## Release Gate
 
-Run the release validation gate before any push, tag, or published release.
-For publish-ready finalization, pass the version that is about to be tagged:
+准备普通分支或拉取请求时使用 affected-surface 本地验证路径。对于明确的
+Release/checkpoint，或创建 tag、发布 Release 之前，运行 Release validation
+gate。进行可发布收尾时传入即将创建 tag 的版本号：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
@@ -211,8 +254,8 @@ When a change spans multiple categories, use the highest tier that applies.
 |---|---|---|
 | 0 | Issue or PR metadata only, such as labels, comments, issue routing, or branch cleanup with no repository diff | Read back the GitHub state that changed. No local repository validation is needed unless files changed. |
 | 1 | Low-risk text-only docs that do not affect README entrypoints, governance, release process, release notes, tracked `.agents` memory, scripts, installer behavior, CI, or generated runtime behavior | Run `git diff --check` and review links or changed prose manually. |
-| 2 | Public adoption docs, README entrypoints, governance docs, release process docs, release notes, release readiness, tracked `.agents` memory, specs, issue/PR templates, or public/private boundary wording | Run `git diff --check`, the public reader review when relevant, and the full local release validator. |
-| 3 | PowerShell scripts, installer or uninstaller behavior, release validator behavior, CI workflow files, skill metadata, knowledge hub generation/search behavior, templates that affect generated project memory, or release packaging | Run `git diff --check`, targeted parser or smoke checks for the changed surface, and the full local release validator before PR review. |
+| 2 | Public adoption docs, README entrypoints, governance docs, release process docs, release notes, release readiness, tracked `.agents` memory, specs, issue/PR templates, or public/private boundary wording | 执行 `git diff --check`、必要时进行公开读者审查，并执行分类器选择的 affected-surface `iteration` / `pre-push` validation；默认不运行完整 Release 验证。 |
+| 3 | PowerShell scripts, installer or uninstaller behavior, release validator behavior, CI workflow files, skill metadata, knowledge hub generation/search behavior, templates that affect generated project memory, or release packaging | 执行 `git diff --check`、受影响表面的定向解析器或冒烟检查，以及分类器选择的 affected-surface validation；完整 Release 验证仅用于明确的 Release/checkpoint 决策。 |
 
 Release publication still requires the full release gate and maintainer
 approval. Repository settings, secrets, GitHub App permissions, rulesets, and

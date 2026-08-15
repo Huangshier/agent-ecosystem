@@ -1,25 +1,25 @@
 ---
-name: Feature request
-about: Suggest a new feature or improvement.
+name: 功能请求
+about: 提议一项新能力或改进。
 title: ""
 labels: enhancement, triage:needs-human
 assignees: ""
 ---
 
-# Feature Request
+# 功能请求
 
-## Problem
+## 问题
 
-<!-- What problem does this solve? Why is the current behavior insufficient? -->
+<!-- 这项请求解决什么问题？为什么当前行为不够？ -->
 
-## Proposal
+## 提案
 
-<!-- Describe the feature or change you'd like. -->
+<!-- 描述希望增加或改变的能力。 -->
 
-## Alternatives Considered
+## 已考虑的替代方案
 
-<!-- What other approaches did you consider? Why were they rejected? -->
+<!-- 还考虑过哪些方案？为什么没有选择？ -->
 
-## Scope
+## 范围
 
-<!-- Is this a small improvement, a new module, or a broader architectural change? -->
+<!-- 这是小改进、新模块，还是更广泛的架构变化？ -->

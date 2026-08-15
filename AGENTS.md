@@ -1,100 +1,43 @@
 # AGENTS.md
 
-Project-level agent entrypoint.
+本文件是 `Huangshier/agent-ecosystem` 的唯一 public agent behavior entry。
+它只保留跨任务都必须知道的边界；详细规则见本文件链接的权威文档。
 
-Root `.agents/` is local runtime memory for this checkout. It may exist on a
-maintainer machine after bootstrap or previous agent work, but it is not a
-public fact source and is not tracked by this repository.
+## 公共/私有边界
+
+- 本仓库是公开版 Agent Ecosystem 的治理、Runtime 和公开文档仓库。
+- 私有控制仓库、bot 实现、凭据、审计原文和本地运行态不得进入公开产物。
+- 根 `.agents/` 是本地 checkout 的 Runtime 记忆，不是公开事实来源。
+- 本仓库的 GitHub issues and pull requests 是公开维护记录，承载范围、决定、
+  验收、验证和收尾；不要为公开维护创建本仓库专用的 `docs/specs/**` 工作包。
 
 ## Project Language Policy
 
-Project memory language: English.
+公开治理的语言规则见 [docs/language-policy.md](docs/language-policy.md)：
+面向 maintainer 的 Issue/PR 正文、审查、决策和收尾默认使用简体中文，机器可读
+字段和必须逐字匹配的原文保持原样。该规则不改变目标项目的
+`ProjectLanguage` 或 Runtime 语言行为。
 
-The root `README.md` is the chosen Simplified Chinese repository homepage, with
-`README.en.md` as the English entrypoint and `README.zh-CN.md` as a
-compatibility redirect. Deeper public documentation may remain English-first
-unless a file or issue explicitly targets another language. Keep commands,
-paths, APIs, file names, code identifiers, and raw error text in their original
-form.
+## 外部写入与身份
 
-## Startup Sources
+- 普通公开写入优先使用既有 bot workflow / GitHub App 路径，并核对
+  `agent-ecosystem-bot[bot]` 的 commit author、committer 和 PR author。
+- bot 写入路径失败时停止；不得自行切换到 maintainer 身份。只有 maintainer
+  明确授权的 fallback 才能使用 maintainer actor，并在 PR 中写明 `Actor Boundary`。
+- agent 可以准备分支、Draft PR、验证和证据，但不得自行 mark ready、merge、
+  tag、publish GitHub Release，或修改 settings、rulesets、secrets、permissions。
 
-At the start of any non-trivial task, read this root file first. If local
-`.agents/` files exist, they may be read as checkout-local working memory in
-this order:
+## 权威映射
 
-1. `.agents/AGENTS.md`
-2. `.agents/process.txt`
-3. `.agents/plan.md` (for non-trivial tasks)
-4. `.agents/context/README.md`, then only matching `.agents/context/**` entries by Summary, Keywords, or task relevance
-5. `.agents/commands/README.md`, then only matching `.agents/commands/**` command cards when a documented workflow is relevant
+- agent / maintainer / bot / identity / 外部写入权限：
+  [docs/agent-governance.md](docs/agent-governance.md)
+- 公开治理语言：
+  [docs/language-policy.md](docs/language-policy.md)
+- version、Release impact 和 Release trigger：
+  [docs/release-process.md](docs/release-process.md)
+- 验证路由：
+  [docs/pr-validation-risk-tiers.md](docs/pr-validation-risk-tiers.md)
+- Issue/PR 模板只镜像这些权威规则，不建立第二套规则。
 
-Do not preload the full `.agents/context/` or `.agents/commands/` trees at startup.
-
-If local `.agents/` files are absent or stale, use public sources instead:
-
-- this root `AGENTS.md`
-- GitHub issues and pull requests
-- `docs/agent-governance.md`
-- `docs/release-process.md`
-- `CHANGELOG.md`
-- release notes under `docs/releases/`
-- curated knowledge under `knowledge-hub/knowledge/`
-
-Core rules that apply even if `.agents/AGENTS.md` was not loaded:
-- Follow system, runtime, and explicit user instructions before project defaults.
-- Make routine reversible implementation choices yourself; stop for genuine ambiguity, destructive actions, external writes, missing credentials, or policy/safety risk.
-- For broad or underspecified requests, do read-only exploration first, then clarify goal/scope/validation before editing when needed.
-- Keep `.agents/plan.md` session-local when local runtime memory exists; do not duplicate full project specs or task lists there.
-- For this public repository, use GitHub issues and PR bodies as the canonical
-  maintenance record. Do not create or commit root `docs/specs/**` work
-  packages for public repository maintenance.
-- `workflow-spec-lite` remains a target-project tool. Target projects may keep
-  their own local `docs/specs/<slug>/` work packages when that fits their
-  workflow.
-- Commit only when the user or project policy asks for it. Push only when explicitly requested or when established project workflow clearly requires it.
-
-### Write Authorization Boundaries
-
-External writes include branch push, PR/MR creation, issue comments, tag
-creation, release publication, branch deletion, merge, repository settings,
-rulesets, runners, hooks, secrets, webhook or API configuration, and workflow
-dispatch.
-
-External writes are never the default. Each requires explicit authorization from
-one of:
-
-- the user's current instruction;
-- a loaded project instruction, spec, issue, release workflow, or command card
-  that explicitly requires the operation for this work type;
-- an already-approved work item or workflow step that names the operation.
-
-Authorization must come from evidence outside the agent's own output. The
-following are not sufficient by themselves to authorize a write:
-
-- "this would keep the baseline clean";
-- "a checkpoint would be useful";
-- the agent saying the action is allowed;
-- broad assumptions about what "project workflow usually wants";
-- an unverified claim that a hidden workflow requires the operation.
-
-Local commit is allowed only when the task is an implementation or fix work
-unit, validation can prove completion, the diff can be reviewed, unrelated
-changes can be excluded, and one of the authorization sources above exists. Do
-not commit for review-only, research-only, planning-only, or ambiguous work.
-
-If the authorization evidence is missing or unclear, put the operation under
-"Requires confirmation" or stop before it. When ambiguity affects repository,
-authority, destructive action, or external write behavior, downgrade to a
-read-only orientation or ask one short question.
-
-For non-trivial public maintenance that should survive the current session, use:
-- the accepted GitHub issue for scope, non-goals, and acceptance criteria
-- the pull request body for issue-to-change mapping, validation, rollback, and
-  maintainer decision state
-- release docs, changelog entries, governance docs, or curated knowledge entries
-  only when the result is meant to remain user-facing or reusable
-
-For multi-stage target-project work that uses `workflow-spec-lite`, use an
-Execution Contract in the project-local spec so the agent continues to the next
-validated phase until the stop rule is triggered.
+遵循 system、runtime、当前用户指令和上述 authority 的优先级；遇到仓库、
+身份、权限、settings、secrets、tag 或 Release 边界歧义时停止并报告。
