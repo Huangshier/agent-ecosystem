@@ -189,7 +189,8 @@
         param(
             [Parameter(Mandatory = $true)][string]$Name,
             [ValidateSet("c3.3", "legacy")][string]$WorkspaceModel = "c3.3",
-            [string]$WorkspaceState = "active"
+            [string]$WorkspaceState = "active",
+            [ValidateSet("en", "zh-CN")][string]$ProjectLanguage = "en"
         )
 
         $root = Join-PathParts $fixtureRoot "c33-project-$Name"
@@ -200,7 +201,7 @@
         }
         $lock = [ordered]@{
             schema_version = 1
-            project_language = "en"
+            project_language = $ProjectLanguage
             workspace_model = $WorkspaceModel
             workspace_state = $WorkspaceState
             workspace_roots = @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
@@ -878,11 +879,21 @@
         [string]$c33CurrentPayload.project.workspace.layout -ceq "complete" -and
         [string]$c33CurrentPayload.project.workspace.runtime_boundary -ceq "separate" -and
         [string]$c33CurrentPayload.project.workspace.readiness -ceq "active-ready" -and
+        [string]$c33CurrentPayload.project.project_language -ceq "en" -and
         [string]$c33CurrentPayload.recommended_next_action -ceq "none"
     ) -Message "Active C3.3 workspace did not own the top-level Project status."
     Assert-StatusCondition -Condition (-not $c33CurrentText.Contains("memory-helper-unavailable")) -Message "Active C3.3 status still depended on a retired memory helper."
     Assert-StatusCondition -Condition ((@($c33CurrentBefore) -join "`n") -ceq (@(Get-ProjectFixtureTreeState -Root $c33CurrentProject.root) -join "`n")) -Message "Active C3.3 status modified the project fixture."
-    $evidence.Add([ordered]@{ scenario = "c33-project-current-retired-helpers-absent"; status = [string]$c33CurrentPayload.project.status; readiness = [string]$c33CurrentPayload.project.workspace.readiness })
+    $evidence.Add([ordered]@{ scenario = "c33-project-current-retired-helpers-absent"; status = [string]$c33CurrentPayload.project.status; readiness = [string]$c33CurrentPayload.project.workspace.readiness; project_language = [string]$c33CurrentPayload.project.project_language })
+
+    $c33ZhProject = New-C33ProjectStatusFixture -Name "current-zh" -ProjectLanguage "zh-CN"
+    $c33ZhPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33ZhProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+    Assert-StatusCondition -Condition (
+        [string]$c33ZhPayload.project.status -ceq "current" -and
+        [string]$c33ZhPayload.project.workspace.readiness -ceq "active-ready" -and
+        [string]$c33ZhPayload.project.project_language -ceq "zh-CN"
+    ) -Message "Active C3.3 zh-CN workspace language was not preserved."
+    $evidence.Add([ordered]@{ scenario = "c33-project-current-zh"; status = [string]$c33ZhPayload.project.status; project_language = [string]$c33ZhPayload.project.project_language })
 
     $c33LegacyProject = New-C33ProjectStatusFixture -Name "legacy" -WorkspaceModel "legacy" -WorkspaceState "not-enabled"
     $c33LegacyPayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33LegacyProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
@@ -904,6 +915,31 @@
         [string]$c33MalformedPayload.project.workspace.readiness -ceq "unknown"
     ) -Message "Malformed C3.3 workspace metadata did not fail closed."
     $evidence.Add([ordered]@{ scenario = "c33-project-malformed"; status = [string]$c33MalformedPayload.project.status })
+
+    $c33LanguageCases = @(
+        @{ name = "language-missing"; remove = $true; value = $null },
+        @{ name = "language-non-string"; remove = $false; value = 7 },
+        @{ name = "language-unsupported"; remove = $false; value = "fr" }
+    )
+    foreach ($case in $c33LanguageCases) {
+        $c33LanguageProject = New-C33ProjectStatusFixture -Name $case.name
+        if ([bool]$case.remove) {
+            $c33LanguageProject.lock.Remove("project_language")
+        }
+        else {
+            $c33LanguageProject.lock.project_language = $case.value
+        }
+        Write-StatusText -Path $c33LanguageProject.lock_path -Text ($c33LanguageProject.lock | ConvertTo-Json -Depth 8)
+        $c33LanguagePayload = Read-StatusPayload -Run (Invoke-Status -RuntimeRoot $recActiveRuntime -ProjectRoot $c33LanguageProject.root -LockHelper $absentRetiredHelper -UpgradeHelper $absentRetiredHelper -DiagnoseHelper $absentRetiredHelper)
+        Assert-StatusCondition -Condition (
+            [string]$c33LanguagePayload.project.status -ceq "unknown" -and
+            [string]$c33LanguagePayload.project.reason -ceq "invalid-workspace-metadata" -and
+            $null -eq $c33LanguagePayload.project.project_language -and
+            [string]$c33LanguagePayload.project.workspace.status -ceq "unknown" -and
+            [string]$c33LanguagePayload.project.workspace.readiness -ceq "unknown"
+        ) -Message "Invalid C3.3 project language $($case.name) did not fail closed."
+        $evidence.Add([ordered]@{ scenario = "c33-project-$($case.name)"; status = [string]$c33LanguagePayload.project.status })
+    }
 
     $c33SchemaProject = New-C33ProjectStatusFixture -Name "schema-missing"
     $c33SchemaProject.lock.Remove("schema_version")

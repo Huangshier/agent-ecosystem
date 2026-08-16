@@ -982,6 +982,7 @@ function Set-ProjectWorkspaceStatus {
     $lockPath = Join-PathParts $projectRoot ".agents" "hub.lock.json"
     $workspaceModel = ""
     $workspaceState = ""
+    $projectLanguage = $null
     if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
         try {
             $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
@@ -999,9 +1000,18 @@ function Set-ProjectWorkspaceStatus {
                     throw "unsupported workspace metadata schema"
                 }
             }
+            if ($workspaceModel -ceq "c3.3") {
+                $projectLanguage = Get-ManifestPropertyValue -Manifest $lock -Name "project_language"
+                if ($projectLanguage -isnot [string] -or $projectLanguage -cnotin @("en", "zh-CN")) {
+                    throw "unsupported project language"
+                }
+            }
             if (($workspaceModel -ceq "c3.3" -and $workspaceState -cnotin @("active", "dormant")) -or
                 ($workspaceModel -ceq "legacy" -and $workspaceState -cnotin @("", "not-enabled"))) {
                 throw "unsupported workspace state"
+            }
+            if ($workspaceModel -ceq "c3.3") {
+                $Payload.project.project_language = [string]$projectLanguage
             }
         }
         catch {
@@ -1063,7 +1073,6 @@ function Set-C33ProjectStatus {
     # 字段保留 schema-1 形状，但不再调用 retired helper 或伪造其诊断结果。
     $project.status = "unknown"
     $project.reason = "workspace-readiness-unavailable"
-    $project.project_language = $null
     $project.baseline.status = "unknown"
     $project.baseline.reason = "c3-3-workspace-authority"
     $project.memory.status = "unknown"

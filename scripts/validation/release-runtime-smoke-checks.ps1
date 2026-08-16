@@ -309,7 +309,12 @@ try {
 
     $sourceStatusScript = Join-PathParts $repoRoot "scripts" "status.ps1"
     $installedStatusScript = Join-PathParts $script:recommendedCopyRuntime "scripts" "status.ps1"
-    $sourceRuntimeStatus = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -Json | ConvertFrom-Json)
+    $projectLock = Get-Content -LiteralPath (Join-PathParts $copySmoke.project ".agents" "hub.lock.json") -Raw | ConvertFrom-Json
+    $expectedProjectLanguage = [string]$projectLock.project_language
+    if ($expectedProjectLanguage -cnotin @("en", "zh-CN")) {
+        throw "Recommended copy runtime project lock did not contain a supported project language."
+    }
+    $sourceRuntimeStatus = (& $sourceStatusScript -RuntimeDir $script:recommendedCopyRuntime -ProjectDir $copySmoke.project -Json | ConvertFrom-Json)
     $retiredSkills = @("project-context-gate", "memory-governance", "workflow-spec-lite")
     $installedRetiredSkills = @($retiredSkills | Where-Object { Test-Path -LiteralPath (Join-PathParts $script:recommendedCopyRuntime "skills" $_) })
     if ($installedRetiredSkills.Count -ne 0) {
@@ -343,6 +348,9 @@ try {
             [string]$payload.runtime.workspace.lifecycle -cne "active" -or
             -not [bool]$payload.runtime.workspace.default_cutover) {
             throw "Status did not report the active C3.3 default runtime workspace contract."
+        }
+        if ([string]$payload.project.project_language -cne $expectedProjectLanguage) {
+            throw "Status did not preserve the active C3.3 project language."
         }
     }
     if ($installedStatusText.Contains("memory-helper-unavailable")) {
