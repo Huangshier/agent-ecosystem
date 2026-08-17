@@ -1,137 +1,128 @@
 # Runtime Adoption Bridge
 
-This document answers issue #116. It explains how different agent runtimes
-enter the same Workflow Kernel project memory model without changing runtime
-behavior or adding runtime-specific configuration to bootstrap templates.
+本文回应 issue #116，说明不同 agent runtime 如何进入同一 Workflow Kernel
+project memory model，同时不改变 runtime behavior，也不向 bootstrap template
+加入 runtime-specific configuration。
 
-After the one-time C3.3 default cutover, a fresh project bootstraps directly
-into the canonical C3.3 workspace (`project-bootstrap` + `project-workspace`).
-The legacy runtime-class paths below (`project-context-gate`,
-`workflow-spec-lite`, `memory-governance`) describe legacy projects that have
-not yet been explicitly migrated; they are no longer the normal workflow.
+完成一次性的 C3.3 default cutover 后，fresh project 会直接 bootstrap 到
+canonical C3.3 workspace（`project-bootstrap` + `project-workspace`）。这两个是
+唯一 active Runtime Skills。`project-context-gate`、`workflow-spec-lite` 和
+`memory-governance` 已 retired；历史记录或 compatibility fixture 中仍有这些
+名称，并不意味着它们是当前 startup 或 migration path。
 
-For the first-use installation and bootstrap path, see
-[how-to-adapt](how-to-adapt.md). For the full adoption walkthrough, see
-[minimal project adoption](walkthroughs/minimal-project-adoption.md).
+首次安装和 bootstrap path 见 [how-to-adapt](how-to-adapt.md)；完整 adoption
+walkthrough 见 [minimal project adoption](walkthroughs/minimal-project-adoption.md)。
 
-## Scope
+## 范围
 
-This bridge covers three runtime classes:
+本文覆盖三类 runtime：
 
-- **Codex** (OpenAI): native `AGENTS.md` support, skill discovery.
-- **Claude Code** (Anthropic): native `CLAUDE.md` loading, optional
-  `@AGENTS.md` import shim.
-- **Generic agents**: unknown startup surface; legacy projects use the
-  `project-context-gate` script as the explicit context reconstruction entry.
+- **Codex**（OpenAI）：原生支持 `AGENTS.md` 和 skill discovery。
+- **Claude Code**（Anthropic）：原生加载 `CLAUDE.md`，可选使用
+  `@AGENTS.md` import shim。
+- **Generic agents**：startup surface 未知；读取 `AGENTS.md`，然后显式使用
+  `project-workspace` 的 `check` 和 `discover` entrypoint。
 
-This document does not:
+本文不做以下事情：
 
-- add `GEMINI.md`, `.clinerules`, or other runtime-specific files beyond
-  `CLAUDE.md` to bootstrap templates;
-- implement a shared session state store, lifecycle hooks, state schema, or
-  runtime adapter layer;
-- control any runtime's internal loading behavior;
-- include private overlay paths, local runtime state, or sensitive material.
+- 不向 bootstrap template 添加 `GEMINI.md`、`.clinerules` 或 `CLAUDE.md` 之外的
+  runtime-specific file；
+- 不实现 shared session state store、lifecycle hooks、state schema 或 runtime
+  adapter layer；
+- 不控制任何 runtime 的内部加载行为；
+- 不包含 private overlay path、local runtime state 或 sensitive material。
 
-## C3.3 Runtime Boundary
+## C3.3 Runtime 边界
 
-The one-time default cutover made `recommended` (and `full` / `dev`) the active
-C3.3 Runtime. Its manifest records the workspace capability as `active` with
-`default_cutover: true`, and it packages the `project-workspace` Skill and its
-project templates. The packaged runtime owns only its manifest-managed runtime
-content; `AGENTS.md`, the `.agents/` workspace, canonical
-Work/Context/Procedure/Spec assets, project-local Skills, and `docs/specs/`
-remain project-local and are outside runtime uninstall ownership.
+一次性的 default cutover 已使 `recommended`（以及 `full` / `dev`）成为 active
+C3.3 Runtime。其 manifest 将 workspace capability 记录为 `active`，并设置
+`default_cutover: true`，同时打包 `project-workspace` Skill 及其 project
+template。打包后的 runtime 只拥有其 manifest 管理的 runtime content；
+`AGENTS.md`、`.agents/` workspace、canonical Work/Context/Procedure/Spec
+asset、project-local Skill 和 `docs/specs/` 仍属于 project-local，不在 runtime
+uninstall ownership 内。
 
-Runtime Skill authority is limited to `project-bootstrap` and
-`project-workspace`. `project-context-gate`, `memory-governance`, and
-`workflow-spec-lite` are retired from C3.3 authority: no public profile installs
-or bridges them, and there is no alias, forwarder, or dual-write path. The
-legacy project-loading paths described below apply to legacy projects that have
-not yet been explicitly migrated; a fresh project bootstraps directly into the
-canonical C3.3 workspace.
+Runtime Skill authority 仅限 `project-bootstrap` 和 `project-workspace`。
+`project-context-gate`、`memory-governance` 和 `workflow-spec-lite` 已从 C3.3
+authority retired：没有 public profile 安装或 bridge 它们，也没有 alias、
+forwarder 或 dual-write path。下文描述的 legacy project-loading path 仅作
+历史解释。现有 legacy project 通过 Runtime-level
+`scripts/migrate-project.ps1` 的 Analyze -> explicit Apply -> guarded Rollback
+flow 迁移；fresh project 则直接 bootstrap 到 canonical C3.3 workspace。
 
-## Shared Entry Point
+## 共享入口
 
-The Workflow Kernel uses `AGENTS.md` at the project root as the canonical
-entrypoint. This file tells the agent where to find deeper guidance:
+Workflow Kernel 使用 project root 的 `AGENTS.md` 作为 canonical entrypoint。
+该文件告诉 agent 去哪里查找更深层的 guidance：
 
 ```text
 <project>/
   AGENTS.md                       ← authoritative project behavior contract
   CLAUDE.md                       ← Claude Code shim (auto-generated by bootstrap)
   .agents/
-    AGENTS.md                     ← project-memory language and routing guide
-    process.txt                   ← hot memory: current session state
-    plan.md                       ← hot memory: active plan pointer
-    notes.md                      ← cold memory: confirmed facts
-    context/                      ← long-term memory cards
-      README.md
-      tech/
-      business/
-      experience/
-    commands/                     ← command index (README.md); do not preload cards
+    context/                      ← canonical Context assets and discovery index
+    procedures/                   ← canonical Procedure assets
+    work/                         ← unfinished-work continuity assets
+    skills/                       ← optional project-local Skill publication
   docs/
-    specs/                        ← optional durable work packages
+    specs/                        ← canonical durable Spec assets
 ```
 
-## Progressive Loading
+Existing project 还可能包含旧的 `.agents/AGENTS.md`、`process.txt`、`plan.md`、
+`notes.md` 或 command index。refresh 或 migration 时保留 project-owned content，
+但不要把这些 compatibility surface 当作第二套 C3.3 authority。
+`project-workspace` 仍是 canonical Work、Context、Procedure 和 Spec discovery
+及 authoring 的 public entrypoint。
 
-All runtimes should load context by disclosure tier, not by preloading
-everything at once. This keeps context cost proportional to task complexity.
+## 渐进加载
 
-**Hot tier** — load immediately at session start:
+所有 runtime 都应渐进加载 project guidance，而不是一次性预加载全部内容。这样
+context cost 才会与 task complexity 保持相称。
 
-1. `AGENTS.md` (root)
-2. `.agents/AGENTS.md`
-3. `.agents/process.txt`
-4. `.agents/plan.md`
-5. `.agents/context/README.md`
-6. `.agents/commands/README.md`
+**Required startup**——在 session start 立即加载：
 
-**Warm tier** — load when a non-trivial task is active:
+1. root `AGENTS.md`
+2. 使用 `project-workspace` `check` 验证 workspace contract。
+3. 仅对 task 匹配的 asset 使用 `project-workspace` `discover`。
 
-- `docs/specs/<slug>/spec.md` and `tasks.md` referenced by process.txt or
-  plan.md
+**Warm tier**——non-trivial task active 时加载：
 
-**Cold tier** — open on demand only when task keywords match:
+- task 需要 durable project-local work package 时，加载
+  `docs/specs/<slug>/spec.md` 和 `tasks.md`
 
-- matching `.agents/context/**` entries by Summary or Keywords
-- matching `.agents/commands/**` command cards when a documented workflow is
-  relevant
-- `.agents/notes.md`
+**On-demand tier**——仅在 task keyword 匹配时打开：
 
-Skip missing files without treating them as errors.
+- 按 `Summary` 或 `Keywords` 匹配的 `.agents/context/**` entry
+- documented workflow 相关时匹配的 `.agents/procedures/**` entry
+- 恢复未完成工作时匹配的 `.agents/work/**` continuity record
 
-## Codex Path
+使用 `project-workspace create-spec` 创建 durable Spec；未完成工作使用其
+Work/Context continuity operation。可选文件缺失时跳过，不要把它们当作 error。
 
-Codex has native `AGENTS.md` support. The entry sequence is:
+## Codex 路径
 
-1. Codex reads the root `AGENTS.md` at session start.
-2. Follow the minimum read order defined in that file:
-   `.agents/AGENTS.md`, `.agents/process.txt`, `.agents/plan.md`,
-   `.agents/context/README.md`, and `.agents/commands/README.md`.
-3. For non-trivial work, use `project-context-gate` to rebuild the full
-   constraint capsule.
-4. For durable work packages, use `workflow-spec-lite` under
-   `docs/specs/<slug>/`.
-5. For periodic memory maintenance, use `memory-governance`.
+Codex 原生支持 `AGENTS.md`，entry sequence 如下：
 
-Codex also discovers skills via the installed skill registry. If
-`project-context-gate` is installed, Codex can invoke it directly; otherwise,
-the fallback rule in the skill's SKILL.md requires the agent to perform
-progressive loading manually.
+1. Codex 在 session start 读取 root `AGENTS.md`。
+2. 运行 active `project-workspace` check，并只 discover 匹配的 Work、Context、
+   Procedure 和 Spec asset。
+3. 对 durable project work package，在 `docs/specs/<slug>/` 下使用
+   `project-workspace create-spec`。
+4. 对未完成 work 或稳定的 handoff fact，使用 `project-workspace` 的
+   Work/Context continuity operation。
 
-## Claude Code Path
+Codex 还会通过已安装的 skill registry 发现 active Skill。retired Skill 不是当前
+startup 的必需项，不得恢复为 alias 或 compatibility forwarder。
 
-Claude Code loads `CLAUDE.md` from the project root or `.claude/` directory
-at session start. It does **not** automatically read `AGENTS.md`.
+## Claude Code 路径
 
-### Bootstrap-Provided CLAUDE.md Shim
+Claude Code 在 session start 从 project root 或 `.claude/` directory 加载
+`CLAUDE.md`，不会自动读取 `AGENTS.md`。
 
-New projects bootstrapped with `project-bootstrap` automatically receive a
-thin `CLAUDE.md` at the project root. This file explicitly imports the
-minimum project-memory startup files:
+### Bootstrap 提供的 CLAUDE.md Shim
+
+使用 `project-bootstrap` bootstrap 的 new project 会在 project root 自动获得
+一个 thin `CLAUDE.md`。该文件显式导入最小 project-memory startup file：
 
 ```markdown
 # CLAUDE.md
@@ -144,165 +135,144 @@ minimum project-memory startup files:
 @.agents/commands/README.md
 ```
 
-These imports expose the minimum startup context for non-trivial tasks: the
-authoritative root behavior contract, the concise project-memory guide, current
-session state, the active plan pointer, the cold-context routing index, and the
-commands README. The
-context README helps the agent discover matching cold-tier entries on demand.
-The commands README surfaces reusable workflow cards. The shim imports only
-`README.md` from each index directory — it does not preload `.agents/context/**`
-context cards or `.agents/commands/**` command cards.
+这些 import 会暴露 authoritative root behavior contract 和 project-local memory
+guide。其余 project asset 通过 `project-workspace` 渐进发现；shim 不会预加载
+所有 Context、Procedure、Work 或 Spec asset。
 
-The shim does **not** preload the full `.agents/context/` tree. After loading
-the files above, the agent should open specific context entries only when the
-current task keywords match an entry's Summary or Keywords. This mirrors the
-progressive loading discipline that `AGENTS.md` defines for other runtimes.
+shim 不会预加载完整的 `.agents/context/` tree。加载上述文件后，只有在当前
+task keyword 匹配 entry 的 Summary 或 Keywords 时，agent 才应打开具体 context
+entry。这与 `AGENTS.md` 为其他 runtime 定义的渐进加载纪律一致。
 
-This shim explicitly surfaces the minimum startup files because maintainer
-testing found that importing only `@AGENTS.md` is not sufficient: Claude Code
-may stop at the root file and not continue into `.agents/`. The explicit import
-list ensures the agent sees the same hot-tier context that other runtimes
-receive from following `AGENTS.md` instructions.
+shim 显式暴露最小 startup file，是因为 maintainer testing 发现只 import
+`@AGENTS.md` 并不足够：Claude Code 可能停在 root file，不继续进入 `.agents/`。
+显式 import list 确保 agent 能看到其他 runtime 按 `AGENTS.md` instruction 获得
+的同一 hot-tier context。
 
-The shim does not control Claude Code's internal behavior. If any imported file
-is missing, the scaffold is incomplete — run `project-bootstrap` first. For
-ongoing context verification, use `project-context-gate`.
+shim 不控制 Claude Code 的内部行为。如果任一 imported file 缺失，说明 scaffold
+不完整——先运行 `project-bootstrap`。持续验证 workspace 时，使用 active
+`project-workspace` 的 check 和 discover entrypoint。
 
-### Existing Projects
+### Existing Project
 
-For projects created before the shim was added to bootstrap:
+对于 shim 加入 bootstrap 之前创建的 project：
 
-- **Default refresh** (`bootstrap_project.ps1` without flags) generates the
-  `CLAUDE.md` shim if it is missing. It does not overwrite an existing
-  `CLAUDE.md`.
-- **Memory upgrade analyze** reports a `missing_claude_shim` advisory when
-  the project has a `.agents/` scaffold but no root `CLAUDE.md`. This is an
-  informational finding, not a warning — the project functions correctly
-  without the shim when using other runtimes or invoking `project-context-gate`
-  explicitly.
-- If the project has an existing `CLAUDE.md` with different content, the
-  bootstrap preserves it. Run analyze to review whether the shim imports are
-  present; if needed, add the missing imports manually or use the
-  `-ForceResetScaffold` flag (with backup).
+- **Default refresh**（不带 flags 的 `bootstrap_project.ps1`）在缺失时生成
+  `CLAUDE.md` shim，不覆盖已有的 `CLAUDE.md`。
+- **Legacy migration Analyze** 在 project 有 `.agents/` scaffold 但没有 root
+  `CLAUDE.md` 时报告 `missing_claude_shim` advisory。这是 informational
+  finding，不是 warning——使用其他 runtime 时，project 没有 shim 仍可正常
+  工作。legacy project migration 使用 `scripts/migrate-project.ps1`；不要恢复
+  retired context-gate helper。
+- 如果 project 已有内容不同的 `CLAUDE.md`，bootstrap 会保留它。运行 analyze
+  检查 shim import 是否存在；必要时手动补充 missing import，或使用带 backup
+  的 `-ForceResetScaffold` flag。
 
-### Why Not Rely on Global CLAUDE.md Alone?
+### 为什么不能只依赖 Global CLAUDE.md？
 
-A global `CLAUDE.md` in the user's home directory can instruct Claude Code to
-look for `AGENTS.md` in each project. Maintainer testing found that this
-approach is unreliable: Claude Code does not always follow cross-file
-discovery instructions from a global config when the target file is not
-itself a recognized loading surface. Even a project-local `CLAUDE.md` that
-imports only `@AGENTS.md` is insufficient — Claude Code may stop at the root
-file without continuing into `.agents/`. The explicit multi-import shim above
-is more dependable because `CLAUDE.md` is a first-class loading surface, `@`
-import is a native inclusion mechanism, and the import list directly surfaces
-the minimum startup files instead of relying on the agent to follow
-instructions inside `AGENTS.md`.
+用户 home directory 中的 global `CLAUDE.md` 可以指示 Claude Code 在每个 project
+查找 `AGENTS.md`。但 maintainer testing 发现这种方式不可靠：当 target file
+本身不是 recognized loading surface 时，Claude Code 不一定遵循 global config
+中的 cross-file discovery instruction。即使 project-local `CLAUDE.md` 只 import
+`@AGENTS.md` 也不够——Claude Code 可能停在 root file，不继续进入 `.agents/`。
+上面的 explicit multi-import shim 更可靠，因为 `CLAUDE.md` 是 first-class
+loading surface，`@` import 是原生 inclusion mechanism，import list 直接暴露
+最小 startup file，不依赖 agent 去遵循 `AGENTS.md` 内的 instruction。
 
-### Alternative: Generate the Shim or Use project-context-gate
+### 替代路径：生成 Shim 或检查 Workspace
 
-If the project does not have a `CLAUDE.md` shim, run `bootstrap_project.ps1`
-in default mode — it generates the shim if missing. Alternatively, invoke
-`project-context-gate` explicitly at the start of non-trivial work:
+如果 project 没有 `CLAUDE.md` shim，使用 default mode 运行
+`bootstrap_project.ps1`，它会在缺失时生成 shim。然后显式检查 active C3.3
+workspace：
 
 ```powershell
-pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
+pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/check-project-workspace.ps1 -ProjectRoot <project> -Json
+pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
 ```
 
-This inventories hot/warm/cold context files and produces a structured
-context summary that the agent can use to continue work.
-
-For a copyable agent-facing summary, use `-Brief`:
+需要 migration 的 legacy project 使用 Runtime-level authority：
 
 ```powershell
-pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Brief
+pwsh -NoProfile -NonInteractive -File <runtime>/scripts/migrate-project.ps1 -Mode Analyze -ProjectRoot <project> -Json
+pwsh -NoProfile -NonInteractive -File <runtime>/scripts/migrate-project.ps1 -Mode Apply -ProjectRoot <project> -AnalyzeEvidence <analyze-json> -ConfirmMigration -Json
+pwsh -NoProfile -NonInteractive -File <runtime>/scripts/migrate-project.ps1 -Mode Rollback -ProjectRoot <project> -BackupId <backup-id> -ConfirmRollback -Json
 ```
 
-## Generic Agent Path
+## Generic Agent 路径
 
-When the agent runtime has no known startup surface for `AGENTS.md` or
-`CLAUDE.md`, use the explicit context reconstruction path:
+当 agent runtime 没有已知的 `AGENTS.md` 或 `CLAUDE.md` startup surface 时，使用
+显式 workspace discovery path：
 
-1. Run `project-context-gate` to inventory available context files:
-
-   ```powershell
-   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
-   ```
-
-   For JSON output suitable for automation:
+1. 运行 active `project-workspace` checks，盘点可用 asset：
 
    ```powershell
-   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/check-project-workspace.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-   For compact agent handoff text:
+2. 读取 `AGENTS.md`，然后只打开匹配的 canonical Work、Context、Procedure 或
+   Spec asset。
 
-   ```powershell
-   pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project> -Brief
-   ```
+3. 读取 active work package：`docs/specs/<slug>/spec.md` 以及 process 或 plan
+   引用的 `tasks.md`。
 
-2. Read hot-tier files: `AGENTS.md`, `.agents/AGENTS.md`,
-   `.agents/process.txt`, `.agents/plan.md`.
+4. 只有 task keyword 与 metadata 对齐时，才读取匹配 asset。
 
-3. Read any active work packages: `docs/specs/<slug>/spec.md` and `tasks.md`
-   referenced by process or plan.
+5. 对 durable work，使用 `project-workspace create-spec` 创建 Spec；对未完成
+   work，使用其 Work continuity operation。
 
-4. Read matching cold-tier entries only when task keywords align with
-   `.agents/context/` Summary or Keywords.
+## 首次使用诊断
 
-5. Produce a constraint capsule summarizing: current objective, project
-   rules, validation requirements, and known blockers.
-
-## First-Use Diagnostic
-
-When in doubt about whether project memory is properly loaded, check:
+不确定 project memory 是否正确加载时，检查：
 
 ```powershell
 # 1. Verify scaffold exists
 Test-Path <project>/AGENTS.md
 Test-Path <project>/.agents/AGENTS.md
 
-# 2. Run context gate
-pwsh -NoProfile -File <runtime>/skills/project-context-gate/scripts/context_gate.ps1 -ProjectRoot <project>
+# 2. Check the active C3.3 workspace
+pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/check-project-workspace.ps1 -ProjectRoot <project> -Json
 
-# 3. Verify bootstrap lock
-pwsh -NoProfile -File <runtime>/skills/project-bootstrap/scripts/check_hub_lock.ps1 -ProjectDir <project>
+# 3. Discover matching canonical assets
+pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
 ```
 
-If any check fails, re-run `project-bootstrap` for the project:
+如果 fresh project 缺少 scaffold，为 project 重新运行 `project-bootstrap`。如果
+existing project 是 legacy，在 Analyze 后使用显式 migration authority，不要恢复
+retired helper：
 
 ```powershell
-pwsh -NoProfile -File <runtime>/skills/project-bootstrap/scripts/bootstrap_project.ps1 -ProjectDir <project>
+pwsh -NoProfile -NonInteractive -File <runtime>/skills/project-bootstrap/scripts/bootstrap_project.ps1 -ProjectDir <project>
+pwsh -NoProfile -NonInteractive -File <runtime>/scripts/migrate-project.ps1 -Mode Analyze -ProjectRoot <project> -Json
 ```
 
-## Public / Private Boundary
+## Public / Private 边界
 
-- `AGENTS.md`, `.agents/`, and `docs/specs/` inside the target project are
-  **project-local**. They belong to the project, not to the public kernel
-  repository.
-- The public kernel repository (`agent-ecosystem`) provides templates,
-  skills, and documentation. It does not own project-local memory.
-- Private overlays, runtime state, sensitive material, and local-only paths must
-  not appear in public documentation, issues, or pull requests.
-- When promoting a reusable lesson from a private project to the public
-  knowledge hub, follow the
-  [public promotion checklist](../knowledge-hub/knowledge/standards/public-promotion-checklist.md).
+- target project 内的 `AGENTS.md`、`.agents/` 和 `docs/specs/` 属于
+  **project-local**，归 project 所有，不归 public kernel repository 所有。
+- public kernel repository（`agent-ecosystem`）提供 template、skill 和文档，
+  不拥有 project-local memory。
+- private overlay、runtime state、sensitive material 和 local-only path 不得
+  出现在 public documentation、issue 或 pull request 中。
+- 将 private project 的 reusable lesson 晋升到 public knowledge hub 时，遵循
+  [public promotion checklist](../knowledge-hub/knowledge/standards/public-promotion-checklist.md)。
 
-## Long-Term Direction
+## 长期方向
 
-A recent discussion on issue #116 proposed externalizing session state into
-a shared store with cross-runtime lifecycle hooks and a standardized state
-schema. This would allow any agent runtime to resume another runtime's
-session from a checkpoint. The proposal is architecturally interesting but
-requires validation as a real user pain point and conflicts with the current
-file-driven progressive disclosure model. It is recorded as a long-term
-exploration topic and is out of scope for this documentation bridge.
+issue #116 的近期讨论提出将 session state 外置到 shared store，并加入
+cross-runtime lifecycle hooks 和 standardized state schema，使任意 agent runtime
+都能从 checkpoint 恢复另一个 runtime 的 session。该 proposal 在架构上有意义，
+但仍需验证是否对应真实用户痛点，而且与当前 file-driven progressive
+disclosure model 冲突。因此它只记录为 long-term exploration topic，不属于本文
+档 bridge 的范围。
 
-## Validation
+## 验证
 
-Documentation-only changes to this bridge should run:
+本文档的 documentation-only 变更应运行：
 
 ```powershell
 git diff --check
-pwsh -NoProfile -File scripts/validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage iteration
+pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage pre-push
 ```
+
+完整 Release validator 仅用于明确的 Release/checkpoint decision。

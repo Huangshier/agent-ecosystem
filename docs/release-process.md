@@ -1,8 +1,7 @@
 # Release Process
 
-This process keeps public releases repeatable while keeping private migration
-state, sensitive audit details, and local runtime paths out of the public
-repository.
+本流程让 public release 可重复执行，同时将 private migration state、sensitive
+audit detail 和 local runtime path 留在 public repository 之外。
 
 ## Release impact 与版本决策
 
@@ -56,93 +55,87 @@ gate。进行可发布收尾时传入即将创建 tag 的版本号：
 pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
 ```
 
-Use a scratch directory outside the live runtime. The validator refuses to use
-the current user's `$HOME\.agents` runtime path. It writes an
-`install-manifest.json` plus `install-report.json` for each temporary install and a final
-`validation-result.json` under the scratch directory.
-The C3.3 validation control plane and normative repository validation
-entrypoints, including this release validator, require PowerShell Core 7.6 or
-later through `pwsh -NoProfile -NonInteractive -File`.
+使用 live Runtime 之外的 scratch directory。validator 拒绝使用当前 user 的
+`$HOME\.agents` Runtime path。它为每个 temporary install 写入
+`install-manifest.json` 和 `install-report.json`，并在 scratch directory 下写入
+最终的 `validation-result.json`。
+C3.3 validation control plane 和 normative repository validation entrypoint
+（包括本 release validator）要求 PowerShell Core 7.6 或更高版本，并通过
+`pwsh -NoProfile -NonInteractive -File` 运行。
 
-Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
-bridge, or legacy Skill execution contracts. Those surfaces remain
-transitional and will be migrated or retired only in their designated later
-slices. This transition is not a commitment to long-lived dual-host or
-dual-semantics support.
+当前 Runtime authority 是 `project-bootstrap` + `project-workspace`。
+`project-context-gate`、`workflow-spec-lite` 和 `memory-governance` 已从 current
+Runtime authority retired；validator fixture 或 release record 中保留的相关
+名称只是 historical/compatibility evidence。legacy project migration 通过
+`scripts/migrate-project.ps1` 的 Analyze -> explicit Apply -> guarded Rollback
+执行。
 
-See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
-the public release line does not ship Bash or Zsh wrappers yet, and future
-wrappers should delegate to the canonical `.ps1` scripts through `pwsh`.
+当前 non-PowerShell policy 见 [Shell strategy](shell-strategy.md)：public release
+line 尚未提供 Bash or Zsh wrappers；未来 wrapper 应通过 `pwsh` 委托给 canonical
+`.ps1` script。
 
-When a maintainer intentionally reuses a persistent scratch parent, inspect
-retention before deleting anything:
+当 maintainer 有意复用 persistent scratch parent 时，删除前先检查 retention：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\prune-validation-scratch.ps1 -ScratchRoot <scratch-parent> -RetainLatest 10
 ```
 
-The pruning helper is a dry run by default. Add `-Apply` only after reviewing
-the evidence. It only considers direct child directories that contain
-`validation-result.json`, rejects live runtime and repository-root targets, and
-emits JSON evidence with `-Json`.
+pruning helper 默认是 dry run。只有 review evidence 后才添加 `-Apply`。它只处理
+包含 `validation-result.json` 的 direct child directory，拒绝 live Runtime 和
+repository-root target，并通过 `-Json` 输出 JSON evidence。
 
-The validator checks:
+validator 检查：
 
-- public repository structure and release documentation entrypoints
-- publish-ready release metadata alignment for the target version across
-  `README.md`, `README.en.md`, release notes, release readiness, and the release
-  notes index
-- root `.agents/` runtime memory is not tracked, while generated/template
-  `.agents` paths remain allowed
-- public spec files avoid obvious volatile active-state records unless covered
-  by historical evidence, stop-rule, or retrospective allowlists
+- public repository structure 和 release documentation entrypoint
+- target version 在 `README.md`、`README.en.md`、release note、release readiness
+  和 release notes index 中的 publish-ready metadata 对齐
+- root `.agents/` Runtime memory 未被 track，同时 generated/template `.agents`
+  path 仍被允许
+- public Spec file 避免明显的 volatile active-state record，除非由 historical
+  evidence、stop-rule 或 retrospective allowlist 覆盖
 - Workflow Kernel skill metadata
-- installer profile matrix for `minimal`, `recommended`, `full`, and `dev`
-- default copy installs and explicit development link/junction installs
-- runtime smoke coverage for bootstrap, context gate, workflow spec creation,
-  and memory diagnosis in both recommended copy and link installs
-- incremental installer reruns, unknown/local-modified protection, conflict exit
-  behavior, `-AllowPartial`, and managed replacement compatibility
-- hub initialization Git mode, including default no-Git behavior and explicit
-  Git initialization
-- `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project
-  batch checking against temporary git-backed hubs
-- memory upgrade Analyze, Plan, and Apply flow against a temporary project
-- knowledge catalog, pattern, and standard entry coverage
+- `minimal`、`recommended`、`full` 和 `dev` 的 installer profile matrix
+- default copy install 与显式 development link/junction install
+- recommended copy 和 link install 中 bootstrap、`project-workspace`
+  check/discover、active C3.3 status、retired-Skill absence 和 explicit
+  migration boundary 的 Runtime smoke coverage
+- incremental installer rerun、unknown/local-modified protection、conflict
+  exit behavior、`-AllowPartial` 和 managed replacement compatibility
+- hub initialization Git mode，包括 default no-Git behavior 和显式 Git
+  initialization
+- temporary git-backed hub 中 `hub.lock` 的 in-sync、missing-lock、invalid-hub、
+  drift 和 multi-project batch check
+- temporary project 上的 legacy project migration Analyze、explicit Apply 和
+  guarded Rollback flow
+- knowledge catalog、pattern 和 standard entry coverage
 - public domain-pack catalog coverage
 - public experience index search
-- experience promotion, index rebuild, and search closure against a temporary
-  hub copy
-- no-op experience index rebuilds that preserve registry file hashes
-- Claude Code hooks guardrails contract, executable lifecycle settings and
-  runner, bundled snapshot, and public-safe deterministic stdin/stdout fixtures
-- PowerShell parser checks and JSON parsing
-- UTF-8 encoding for non-ASCII PowerShell scripts
+- temporary hub copy 上的 experience promotion、index rebuild 和 search closure
+- 保持 registry file hash 的 no-op experience index rebuild
+- Claude Code hooks guardrails contract、executable lifecycle setting 和
+  runner、bundled snapshot，以及 public-safe deterministic stdin/stdout fixture
+- PowerShell parser check 和 JSON parsing
+- non-ASCII PowerShell script 的 UTF-8 encoding
 - public sensitive-pattern audit
-- duplicate helper script hashes
-- language policy template coverage in both repository guidance and bootstrap
-  output
-- first-session language write capability for English and Simplified Chinese
-  temporary projects, driven by an explicit `-ProjectLanguage` value supplied by
-  the agent or workflow
-- conservative project-memory language migration between `en` and `zh-CN`,
-  including proposal-first, backup-first, apply, validate, mixed-memory, and
-  project-specific preservation fixtures
-- read-only body-level project-memory language audit coverage for
-  metadata/body mismatches, fenced code, protected literals, and mixed
-  narrative fixtures
-- project-bootstrap operating modes, including missing-template refresh,
-  unmodified-template refresh, compatibility overwrite warnings, and
-  backup-first force reset behavior
-- localized context discovery headings in memory diagnosis and upgrade analysis
-- bilingual public/private routing guidance in language policy and bundled
-  knowledge assets
-- workflow-spec-lite spec validation against complete, Loop Contract,
-  Simplified Chinese, and intentionally broken fixtures
-- anti-drift template and memory-governance coverage for scope drift, unrelated
-  refactors, and skipped acceptance checks
-- validation scratch retention pruning dry-run/apply behavior
-- adoption guide and minimal project example coverage
+- duplicate helper script hash
+- repository guidance 和 bootstrap output 中的 language policy template coverage
+- 由 agent 或 workflow 显式提供 `-ProjectLanguage` 值驱动的 English 与
+  Simplified Chinese temporary project first-session language write capability
+- `en` 与 `zh-CN` 之间的 conservative project-memory language migration，包括
+  proposal-first、backup-first、apply、validate、mixed-memory 和
+  project-specific preservation fixture
+- read-only body-level project-memory language audit coverage，包括 metadata/body
+  mismatch、fenced code、protected literal 和 mixed narrative fixture
+- project-bootstrap operating mode，包括 missing-template refresh、
+  unmodified-template refresh、compatibility overwrite warning 和 backup-first
+  force reset behavior
+- legacy diagnostic 和 upgrade analysis 保留的 historical localized context discovery headings
+- language policy 和 bundled knowledge asset 中的 bilingual public/private routing guidance
+- 为 compatibility 和 negative validation 保留的 historical
+  `workflow-spec-lite` 与 memory-governance fixture；它们不定义 current Runtime
+  authority
+- validation scratch retention pruning 的 dry-run/apply behavior
+- adoption guide 和 minimal project example coverage
 - v0.2.0 release notes coverage
 - v0.3.0 release notes coverage
 - v0.3.1 release notes coverage
@@ -157,244 +150,225 @@ The validator checks:
 
 ## CI Gate
 
-The repository runs `.github/workflows/release-validation.yml` for pull
-requests, pushes to `main`, and manual dispatches. These
-events have deliberately different validation responsibilities:
+repository 会在 pull request、push 到 `main` 和 manual dispatch 时运行
+`.github/workflows/release-validation.yml`。这些 event 有意承担不同的 validation
+responsibility：
 
 | Surface | Responsibility | Hosted path |
 |---|---|---|
-| Pull request | Prove the diff and its affected behavior | Classifier-selected quick/affected suites, plus control-plane self-protection when required; validation-routing changes also execute the Windows main-health smoke; PR A's direct bootstrap regression remains on the affected path. |
-| `main` push | Prove that the repository is healthy | One Windows `main health` job for PowerShell/JSON parsing, public-safe/sensitive scanning, and a small copy-install/bootstrap/C3.3 workspace smoke. |
-| Release/checkpoint | Prove the complete publication surface | Manual runs retain the `RepositoryCheckpointNeutral` and `RepositoryCheckpointRuntime` validator shards, including the required cross-platform runtime matrix and release-only checks. |
+| Pull request | 证明 diff 及其 affected behavior | classifier-selected quick/affected suite，以及需要时的 control-plane self-protection；validation-routing change 还会执行 Windows main-health smoke；PR A 的 direct bootstrap regression 仍在 affected path。 |
+| `main` push | 证明 repository healthy | 一个 Windows `main health` job，检查 PowerShell/JSON parsing、public-safe/sensitive scanning，以及小型 copy-install/bootstrap/C3.3 workspace smoke。 |
+| Release/checkpoint | 证明完整 publication surface | manual run 保留 `RepositoryCheckpointNeutral` 和 `RepositoryCheckpointRuntime` validator shard，包括 required cross-platform Runtime matrix 和 release-only check。 |
 
-The main health job is intentionally not a Release candidate. A `main` push
-does not run the `PlatformNeutral` or three-platform `RuntimePlatform` release
-shards and does not call the complete `scripts/validate-release.ps1` suite.
-The fixed `validation gate` remains the single required result check. Main does
-not run a lineage shadow, and ordinary PR jobs do not upload per-job evidence
-manifests for a later aggregation step.
+main health job 有意不是 Release candidate。`main` push 不运行
+`PlatformNeutral` 或 three-platform `RuntimePlatform` release shard，也不调用
+完整的 `scripts/validate-release.ps1` suite。固定的 `validation gate` 仍是唯一
+required result check。main 不运行 lineage shadow，普通 PR job 也不为后续
+aggregation step 上传 per-job evidence manifest。
 
-For pull requests, the deterministic classifier selects the affected suites
-and the hosts declared by those suites. Changes to validation routing or
-other validation control-plane surfaces also run an independent
-self-protection oracle; validation-routing changes additionally execute the
-Windows main-health smoke before merge. Other PRs do not run that job. See
-[PR validation risk tiers](pr-validation-risk-tiers.md) for the authoritative
-routing and conservative fallback rules.
+对 pull request，deterministic classifier 选择 affected suite 及这些 suite 声明
+的 host。validation routing 或其他 validation control-plane surface 变更还会
+运行 independent self-protection oracle；validation-routing change 在 merge 前
+另外执行 Windows main-health smoke。其他 PR 不运行该 job。权威 routing 和
+conservative fallback rule 见 [PR validation risk tiers](pr-validation-risk-tiers.md)。
 
-The fixed `validation gate` evaluates the classifier-selected jobs and fails
-closed when classification, required execution, or the conditional main-health
-or self-protection result is incomplete. The classifier and the selected PR
-validation jobs retain the direct exact-candidate identity checks; the gate
-only aggregates job results. A complete hosted release-validation matrix is
-not a per-PR hard gate.
+固定的 `validation gate` 评估 classifier-selected job；当 classification、required
+execution、conditional main-health 或 self-protection result 不完整时 fail
+closed。classifier 和选中的 PR validation job 保留 direct exact-candidate
+identity check；gate 只 aggregate job result。完整 hosted release-validation
+matrix 不是 per-PR hard gate。
 
-Every `main` push runs only the thin main health contract and does not select a
-Release profile. Manually dispatched runs use the broader `RepositoryCheckpoint`
-profile for release
-archive, governance, evaluation, benchmark, historical, and other
-checkpoint-only assertions.
+每次 `main` push 只运行 thin main health contract，不选择 Release profile。manual
+dispatch 使用更宽的 `RepositoryCheckpoint` profile，覆盖 release archive、
+governance、evaluation、benchmark、historical 及其他 checkpoint-only assertion。
 
-The workflow uses event-aware GitHub Actions concurrency. New pull-request and
-manually dispatched runs may cancel an older same-event, same-ref run, while
-every `push` to `main` has a unique concurrency identity.
+workflow 使用 event-aware GitHub Actions concurrency。新的 pull-request 和
+manual dispatch run 可以取消同 event、同 ref 的旧 run；每次 `push` 到 `main`
+都有 unique concurrency identity。
 
-Successful manual Release/checkpoint jobs upload explicit evidence allowlists,
-while failed Release jobs preserve their complete scratch directory for
-diagnosis. Ordinary PR validation is represented by job results and direct
-candidate checks. Treat evaluator failures and other required CI failures as
-release blockers unless the
-maintainer explicitly records a platform-specific deferral for a pre-release
-calibration run.
+成功的 manual Release/checkpoint job 上传 explicit evidence allowlist；失败的
+Release job 保留完整 scratch directory 供 diagnosis。普通 PR validation 由 job
+result 和 direct candidate check 表示。除非 maintainer 明确为 pre-release
+calibration run 记录 platform-specific deferral，否则 evaluator failure 和其他
+required CI failure 都应视为 release blocker。
 
-Validation-sensitive text files are LF-normalized by `.gitattributes` so
-content hashes in the experience registry are stable on hosted Windows, Ubuntu,
-and macOS runners.
+validation-sensitive text file 由 `.gitattributes` 统一为 LF，使 experience
+registry 中的 content hash 在 hosted Windows、Ubuntu 和 macOS runner 上稳定。
 
-Deferred checks are allowed only when the capability does not exist yet. The
-release validator should report zero deferred checks for a publishable release
-unless a maintainer explicitly records a new deferral.
+只有 capability 尚不存在时才允许 deferred check。可发布 Release 的 release
+validator 应报告 zero deferred check，除非 maintainer 明确记录新的 deferral。
 
-The workflow keeps an always-run fixed `validation gate` instead of relying on
-workflow-level path filters, which can leave required checks pending. Any
-future routing change must preserve a fail-closed required gate and update this
-process plus repository required-check settings in the same reviewed change.
+workflow 保留 always-run fixed `validation gate`，不依赖可能使 required check
+保持 pending 的 workflow-level path filter。未来任何 routing change 都必须保留
+fail-closed required gate，并在同一个 reviewed change 中同步更新本流程和
+repository required-check setting。
 
 ## Public Reader Review
 
-For public-facing documentation and release metadata changes, include a short
-reader-oriented review before merging:
+对于 public-facing documentation 和 release metadata change，merge 前完成简短的
+reader-oriented review：
 
-- **First-time reader**: the README and docs index explain what the project is,
-  what it is not, and where to go next.
-- **Current release**: current docs do not rely on stale first-release framing
-  when describing the active release line.
-- **Validation summary**: release notes and readiness docs do not disagree with
-  the validator output or with each other.
-- **Public boundary**: docs do not include private overlay details, local
-  migration state, machine-specific paths, or private review material.
-- **Cross-platform onboarding**: PowerShell-first expectations are visible to
-  non-Windows readers, with `pwsh` guidance where appropriate.
+- **First-time reader**：README 和 docs index 说明 project 的定位、非目标以及
+  下一步去哪里。
+- **Current release**：描述 active release line 时，current docs 不依赖过时的
+  first-release framing。
+- **Validation summary**：release note 和 readiness doc 与 validator output
+  以及彼此之间保持一致。
+- **Public boundary**：doc 不包含 private overlay detail、local migration state、
+  machine-specific path 或 private review material。
+- **Cross-platform onboarding**：非 Windows reader 能看到 PowerShell-first
+  expectation，并在适当位置获得 `pwsh` guidance。
 
-This review is intentionally lightweight. It is a checklist for adoption
-surfaces, not a separate approval process.
+该 review 有意保持轻量，是 adoption surface 的 checklist，不是独立的 approval
+process。
 
 ## Validation Tiers
 
-The fixed hosted `validation gate` remains the fail-closed merge result for
-pull requests to `main`. The classifier and selected validation jobs choose
-which affected suites and hosts must satisfy that gate; skipped suites are not
-reported as passing. Pull requests must also report validation evidence in the
-PR body. The tiers below guide local validation depth before opening or
-updating a PR; maintainers may ask for more validation when risk is unclear.
+固定的 hosted `validation gate` 仍是 pull request 到 `main` 的 fail-closed merge
+result。classifier 和 selected validation job 决定哪些 affected suite 与 host
+必须满足该 gate；skipped suite 不报告为 passing。pull request 还必须在 PR body
+报告 validation evidence。以下 tier 指导打开或更新 PR 前的本地 validation
+depth；风险不明确时，maintainer 可以要求更多 validation。
 
-When a change spans multiple categories, use the highest tier that applies.
+一个 change 跨越多个 category 时，使用适用的最高 tier。
 
 | Tier | Change type | Local validation expectation |
 |---|---|---|
-| 0 | Issue or PR metadata only, such as labels, comments, issue routing, or branch cleanup with no repository diff | Read back the GitHub state that changed. No local repository validation is needed unless files changed. |
-| 1 | Low-risk text-only docs that do not affect README entrypoints, governance, release process, release notes, tracked `.agents` memory, scripts, installer behavior, CI, or generated runtime behavior | Run `git diff --check` and review links or changed prose manually. |
-| 2 | Public adoption docs, README entrypoints, governance docs, release process docs, release notes, release readiness, tracked `.agents` memory, specs, issue/PR templates, or public/private boundary wording | 执行 `git diff --check`、必要时进行公开读者审查，并执行分类器选择的 affected-surface `iteration` / `pre-push` validation；默认不运行完整 Release 验证。 |
-| 3 | PowerShell scripts, installer or uninstaller behavior, release validator behavior, CI workflow files, skill metadata, knowledge hub generation/search behavior, templates that affect generated project memory, or release packaging | 执行 `git diff --check`、受影响表面的定向解析器或冒烟检查，以及分类器选择的 affected-surface validation；完整 Release 验证仅用于明确的 Release/checkpoint 决策。 |
+| 0 | 仅 Issue 或 PR metadata，例如 labels、comments、issue routing，或没有 repository diff 的 branch cleanup | 回读发生变化的 GitHub state。除非文件发生变化，否则不需要本地 repository validation。 |
+| 1 | 不影响 README entrypoint、governance、release process、release note、tracked `.agents` memory、script、installer behavior、CI 或 generated Runtime behavior 的低风险纯文本 doc | 运行 `git diff --check`，手动 review link 或变更正文。 |
+| 2 | public adoption doc、README entrypoint、governance doc、release process doc、release note、release readiness、tracked `.agents` memory、Spec、issue/PR template 或 public/private boundary wording | 执行 `git diff --check`、必要时进行公开读者审查，并执行分类器选择的 affected-surface `iteration` / `pre-push` validation；默认不运行完整 Release 验证。 |
+| 3 | PowerShell script、installer 或 uninstaller behavior、release validator behavior、CI workflow file、skill metadata、knowledge hub generation/search behavior、影响 generated project memory 的 template 或 release packaging | 执行 `git diff --check`、受影响表面的定向解析器或冒烟检查，以及分类器选择的 affected-surface validation；完整 Release 验证仅用于明确的 Release/checkpoint 决策。 |
 
-Release publication still requires the full release gate and maintainer
-approval. Repository settings, secrets, GitHub App permissions, rulesets, and
-release publishing are maintainer-controlled actions, not agent-only validation
-tiers.
+Release publication 仍需要完整 release gate 和 maintainer approval。Repository
+setting、secret、GitHub App permission、ruleset 和 release publishing 都是
+maintainer-controlled action，不是 agent-only validation tier。
 
 ## Release Finalization Alignment
 
-Maintainer authorization to publish starts the finalization phase; it is not
-authorization to tag or publish directly from release-planning metadata.
+maintainer 对 publish 的授权会开始 finalization phase；它不等于可以直接从
+release-planning metadata tag 或 publish。
 
-Before creating a tag or GitHub Release, the agent must complete publish-ready
-alignment:
+创建 tag 或 GitHub Release 前，agent 必须完成 publish-ready alignment：
 
-1. Update `README.md` and `README.en.md` so their current release fields match
-   the target version.
-2. Update the target release notes from planning copy to published-release
-   metadata, including status, tag target, published GitHub Release URL, and
-   final validation evidence.
-3. Update release readiness and the release notes index so they no longer carry
-   stale candidate, draft, unpublished, or older-current-release wording.
-4. Run `scripts/validate-release.ps1 -TargetVersion <target-version>` and fix
-   any alignment failure before continuing.
-5. Review the final diff and validation result before creating the tag or
-   GitHub Release.
+1. 更新 `README.md` 和 `README.en.md`，使 current release field 与 target
+   version 匹配。
+2. 将 target release note 从 planning copy 更新为 published-release metadata，
+   包括 status、tag target、published GitHub Release URL 和 final validation
+   evidence。
+3. 更新 release readiness 和 release notes index，移除 stale candidate、draft、
+   unpublished 或 older-current-release wording。
+4. 运行 `scripts/validate-release.ps1 -TargetVersion <target-version>`，继续
+   前修复所有 alignment failure。
+5. 创建 tag 或 GitHub Release 前，review final diff 和 validation result。
 
-If alignment cannot be completed or validation fails, stop before tag creation
-and release publication.
+如果无法完成 alignment 或 validation failure，必须在创建 tag 和 release
+publication 前停止。
 
 ## GitHub Release Body Hygiene
 
-Start every future release note from
-[`docs/releases/template.md`](releases/template.md). The two marker lines are a
-machine-enforced publication boundary, not editorial hints:
+未来每个 release note 都从 [`docs/releases/template.md`](releases/template.md)
+开始。两行 marker 是 machine-enforced publication boundary，不是 editorial hint：
 
-- The text between `<!-- RELEASE_BODY_START -->` and
-  `<!-- RELEASE_BODY_END -->` is the user-facing GitHub Release body. It must
-  explain who the release is for, required upgrade actions, main changes,
-  compatibility, known limitations, rollback, and the public boundary. A
-  concise statement that validation succeeded is allowed.
-- The `Internal Release Record` after the end marker is the maintainer-facing
-  evidence record. Put issue/pull-request mapping, exact
-  PASS/FAIL/WARN/DEFERRED counts, hosted run IDs, platform matrix details,
-  evidence manifests and artifacts, tag target, release status, maintainer
-  authorization, and other governance facts there.
+- `<!-- RELEASE_BODY_START -->` 与 `<!-- RELEASE_BODY_END -->` 之间的 text 是
+  user-facing GitHub Release body。必须说明 release 面向谁、required upgrade
+  action、主要变更、compatibility、known limitation、rollback 和 public
+  boundary；可以简短说明 validation succeeded。
+- end marker 之后的 `Internal Release Record` 是 maintainer-facing evidence
+  record。Issue/pull-request mapping、exact PASS/FAIL/WARN/DEFERRED count、
+  hosted run ID、platform matrix detail、evidence manifest 和 artifact、tag
+  target、release status、maintainer authorization 及其他 governance fact 都
+  放在这里。
 
-The validator inspects only the text inside the markers for internal evidence.
-It fails closed when either marker is missing, duplicated, or reversed. Inside
-the markers it rejects issue/PR mapping, exact validation counts, hosted run or
-matrix evidence, merge waiting state, tag or publication instructions,
-maintainer authorization, and similar internal workflow language. The same
-facts are valid after the end marker in the maintainer record.
+validator 只检查 marker 内的 text 是否包含 internal evidence。任一 marker 缺失、
+重复或顺序反转时会 fail closed。marker 内拒绝 issue/PR mapping、exact
+validation count、hosted run 或 matrix evidence、merge waiting state、tag 或
+publication instruction、maintainer authorization 及类似 internal workflow
+language；相同 fact 可以放在 end marker 之后的 maintainer record 中。
 
-The tracked published release notes through `v0.6.0` predate this strict
-contract and remain unchanged. The validator recognizes those files by an exact
-closed allowlist; `template.md` and every unlisted release note use the strict
-contract. A new or backdated note cannot gain compatibility treatment by using
-an older version number or omitting its markers.
+tracked、截至 `v0.6.0` 的 published release note 早于此 strict contract，保持
+不变。validator 通过 exact closed allowlist 识别这些 file；`template.md` 和未
+列出的每个 release note 使用 strict contract。新的或 backdated note 不能仅靠
+使用较旧 version number 或省略 marker 获得 compatibility treatment。
 
-Body-only edits to existing GitHub Releases must be explicitly scoped as
-body-only. They must not alter tags, tag targets, release assets, release dates,
-latest/prerelease flags, repository settings, rulesets, secrets, or branch
-protection.
+对已有 GitHub Release 的 body-only edit 必须显式限定为 body-only。不得修改 tag、
+tag target、release asset、release date、latest/prerelease flag、repository
+setting、ruleset、secret 或 branch protection。
 
 ## Old-Release Upgrade Rehearsal
 
-Starting with `v0.5.0`, the release process requires at least one old-release
-upgrade rehearsal before tagging a new public release. This rehearsal validates
-the upgrade path from a published tag to the current `main`.
+从 `v0.5.0` 开始，release process 要求在新的 public release 创建 tag 前至少
+完成一次 old-release upgrade rehearsal。该 rehearsal 验证从 published tag 到
+当前 `main` 的 upgrade path。
 
-### When to Rehearse
+### 何时进行 Rehearse
 
-- Before tagging any release that changes the install contract, template
-  structure, project memory schema, or hub lock format.
-- Before tagging any release that adds or removes install profiles.
-- For patch or docs-only releases that do not change the above surfaces,
-  a rehearsal from the most recent supported-direct tag is still recommended
-  but may be skipped if the maintainer records the deferral.
+- 在 tag 任何改变 install contract、template structure、project workspace schema 或
+  hub lock format 的 release 前。
+- 在 tag 任何增加或删除 install profile 的 release 前。
+- 对不改变上述 surface 的 patch 或 docs-only release，仍建议从最近的 Runtime
+  refresh source tag rehearsal；如果 maintainer 记录 deferral，可以跳过。
 
-### What to Rehearse
+### Rehearse 什么内容
 
-1. **Runtime install upgrade**: Install from the source tag, then upgrade from
-   the target release source through the ordinary default incremental install
-   path. A schema-2 runtime does not require `-Force`. Verify the install
-   manifest.
-2. **Project memory upgrade**: Bootstrap a project from the source tag's
-   runtime, then upgrade the runtime and run memory upgrade analyze, hub
-   lock check, context gate, and memory diagnosis.
-3. **Record evidence**: Add results to
-   `docs/old-release-rehearsal-evidence.md`.
+1. **Runtime install upgrade**：从 source tag 安装，然后从 target release source
+   通过 ordinary default incremental install path 升级。schema-2 Runtime 不需要
+   `-Force`。验证 install manifest。
+2. **Project workspace migration**：从 source tag 的 Runtime bootstrap project，
+   然后升级 Runtime 并运行 `project-workspace` check/discover。如果 project
+   是 legacy，运行 `scripts/migrate-project.ps1` Analyze，review evidence，
+   explicit Apply，并验证 guarded Rollback path。rehearsal record 中较旧的
+   context-gate、workflow-spec 或 memory-diagnosis reference 是 historical
+   evidence，不是 current C3.3 authority。
+3. **Record evidence**：将结果加入 `docs/old-release-rehearsal-evidence.md`。
 
-For a schema-1 runtime whose managed content differs from the target source,
-the default installer fails closed and preserves the existing content. The
-maintainer must review or back up those differences first, and use
-`-ReplaceManaged` only after explicitly accepting replacement of managed
-content. `-Force` remains a deprecated compatibility alias for
-`-ReplaceManaged`; it is not a required or recommended rehearsal path.
+对 managed content 与 target source 不同的 schema-1 Runtime，default installer
+fail closed 并保留 existing content。maintainer 必须先 review 或 backup 这些
+difference，只有显式接受替换 managed content 后才使用 `-ReplaceManaged`。
+`-Force` 仍是 `-ReplaceManaged` 的 deprecated compatibility alias，不是 required
+或 recommended rehearsal path。
 
 ### Minimum Source Tag
 
-The most recent supported-direct tag should be the primary rehearsal source.
-For `v0.5.0`, this is `v0.4.6`. If the release changes the template
-structure, also rehearse the earliest supported-direct source to confirm
-forward compatibility.
+最近的 Runtime refresh source tag 应作为 primary rehearsal source。对 `v0.5.0`，
+该 source 是 `v0.4.6`。如果 release 改变 template structure，也应 rehearsal
+最早的可用 Runtime refresh source，以检查迁移 evidence；不要把 source version
+本身当作 target project 无需 migration 的承诺。
 
-### Checklist vs Automation
+### Checklist 与 Automation
 
-Today the rehearsal is a manual checklist. Steps are documented in
-[Old-Release Upgrade Path](old-release-upgrade-path.md). Future enhancement
-may script the rehearsal into the release validator as an optional fixture,
-but this is not required for `v0.5.0`.
+当前 rehearsal 是 manual checklist，步骤记录在
+[Old-Release Upgrade Path](old-release-upgrade-path.md)。未来 enhancement 可以
+将 rehearsal script 化为 release validator 的 optional fixture，但 `v0.5.0` 不
+要求这样做。
 
 ## Publishing Steps
 
-1. Start from a clean local review branch or a clearly understood local diff.
-2. Run the release validation gate with a temporary scratch directory.
-3. Run the public reader review when the diff changes README, docs entrypoints,
-   release notes, or release process text.
-4. Review `validation-result.json` and any public diff.
-5. Open or update a pull request when using CI for release review.
-6. Confirm the PR classifier-selected suites and hosts, the fixed
-   `validation gate`, and direct candidate identity checks pass for the final head.
-7. Record only public-safe release status in this repository.
-8. After maintainer authorization, complete release-finalization alignment and
-   rerun the full local gate with `-TargetVersion <target-version>`.
-9. Push, tag, and publish release notes only after the local full release gate,
-   hosted required gate, final evidence review, and maintainer approval pass.
+1. 从干净的 local review branch 或已明确理解的 local diff 开始。
+2. 对普通 pull request，运行 `git diff --check`、classifier-selected affected
+   `iteration` 和 `pre-push` validation，以及 targeted documentation consumer
+   check。不要仅因为准备 docs PR 就运行完整 Release validator。
+3. 当 diff 修改 README、docs entrypoint、release note 或 release process text
+   时，运行 Public Reader Review。
+4. 对明确的 Release/checkpoint decision，使用 temporary scratch directory
+   运行 Release validation gate，并 review `validation-result.json`。
+5. Review public diff；如果使用 CI review，则打开或更新 pull request。
+6. 确认 PR classifier-selected suite 和 host、固定的 `validation gate` 以及
+   direct candidate identity check 在 final head 上通过。
+7. 在本 repository 中只记录 public-safe release status。
+8. maintainer authorization 后，完成 release-finalization alignment，并使用
+   `-TargetVersion <target-version>` 重跑完整 local gate。
+9. 只有 local full release gate、hosted required gate、final evidence review 和
+   maintainer approval 都通过后，才 push、tag 和 publish release note。
 
-Do not publish if the validator reports a failed check. Fix the public tree or
-record the release-blocking decision in private migration state, then rerun the
-gate.
+validator 报告 failed check 时不要 publish。修复 public tree，或在 private
+migration state 中记录 release-blocking decision，然后重新运行 gate。
 
 ## Public Records
 
-Public release records should describe the validation surface and final status.
-Do not include local machine paths, private repository mappings, raw sensitive
-audit findings, or private overlay details.
+Public release record 应说明 validation surface 和 final status。不要包含 local
+machine path、private repository mapping、raw sensitive audit finding 或 private
+overlay detail。
 
-Root `.agents/` files are local runtime memory and are not public release
-records. Public specs are durable work packages; use them for scope, decisions,
-acceptance evidence, and completed results rather than local checkout or pull
-request wait state.
+root `.agents/` file 是 local Runtime memory，不是 public release record。Public
+Spec 是 durable work package；应使用它记录 scope、decision、acceptance evidence
+和 completed result，不要记录 local checkout 或 pull request wait state。
