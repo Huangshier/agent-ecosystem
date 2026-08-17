@@ -302,7 +302,7 @@ setting、ruleset、secret 或 branch protection。
 
 ### 何时进行 Rehearse
 
-- 在 tag 任何改变 install contract、template structure、project memory schema 或
+- 在 tag 任何改变 install contract、template structure、project workspace schema 或
   hub lock format 的 release 前。
 - 在 tag 任何增加或删除 install profile 的 release 前。
 - 对不改变上述 surface 的 patch 或 docs-only release，仍建议从最近的 Runtime

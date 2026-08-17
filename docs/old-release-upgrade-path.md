@@ -3,7 +3,7 @@
 本文定义从旧 public release 升级到当前 C3.3 Runtime 时的支持矩阵，并明确
 Runtime install state 与 existing project workspace state 的不同处理方式。
 
-New user 应使用 [quick start](release-readiness.md#current-quick-start) 或
+New user 应使用 [how-to-adapt](how-to-adapt.md) 或
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md)。
 本文面向已经从 previous public release 安装过 Runtime 的 user。
 

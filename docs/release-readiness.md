@@ -72,7 +72,7 @@ Release/checkpoint 决定才进入 `release` stage。
 `Bilingual Public/Private Routing`、`localized context discovery headings`。
 它们不构成新的 Runtime 或 Release authority。
 
-## Current Quick Start
+## Current Validation Quick Reference
 
 当前仅用于本地验证和文档导航，不表示发布授权：
 

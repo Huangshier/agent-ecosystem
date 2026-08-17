@@ -36,8 +36,12 @@ overlays 不在本范围内。
 
 ```powershell
 git diff --check
-pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime> -Copy -Force
+pwsh -NoProfile -NonInteractive -File .\scripts\invoke-local-validation.ps1 -Stage iteration
+pwsh -NoProfile -NonInteractive -File .\scripts\invoke-local-validation.ps1 -Stage pre-push
 ```
+
+installer-specific smoke 由 affected validation / classifier 决定，不作为所有
+贡献的默认命令。
 
 C3.3 validation control plane 和规范 repository validation entrypoints 要求
 使用 PowerShell Core 7.6 或更高版本，并通过
