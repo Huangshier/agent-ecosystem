@@ -982,13 +982,36 @@ function Set-ProjectWorkspaceStatus {
     $lockPath = Join-PathParts $projectRoot ".agents" "hub.lock.json"
     $workspaceModel = ""
     $workspaceState = ""
+    $projectLanguage = $null
     if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
         try {
             $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+            if (-not (Test-ManifestObject -Value $lock)) {
+                throw "workspace metadata must be an object"
+            }
             $workspaceModel = [string](Get-ManifestPropertyValue -Manifest $lock -Name "workspace_model")
             $workspaceState = [string](Get-ManifestPropertyValue -Manifest $lock -Name "workspace_state")
             if (-not [string]::IsNullOrWhiteSpace($workspaceModel) -and $workspaceModel -cne "c3.3" -and $workspaceModel -cne "legacy") {
                 throw "unsupported workspace model"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($workspaceModel)) {
+                $workspaceSchema = Get-ManifestPropertyValue -Manifest $lock -Name "schema_version"
+                if (-not (Test-IntegerValue -Value $workspaceSchema) -or [int64]$workspaceSchema -ne 1) {
+                    throw "unsupported workspace metadata schema"
+                }
+            }
+            if ($workspaceModel -ceq "c3.3") {
+                $projectLanguage = Get-ManifestPropertyValue -Manifest $lock -Name "project_language"
+                if ($projectLanguage -isnot [string] -or $projectLanguage -cnotin @("en", "zh-CN")) {
+                    throw "unsupported project language"
+                }
+            }
+            if (($workspaceModel -ceq "c3.3" -and $workspaceState -cnotin @("active", "dormant")) -or
+                ($workspaceModel -ceq "legacy" -and $workspaceState -cnotin @("", "not-enabled"))) {
+                throw "unsupported workspace state"
+            }
+            if ($workspaceModel -ceq "c3.3") {
+                $Payload.project.project_language = [string]$projectLanguage
             }
         }
         catch {
@@ -1021,6 +1044,72 @@ function Set-ProjectWorkspaceStatus {
     }
     elseif ($workspace.layout -eq "complete") {
         $workspace.readiness = "unknown"
+    }
+}
+
+function Test-ActiveC33RuntimeAuthority {
+    param([Parameter(Mandatory = $true)][object]$Payload)
+
+    return [string]$Payload.runtime.workspace.architecture -ceq "c3.3" -and
+        [string]$Payload.runtime.workspace.lifecycle -ceq "active" -and
+        $Payload.runtime.workspace.default_cutover -is [bool] -and
+        [bool]$Payload.runtime.workspace.default_cutover
+}
+
+function Set-C33ProjectStatus {
+    param(
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [string]$Root
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Root)) {
+        return
+    }
+
+    $project = $Payload.project
+    $workspace = $project.workspace
+
+    # NOTE: active C3.3 只以当前 workspace 结果作为顶层 Project 权威；旧 baseline / memory
+    # 字段保留 schema-1 形状，但不再调用 retired helper 或伪造其诊断结果。
+    $project.status = "unknown"
+    $project.reason = "workspace-readiness-unavailable"
+    $project.baseline.status = "unknown"
+    $project.baseline.reason = "c3-3-workspace-authority"
+    $project.memory.status = "unknown"
+    $project.memory.migration_finding_count = 0
+    $project.memory.refresh_finding_count = 0
+    $project.memory.diagnostic_warning_count = 0
+    $project.memory.finding_codes = @()
+    $project.snapshot_consistency = "unknown"
+    $project.source_provenance = "unknown"
+    $project.remote_latest = "not-checked"
+
+    if ([string]$Payload.runtime.manifest_status -cne "current" -or
+        [string]$Payload.runtime.workspace.ownership -cne "manifest-scoped") {
+        $project.reason = "runtime-workspace-unavailable"
+        return
+    }
+
+    if ([string]$workspace.readiness -ceq "not-c3-3") {
+        $project.status = "migration-required"
+        $project.reason = "legacy-workspace"
+        return
+    }
+
+    if ([string]$workspace.status -ceq "current" -and
+        [string]$workspace.layout -ceq "complete" -and
+        [string]$workspace.runtime_boundary -ceq "separate" -and
+        [string]$workspace.runtime_ownership -ceq "manifest-scoped" -and
+        [string]$workspace.readiness -ceq "active-ready") {
+        $project.status = "current"
+        $project.reason = [string]$workspace.reason
+        return
+    }
+
+    $workspaceReason = [string]$workspace.reason
+    if (-not [string]::IsNullOrWhiteSpace($workspaceReason) -and
+        $workspaceReason -cnotin @("not-requested", "canonical-layout-present")) {
+        $project.reason = $workspaceReason
     }
 }
 
@@ -1437,10 +1526,17 @@ function Write-RuntimeStatusText {
 
 $runtimeRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeDir)
 $statusPayload = Get-RuntimeStatusPayload -Root $runtimeRoot
-try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
-catch { Reset-ProjectUnavailable -Payload $statusPayload }
-try { Set-ProjectWorkspaceStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
-catch { Reset-ProjectWorkspaceUnavailable -Payload $statusPayload }
+if (Test-ActiveC33RuntimeAuthority -Payload $statusPayload) {
+    try { Set-ProjectWorkspaceStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
+    catch { Reset-ProjectWorkspaceUnavailable -Payload $statusPayload }
+    Set-C33ProjectStatus -Payload $statusPayload -Root $ProjectDir
+}
+else {
+    try { Set-ProjectStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
+    catch { Reset-ProjectUnavailable -Payload $statusPayload }
+    try { Set-ProjectWorkspaceStatus -Payload $statusPayload -Root $ProjectDir -RuntimeRoot $runtimeRoot }
+    catch { Reset-ProjectWorkspaceUnavailable -Payload $statusPayload }
+}
 $statusPayload.recommended_next_action = Get-RecommendedNextAction -Payload $statusPayload
 if ($Json.IsPresent) {
     $statusPayload | ConvertTo-Json -Depth 8

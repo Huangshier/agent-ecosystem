@@ -8,6 +8,8 @@ All notable public changes are summarized here.
   capability, including the current project asset and discovery boundaries.
 - Completed the one-time default / recommended runtime cutover and converged
   active Runtime authority to `project-bootstrap` and `project-workspace`.
+- Fixed installed C3.3 Runtime status so valid project workspaces are no longer
+  downgraded by retired project-memory helpers.
 - Converged post-#333 validation responsibility: pull requests prove the diff
   and affected behavior, `main` push health remains a separate boundary, and
   full Release/checkpoint validation is explicit.

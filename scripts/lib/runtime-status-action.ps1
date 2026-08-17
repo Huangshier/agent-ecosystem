@@ -47,7 +47,8 @@ function Get-RecommendedNextAction {
 
         $project = Get-ActionProperty -InputObject $Payload -Name "project"
         switch -CaseSensitive (Get-ActionStatus -InputObject $project -Name "status") {
-            "migration-required" { return "run-memory-migration-analysis" }
+            # NOTE: C3.3 的唯一项目迁移入口是 scripts/migrate-project.ps1 -Mode Analyze。
+            "migration-required" { return "run-project-migration-analysis" }
             "optional-refresh" { return "refresh-project-templates" }
             "unknown" {
                 if ((Get-ActionStatus -InputObject $project -Name "reason") -cne "not-requested") { return "inspect-manually" }
