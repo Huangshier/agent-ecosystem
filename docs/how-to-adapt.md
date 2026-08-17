@@ -1,106 +1,102 @@
-# How To Adapt Agent Ecosystem
+# 如何适配 Agent Ecosystem
 
-This guide shows how to use the public Workflow Kernel in another project
-without copying this repository's private workflow.
+本指南说明如何在其他项目中使用 public Workflow Kernel，而不复制本仓库的
+private workflow。
 
-For a continuous first-use path from an empty project, see the
+从空项目开始的完整 first-use path 见
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md).
-For projects that already have `.agents` memory, use the
+已经存在 `.agents` memory 的项目使用
 [existing project upgrade path](existing-project-upgrade.md).
 
-## 1. Install A Runtime
+## 1. 安装 Runtime
 
-Install the recommended public runtime:
+安装 recommended public runtime：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended
 ```
 
-For evaluation, use a temporary runtime first:
+评估时先使用 temporary runtime：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
-The default is a standalone copy. Rerunning the same command restores missing
-managed files and updates only source-changed files whose installed copies were
-not modified locally. Use `-DevLink` only for an explicit source-linked
-development runtime. Existing `-Copy` invocations remain compatible.
+默认模式是 standalone copy。重复运行同一命令会恢复缺失的 managed files，且
+只更新 source 已变化并且 installed copy 没有被本地修改的文件。只有明确需要
+source-linked development runtime 时才使用 `-DevLink`。既有 `-Copy` 调用继续
+兼容。
 
-Every run writes `install-report.json`. Unknown files are preserved and produce
-a warning status with exit code 0. A file changed both locally and in the source
-produces a conflict and a non-zero exit by default. Use `-AllowPartial` to
-accept skipped conflicts, or `-ReplaceManaged` to overwrite managed files while
-still preserving unknown files. `-Force` remains a deprecated compatibility
-alias for `-ReplaceManaged`.
+每次运行都会写入 `install-report.json`。unknown files 会保留，并以 warning
+status 和 exit code 0 报告。文件同时在本地和 source 中发生变化时，默认产生
+conflict 并返回 non-zero exit。使用 `-AllowPartial` 接受 skipped conflicts，或
+使用 `-ReplaceManaged` 覆盖 managed files，同时继续保留 unknown files。`-Force`
+仍是 `-ReplaceManaged` 的 deprecated compatibility alias。
 
-C3.3 entrypoints use `pwsh -NoProfile -NonInteractive -File` (PowerShell Core
-7.6+). The active Runtime Skills are `project-bootstrap` and
-`project-workspace`; `project-context-gate`, `workflow-spec-lite`, and
-`memory-governance` are retired and are not installed by current public profiles.
+C3.3 entrypoints 使用 `pwsh -NoProfile -NonInteractive -File`（PowerShell Core
+7.6+）。active Runtime Skills 是 `project-bootstrap` 和 `project-workspace`；
+`project-context-gate`、`workflow-spec-lite` 和 `memory-governance` 已 retired，
+当前 public profiles 不安装它们。
 
-To remove a generated runtime later, use the manifest-based uninstaller:
+之后要移除 generated runtime，请使用 manifest-based uninstaller：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\uninstall.ps1 -TargetDir <runtime>
 ```
 
-For schema-2 copy items, the uninstaller first checks every managed destination
-for nested unknown files and locally modified managed files. Any finding blocks
-the entire uninstall before deletion and preserves the manifest/report for
-review. Clean copy items and dev links retain the basic manifest-based uninstall
-path; paths outside manifest destinations are untouched. Schema-1 manifests do
-not provide this file-level protection. If the manifest is missing, no cleanup
-is performed automatically.
+对于 schema-2 copy items，uninstaller 会先检查每个 managed destination 中是否有
+nested unknown files 或 locally modified managed files。任何 finding 都会在删除
+前阻止整个 uninstall，并保留 manifest/report 供 review。clean copy items 和
+dev links 继续使用基本的 manifest-based uninstall path；manifest destinations
+之外的 paths 不会被触碰。Schema-1 manifests 不提供这种 file-level protection。
+如果 manifest 缺失，则不会自动执行 cleanup。
 
-## 2. Bootstrap A Project
+## 2. Bootstrap 项目
 
-Run `project-bootstrap` from the installed runtime:
+从已安装的 runtime 运行 `project-bootstrap`：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
 ```
 
-Set project memory language explicitly during the first non-trivial memory
-write when the agent or workflow knows the user's primary language:
+当 agent 或 workflow 知道用户的 primary language 时，在第一次 non-trivial
+memory write 时显式设置 project memory language：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
-The script does not infer chat language by itself.
-The supported project memory template languages are `en` and `zh-CN` only;
-English is the fallback. This is a scaffold-language feature, not
-arbitrary-language i18n.
+该 script 不会自行推断 chat language。支持的 project memory template languages
+只有 `en` 和 `zh-CN`；English 是 fallback。这是 scaffold-language feature，
+不是 arbitrary-language i18n。
 
-For an existing project, treat bootstrap as a conservative scaffold refresh,
-not as a legacy migration:
+对于 existing project，应把 bootstrap 视为 conservative scaffold refresh，而
+不是 legacy migration：
 
-- Default bootstrap copies missing scaffold files and preserves existing memory.
-- For a legacy project, use the
-  [existing project upgrade path](existing-project-upgrade.md), whose only
-  migration authority is `<runtime>\scripts\migrate-project.ps1`.
-- Use `-RefreshUnmodifiedTemplates` only when you want files that still match
-  the previous installed template hash to pick up newer templates.
-- Do not use reset language for memory migration. Use the Analyze, Plan, Apply,
-  and Validate flows so project-specific content is reviewed and backed up
-  before changes are applied.
-- For established project memory language changes, use the conservative
-  language migration switches with an explicit direction, for example
-  `-AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN`,
-  then `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan
-  <proposal.json>`, and `-ValidateLanguageMigration -MigrationPlan
-  <proposal.json>`.
-- For retained manual-review artifacts, continue with
-  `-PlanNarrativeMigration -MigrationPlan <proposal.json>`, review and approve
-  the generated `narrative-proposal.json`, then run
-  `-ApplyNarrativeMigration` and `-ValidateNarrativeMigration`.
-- `-ForceResetScaffold` is only for intentionally discarding scaffold
-  customizations. It warns and backs up first, but it is not a conservative
-  language migration path.
+- Default bootstrap 会复制缺失的 scaffold file，并保留 existing memory。
+- legacy project 使用
+  [existing project upgrade path](existing-project-upgrade.md)，其唯一 migration
+  authority 是 `<runtime>\scripts\migrate-project.ps1`。
+- 只有希望仍匹配 previous installed template hash 的文件接收新 template 时，
+  才使用 `-RefreshUnmodifiedTemplates`。
+- 不要使用 reset language 进行 memory migration。使用 Analyze、Plan、Apply 和
+  Validate flows，确保 project-specific content 在应用变更前经过 review 并完成
+  backup。
+- established project memory language 变更使用带有明确方向的 conservative
+  language migration switches，例如
+  `-AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN`，然后使用
+  `-PlanLanguageMigration`、`-ApplyLanguageMigration -MigrationPlan
+  <proposal.json>` 和 `-ValidateLanguageMigration -MigrationPlan
+  <proposal.json>`。
+- 对 retained manual-review artifacts，继续使用
+  `-PlanNarrativeMigration -MigrationPlan <proposal.json>`，review 并批准生成的
+  `narrative-proposal.json`，然后运行 `-ApplyNarrativeMigration` 和
+  `-ValidateNarrativeMigration`。
+- `-ForceResetScaffold` 仅用于有意丢弃 scaffold customizations。它会先发出
+  warning 并 backup，但不是 conservative language migration path。
 
-The runtime-level legacy migration command is proposal-first and backup-first:
+runtime-level legacy migration command 遵循 proposal-first 和 backup-first：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Analyze -ProjectRoot <project> -Json
@@ -108,63 +104,64 @@ pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mod
 pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Rollback -ProjectRoot <project> -BackupId <backup-id> -ConfirmRollback -Json
 ```
 
-## 3. Use The Workflow Kernel
+## 3. 使用 Workflow Kernel
 
-- Start non-trivial work by reading root `AGENTS.md`, then use
-  `project-workspace` `discover` / `check` to progressively find canonical
-  Work, Context, Procedure, and Spec assets. Do not use a retired context-gate
-  or memory-governance helper as the current entrypoint.
-- For Claude Code projects, keep the generated `CLAUDE.md`,
-  `.claude/settings.json`, `.claude/guardrails/`, and `.claude/hooks/` surfaces
-  in place. The lifecycle hooks check entry loading, project context, write
-  authorization profiles, dangerous memory reset modes, and stop points without
-  becoming a security sandbox or bypassing normal permissions.
-- Use `project-workspace create-spec` in the target project for work that needs
-  durable goals, non-goals, acceptance evidence, risks, or multi-phase
-  execution.
-- Use the `project-workspace` Work/Context continuity operations to record
-  unfinished work and stable facts at handoff.
-- Use the public `knowledge-hub/knowledge-catalog.md` before opening individual
-  reusable knowledge entries.
-- For runtime-specific startup paths (Codex, Claude Code, generic agents), see
-  the [runtime adoption bridge](runtime-adoption-bridge.md).
+对非 trivial work，先读取根目录 `AGENTS.md`，再使用
+`project-workspace` 的 `discover` / `check` 渐进发现 canonical Work、Context、
+Procedure 和 Spec asset。不要把 retired 的 context-gate 或 memory-governance
+helper 当作当前 entrypoint。
 
-## 4. Keep Layers Separate
+对于 Claude Code project，保留生成的 `CLAUDE.md`、`.claude/settings.json`、
+`.claude/guardrails/` 和 `.claude/hooks/` surfaces。lifecycle hooks 会检查
+entry loading、project context、write authorization profile、危险的 memory
+reset mode 和 stop point，但不会变成 security sandbox，也不会绕过正常权限。
 
-- Public source: reusable kernel and public-safe knowledge.
-- Runtime: generated install under `$HOME/.agents` or another target.
-- Project local: `.agents/` and optional `docs/specs/` inside the target
-  project.
-- Private overlay: optional private profiles, skills, and knowledge outside this
-  public repository.
+在 target project 中，需要 durable goal、non-goal、acceptance evidence、risk
+或 multi-phase execution 时，使用 `project-workspace create-spec`。
 
-This public repository itself uses GitHub issues and pull request bodies as the
-maintenance record. Do not copy its historical root `docs/specs/**` work-package
-pattern into public maintenance by default.
+在交接时，使用 `project-workspace` 的 Work/Context continuity operation 记录
+未完成工作和稳定事实。
 
-Do not copy the public tree into a private overlay. Add only private increments.
+打开单个 reusable knowledge entry 前，先查看 public
+`knowledge-hub/knowledge-catalog.md`。
 
-## 5. Validate Your Setup
+Codex、Claude Code 和 generic agent 的 runtime-specific startup path 见
+[runtime adoption bridge](runtime-adoption-bridge.md)。
 
-Recommended workspace checks:
+## 4. 保持层次分离
+
+- Public source：可复用的 kernel 和 public-safe knowledge。
+- Runtime：安装到 `$HOME/.agents` 或其他 target 的 generated runtime。
+- Project local：target project 内的 `.agents/` 和可选 `docs/specs/`。
+- Private overlay：位于本 public repository 之外的可选 private profile、skill 和
+  knowledge。
+
+本 public repository 使用 GitHub issue 和 pull request body 作为 maintenance
+record。默认不要把它历史上的根目录 `docs/specs/**` work-package pattern 复制
+到 public maintenance 中。
+
+不要把 public tree 复制到 private overlay；只添加 private increment。
+
+## 5. 验证设置
+
+建议运行以下 workspace checks：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
 ```
 
-For an ordinary documentation change to this public repository, run the
-classifier-selected affected validation at `iteration` and `pre-push`, plus
-`git diff --check` and Public Reader Review. The full Release validator is only
-for an explicit Release/checkpoint decision. When that decision exists, run:
+对于本 public repository 的普通文档变更，运行 classifier-selected affected
+`iteration` 和 `pre-push` validation，并执行 `git diff --check` 和 Public Reader
+Review。完整 Release validator 仅用于明确的 Release/checkpoint decision；只有
+存在该 decision 时才运行：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
 ```
 
-## Example
+## 示例
 
-See [examples/minimal-project](../examples/minimal-project/README.md) for a
-small project-local scaffold that shows the intended file layout. For the full
-adoption sequence, use the
+参见 [examples/minimal-project](../examples/minimal-project/README.md)，其中有
+展示目标文件布局的 project-local scaffold。完整 adoption sequence 见
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md).

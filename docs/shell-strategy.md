@@ -1,40 +1,39 @@
 # Shell Strategy
 
-Agent Ecosystem automation is PowerShell-first for the public Workflow Kernel.
-The canonical install, uninstall, validation, bootstrap, workspace, migration,
-and maintenance entrypoints are the checked-in `.ps1` scripts.
+Agent Ecosystem automation 对 public Workflow Kernel 采用 PowerShell-first
+策略。canonical install、uninstall、validation、bootstrap、workspace、migration
+和 maintenance entrypoints 都是仓库中受版本控制的 `.ps1` scripts。
 
 ## Current Support
 
-- The C3.3 validation control plane and normative repository validation
-  entrypoints require PowerShell Core 7.6 or later through
-  `pwsh -NoProfile -NonInteractive -File`.
-- Those validation entrypoints do not support a `powershell.exe` fallback.
-- The active Runtime Skills are `project-bootstrap` and `project-workspace`.
-  Retired `project-context-gate`, `workflow-spec-lite`, and
-  `memory-governance` paths are not current Runtime entrypoints.
-- Fresh projects bootstrap into the C3.3 workspace. Existing legacy projects
-  migrate through `scripts/migrate-project.ps1` with Analyze -> explicit Apply
-  -> guarded Rollback.
-- Pull requests use classifier-selected affected validation at `iteration` and
-  `pre-push`; a push to `main` runs only thin main health. The full Release
-  validator is reserved for an explicit Release/checkpoint decision.
+- C3.3 validation control plane 和规范 repository validation entrypoints 要求
+  使用 PowerShell Core 7.6 或更高版本，并通过
+  `pwsh -NoProfile -NonInteractive -File` 调用。
+- 这些 validation entrypoints 不支持 `powershell.exe` fallback。
+- active Runtime Skills 是 `project-bootstrap` 和 `project-workspace`。
+  retired 的 `project-context-gate`、`workflow-spec-lite` 和
+  `memory-governance` 路径不是当前 Runtime entrypoints。
+- fresh project 直接进入 C3.3 workspace。existing legacy project 通过
+  `scripts/migrate-project.ps1` 执行 Analyze -> explicit Apply -> guarded
+  Rollback。
+- pull request 在 `iteration` 和 `pre-push` 执行 classifier-selected affected
+  validation；push 到 `main` 只运行 thin main health。完整 Release validator
+  仅保留给明确的 Release/checkpoint 决定。
 
 ## Non-PowerShell Shells
 
-No Bash or Zsh wrappers are shipped in the current public release line. Users
-running the normative repository validation entrypoints from POSIX shells
-should install PowerShell 7.6 and invoke them through
-`pwsh -NoProfile -NonInteractive -File`.
+当前 public release line 不提供 Bash 或 Zsh wrappers（No Bash or Zsh wrappers）。通过 POSIX shell 运行
+规范 repository validation entrypoints 的用户应安装 PowerShell 7.6，并通过
+`pwsh -NoProfile -NonInteractive -File` 调用它们。
 
-Future Bash or Zsh support should be a thin compatibility layer, not a second
-implementation. A wrapper may locate `pwsh`, normalize arguments, and delegate to
-the canonical PowerShell script. It should not duplicate install, uninstall,
-context discovery, release validation, or manifest cleanup logic.
+未来的 Bash 或 Zsh 支持只能是 thin compatibility layer，而不是第二套
+implementation。wrapper 可以定位 `pwsh`、规范化参数并委托给 canonical
+PowerShell script，但不得复制 install、uninstall、context discovery、release
+validation 或 manifest cleanup logic。
 
 ## Future Options
 
-Future releases may add one of these paths:
+未来 Release 可以考虑以下路径之一：
 
 - Thin POSIX wrappers that delegate to `pwsh`.
 - Package-manager installation snippets that install PowerShell 7.6 first and
@@ -42,6 +41,6 @@ Future releases may add one of these paths:
 - A small cross-platform binary only if repeated usage proves that script
   wrappers are not enough.
 
-Before any non-PowerShell entrypoint ships, the release gate should validate it
-on Ubuntu and macOS, document the same argument contract as the `.ps1` script,
-and prove that it does not diverge from the canonical PowerShell behavior.
+任何 non-PowerShell entrypoint 发布前，release gate 都应在 Ubuntu 和 macOS
+上验证它，记录与 `.ps1` script 相同的 argument contract，并证明其行为没有
+偏离 canonical PowerShell behavior。

@@ -1,111 +1,103 @@
 # Existing Project Upgrade Path
 
-This guide is for projects that already have a runtime or `.agents` content and
-need to reach the current C3.3 workspace without losing project-owned context.
-It separates a safe scaffold refresh from legacy project migration.
+本文适用于已经有 runtime 或 `.agents` content、需要在不丢失 project-owned
+context 的前提下进入当前 C3.3 workspace 的 project。它把安全的 scaffold
+refresh 与 legacy project migration 分开。
 
-New empty projects should use the
-[minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md)
-instead. This guide assumes the project already has local memory, specs, and
-possibly generated context entries.
+New empty project 应使用 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md)。
+本文假设 project 已有 local memory、Spec，以及可能已经生成的 context entry。
 
-## Which Path Should I Use?
+## 应该使用哪条路径？
 
-| Intent | Recommended path |
+| 目标 | Recommended path |
 | --- | --- |
-| Adopt Agent Ecosystem in a new project | Use the minimal project adoption walkthrough. |
-| Refresh missing scaffold files in an existing project | Run a conservative `project-bootstrap` refresh; preserve project-specific content. |
-| Upgrade only unmodified old templates | Use `-RefreshUnmodifiedTemplates` after checking the current project memory language. |
-| Change project memory language | Use the conservative language migration Analyze -> Plan -> Apply -> Validate flow. |
-| Migrate a legacy project into C3.3 | Run `scripts/migrate-project.ps1` Analyze -> explicit Apply -> guarded Rollback. |
-| Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup; this is not the legacy migration authority. |
-| Inspect current state only | Run `status.ps1`, `project-workspace check`, and `project-workspace discover` without apply modes. |
+| 在 new project 中采用 Agent Ecosystem | 使用 minimal project adoption walkthrough。 |
+| 刷新 existing project 中缺失的 scaffold file | 执行保守的 `project-bootstrap` refresh；保留 project-specific content。 |
+| 只升级未修改的旧 template | 检查当前 project memory language 后使用 `-RefreshUnmodifiedTemplates`。 |
+| 修改 project memory language | 使用保守的 language migration Analyze -> Plan -> Apply -> Validate flow。 |
+| 将 legacy project 迁移到 C3.3 | 运行 `scripts/migrate-project.ps1` 的 Analyze -> explicit Apply -> guarded Rollback。 |
+| 丢弃旧 scaffold customizations | 仅在调用方明确确认 backup 后可以覆盖旧 scaffold content 时使用 `-ForceResetScaffold`；它不是 legacy migration authority。 |
+| 只检查当前状态 | 不使用 apply mode，运行 `status.ps1`、`project-workspace check` 和 `project-workspace discover`。 |
 
-## Command Ownership Boundary
+## Command Ownership 边界
 
-The command ownership boundary for the current Runtime is:
+当前 Runtime 的 command ownership boundary 如下：
 
-- `project-bootstrap` owns fresh scaffold creation, safe refresh, unmodified
-  template refresh, and explicit backup-first force reset.
-- `project-workspace` owns read-only workspace checks/discovery, canonical
-  Work/Context/Procedure/Spec asset discovery and authoring, and durable Spec
-  creation through `create-spec`.
-- `scripts/status.ps1` reports top-level Project status from the
-  `project.workspace` authority; it does not use retired memory helpers.
-- The Runtime-level `scripts/migrate-project.ps1` is the only current authority
-  for legacy project migration. It exposes Analyze, explicit Apply, and guarded
-  Rollback modes.
+- `project-bootstrap` 负责 fresh scaffold creation、safe refresh、unmodified
+  template refresh，以及显式的 backup-first force reset。
+- `project-workspace` 负责 read-only workspace checks/discovery、canonical
+  Work/Context/Procedure/Spec asset 的 discovery 和 authoring，以及通过
+  `create-spec` 创建 durable Spec。
+- `scripts/status.ps1` 从 `project.workspace` authority 报告顶层 Project status；
+  不使用 retired memory helper。
+- Runtime-level `scripts/migrate-project.ps1` 是 legacy project migration 的唯一
+  current authority，提供 Analyze、explicit Apply 和 guarded Rollback mode。
 
-Older bootstrap upgrade switches and helpers remain only as compatibility or
-historical surfaces. They do not make retired Runtime Skills active and must
-not be used as the C3.3 legacy migration path. See [Project Bootstrap Command
-Boundaries](project-bootstrap-command-boundaries.md) for the preserved command
-boundary and standalone runtime packaging constraints.
+旧的 bootstrap upgrade switch 和 helper 仅作为 compatibility 或 historical
+surface 保留。它们不会使 retired Runtime Skill 重新 active，也不得作为 C3.3
+legacy migration path。保留的 command boundary 和 standalone runtime packaging
+constraint 见 [Project Bootstrap Command Boundaries](project-bootstrap-command-boundaries.md)。
 
-## Current Template Model
+## 当前 Template Model
 
-The public template model uses language-scoped project-memory templates:
+public template model 使用 language-scoped project-memory templates：
 
 ```text
 knowledge-hub/templates/languages/<language>/project-root|project-agent/
 skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/
 ```
 
-The supported public project-memory template languages are `en` and `zh-CN`.
-English remains the public default and fallback language. Current `recommended`,
-`full`, and `dev` profiles install the active C3.3 Runtime authority;
-`project-bootstrap` and `project-workspace` are the current Runtime Skills.
-They do not install retired `project-context-gate`, `workflow-spec-lite`, or
-`memory-governance` Skills.
+支持的 public project-memory template language 是 `en` 和 `zh-CN`。English 仍是
+public default 和 fallback language。当前 `recommended`、`full` 和 `dev` profile
+安装 active C3.3 Runtime authority；`project-bootstrap` 和 `project-workspace`
+是当前 Runtime Skill。它们不安装 retired `project-context-gate`、
+`workflow-spec-lite` 或 `memory-governance` Skill。
 
-Do not recreate legacy template directories as compatibility mirrors. Old path
-references should be treated as historical records or cleanup findings, not as
-supported current entrypoints.
+不要将 legacy template directory 重新创建为 compatibility mirror。旧 path
+reference 应作为 historical record 或 cleanup finding 处理，而不是 supported
+current entrypoint。
 
-## Preserve Local Memory
+## 保留 Local Memory
 
-Existing project content is project-owned. The public templates are structural
-baselines for missing files, exact template replacement, and reviewable
-migration evidence. They do not authorize overwriting project-specific memory.
+Existing project content 属于 project-owned。public template 是缺失文件、exact
+template replacement 和可 review migration evidence 的 structural baseline，
+不授权覆盖 project-specific memory。
 
-Preserve local content such as:
+应保留以下 local content：
 
-- `.agents/process.txt`, `.agents/plan.md`, and `.agents/notes.md` when they
-  contain active project state or stable facts.
-- `.agents/context/experience/` entries created by runtime work.
-- `.agents/context/patterns/` and `.agents/context/standards/` when a project
-  has added those local routing folders.
-- `docs/specs/**` work packages that define local goals, decisions, or
-  acceptance evidence.
-- Any project-specific commands, context indexes, or notes that do not exactly
-  match the public scaffold.
+- 包含 active project state 或 stable fact 的 `.agents/process.txt`、
+  `.agents/plan.md` 和 `.agents/notes.md`。
+- runtime work 创建的 `.agents/context/experience/` entry。
+- project 添加了这些 local routing folder 时的 `.agents/context/patterns/` 和
+  `.agents/context/standards/`。
+- 定义 local goal、decision 或 acceptance evidence 的 `docs/specs/**` work
+  package。
+- 任何不完全匹配 public scaffold 的 project-specific command、context index 或
+  note。
 
-This preservation rule applies to target projects being upgraded. The canonical
-C3.3 project asset roots are Work, Context, Procedure, and Spec; a migration
-must account for each declared target and leave unsupported or ambiguous legacy
-content for human disposition. The public `agent-ecosystem` source repository
-uses GitHub issues and pull requests for its own maintenance record and does not
-track root `docs/specs/**` as a maintenance work package.
+此保留规则适用于正在升级的 target project。canonical C3.3 project asset root
+是 Work、Context、Procedure 和 Spec；migration 必须处理每个已声明的 target，
+并将 unsupported 或 ambiguous legacy content 留给 human disposition。public
+`agent-ecosystem` source repository 用 GitHub issue 和 pull request 记录自身
+maintenance，不把 root `docs/specs/**` 作为 maintenance work package 跟踪。
 
-## Intent Quick Reference
+## Intent 快速参考
 
-Use precise wording before choosing a tool mode:
+选择 tool mode 前先明确使用意图：
 
-- Refresh or template upgrade: keep project-specific memory. Add missing
-  scaffolds, update files that still match old templates when requested, and
-  route customized files to review.
-- Language migration: change project memory between `en` and `zh-CN`. Use
-  target-language templates, review target-language narrative drafts, and keep
-  protected literals such as commands, paths, APIs, filenames, raw errors, and
-  code symbols in their original form.
-- Reset or reinitialize: discard scaffold customizations only when the caller
-  explicitly says old memory can be discarded. This is the `-ForceResetScaffold`
-  path, not the default meaning of refresh, upgrade, migrate, or reinitialize.
+- Refresh 或 template upgrade：保留 project-specific memory；补充缺失 scaffold，
+  按请求更新仍匹配旧 template 的文件，并将已 custom 的文件送交 review。
+- Language migration：在 `en` 和 `zh-CN` 之间变更 project memory。使用 target
+  language template，review target-language narrative draft，并保持 command、
+  path、API、filename、raw error 和 code symbol 等 protected literal 原文。
+- Reset 或 reinitialize：仅当调用方明确说可以丢弃旧 memory 时，才丢弃 scaffold
+  customization。这是 `-ForceResetScaffold` path，不是 refresh、upgrade、
+  migrate 或 reinitialize 的默认含义。
 
-Copyable prompts:
+可复制的 prompt：
 
 ```text
-Please conservatively refresh this project's memory templates. Preserve project-specific content and update only safe shared scaffold and rule surfaces.
+请保守刷新当前项目的工程记忆模板，保留项目特化内容，只更新安全的共享骨架和规则。
 ```
 
 ```text
@@ -113,7 +105,7 @@ Please conservatively refresh this project's memory templates. Preserve project-
 ```
 
 ```text
-Please migrate this project's memory to zh-CN. Replace template portions with zh-CN templates, draft project-specific narrative in zh-CN for review, and keep commands, paths, APIs, filenames, raw errors, and code symbols in their original form.
+请把当前项目工程记忆迁移到 zh-CN。模板部分替换为中文模板，项目特化叙述内容翻译成中文供 review；命令、路径、API、文件名、错误文本和代码符号保持原文。
 ```
 
 ```text
@@ -121,7 +113,7 @@ Please migrate this project's memory to zh-CN. Replace template portions with zh
 ```
 
 ```text
-Please reinitialize project memory and do not preserve old content. I confirm old scaffold customizations may be overwritten after backup.
+请重新初始化工程记忆，不保留旧内容。我确认可以在备份后覆盖旧脚手架。
 ```
 
 ```text
@@ -130,20 +122,20 @@ Please reinitialize project memory and do not preserve old content. I confirm ol
 
 ## Upgrade Flow
 
-Use the current C3.3 flow for a legacy project:
+legacy project 使用当前 C3.3 flow：
 
-`Analyze -> explicit Apply -> guarded Rollback`, followed by read-only status
-and workspace checks. A scaffold refresh remains a separate `project-bootstrap`
-operation and is not an implicit migration.
+`Analyze -> explicit Apply -> guarded Rollback`，随后执行 read-only status 和
+workspace check。scaffold refresh 仍是独立的 `project-bootstrap` operation，不是
+implicit migration。
 
-Before a scaffold refresh, determine the project memory language from the
-project's `.agents/AGENTS.md` or existing `.agents/hub.lock.json`
-`project_language` field. Pass that language explicitly with `-ProjectLanguage`
-when `project-bootstrap` may create missing scaffold or lock metadata. Do not
-infer project memory language from the current chat. This language check does
-not replace the migration evidence required by `scripts/migrate-project.ps1`.
+scaffold refresh 前，从 project 的 `.agents/AGENTS.md` 或现有
+`.agents/hub.lock.json` 的 `project_language` field 确定 project memory
+language。当 `project-bootstrap` 可能创建缺失 scaffold 或 lock metadata 时，
+使用 `-ProjectLanguage` 显式传入该 language。不要从当前 chat 推断 project
+memory language。此 language check 不能替代 `scripts/migrate-project.ps1` 要求
+的 migration evidence。
 
-1. Inspect the installed Runtime and the project without editing files.
+1. 不编辑文件，检查已安装的 Runtime 和 project。
 
    ```powershell
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
@@ -151,28 +143,26 @@ not replace the migration evidence required by `scripts/migrate-project.ps1`.
    pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-2. If the workspace is legacy or the status result is `migration-required`,
-   create deterministic migration evidence with the Runtime-level migration
-   authority. Analyze is strictly read-only.
+2. 如果 workspace 是 legacy，或 status result 为 `migration-required`，使用
+   Runtime-level migration authority 创建 deterministic migration evidence。
+   Analyze 严格为 read-only。
 
    ```powershell
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Analyze -ProjectRoot <project> -Json
    ```
 
-3. Review the Analyze evidence. Confirm the Work / Context / Procedure / Spec
-   plan, project language, workspace model, and project-specific preservation
-   decisions. Unsupported or ambiguous material remains a human-disposition
-   finding.
+3. Review Analyze evidence。确认 Work / Context / Procedure / Spec plan、project
+   language、workspace model 和 project-specific preservation decision。
+   Unsupported 或 ambiguous material 仍作为 human-disposition finding 保留。
 
-4. Apply only the reviewed evidence with explicit confirmation. Apply creates
-   and verifies a complete project-owned backup before changing migration
-   targets.
+4. 仅在显式确认后 Apply 已 review 的 evidence。Apply 会在修改 migration target
+   前创建并验证完整的 project-owned backup。
 
    ```powershell
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Apply -ProjectRoot <project> -AnalyzeEvidence <analyze-json> -ConfirmMigration -Json
    ```
 
-5. Validate the result with read-only status and workspace checks.
+5. 使用 read-only status 和 workspace check 验证结果。
 
    ```powershell
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
@@ -180,67 +170,63 @@ not replace the migration evidence required by `scripts/migrate-project.ps1`.
    pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-6. If the unchanged-project guard permits rollback, use the backup ID returned
-   by Apply. Rollback keeps the backup and fails closed if migration-relevant
-   project content changed after Apply.
+6. 如果 unchanged-project guard 允许 rollback，使用 Apply 返回的 backup ID。
+   Rollback 会保留 backup；如果 Apply 后 migration-relevant project content
+   发生变化，则 fail closed。
 
    ```powershell
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Rollback -ProjectRoot <project> -BackupId <backup-id> -ConfirmRollback -Json
    ```
 
-For project-memory language changes, use the conservative language migration
-Analyze, Plan, Apply, and Validate modes with explicit source and target
-languages. Phase 1 replaces templates and stages project-specific content;
-Phase 2 applies reviewed target-language narrative while preserving protected
-literals. Manual-review-only artifacts are reserved for uncertain or unsupported
-content, not the ordinary completion path.
+变更 project-memory language 时，使用带有 explicit source 和 target language 的
+保守 language migration Analyze、Plan、Apply 和 Validate mode。Phase 1 替换
+template 并 stage project-specific content；Phase 2 应用已 review 的
+target-language narrative，同时保留 protected literal。Manual-review-only
+artifact 只用于 uncertain 或 unsupported content，不是普通完成路径。
 
-When a separate body-level language check is needed for a project-memory
-language migration, run:
+project-memory language migration 需要单独进行 body-level language check 时，
+运行：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
 ```
 
-The audit is read-only. It reports likely body-language mismatches without
-translating or rewriting project memory. The language migration validator uses
-the same audit evidence so blocking source-language leftovers prevent a
-completed migration claim.
+该 audit 是 read-only。它报告可能的 body-language mismatch，但不翻译或重写
+project memory。language migration validator 使用相同的 audit evidence，因此
+残留的 source-language blocker 会阻止宣称 migration 已完成。
 
-## Handling Old Path References
+## 处理旧 Path Reference
 
-Classify old path references before editing:
+编辑前先对旧 path reference 分类：
 
-- Active setup, install, bootstrap, migration, or upgrade guidance should move
-  to the `templates/languages/<language>/project-root|project-agent/` model.
-- Historical release notes, closed specs, and old experience entries can keep
-  old paths only when they are clearly marked as legacy, deprecated, removed,
-  superseded, or historical state.
-- Generated or local project records should not be deleted only because they
-  mention an old path. Preserve the record and add a short note when the path is
-  historical.
+- active setup、install、bootstrap、migration 或 upgrade guidance 应迁移到
+  `templates/languages/<language>/project-root|project-agent/` model。
+- historical release note、closed Spec 和 old experience entry 只有明确标记为
+  legacy、deprecated、removed、superseded 或 historical state 时，才可以保留
+  old path。
+- 不要仅因为 generated 或 local project record 提到 old path 就删除它。保留
+  record，并在 path 属于历史内容时添加简短说明。
 
-Do not add compatibility mirrors for old template directories. If a local tool
-still depends on an old path, update the tool or keep the compatibility layer
-inside the local project, not in the public kernel.
+不要为旧 template directory 添加 compatibility mirror。如果 local tool 仍依赖
+old path，更新该 tool，或把 compatibility layer 留在 local project 内，不要放入
+public kernel。
 
 ## Historical Compatibility Wording
 
-Older release records and mechanical validators retain the terms `memory_upgrade.ps1`,
-`-Mode Analyze`, `-AnalyzeMemoryUpgrade`, `ApplyMemoryUpgrade`, and `Validate`.
-They describe the pre-C3.3 `language-scoped project-memory templates` flow and
-its `analyze -> plan -> backup -> apply -> validate` wording, including the
-`memory-only and no-edit` distinction and the rule `Do not recreate legacy
-template directories`. These are historical or compatibility references only;
-they are not the current legacy migration authority. Current migration uses
-`scripts/migrate-project.ps1`, and retired `project-context-gate`,
-`workflow-spec-lite`, and `memory-governance` helpers are not current Runtime
-entrypoints.
+旧 release record 和 mechanical validator 仍保留 `memory_upgrade.ps1`、
+`-Mode Analyze`、`-AnalyzeMemoryUpgrade`、`ApplyMemoryUpgrade` 和 `Validate`。
+这些词描述 C3.3 之前的 `language-scoped project-memory templates` flow 及其
+`analyze -> plan -> backup -> apply -> validate` wording，其中包括
+`memory-only and no-edit` distinction；rule `Do not recreate legacy template directories`；
+与之配套的 `missing scaffold files` 也是保留的历史机器词。
+它们仅是 historical 或 compatibility reference，不是当前 legacy migration
+authority。当前 migration 使用 `scripts/migrate-project.ps1`；
+retired `project-context-gate`、`workflow-spec-lite` 和 `memory-governance`
+helper 不是 current Runtime entrypoint。
 
-## Validation For Public Changes
+## Public Change 验证
 
-For this public repository, ordinary documentation changes use the affected
-validation contract:
+本 public repository 的普通文档变更使用 affected validation contract：
 
 ```powershell
 git diff --check
@@ -248,6 +234,6 @@ pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage
 pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage pre-push
 ```
 
-Run targeted documentation or workspace-consumer checks when the classifier
-selects them, and complete Public Reader Review. The full Release validator is
-reserved for an explicit Release/checkpoint decision.
+当 classifier 选择 targeted documentation 或 workspace-consumer check 时运行它们，
+并完成 Public Reader Review。完整 Release validator 仅保留给明确的
+Release/checkpoint decision。

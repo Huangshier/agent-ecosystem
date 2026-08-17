@@ -1,606 +1,89 @@
 # Release Readiness
 
-Status: `v0.7.1` published public release; current `main` is in the post-C3.3
-maintenance line.
+Status: `v0.7.1` published public release；当前 `main` 已领先 `v0.7.1`。
+
+## Current Release Pointer
+
+- Latest published Release: `v0.7.1`。
+- 当前 `main` 已包含 `v0.7.1` 之后的 C3.3、default cutover 和 PR #340
+  status alignment；这些变化仍属于 `Unreleased`，不是已发布 Release。
+- Current highest Release impact: `minor`。
+- Next target: `v0.8.0` release review。
+- 本页只记录当前状态和导航指针，不授权 `tag`、`publish` 或任何 GitHub
+  Release 操作。
+
+GitHub Release `v0.7.1` has been published：
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.1
+
+已发布 Release 的正文与维护者记录位于
+`docs/releases/v0.7.1.md`；本页不重复保存 tag target、验证计数或 hosted
+run 记录。
+
+## Unreleased
+
+当前 `Unreleased` 的主要公共变化包括：
+
+- C3.3 Workflow Kernel 已成为当前 Runtime 基线；active Runtime Skills 为
+  `project-bootstrap` 和 `project-workspace`。
+- default / recommended runtime cutover 已完成；`project-context-gate`、
+  `workflow-spec-lite`、`memory-governance` 不再是当前 Runtime authority。
+- PR #340 已修复有效 C3.3 workspace 的 status authority，使顶层 Project
+  status 服从 `project.workspace`，并将 legacy migration 指向
+  `scripts/migrate-project.ps1`。
+- 普通 PR 使用 classifier-selected affected `iteration` / `pre-push`
+  validation；`main` push 只运行 thin main health；完整 Release/checkpoint
+  validation 仅在明确 Release 决策时运行。
+
+这些变化使 `Unreleased` 达到 `minor` 级别，但本 Issue 和本 PR 都不发布
+`v0.8.0`，也不构成 tag 或 publish 授权。
 
 ## Current C3.3 Authority
 
-- Active Runtime Skills: `project-bootstrap` and `project-workspace`.
-- Retired from current Runtime authority: `project-context-gate`,
-  `workflow-spec-lite`, and `memory-governance`. Historical release records and
-  negative validation fixtures may retain these names, but current profiles do
-  not install or route through them.
-- PowerShell baseline: PowerShell Core 7.6+ through
-  `pwsh -NoProfile -NonInteractive -File`.
-- Fresh project path: `project-bootstrap` + `project-workspace`.
-- Existing legacy project path: `scripts/migrate-project.ps1` Analyze -> explicit
-  Apply -> guarded Rollback.
-- Workspace checks: `project-workspace` `check-project-workspace` and
-  `discover-project-assets`.
-- Durable project Specs: `project-workspace create-spec`.
-- Validation boundary: ordinary PRs use affected `iteration` / `pre-push`
-  validation; a `main` push runs thin main health; full Release/checkpoint
-  validation is explicit.
-
-This section is the current readiness pointer. Published release sections and
-the retained rehearsal evidence below are historical records, not a second
-current Runtime authority.
-
-The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
-public migration work. `v0.3.0` packaged backlog remediation and public
-maintenance issues into the normal release flow. `v0.3.1` was published as a
-public stabilization release. `v0.4.0` delivered the conservative `en` /
-`zh-CN` engineering-memory language migration workflow, completing issue #30.
-`v0.4.1` consolidated project-memory template authority, and `v0.4.2`
-converged the template model to language-scoped project-root and project-agent
-directories. `v0.4.3` was published as a stabilization release for release
-record normalization, legacy template-path audit coverage, and existing project
-upgrade guidance. `v0.4.4` was published as a stabilization / docs / governance
-patch release for the post-`v0.4.3` guardrails, memory-language governance,
-Chinese homepage, domain-pack governance, and spec-state reconciliation work.
-`v0.4.5` packaged the issue triage label-sync, spec validator zh-CN anchor,
-UTF-8 no-BOM, release-validation permissions, and issue template fixes.
-`v0.4.6` packaged spec lifecycle governance, public-safe reusable knowledge
-patterns, and release body hygiene. `v0.5.0` packaged the stabilization-first
-maintenance closeout, public maintenance-record boundary, release validator
-modularization, old-release upgrade rehearsal evidence, Claude Code adoption
-shim, agent issue triage hardening, and hosted PR identity guard. `v0.5.1`
-packaged memory governance hardening, public-safe write authorization boundary
-clarification, testing capability foundations, and release validator
-thin-entrypoint closeout. `v0.5.2` packages Claude Code lifecycle hooks,
-skill metadata and discovery compatibility, eval-driven iteration and testing
-guidance, public-safe knowledge lifecycle metadata, context index guidance, and
-release validation growth to 81 passing checks. `v0.6.0` packages copy-first
-runtime installation with schema-2 migration, the explicit agent skill bridge,
-candidate intake, session-learning triggers, opt-in directory index diagnostics,
-and experience search correctness fixes.
-
-`v0.7.0` packages reliable runtime and project status, proactive project drift
-guidance, a single authoritative project behavior contract, lifecycle-oriented
-adoption docs, and risk-tiered release validation with evidence and cost
-guardrails. `v0.7.1` packages the post-`v0.7.0` runtime/bootstrap/status fixes,
-restored project-template discovery guidance, deterministic context metadata
-matching, and local/hosted validation routing and evidence reliability work.
-
-## v0.7.1 Published State
-
-Current `main` includes the post-`v0.7.0` maintenance changes summarized in
-`docs/releases/v0.7.1.md`, followed by the one-time C3.3 default cutover and
-the merged status alignment from PR #340. `v0.7.1` remains the latest published
-release; these post-release changes are current `main` state, not a new Release.
-
-GitHub Release `v0.7.1` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.1
-
-Tag target: merge commit for the `v0.7.1` publish-finalization PR.
-
-Local release validation for this alignment passed on the then-supported hosts
-with `PASS=25 FAIL=0 WARN=0 DEFERRED=0`; the current baseline for new validation
-is PowerShell Core 7.6+.
-
-The `v0.7.0` to current-candidate isolated rehearsal passed for fresh
-install/status/uninstall, default copy-mode runtime upgrade, managed and local
-modification protection, project state and conservative refresh boundaries,
-context metadata matching, and the explicit project-bootstrap /
-project-workspace skill boundary. Final evidence is bound to the candidate head.
-
-Release body source: `docs/releases/v0.7.1.md`, between `RELEASE_BODY_START`
-and `RELEASE_BODY_END`.
-
-## v0.7.0 Published State
-
-Current `main` includes the post-`v0.6.0` stabilization changes summarized in
-`docs/releases/v0.7.0.md`. `v0.7.0` is aligned for tag and GitHub Release
-publication from the merge commit of the `v0.7.0` publish-finalization PR.
-
-GitHub Release `v0.7.0` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.0
-
-Tag target: merge commit for the `v0.7.0` publish-finalization PR.
-
-Local release validation for this alignment passed on PowerShell 7 and Windows
-PowerShell 5.1 with `PASS=92 FAIL=0 WARN=0 DEFERRED=0`.
-
-The `v0.6.0` to current-main isolated rehearsal passed for fresh
-install/status/uninstall, default copy-mode runtime upgrade, project template
-drift detection, conservative refresh for unmodified and customized projects,
-managed-file protection, and an explicit two-skill bridge.
-
-Release body source: `docs/releases/v0.7.0.md`, between `RELEASE_BODY_START`
-and `RELEASE_BODY_END`.
-
-## v0.6.0 Published State
-
-Current `main` includes the post-`v0.5.2` runtime lifecycle and knowledge
-workflow changes summarized in `docs/releases/v0.6.0.md`. `v0.6.0` is aligned
-for tag and GitHub Release publication from the merge commit of the `v0.6.0`
-publish-finalization PR.
-
-GitHub Release `v0.6.0` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.6.0
-
-Tag target: merge commit for the `v0.6.0` publish-finalization PR.
-
-Local release validation for this alignment passed on PowerShell 7 and Windows
-PowerShell 5.1 with `PASS=86 FAIL=0 WARN=0 DEFERRED=0`.
-
-The `v0.5.2` schema-1 copy runtime upgrade rehearsal passed: the default refresh
-reported conflicts without replacing managed differences or migrating the
-manifest; reviewed `-ReplaceManaged` completed schema-2 copy migration while
-preserving the explicit user decision boundary. A v0.5.2-bootstrapped project
-reported 0 memory-upgrade and memory-diagnosis findings.
-
-Release body source: `docs/releases/v0.6.0.md`, between `RELEASE_BODY_START`
-and `RELEASE_BODY_END`.
-
-## Future Release Record Contract
-
-`v0.6.0` and earlier notes are immutable legacy published records. Future
-release notes use [`docs/releases/template.md`](releases/template.md). Only the
-content between the release body markers is copied to GitHub Releases; exact
-validation evidence, hosted identities, issue/PR mapping, tag target, release
-status, and authorization remain after the end marker in the Internal Release
-Record. The strict validator applies to the template and every release-note file
-outside the exact published-note allowlist through `v0.6.0`, without changing
-the published `v0.6.0` body.
-
-## v0.5.2 Published State
-
-Current `main` includes the post-`v0.5.1` Claude hooks / skill discovery /
-testing and evaluation / knowledge lifecycle changes summarized in
-`docs/releases/v0.5.2.md`. `v0.5.2` is aligned for tag and GitHub Release
-publication from the merge commit of the `v0.5.2` publish-finalization PR.
-
-GitHub Release `v0.5.2` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.2
-
-Tag target: merge commit for the `v0.5.2` publish-finalization PR.
-
-Local release validation for this alignment passed with
-`PASS=81 FAIL=0 WARN=0 DEFERRED=0`.
-
-Release body source: `docs/releases/v0.5.2.md`, between
-`RELEASE_BODY_START` and `RELEASE_BODY_END`.
-
-## v0.5.1 Published State
-
-Current `main` includes the post-`v0.5.0` memory-governance / authorization /
-testing-foundations / release-validator changes summarized in
-`docs/releases/v0.5.1.md`. `v0.5.1` is aligned for maintainer tag and GitHub
-Release publication from the merge commit of the `v0.5.1` publish-finalization
-PR.
-
-GitHub Release `v0.5.1` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.1
-
-Tag target: merge commit for the `v0.5.1` publish-finalization PR.
-
-Local release validation for this alignment passed with
-`PASS=62 FAIL=0 WARN=0 DEFERRED=0`.
-
-Release body source: `docs/releases/v0.5.1.md`, between
-`RELEASE_BODY_START` and `RELEASE_BODY_END`.
-
-## v0.5.0 Published State
-
-Current `main` includes the post-`v0.4.6` stabilization / governance /
-validation-infrastructure changes summarized in `docs/releases/v0.5.0.md`.
-`v0.5.0` is aligned for maintainer tag and GitHub Release publication from the
-merge commit of the `v0.5.0` publish-finalization PR.
-
-GitHub Release `v0.5.0` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.5.0
-
-Tag target: merge commit for the `v0.5.0` publish-finalization PR.
-
-Local release validation for this alignment passed with
-`PASS=58 FAIL=0 WARN=0 DEFERRED=0`.
-
-Release body source: `docs/releases/v0.5.0.md`, between
-`RELEASE_BODY_START` and `RELEASE_BODY_END`.
-
-## v0.4.4 Published State
-
-Current `main` includes the post-`v0.4.3` stabilization / docs / governance
-changes summarized in `docs/releases/v0.4.4.md`. `v0.4.4` has been tagged and
-published as a public release.
-
-Published GitHub Release:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
-
-Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
-
-## Historical Completion Ledger
-
-The entries in this section are retained release and maintenance evidence. They
-are not instructions for the current Runtime and do not override the Current
-C3.3 Authority section above.
-
-- Workflow Kernel skills are present under `skills/`.
-- Kernel skill metadata includes `category`, `stability`, and `scope`.
-- Public knowledge hub templates and selected generic maintenance scripts are present.
-- One public-safe workflow experience entry is indexed.
-- Knowledge Hub Phase 3 structure is present:
-  `knowledge-catalog.md`, `experience/`, `patterns/`, `standards/`, and
-  `domain-packs/`.
-- One reusable engineering pattern and one cross-project standard are present.
-- One public-safe domain pack scaffold is present:
-  `knowledge/domain-packs/embedded-core/`.
-- Public installer supports `minimal`, `recommended`, `full`, and `dev` profiles.
-- `full` and `dev` remain reserved future public scopes that currently install
-  the same public content as `recommended` until a governance-approved
-  expansion lands.
-- Recommended profile has been validated against a temporary runtime in copy mode.
-- Recommended profile has been smoke-tested by bootstrapping a new project from
-  a temporary runtime install.
-- First public release version selected: `v0.1.0`.
-- First public Chinese documentation ships as `README.zh-CN.md`.
-- Reusable release validation is available at `scripts/validate-release.ps1`.
-- Release process guidance is available at `docs/release-process.md`.
-- Latest local hardened release validation passed with 40 checks passing, no
-  failures, warnings, or deferred checks.
-- Narrative migration plan/apply/validate from Phase 1 manual-review artifacts
-  is covered by the release validator, including hash verification, category
-  routing, and unapproved-by-default behavior.
-- Duplicate experience-maintenance helpers have been reviewed:
-  `project-bootstrap` keeps compatibility copies, while `knowledge-hub/scripts`
-  is the preferred runtime maintenance entrypoint.
-- PowerShell helper ownership is documented: repository maintenance scripts use
-  `scripts/lib/path-guard.ps1`, while installed skill and knowledge-hub runtime
-  scripts keep local helpers or depend only on same-package helpers.
-- The initial public experience entry is documented as a public-safe reindexed
-  backfill with local source paths intentionally omitted from `index.json`.
-- Installer metadata behavior is documented: schema-2 `install-manifest.json`
-  records copy or explicit development-link strategy and per-file content state,
-  while schema-1 `install-report.json` records each run's result.
-- Latest local high-risk public audit found no matches, and public PowerShell
-  scripts parsed successfully.
-- CI release validation workflow is present at
-  `.github/workflows/release-validation.yml` and is configured for PowerShell 7
-  on Windows, Ubuntu, and macOS, plus Windows PowerShell 5.1 on Windows.
-- Hosted CI release validation passed on Windows, Ubuntu, and macOS:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25509636087
-- `.gitattributes` pins validation-sensitive text files to LF endings so
-  experience registry hash checks remain stable across hosted runners.
-- Bootstrap templates install a `Project Language Policy` section into
-  `.agents/AGENTS.md`; release validation checks both repository guidance and
-  bootstrap output.
-- `project-bootstrap` can write first-session language scaffolds when an agent
-  or workflow supplies `-ProjectLanguage en` or `-ProjectLanguage zh-CN`; release
-  validation checks both languages with temporary projects.
-- `project-bootstrap` distinguishes empty initialization, missing-template
-  refresh, unmodified-template refresh, conservative memory migration, and
-  explicit force reset. Compatibility overwrite emits warnings, and force reset
-  remains backup-first.
-- `project-bootstrap` supports conservative `en` / `zh-CN` project-memory
-  language migration with analyze, plan, proposal, backup, apply, and validate
-  modes.
-- `workflow-spec-lite` includes a read-only spec validator that checks goals,
-  non-goals, risks, acceptance evidence, and Execution Contract stop rules.
-- Spec templates and memory-governance guidance include scope drift, unrelated
-  refactor, and skipped acceptance protections.
-- Knowledge catalog coverage includes the `embedded-core` domain pack scaffold.
-- Public adoption surface includes `docs/how-to-adapt.md` and
-  `examples/minimal-project/`.
-- Public release notes are present at `docs/releases/v0.2.0.md`.
-- Schema-2 copy uninstall fails fast before deletion when a manifest destination
-  contains nested unknown or locally modified managed files. Missing manifests
-  still produce manual cleanup guidance without removal; schema-1 manifests
-  retain legacy item-boundary behavior.
-- Shared PowerShell helper extraction keeps path guard logic consistent across
-  installer, uninstaller, validator, and benchmark scripts.
-- Release validation helper extraction keeps common test utilities in
-  `scripts/validation/release-test-helper.ps1`.
-- Large-context benchmark coverage validates context gate JSON behavior with
-  500 generated context files.
-- Cross-platform shell strategy documents PowerShell as the canonical public
-  script surface and defers Bash or Zsh wrappers.
-- Memory diagnostics and memory upgrade analysis accept localized context
-  discovery headings while preserving English-first public templates.
-- Bilingual Public/Private Routing guidance is documented in the public
-  knowledge hub and language policy.
-- Public release notes are present at `docs/releases/v0.3.0.md`.
-- Public release notes are present at `docs/releases/v0.3.1.md`.
-- Public release notes are present at `docs/releases/v0.4.0.md`.
-- Public release notes are present at `docs/releases/v0.4.1.md`.
-- Public release notes are present at `docs/releases/v0.4.2.md`.
-- Public release notes are present at `docs/releases/v0.4.3.md`.
-- Conservative `en` / `zh-CN` language migration is complete: Phase 1
-  deterministic scaffold migration and Phase 2 narrative migration from
-  manual-review artifacts. Issue #30 is closed.
-- Final hosted CI release validation for the published `v0.4.0` main passed on
-  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25795197326
-- Historical `v0.4.1` release state: project-memory template authority was
-  consolidated in `v0.4.1`. At that point, public
-  templates moved under `knowledge-hub/templates/project-memory/`, the bundled
-  project-bootstrap snapshot was synchronized, and the standalone
-  `skills/project-bootstrap/templates/project-memory/` tree was removed.
-- Final hosted CI release validation for the published `v0.4.1` main passed on
-  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25801192289
-- Language-scoped template directory convergence was published in `v0.4.2`:
-  public templates and bundled snapshots now use
-  `templates/languages/en|zh-CN/project-root|project-agent`.
-- Final hosted CI release validation for the published `v0.4.2` main passed on
-  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25809635716
-- Current README and `README.zh-CN.md` describe the project as a Workflow
-  Kernel with an explicit extension model and non-runtime boundaries.
-- Release process guidance includes a lightweight Public Reader Review checklist.
-- Release validation workflow uses Node 24-compatible action versions:
-  `actions/checkout@v6` and `actions/upload-artifact@v7`.
-- Final hosted CI release validation for the published `v0.3.1` main passed on
-  Windows PowerShell 5.1, Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25598098034
-- GitHub Release `v0.3.1` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.3.1
-- GitHub Release `v0.4.0` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.0
-- GitHub Release `v0.4.1` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.1
-- GitHub Release `v0.4.2` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.2
-- GitHub Release `v0.4.3` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.3
-- Hub initialization now leaves template hubs as ordinary directories unless
-  `-InitializeGit` or `-CommitInitial` is explicitly supplied.
-- Experience index rebuilds preserve registry bytes on no-op rebuilds, avoiding
-  timestamp-only diffs.
-- Validation scratch retention can be inspected with
-  `scripts/prune-validation-scratch.ps1`, which is dry-run by default and only
-  prunes evidence-marked validation run directories when `-Apply` is supplied.
-- Existing project upgrade guidance documents the post-`v0.4.2`
-  language-scoped template model, conservative upgrade flow, local memory
-  preservation, and old path handling.
-- `v0.4.3` release validation passed with
-  `PASS=46 FAIL=0 WARN=0 DEFERRED=0`.
-- Hosted Release validation for the published `v0.4.3` tag target
-  `26072b7f8e25e2a5b1092b6af45d47ae1c43cac8` passed on Windows PowerShell 5.1,
-  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/25841179794
-- Post-`v0.4.3` closeout write-scope, cross-workspace, `/goal` evidence,
-  high-risk evidence, bootstrap analyze, and memory-scope language governance
-  guardrails have landed through issues #65, #66, #68, and #69.
-- PR base guard and release-validation concurrency are present.
-- Root `.agents/` is checkout-local runtime memory and untracked.
-- The Simplified Chinese homepage is `README.md`; `README.en.md` remains the
-  English entrypoint.
-- Domain-pack governance lifecycle is documented without enabling profile
-  expansion or new public domain packs.
-- Body-level project-memory language audit and `en` / `zh-CN` migration review
-  flow validation are covered.
-- Completed `docs/specs/**` work-package state was reconciled, and #23 remains
-  a deferred next-version planning umbrella.
-- Public release notes are present at `docs/releases/v0.4.4.md` as bilingual
-  published release notes.
-- `v0.4.4` final local release validation passed with
-  `PASS=51 FAIL=0 WARN=0 DEFERRED=0`.
-- Final hosted Release validation for the published `v0.4.4` tag target
-  `71fabb372a4cbc024f07c920a0c17b903a77afc2` passed on Windows PowerShell 5.1,
-  Windows pwsh, Ubuntu pwsh, and macOS pwsh:
-  https://github.com/Huangshier/agent-ecosystem/actions/runs/26269908157
-- GitHub Release `v0.4.4` has been published:
-  https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
-
-- Old-release upgrade support matrix defines supported direct (`v0.4.2`–`v0.4.6`),
-  best-effort (`v0.3.x`–`v0.4.1`), and unsupported (`v0.1.0`, `v0.2.0`) categories
-  with expected upgrade paths and validation steps.
-- Old-release upgrade path documentation covers runtime install upgrade
-  (same-machine refresh, copy mode, link/junction mode), project memory upgrade
-  (analyze/plan/apply/validate), fresh-machine install, and manifest verification.
-- `v0.4.6` → current `main` old-release upgrade rehearsal passed: runtime install
-  upgrade, project memory analyze (0 findings), hub lock in-sync, context gate,
-  and memory diagnosis (0 findings).
-- Release process requires at least one old-release upgrade rehearsal before
-  tagging releases that change the install contract, template structure, or
-  project memory schema.
-- Old-release rehearsal evidence is recorded in
-  `docs/old-release-rehearsal-evidence.md`.
-- Public release notes are present at `docs/releases/v0.5.1.md` as bilingual
-  published release notes.
-- `v0.5.1` final local release validation passed with
-  `PASS=62 FAIL=0 WARN=0 DEFERRED=0`.
-- Public release notes are present at `docs/releases/v0.5.2.md` as bilingual
-  published release notes.
-- `v0.5.2` final local release validation passed with
-  `PASS=81 FAIL=0 WARN=0 DEFERRED=0`.
-- Public release notes are present at `docs/releases/v0.6.0.md` with first-screen
-  runtime, project refresh, bridge, compatibility, and command guidance.
-- `v0.6.0` final local release validation passed on PowerShell 7 and Windows
-  PowerShell 5.1 with `PASS=86 FAIL=0 WARN=0 DEFERRED=0`.
-- Public release notes are present at `docs/releases/v0.7.0.md` with runtime
-  status, project refresh, compatibility, rollback, and public-boundary
-  guidance.
-- `v0.7.0` final local release validation passed on PowerShell 7 and Windows
-  PowerShell 5.1 with `PASS=92 FAIL=0 WARN=0 DEFERRED=0`.
-- Release validator thin-entrypoint closeout: `scripts/validate-release.ps1`
-  refactored from 2,496 lines to 566 lines with 10 extracted validation helper
-  modules; 62 checks preserved with identical output contract.
-- Memory governance hardened: structural diagnostics design, phase-close
-  integration, completed-list growth detection, stable notes preservation, and
-  template governance guidance.
-- Public-safe write authorization boundaries clarified in public governance
-  documentation.
-- Testing capability foundations established: TDD and test-strategy patterns,
-  test workflow command cards, testing conventions, and workflow-spec-lite test
-  guidance.
-- Claude Code lifecycle hooks and guardrails are available in project-bootstrap
-  templates for `SessionStart`, `PreToolUse`, and `Stop` with public-safe
-  deterministic validation.
-- Skill metadata and discovery compatibility is documented through the
-  cross-runtime compatibility audit, additive metadata maps, compatibility
-  fields, and read-only skills discovery command cards.
-- Eval-driven skill iteration now has deterministic fixture, report, runner
-  output, regeneration, and benchmark contracts.
-- Knowledge lifecycle management completed its public-safe split with hot memory
-  soft-length diagnostics, human-reviewed experience lifecycle metadata,
-  generated index lifecycle fields, no search/read telemetry writeback, and
-  context index guidance.
-
-## v0.4.5 Published State
-
-Current `main` includes the post-`v0.4.4` maintenance / compatibility /
-governance changes summarized in `docs/releases/v0.4.5.md`. `v0.4.5` has
-been tagged and published as a public release.
-
-GitHub Release `v0.4.5` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.5
-
-Tag target: PR #110 merge commit.
-
-## v0.4.6 Published State
-
-Current `main` includes the post-`v0.4.5` documentation / governance /
-release-hygiene changes summarized in `docs/releases/v0.4.6.md`. `v0.4.6` has
-been tagged and published as a public release.
-
-GitHub Release `v0.4.6` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.6
-
-Tag target: merge commit for the `v0.4.6` publish-finalization PR.
-
-Local release validation for this alignment passed with
-`PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
-
-## Required Before Future Release/checkpoint Publishing
-
-- Re-run the final sensitive information audit if review changes the public tree.
-- Re-run `scripts/validate-release.ps1` if installer, skill, template, release
-  documentation, or audit rules change during review.
-- Review the final local diff.
-- Maintainer authorization to publish starts release-finalization alignment; it
-  does not authorize an immediate tag or GitHub Release.
-- Before creating a future tag or GitHub Release, align `README.md`,
-  `README.en.md`, release notes, release readiness, and the release notes index
-  to the target version, then run
-  `scripts/validate-release.ps1 -TargetVersion <target-version>`.
-- Push, tag, and publish release notes only after finalization alignment and
-  release validation pass.
-
-Ordinary documentation pull requests do not require the full Release validator;
-they use `git diff --check`, classifier-selected affected `iteration` /
-`pre-push` validation, necessary targeted documentation consumers, and Public
-Reader Review.
+- PowerShell baseline：PowerShell Core 7.6+，通过
+  `pwsh -NoProfile -NonInteractive -File`。
+- fresh project：`project-bootstrap` + `project-workspace`。
+- existing legacy project：`scripts/migrate-project.ps1` 的 Analyze → explicit
+  Apply → guarded Rollback。
+- workspace checks：`project-workspace` 的 `check-project-workspace` 和
+  `discover-project-assets`。
+- durable Spec：`project-workspace create-spec`。
+- status：当前顶层 Project status 服从 `project.workspace` authority，不依赖
+  retired memory helpers。
+
+## Authority and Records Pointers
+
+- `docs/release-process.md`：版本号、Release impact、Release review 和发布
+  授权边界。
+- `CHANGELOG.md`：`Unreleased` 与已发布版本的变化摘要。
+- `docs/releases/**`：已发布 Release notes 与未来 Release note template。
+- `docs/old-release-rehearsal-evidence.md`：历史升级 rehearsal evidence；它是
+  historical evidence，不是当前 authority。
+- `docs/language-policy.md`：public governance artifact 的中文优先和机器契约
+  保留规则。
+
+## Validation Pointer
+
+普通文档 PR 运行 `git diff --check`、classifier-selected affected
+`iteration` / `pre-push`、必要的 targeted documentation consumers 和 Public
+Reader Review。不要因为普通 PR 触发完整 Release validator；只有明确的
+Release/checkpoint 决定才进入 `release` stage。
+
+为兼容现有机械消费者，以下术语仍作为历史或路由指针保留：
+`Bilingual Public/Private Routing`、`localized context discovery headings`。
+它们不构成新的 Runtime 或 Release authority。
 
 ## Current Quick Start
 
-```powershell
-pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended
-```
-
-Safe validation form:
+当前仅用于本地验证和文档导航，不表示发布授权：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
+pwsh -NoProfile -NonInteractive -File .\scripts\invoke-local-validation.ps1 -Stage iteration
+pwsh -NoProfile -NonInteractive -File .\scripts\invoke-local-validation.ps1 -Stage pre-push
 ```
 
-Explicit Release/checkpoint validation form:
+完整 Release validation 只在明确 Release/checkpoint 决定下运行：
 
 ```powershell
-pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -TargetVersion <target-version>
 ```
-
-Machine-readable output form:
-
-```powershell
-pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root> -Json
-```
-
-The full and machine-readable `validate-release.ps1` forms above are normative
-only for an explicit Release/checkpoint decision. The C3.3 validation control
-plane requires PowerShell Core 7.6 or later through
-`pwsh -NoProfile -NonInteractive -File` and does not fall back to
-`powershell.exe`. The active Runtime Skills remain `project-bootstrap` and
-`project-workspace`; retired Skill records below are historical compatibility
-coverage, not current execution contracts.
-
-## Installer Metadata
-
-By default, the installer creates an independent copy and never links ordinary
-installs to the source checkout. `-DevLink` is the explicit contributor mode;
-it creates `Junction` items on Windows and `SymbolicLink` items elsewhere.
-Existing `-Copy` invocations remain compatible.
-
-Schema-2 `install-manifest.json` records the profile, actual strategy,
-runtime-relative managed items, and per-file source/installed hashes.
-Schema-1 `install-report.json` records `success`, `warning`, or `conflict`, with
-counts and complete runtime-relative file lists. Unknown files are preserved
-with exit code 0. Simultaneous source and local changes return non-zero unless
-`-AllowPartial` is explicit. `-ReplaceManaged` and deprecated `-Force` replace
-managed content without deleting unknown files.
-
-`scripts/uninstall.ps1` uses that manifest as the only automatic cleanup
-authority. Schema-2 copy items receive a whole-run preflight: nested unknown or
-locally modified managed files block all deletion and preserve installer
-metadata. Clean copy items and dev links retain basic removal compatibility;
-schema-1 manifests retain legacy item-boundary behavior. A missing manifest
-prints manual cleanup guidance without removing anything.
-
-## Suggested Public Audit
-
-Before publishing, scan the public tree for high-risk path and credential
-patterns, then review any keyword matches manually. Security policy and audit
-documentation may intentionally contain safety terms.
-
-The release validator automates the current audit baseline and records a
-machine-readable result in the scratch directory.
-
-## Hardened Validation Coverage
-
-The release validator now covers:
-
-- profile matrix installs in default copy and explicit development-link modes
-- recommended runtime smoke for copy and explicit development-link installs
-- incremental rerun, missing file repair, source update, unknown preservation,
-  local modification, conflict, partial success, managed replacement, conservative
-  schema-1 copy migration, profile reduction ownership, and stable root-conflict fixtures
-- schema-2 copy uninstall fail-fast for nested unknown/local modifications,
-  clean copy removal, missing-manifest safety, and dev-link compatibility
-- retained historical context-discovery JSON performance coverage with 500
-  generated context files
-- cross-platform shell strategy docs aligned with CI shell coverage
-- `hub.lock` drift checking with a temporary git-backed hub
-- hub initialization Git mode coverage, ensuring default hub initialization
-  does not create nested Git repositories
-- experience promote -> rebuild -> search closure using a temporary hub copy
-- no-op experience index rebuild coverage that preserves registry file hashes
-- knowledge catalog coverage for experience, patterns, and standards
-- public domain-pack catalog coverage
-- duplicate helper hashes, shared helper wiring, parser checks, JSON parsing,
-  public structure, sensitive-pattern audit, and language policy templates
-- UTF-8 encoding for non-ASCII PowerShell scripts
-- first-session language write coverage for English and Simplified Chinese
-  temporary projects
-- project-bootstrap operating-mode coverage for safe refresh, compatibility
-  overwrite warnings, and backup-first force reset
-- conservative project-memory language migration coverage for both `en` to
-  `zh-CN` and `zh-CN` to `en`, mixed memory, project-specific preservation,
-  proposal-first apply, backup-first apply, and narrative migration routing
-- read-only body-level project-memory language audit coverage for
-  metadata/body mismatches, fenced code, protected literals, and mixed
-  narrative fixtures
-- retained historical `workflow-spec-lite` positive/negative fixtures and
-  memory-governance compatibility coverage; these do not define active Runtime
-  authority
-- validation scratch retention pruning dry-run/apply behavior
-- adoption guide and minimal project example coverage
-- v0.2.0 release notes coverage
-- historical localized context discovery headings for legacy diagnostics and
-  upgrade analysis
-- bilingual public/private routing documentation coverage
-- v0.3.0 release notes coverage
-- v0.3.1 release notes coverage
-- v0.4.0 release notes coverage
-- v0.4.1 release notes coverage
-- v0.4.2 release notes coverage
-- v0.4.3 release notes coverage
-- v0.4.4 published release notes coverage
-- publish-ready release metadata alignment coverage
-- v0.4.5 published release notes coverage
-- v0.4.6 published release notes coverage
-- legacy template-path reference audit coverage
-- existing project upgrade path coverage
-- old-release upgrade support matrix and path documentation
-- old-release rehearsal evidence for `v0.4.6` → current `main`
-- release process old-release upgrade rehearsal requirement
