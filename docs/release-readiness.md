@@ -1,6 +1,30 @@
 # Release Readiness
 
-Status: `v0.7.1` published public release.
+Status: `v0.7.1` published public release; current `main` is in the post-C3.3
+maintenance line.
+
+## Current C3.3 Authority
+
+- Active Runtime Skills: `project-bootstrap` and `project-workspace`.
+- Retired from current Runtime authority: `project-context-gate`,
+  `workflow-spec-lite`, and `memory-governance`. Historical release records and
+  negative validation fixtures may retain these names, but current profiles do
+  not install or route through them.
+- PowerShell baseline: PowerShell Core 7.6+ through
+  `pwsh -NoProfile -NonInteractive -File`.
+- Fresh project path: `project-bootstrap` + `project-workspace`.
+- Existing legacy project path: `scripts/migrate-project.ps1` Analyze -> explicit
+  Apply -> guarded Rollback.
+- Workspace checks: `project-workspace` `check-project-workspace` and
+  `discover-project-assets`.
+- Durable project Specs: `project-workspace create-spec`.
+- Validation boundary: ordinary PRs use affected `iteration` / `pre-push`
+  validation; a `main` push runs thin main health; full Release/checkpoint
+  validation is explicit.
+
+This section is the current readiness pointer. Published release sections and
+the retained rehearsal evidence below are historical records, not a second
+current Runtime authority.
 
 The initial public release has been published as `v0.1.0`; `v0.2.0` closed the
 public migration work. `v0.3.0` packaged backlog remediation and public
@@ -41,22 +65,24 @@ matching, and local/hosted validation routing and evidence reliability work.
 ## v0.7.1 Published State
 
 Current `main` includes the post-`v0.7.0` maintenance changes summarized in
-`docs/releases/v0.7.1.md`. `v0.7.1` is aligned for tag and GitHub Release
-publication from the merge commit of the `v0.7.1` publish-finalization PR.
+`docs/releases/v0.7.1.md`, followed by the one-time C3.3 default cutover and
+the merged status alignment from PR #340. `v0.7.1` remains the latest published
+release; these post-release changes are current `main` state, not a new Release.
 
 GitHub Release `v0.7.1` has been published:
 https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.7.1
 
 Tag target: merge commit for the `v0.7.1` publish-finalization PR.
 
-Local release validation for this alignment passed on PowerShell 7 and Windows
-PowerShell 5.1 with `PASS=25 FAIL=0 WARN=0 DEFERRED=0`.
+Local release validation for this alignment passed on the then-supported hosts
+with `PASS=25 FAIL=0 WARN=0 DEFERRED=0`; the current baseline for new validation
+is PowerShell Core 7.6+.
 
 The `v0.7.0` to current-candidate isolated rehearsal passed for fresh
 install/status/uninstall, default copy-mode runtime upgrade, managed and local
 modification protection, project state and conservative refresh boundaries,
 context metadata matching, and the explicit project-bootstrap /
-project-context-gate skill bridge. Final evidence is bound to the candidate head.
+project-workspace skill boundary. Final evidence is bound to the candidate head.
 
 Release body source: `docs/releases/v0.7.1.md`, between `RELEASE_BODY_START`
 and `RELEASE_BODY_END`.
@@ -184,7 +210,11 @@ https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.4.4
 
 Tag target: `71fabb372a4cbc024f07c920a0c17b903a77afc2`.
 
-## Completed
+## Historical Completion Ledger
+
+The entries in this section are retained release and maintenance evidence. They
+are not instructions for the current Runtime and do not override the Current
+C3.3 Authority section above.
 
 - Workflow Kernel skills are present under `skills/`.
 - Kernel skill metadata includes `category`, `stability`, and `scope`.
@@ -433,7 +463,7 @@ Tag target: merge commit for the `v0.4.6` publish-finalization PR.
 Local release validation for this alignment passed with
 `PASS=54 FAIL=0 WARN=0 DEFERRED=0`.
 
-## Required Before Future Publishing
+## Required Before Future Release/checkpoint Publishing
 
 - Re-run the final sensitive information audit if review changes the public tree.
 - Re-run `scripts/validate-release.ps1` if installer, skill, template, release
@@ -448,6 +478,11 @@ Local release validation for this alignment passed with
 - Push, tag, and publish release notes only after finalization alignment and
   release validation pass.
 
+Ordinary documentation pull requests do not require the full Release validator;
+they use `git diff --check`, classifier-selected affected `iteration` /
+`pre-push` validation, necessary targeted documentation consumers, and Public
+Reader Review.
+
 ## Current Quick Start
 
 ```powershell
@@ -460,7 +495,7 @@ Safe validation form:
 pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended -TargetDir <temp-runtime>
 ```
 
-Full release validation form:
+Explicit Release/checkpoint validation form:
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoot <scratch-root>
@@ -473,16 +508,12 @@ pwsh -NoProfile -NonInteractive -File .\scripts\validate-release.ps1 -ScratchRoo
 ```
 
 The full and machine-readable `validate-release.ps1` forms above are normative
-repository validation entrypoints. The C3.3 validation control plane requires
-PowerShell Core 7.6 or later through
+only for an explicit Release/checkpoint decision. The C3.3 validation control
+plane requires PowerShell Core 7.6 or later through
 `pwsh -NoProfile -NonInteractive -File` and does not fall back to
-`powershell.exe`.
-
-Running the installer examples through `pwsh` here does not change the current
-v0.7.1 Runtime, installer, bootstrap, bridge, or legacy Skill execution
-contracts. Those surfaces remain transitional and will be migrated or retired
-only in their designated later slices. This transition is not a commitment to
-long-lived dual-host or dual-semantics support.
+`powershell.exe`. The active Runtime Skills remain `project-bootstrap` and
+`project-workspace`; retired Skill records below are historical compatibility
+coverage, not current execution contracts.
 
 ## Installer Metadata
 
@@ -526,7 +557,8 @@ The release validator now covers:
   schema-1 copy migration, profile reduction ownership, and stable root-conflict fixtures
 - schema-2 copy uninstall fail-fast for nested unknown/local modifications,
   clean copy removal, missing-manifest safety, and dev-link compatibility
-- context gate JSON performance with 500 generated context files
+- retained historical context-discovery JSON performance coverage with 500
+  generated context files
 - cross-platform shell strategy docs aligned with CI shell coverage
 - `hub.lock` drift checking with a temporary git-backed hub
 - hub initialization Git mode coverage, ensuring default hub initialization
@@ -548,13 +580,14 @@ The release validator now covers:
 - read-only body-level project-memory language audit coverage for
   metadata/body mismatches, fenced code, protected literals, and mixed
   narrative fixtures
-- workflow-spec-lite validator positive/negative fixtures
-- anti-drift template and memory-governance coverage
+- retained historical `workflow-spec-lite` positive/negative fixtures and
+  memory-governance compatibility coverage; these do not define active Runtime
+  authority
 - validation scratch retention pruning dry-run/apply behavior
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
-- localized context discovery headings for memory diagnosis and upgrade
-  analysis
+- historical localized context discovery headings for legacy diagnostics and
+  upgrade analysis
 - bilingual public/private routing documentation coverage
 - v0.3.0 release notes coverage
 - v0.3.1 release notes coverage

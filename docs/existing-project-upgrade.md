@@ -1,8 +1,8 @@
 # Existing Project Upgrade Path
 
-This guide is for projects that already have `.agents` memory and want to move
-toward the post-`v0.4.2` public template model without losing local project
-context.
+This guide is for projects that already have a runtime or `.agents` content and
+need to reach the current C3.3 workspace without losing project-owned context.
+It separates a safe scaffold refresh from legacy project migration.
 
 New empty projects should use the
 [minimal project adoption walkthrough](walkthroughs/minimal-project-adoption.md)
@@ -14,33 +14,37 @@ possibly generated context entries.
 | Intent | Recommended path |
 | --- | --- |
 | Adopt Agent Ecosystem in a new project | Use the minimal project adoption walkthrough. |
-| Refresh missing scaffold files in an existing project | Run conservative bootstrap refresh; preserve project-specific memory. |
+| Refresh missing scaffold files in an existing project | Run a conservative `project-bootstrap` refresh; preserve project-specific content. |
 | Upgrade only unmodified old templates | Use `-RefreshUnmodifiedTemplates` after checking the current project memory language. |
 | Change project memory language | Use the conservative language migration Analyze -> Plan -> Apply -> Validate flow. |
-| Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup. |
-| Inspect current state only | Run `status.ps1` and `memory_upgrade.ps1 -Mode Analyze` without apply modes. |
+| Migrate a legacy project into C3.3 | Run `scripts/migrate-project.ps1` Analyze -> explicit Apply -> guarded Rollback. |
+| Discard old scaffold customizations | Use `-ForceResetScaffold` only after the caller explicitly confirms old scaffold content may be overwritten after backup; this is not the legacy migration authority. |
+| Inspect current state only | Run `status.ps1`, `project-workspace check`, and `project-workspace discover` without apply modes. |
 
 ## Command Ownership Boundary
 
-The bootstrap command is the owner for scaffold creation, safe refresh,
-unmodified-template refresh, and explicit backup-first force reset. Upgrade and
-migration logic belongs in dedicated helpers:
+The command ownership boundary for the current Runtime is:
 
-- `memory_upgrade.ps1` for legacy memory analysis, proposal, and apply;
-- `language_migration.ps1` for conservative project-memory language migration;
-- `audit_memory_language.ps1` for read-only body-language evidence;
-- `check_hub_lock.ps1` for lock drift checks.
+- `project-bootstrap` owns fresh scaffold creation, safe refresh, unmodified
+  template refresh, and explicit backup-first force reset.
+- `project-workspace` owns read-only workspace checks/discovery, canonical
+  Work/Context/Procedure/Spec asset discovery and authoring, and durable Spec
+  creation through `create-spec`.
+- `scripts/status.ps1` reports top-level Project status from the
+  `project.workspace` authority; it does not use retired memory helpers.
+- The Runtime-level `scripts/migrate-project.ps1` is the only current authority
+  for legacy project migration. It exposes Analyze, explicit Apply, and guarded
+  Rollback modes.
 
-`bootstrap_project.ps1` keeps existing upgrade and migration switches as
-compatibility and discoverability wrappers, but future old-release upgrade
-orchestration should not be added to the main bootstrap script by default. See
-[Project Bootstrap Command Boundaries](project-bootstrap-command-boundaries.md)
-for the full boundary, compatibility rules, and standalone runtime packaging
-constraints.
+Older bootstrap upgrade switches and helpers remain only as compatibility or
+historical surfaces. They do not make retired Runtime Skills active and must
+not be used as the C3.3 legacy migration path. See [Project Bootstrap Command
+Boundaries](project-bootstrap-command-boundaries.md) for the preserved command
+boundary and standalone runtime packaging constraints.
 
 ## Current Template Model
 
-`v0.4.2` uses language-scoped project-memory templates:
+The public template model uses language-scoped project-memory templates:
 
 ```text
 knowledge-hub/templates/languages/<language>/project-root|project-agent/
@@ -48,9 +52,11 @@ skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<lang
 ```
 
 The supported public project-memory template languages are `en` and `zh-CN`.
-English remains the public default and fallback language. The `full` and `dev`
-profiles still install the same public content as `recommended`; they do not
-install additional public domain packs yet.
+English remains the public default and fallback language. Current `recommended`,
+`full`, and `dev` profiles install the active C3.3 Runtime authority;
+`project-bootstrap` and `project-workspace` are the current Runtime Skills.
+They do not install retired `project-context-gate`, `workflow-spec-lite`, or
+`memory-governance` Skills.
 
 Do not recreate legacy template directories as compatibility mirrors. Old path
 references should be treated as historical records or cleanup findings, not as
@@ -58,9 +64,9 @@ supported current entrypoints.
 
 ## Preserve Local Memory
 
-Existing project memory is project-owned. The public templates are structural
+Existing project content is project-owned. The public templates are structural
 baselines for missing files, exact template replacement, and reviewable
-migration proposals. They do not authorize overwriting project-specific memory.
+migration evidence. They do not authorize overwriting project-specific memory.
 
 Preserve local content such as:
 
@@ -74,9 +80,12 @@ Preserve local content such as:
 - Any project-specific commands, context indexes, or notes that do not exactly
   match the public scaffold.
 
-This preservation rule applies to target projects being upgraded. The public
-`agent-ecosystem` source repository no longer tracks root `docs/specs/**` as its
-own maintenance record.
+This preservation rule applies to target projects being upgraded. The canonical
+C3.3 project asset roots are Work, Context, Procedure, and Spec; a migration
+must account for each declared target and leave unsupported or ambiguous legacy
+content for human disposition. The public `agent-ecosystem` source repository
+uses GitHub issues and pull requests for its own maintenance record and does not
+track root `docs/specs/**` as a maintenance work package.
 
 ## Intent Quick Reference
 
@@ -121,52 +130,62 @@ Please reinitialize project memory and do not preserve old content. I confirm ol
 
 ## Upgrade Flow
 
-Use a conservative analyze -> plan -> backup -> apply -> validate flow.
+Use the current C3.3 flow for a legacy project:
 
-Before running bootstrap wrapper refresh or analyze modes, determine the
-project memory language from the project's `.agents/AGENTS.md` or existing
-`.agents/hub.lock.json` `project_language` field. Pass that language explicitly
-with `-ProjectLanguage` when the wrapper may create missing scaffold or lock
-metadata. Do not infer project memory language from the current chat.
+`Analyze -> explicit Apply -> guarded Rollback`, followed by read-only status
+and workspace checks. A scaffold refresh remains a separate `project-bootstrap`
+operation and is not an implicit migration.
 
-1. Analyze existing memory without editing files by calling the memory-upgrade
-   helper directly.
+Before a scaffold refresh, determine the project memory language from the
+project's `.agents/AGENTS.md` or existing `.agents/hub.lock.json`
+`project_language` field. Pass that language explicitly with `-ProjectLanguage`
+when `project-bootstrap` may create missing scaffold or lock metadata. Do not
+infer project memory language from the current chat. This language check does
+not replace the migration evidence required by `scripts/migrate-project.ps1`.
+
+1. Inspect the installed Runtime and the project without editing files.
 
    ```powershell
-   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\memory_upgrade.ps1 -ProjectDir <project> -Mode Analyze
+   pwsh -NoProfile -NonInteractive -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
    ```
 
-   The bootstrap wrapper also exposes `-AnalyzeMemoryUpgrade`, but it runs the
-   normal conservative bootstrap path before memory analysis. It may create
-   missing scaffold files and `.agents/hub.lock.json` before reporting memory
-   findings. Use the wrapper when a project also needs the current scaffold
-   baseline refreshed; use the direct helper when the analysis must be
-   memory-only and no-edit.
-
-2. Plan a reviewable upgrade proposal.
+2. If the workspace is legacy or the status result is `migration-required`,
+   create deterministic migration evidence with the Runtime-level migration
+   authority. Analyze is strictly read-only.
 
    ```powershell
-   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanMemoryUpgrade
+   pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Analyze -ProjectRoot <project> -Json
    ```
 
-3. Review the generated plan. Confirm that project-specific memory is preserved
-   and that old template path references are treated as historical notes or
-   cleanup findings.
+3. Review the Analyze evidence. Confirm the Work / Context / Procedure / Spec
+   plan, project language, workspace model, and project-specific preservation
+   decisions. Unsupported or ambiguous material remains a human-disposition
+   finding.
 
-4. Back up before apply. The memory upgrade and language migration apply flows
-   are backup-first; do not bypass that safety record.
-
-5. Apply only the reviewed proposal.
+4. Apply only the reviewed evidence with explicit confirmation. Apply creates
+   and verifies a complete project-owned backup before changing migration
+   targets.
 
    ```powershell
-   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyMemoryUpgrade -UpgradePlan <proposal>
+   pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Apply -ProjectRoot <project> -AnalyzeEvidence <analyze-json> -ConfirmMigration -Json
    ```
 
-6. Validate the result with the relevant project checks.
+5. Validate the result with read-only status and workspace checks.
 
    ```powershell
-   pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project>
-   pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\memory_upgrade.ps1 -ProjectDir <project> -Mode Analyze
+   pwsh -NoProfile -NonInteractive -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+   pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
+   ```
+
+6. If the unchanged-project guard permits rollback, use the backup ID returned
+   by Apply. Rollback keeps the backup and fails closed if migration-relevant
+   project content changed after Apply.
+
+   ```powershell
+   pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Rollback -ProjectRoot <project> -BackupId <backup-id> -ConfirmRollback -Json
    ```
 
 For project-memory language changes, use the conservative language migration
@@ -176,10 +195,11 @@ Phase 2 applies reviewed target-language narrative while preserving protected
 literals. Manual-review-only artifacts are reserved for uncertain or unsupported
 content, not the ordinary completion path.
 
-When review needs a standalone body-level language check, run:
+When a separate body-level language check is needed for a project-memory
+language migration, run:
 
 ```powershell
-pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
 ```
 
 The audit is read-only. It reports likely body-language mismatches without
@@ -204,14 +224,30 @@ Do not add compatibility mirrors for old template directories. If a local tool
 still depends on an old path, update the tool or keep the compatibility layer
 inside the local project, not in the public kernel.
 
+## Historical Compatibility Wording
+
+Older release records and mechanical validators retain the terms `memory_upgrade.ps1`,
+`-Mode Analyze`, `-AnalyzeMemoryUpgrade`, `ApplyMemoryUpgrade`, and `Validate`.
+They describe the pre-C3.3 `language-scoped project-memory templates` flow and
+its `analyze -> plan -> backup -> apply -> validate` wording, including the
+`memory-only and no-edit` distinction and the rule `Do not recreate legacy
+template directories`. These are historical or compatibility references only;
+they are not the current legacy migration authority. Current migration uses
+`scripts/migrate-project.ps1`, and retired `project-context-gate`,
+`workflow-spec-lite`, and `memory-governance` helpers are not current Runtime
+entrypoints.
+
 ## Validation For Public Changes
 
-When changing this public repository, run:
+For this public repository, ordinary documentation changes use the affected
+validation contract:
 
 ```powershell
 git diff --check
-pwsh -NoProfile -File scripts/validate-release.ps1 -ScratchRoot <scratch-root>
+pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage iteration
+pwsh -NoProfile -NonInteractive -File scripts/invoke-local-validation.ps1 -Stage pre-push
 ```
 
-The release validator checks the language-scoped template structure, legacy
-template-path audit, upgrade-flow coverage, and public/private boundary rules.
+Run targeted documentation or workspace-consumer checks when the classifier
+selects them, and complete Public Reader Review. The full Release validator is
+reserved for an explicit Release/checkpoint decision.

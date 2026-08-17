@@ -64,11 +64,12 @@ The C3.3 validation control plane and normative repository validation
 entrypoints, including this release validator, require PowerShell Core 7.6 or
 later through `pwsh -NoProfile -NonInteractive -File`.
 
-Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
-bridge, or legacy Skill execution contracts. Those surfaces remain
-transitional and will be migrated or retired only in their designated later
-slices. This transition is not a commitment to long-lived dual-host or
-dual-semantics support.
+Current Runtime authority is `project-bootstrap` + `project-workspace`.
+`project-context-gate`, `workflow-spec-lite`, and `memory-governance` are
+retired from current Runtime authority; retained validator fixtures or release
+records that mention them are historical/compatibility evidence. Legacy project
+migration uses `scripts/migrate-project.ps1` through Analyze -> explicit Apply
+-> guarded Rollback.
 
 See [Shell strategy](shell-strategy.md) for the current non-PowerShell policy:
 the public release line does not ship Bash or Zsh wrappers yet, and future
@@ -99,15 +100,17 @@ The validator checks:
 - Workflow Kernel skill metadata
 - installer profile matrix for `minimal`, `recommended`, `full`, and `dev`
 - default copy installs and explicit development link/junction installs
-- runtime smoke coverage for bootstrap, context gate, workflow spec creation,
-  and memory diagnosis in both recommended copy and link installs
+- runtime smoke coverage for bootstrap, `project-workspace` check/discover,
+  active C3.3 status, retired-Skill absence, and explicit migration boundaries
+  in recommended copy and link installs
 - incremental installer reruns, unknown/local-modified protection, conflict exit
   behavior, `-AllowPartial`, and managed replacement compatibility
 - hub initialization Git mode, including default no-Git behavior and explicit
   Git initialization
 - `hub.lock` in-sync, missing-lock, invalid-hub, drift, and multi-project
   batch checking against temporary git-backed hubs
-- memory upgrade Analyze, Plan, and Apply flow against a temporary project
+- legacy project migration Analyze, explicit Apply, and guarded Rollback flow
+  against a temporary project
 - knowledge catalog, pattern, and standard entry coverage
 - public domain-pack catalog coverage
 - public experience index search
@@ -134,13 +137,13 @@ The validator checks:
 - project-bootstrap operating modes, including missing-template refresh,
   unmodified-template refresh, compatibility overwrite warnings, and
   backup-first force reset behavior
-- localized context discovery headings in memory diagnosis and upgrade analysis
+- retained historical localized context discovery headings for legacy
+  diagnostics and upgrade analysis
 - bilingual public/private routing guidance in language policy and bundled
   knowledge assets
-- workflow-spec-lite spec validation against complete, Loop Contract,
-  Simplified Chinese, and intentionally broken fixtures
-- anti-drift template and memory-governance coverage for scope drift, unrelated
-  refactors, and skipped acceptance checks
+- retained historical `workflow-spec-lite` and memory-governance fixtures for
+  compatibility and negative validation; these do not define current Runtime
+  authority
 - validation scratch retention pruning dry-run/apply behavior
 - adoption guide and minimal project example coverage
 - v0.2.0 release notes coverage
@@ -341,9 +344,12 @@ the upgrade path from a published tag to the current `main`.
    the target release source through the ordinary default incremental install
    path. A schema-2 runtime does not require `-Force`. Verify the install
    manifest.
-2. **Project memory upgrade**: Bootstrap a project from the source tag's
-   runtime, then upgrade the runtime and run memory upgrade analyze, hub
-   lock check, context gate, and memory diagnosis.
+2. **Project workspace migration**: Bootstrap a project from the source tag's
+   runtime, then upgrade the runtime and run `project-workspace` check/discover.
+   If the project is legacy, run `scripts/migrate-project.ps1` Analyze, review
+   the evidence, apply explicitly, and verify the guarded Rollback path. Older
+   context-gate, workflow-spec, or memory-diagnosis references in rehearsal
+   records are historical evidence, not current C3.3 authority.
 3. **Record evidence**: Add results to
    `docs/old-release-rehearsal-evidence.md`.
 
@@ -371,11 +377,16 @@ but this is not required for `v0.5.0`.
 ## Publishing Steps
 
 1. Start from a clean local review branch or a clearly understood local diff.
-2. Run the release validation gate with a temporary scratch directory.
-3. Run the public reader review when the diff changes README, docs entrypoints,
+2. For an ordinary pull request, run `git diff --check`, the
+   classifier-selected affected `iteration` and `pre-push` validation, and any
+   targeted documentation consumer checks. Do not run the complete Release
+   validator solely because a docs PR is being prepared.
+3. Run the Public Reader Review when the diff changes README, docs entrypoints,
    release notes, or release process text.
-4. Review `validation-result.json` and any public diff.
-5. Open or update a pull request when using CI for release review.
+4. For an explicit Release/checkpoint decision, run the Release validation gate
+   with a temporary scratch directory and review `validation-result.json`.
+5. Review the public diff and open or update a pull request when using CI for
+   review.
 6. Confirm the PR classifier-selected suites and hosts, the fixed
    `validation gate`, and direct candidate identity checks pass for the final head.
 7. Record only public-safe release status in this repository.

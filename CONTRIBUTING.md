@@ -4,12 +4,15 @@ Thanks for helping improve Agent Ecosystem.
 
 ## Scope
 
-The first public release is focused on the Workflow Kernel:
+The current public Runtime is the C3.3 Workflow Kernel:
 
 - `project-bootstrap`
-- `project-context-gate`
-- `workflow-spec-lite`
-- `memory-governance`
+- `project-workspace`
+
+`project-context-gate`, `workflow-spec-lite`, and `memory-governance` are retired
+from C3.3 Runtime authority. They may remain in historical records or negative
+validation fixtures, but current public profiles do not install them and current
+project guidance must not route fresh work through them.
 
 Domain-specific skills and private overlays are intentionally out of scope until
 the public kernel and installer are stable.
@@ -39,13 +42,16 @@ pwsh -NoProfile -NonInteractive -File .\scripts\install.ps1 -Profile recommended
 
 The C3.3 validation control plane and normative repository validation
 entrypoints require PowerShell Core 7.6 or later through
-`pwsh -NoProfile -NonInteractive -File`.
+`pwsh -NoProfile -NonInteractive -File`. Fresh projects use
+`project-bootstrap` and `project-workspace`; an existing legacy project uses
+`scripts/migrate-project.ps1` through its explicit Analyze -> Apply -> guarded
+Rollback flow.
 
-Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
-bridge, or legacy Skill execution contracts. Those surfaces remain
-transitional and will be migrated or retired only in their designated later
-slices. This transition is not a commitment to long-lived dual-host or
-dual-semantics support.
+Routine pull requests validate the affected diff through the classifier-selected
+`iteration` and `pre-push` paths. The thin main-push health check and the full
+Release/checkpoint validator are separate boundaries; do not run the complete
+Release validator for an ordinary documentation pull request unless a
+Release/checkpoint decision explicitly requires it.
 
 For PowerShell changes, parse scripts before committing:
 

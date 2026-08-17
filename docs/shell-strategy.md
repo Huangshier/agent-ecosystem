@@ -1,8 +1,8 @@
 # Shell Strategy
 
 Agent Ecosystem automation is PowerShell-first for the public Workflow Kernel.
-The canonical install, uninstall, validation, bootstrap, context-gate, and
-maintenance entrypoints are the checked-in `.ps1` scripts.
+The canonical install, uninstall, validation, bootstrap, workspace, migration,
+and maintenance entrypoints are the checked-in `.ps1` scripts.
 
 ## Current Support
 
@@ -10,13 +10,15 @@ maintenance entrypoints are the checked-in `.ps1` scripts.
   entrypoints require PowerShell Core 7.6 or later through
   `pwsh -NoProfile -NonInteractive -File`.
 - Those validation entrypoints do not support a `powershell.exe` fallback.
-- CI path: `.github/workflows/release-validation.yml` runs the release validator
-  with `pwsh` on Windows, Ubuntu, and macOS.
-- Slice A0 does not change the current v0.7.1 Runtime, installer, bootstrap,
-  bridge, or legacy Skill execution contracts. Those surfaces remain
-  transitional and will be migrated or retired only in their designated later
-  slices. This transition is not a commitment to long-lived dual-host or
-  dual-semantics support.
+- The active Runtime Skills are `project-bootstrap` and `project-workspace`.
+  Retired `project-context-gate`, `workflow-spec-lite`, and
+  `memory-governance` paths are not current Runtime entrypoints.
+- Fresh projects bootstrap into the C3.3 workspace. Existing legacy projects
+  migrate through `scripts/migrate-project.ps1` with Analyze -> explicit Apply
+  -> guarded Rollback.
+- Pull requests use classifier-selected affected validation at `iteration` and
+  `pre-push`; a push to `main` runs only thin main health. The full Release
+  validator is reserved for an explicit Release/checkpoint decision.
 
 ## Non-PowerShell Shells
 
