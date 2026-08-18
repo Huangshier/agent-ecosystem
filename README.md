@@ -45,9 +45,11 @@ Release → installed Runtime → optional Agent bridge → Project
   runtime 或本仓库。
 
 在项目层，根 `AGENTS.md` 是唯一完整的项目行为契约。`.agents/AGENTS.md` 是工程记忆
-指南，说明如何读取和维护 `.agents/`；它不是第二份行为契约。`.agents/process.txt` 与
-`.agents/plan.md` 保存热状态，`.agents/context/` 保存按需发现的知识，`docs/specs/`
-可供目标项目保存跨会话工作包。
+指南，说明如何读取和维护 `.agents/`；它不是第二份行为契约。canonical workspace
+资产为 Work、Context、Procedure、Spec；`project-workspace` 负责 discover、check、
+continuity 和 create-spec。`.agents/process.txt`、`.agents/plan.md` 和 `.agents/notes.md`
+是 C3.3 hot-memory 收敛后的 retired 路径，不是当前 canonical hot-state authority；
+`.agents/context/` 保存按需发现的知识，`docs/specs/` 供目标项目保存跨会话工作包。
 
 完整边界见 [Architecture](docs/architecture.md) 和
 [Runtime adoption bridge](docs/runtime-adoption-bridge.md)。
@@ -161,9 +163,15 @@ pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-w
 - `current`：已检查的项目基线与工程记忆不需要刷新。
 - `optional-refresh`：存在模板基线漂移或缺失的脚手架；默认 bootstrap 保留项目特化内容，
   `-RefreshUnmodifiedTemplates` 只更新仍匹配旧模板的文件。
-- `migration-required`：先运行 `memory_upgrade.ps1 -Mode Analyze`，再执行可审阅、backup-first
-  的 Plan → Apply → Validate 流程。
+- `migration-required`：project workspace 是 legacy 或检测到 structural memory
+  finding。运行 `scripts/migrate-project.ps1 -Mode Analyze`（read-only），review
+  evidence 后显式 `Apply`，必要时使用 guarded `Rollback`；不要使用 retired
+  memory helper 作为 migration authority。
 - `unknown`：helper、lock、语言或 metadata 无法可信解析；先人工检查，不要猜测或强制覆盖。
+
+当前 C3.3 workspace 不需要 migration。Legacy workspace 进入
+`scripts/migrate-project.ps1` 的 Analyze → explicit Apply → guarded Rollback 流程；
+malformed、unavailable 或 unverifiable 状态保持 fail-closed。
 
 “刷新”默认意味着保留项目特化内容。只有调用者明确允许丢弃旧脚手架定制时，才使用
 backup-first 的 `-ForceResetScaffold`。完整决策表与命令见
@@ -181,7 +189,7 @@ backup-first 的 `-ForceResetScaffold`。完整决策表与命令见
 | Agent bridge | `not-configured` | 仅表示此 runtime 没有 bridge manifest；若需要 client discovery，再显式配置。 |
 | Agent bridge | `stale` / `broken` / `conflict` / `unknown` | 按 bridge 文档检查受管 source、目标 link 与占用内容；status 不会自动修复。 |
 | Project | `optional-refresh` | 使用保守 refresh，保留项目特化内容。 |
-| Project | `migration-required` | 走 Analyze → Plan → backup → Apply → Validate。 |
+| Project | `migration-required` | 走 `migrate-project.ps1` Analyze → explicit Apply → guarded Rollback；不使用 retired memory helper。 |
 | Project | `unknown` | 检查 helper 可用性、hub lock、项目语言与诊断输出，保持 fail-soft。 |
 
 需要结构化输出时添加 `-Json`。状态字段的精确定义见 [Scripts](scripts/README.md)，bridge
