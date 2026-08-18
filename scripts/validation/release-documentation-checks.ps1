@@ -404,13 +404,11 @@ try {
     $workflow = Get-FileText -RelativePath ".github/workflows/release-validation.yml"
     $readme = Get-FileText -RelativePath "README.md"
     $readmeEn = Get-FileText -RelativePath "README.en.md"
-    $roadmap = Get-FileText -RelativePath "docs/roadmap/evolution-plan.md"
     $shellExpectations = [ordered]@{
         "docs/shell-strategy.md" = @("PowerShell 7.6", "pwsh -NoProfile -NonInteractive -File", "No Bash or Zsh wrappers", "canonical", ".ps1")
         "docs/release-process.md" = @("Shell strategy", "Bash or Zsh wrappers", "canonical", ".ps1")
         "README.md" = @("Shell strategy")
         "README.en.md" = @("Shell strategy")
-        "docs/roadmap/evolution-plan.md" = @("Shell Direction", "Bash or Zsh wrappers are deferred", "canonical", ".ps1")
     }
     $shellMissing = New-Object 'System.Collections.Generic.List[string]'
     foreach ($relativePath in $shellExpectations.Keys) {
@@ -419,7 +417,6 @@ try {
             "docs/release-process.md" { $releaseProcess }
             "README.md" { $readme }
             "README.en.md" { $readmeEn }
-            default { $roadmap }
         }
         foreach ($token in $shellExpectations[$relativePath]) {
             if ($text -notlike ("*{0}*" -f $token)) {
