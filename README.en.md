@@ -57,10 +57,13 @@ Release → installed Runtime → optional Agent bridge → Project
 
 At the project layer, root `AGENTS.md` is the only complete project behavior
 contract. `.agents/AGENTS.md` is an engineering-memory guide that explains how
-to read and maintain `.agents/`; it is not a second behavior contract.
-`.agents/process.txt` and `.agents/plan.md` hold hot state,
-`.agents/context/` holds discoverable knowledge, and target projects may use
-`docs/specs/` for durable cross-session work packages.
+to read and maintain `.agents/`; it is not a second behavior contract. The
+canonical workspace assets are Work, Context, Procedure, and Spec;
+`project-workspace` handles discover, check, continuity, and create-spec.
+`.agents/process.txt`, `.agents/plan.md`, and `.agents/notes.md` are retired
+paths after the C3.3 hot-memory convergence, not the current canonical
+hot-state authority; `.agents/context/` holds discoverable knowledge, and
+target projects may use `docs/specs/` for durable cross-session work packages.
 
 See [Architecture](docs/architecture.md) and
 [Runtime adoption bridge](docs/runtime-adoption-bridge.md) for the complete
@@ -192,16 +195,23 @@ pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -Projec
 pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 
-- `current`: the checked project baseline and engineering memory need no
-  refresh.
-- `optional-refresh`: the template baseline drifted or scaffold files are
-  missing. Default bootstrap preserves project-specific content;
-  `-RefreshUnmodifiedTemplates` updates only files that still match old
-  templates.
-- `migration-required`: run `memory_upgrade.ps1 -Mode Analyze`, then use the
-  reviewable, backup-first Plan → Apply → Validate flow.
-- `unknown`: a helper, lock, language, or metadata source could not be trusted.
-  Inspect it manually instead of guessing or forcing an overwrite.
+- `current`: the current C3.3 workspace is active-ready; no migration is needed.
+- `migration-required`: the workspace is identified as legacy / not-c3-3. Run
+  `scripts/migrate-project.ps1 -Mode Analyze` (read-only), review the evidence,
+  then explicitly `Apply`, and use the guarded `Rollback` if needed; do not use
+  retired memory helpers as the migration authority.
+- `unknown`: the workspace could not be trusted (incomplete / malformed /
+  unverifiable). Inspect it manually instead of guessing or forcing an overwrite.
+
+Scaffold / template refresh is a separate conservative capability of
+`project-bootstrap` for restoring missing or drifted scaffold files; it
+preserves project-specific content by default, and `-RefreshUnmodifiedTemplates`
+updates only files that still match old templates. It is not a legacy migration
+path and is not bound to the active C3.3 top-level Project status.
+
+A current C3.3 workspace needs no migration. A legacy workspace enters the
+`scripts/migrate-project.ps1` Analyze → explicit Apply → guarded Rollback flow;
+malformed, unavailable, or unverifiable states stay fail-closed.
 
 By default, “refresh” means preserving project-specific content. Use the
 backup-first `-ForceResetScaffold` path only when the caller explicitly allows
@@ -221,9 +231,9 @@ installs, refreshes, repairs, or deletes content.
 | Runtime provenance | `not-recorded` / `unknown` | This does not mean the runtime is broken; source archives may have no Git provenance. |
 | Agent bridge | `not-configured` | This only means this runtime has no bridge manifest; configure one explicitly if client discovery is needed. |
 | Agent bridge | `stale` / `broken` / `conflict` / `unknown` | Inspect the managed source, target link, and occupying content using the bridge guide; status does not repair it. |
-| Project | `optional-refresh` | Use conservative refresh and preserve project-specific content. |
-| Project | `migration-required` | Follow Analyze → Plan → backup → Apply → Validate. |
-| Project | `unknown` | Inspect helper availability, the hub lock, project language, and diagnostic output; remain fail-soft. |
+| Project | `current` | The current C3.3 workspace is active-ready; no migration is needed. |
+| Project | `migration-required` | Follow `migrate-project.ps1` Analyze → explicit Apply → guarded Rollback; do not use retired memory helpers. |
+| Project | `unknown` | Inspect workspace readiness, the hub lock, project language, and diagnostic output; remain fail-closed. |
 
 Add `-Json` for structured output. See [Scripts](scripts/README.md) for exact
 status fields, [Agent-specific skill link bridge](docs/agent-skill-bridge.md)
