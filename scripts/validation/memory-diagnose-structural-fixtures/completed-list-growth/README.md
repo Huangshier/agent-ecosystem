@@ -3,10 +3,10 @@
 Status: implementation coverage for issue #155 after PR #160, PR #161, and
 PR #162.
 
-These fixtures support the `Completed list growth` diagnostic family from
-`docs/roadmap/memory-diagnose-structural-diagnostics.md`. The current
-`memory_diagnose.ps1` helper reports `process_completed_list_growth` for the
-positive fixture and keeps the compact negative fixture clean.
+These fixtures preserve implementation coverage for the `Completed list growth`
+diagnostic family. The current `memory_diagnose.ps1` helper reports
+`process_completed_list_growth` for the positive fixture and keeps the compact
+negative fixture clean.
 
 ## Fixtures
 

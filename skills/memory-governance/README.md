@@ -28,13 +28,6 @@ does not create or modify an index. See
 [`references/directory-index-template.md`](references/directory-index-template.md)
 for the maintenance guidance.
 
-## Structural Diagnostics Design
-Future structural diagnostics for `memory_diagnose.ps1` should follow
-[`docs/roadmap/memory-diagnose-structural-diagnostics.md`](../../docs/roadmap/memory-diagnose-structural-diagnostics.md).
-That design records #155 Part B goals, non-goals, false-positive boundaries,
-fixture expectations, and the staged implementation plan. It is intentionally
-design-first and does not change current helper behavior.
-
 ### Implemented: Hot Memory Soft-Length (issue #167 first slice)
 The helper now includes `info`-level soft-length findings for hot session
 memory files. `process.txt` exceeding 30 lines triggers
