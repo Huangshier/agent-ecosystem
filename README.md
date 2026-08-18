@@ -160,14 +160,16 @@ pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -Projec
 pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 ```
 
-- `current`：已检查的项目基线与工程记忆不需要刷新。
-- `optional-refresh`：存在模板基线漂移或缺失的脚手架；默认 bootstrap 保留项目特化内容，
-  `-RefreshUnmodifiedTemplates` 只更新仍匹配旧模板的文件。
-- `migration-required`：project workspace 是 legacy 或检测到 structural memory
-  finding。运行 `scripts/migrate-project.ps1 -Mode Analyze`（read-only），review
-  evidence 后显式 `Apply`，必要时使用 guarded `Rollback`；不要使用 retired
-  memory helper 作为 migration authority。
-- `unknown`：helper、lock、语言或 metadata 无法可信解析；先人工检查，不要猜测或强制覆盖。
+- `current`：当前 C3.3 workspace 已 active-ready，无需 migration。
+- `migration-required`：当前 workspace 被识别为 legacy / not-c3-3。运行
+  `scripts/migrate-project.ps1 -Mode Analyze`（read-only），review evidence 后显式 `Apply`，
+  必要时使用 guarded `Rollback`；不使用 retired memory helper 作为 migration authority。
+- `unknown`：workspace 无法可信解析（incomplete / malformed / unverifiable 等）；先人工检查，
+  不要猜测或强制覆盖。
+
+Scaffold / template refresh 是 `project-bootstrap` 的独立保守能力，用于补齐缺失或漂移的
+脚手架文件，默认保留项目特化内容，`-RefreshUnmodifiedTemplates` 只更新仍匹配旧模板的文件；
+它不是 legacy migration 路径，也不绑定到 active C3.3 顶层 Project status。
 
 当前 C3.3 workspace 不需要 migration。Legacy workspace 进入
 `scripts/migrate-project.ps1` 的 Analyze → explicit Apply → guarded Rollback 流程；
@@ -188,9 +190,9 @@ backup-first 的 `-ForceResetScaffold`。完整决策表与命令见
 | Runtime provenance | `not-recorded` / `unknown` | 这不等于损坏；source archive 等安装可能没有 Git provenance。 |
 | Agent bridge | `not-configured` | 仅表示此 runtime 没有 bridge manifest；若需要 client discovery，再显式配置。 |
 | Agent bridge | `stale` / `broken` / `conflict` / `unknown` | 按 bridge 文档检查受管 source、目标 link 与占用内容；status 不会自动修复。 |
-| Project | `optional-refresh` | 使用保守 refresh，保留项目特化内容。 |
+| Project | `current` | 当前 C3.3 workspace 已 active-ready，无需 migration。 |
 | Project | `migration-required` | 走 `migrate-project.ps1` Analyze → explicit Apply → guarded Rollback；不使用 retired memory helper。 |
-| Project | `unknown` | 检查 helper 可用性、hub lock、项目语言与诊断输出，保持 fail-soft。 |
+| Project | `unknown` | 检查 workspace readiness、hub lock、项目语言与诊断输出，保持 fail-closed。 |
 
 需要结构化输出时添加 `-Json`。状态字段的精确定义见 [Scripts](scripts/README.md)，bridge
 故障边界见 [Agent-specific skill link bridge](docs/agent-skill-bridge.md)，项目迁移故障见
