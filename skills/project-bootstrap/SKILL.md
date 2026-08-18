@@ -1,6 +1,6 @@
 ---
 name: project-bootstrap
-description: Initialize and maintain project-level `.agents` memory scaffolds from a global git-tracked knowledge hub at `%USERPROFILE%\\.agents\\knowledge-hub`. Use when creating a new project scaffold, refreshing existing project memory, upgrading memory templates, migrating project memory language, refreshing shared templates with a pinned lock file (`.agents/hub.lock.json`), or standardizing cross-project AGENTS/context/plan/process/notes structures. Also use for requests such as 刷新旧工程记忆, 升级工程记忆模板, 迁移工程记忆语言到中文, 迁移工程记忆语言到英文, 重新初始化工程记忆, or 重置工程记忆模板.
+description: Initialize and maintain project-level `.agents` memory scaffolds from a global git-tracked knowledge hub at `%USERPROFILE%\\.agents\\knowledge-hub`. Use when creating a new project scaffold, refreshing existing project memory, upgrading memory templates, migrating project memory language, or refreshing shared templates with a pinned lock file (`.agents/hub.lock.json`). Active C3.3 projects use the minimal canonical workspace (Work, Context, Procedure, Spec) and are verified through `project-workspace`. Legacy hub-lock validation, first-session hot-memory scaffold, and `.agents/AGENTS.md` / `process.txt` / `plan.md` / `notes.md` / `.agents/commands` / `CLAUDE.md` are compatibility-only and are not part of the active C3.3 default flow. Also use for requests such as 刷新旧工程记忆, 升级工程记忆模板, 迁移工程记忆语言到中文, 迁移工程记忆语言到英文, 重新初始化工程记忆, or 重置工程记忆模板.
 category: kernel
 stability: stable
 scope: cross-project
@@ -13,18 +13,60 @@ compatibility: Bundled scripts require PowerShell 7.6+. The metadata map is an a
 
 # Agent Project Bootstrap
 
+## Active C3.3 default flow
+
+After the one-time default cutover, fresh and existing C3.3 projects use the
+canonical minimal workspace. The default flow is:
+
+1. Run `bootstrap_project.ps1` on the target project (see Step 2).
+2. Verify the resulting workspace with
+   `skills/project-workspace/scripts/check-project-workspace.ps1` (see
+   Step 3).
+
+Do not run `init_hub.ps1`, `check_hub_lock.ps1`, or `memory_upgrade.ps1` as
+part of the active C3.3 default flow. Those tools remain available for the
+legacy / compatibility-only scenarios described later in this Skill, and for
+explicit maintenance of a separately tracked knowledge hub repository. A
+fresh C3.3 project intentionally records `hub_dir = ""` in
+`.agents/hub.lock.json`; an empty `hub_dir` is the expected C3.3 state and is
+not a signal to Git-initialize a knowledge hub or to run hub-lock validation.
+
+## Legacy / compatibility-only surface
+
+The following are not part of the active C3.3 default flow. Use them only when
+an existing legacy project or a separately tracked knowledge hub repository
+requires them:
+
+- `init_hub.ps1` (Step 1): hub template initialization for a separately
+  tracked knowledge hub, not for project-local workspace authority.
+- `check_hub_lock.ps1` (Step 4): pin-drift validation for projects that pin a
+  non-empty `hub_dir`.
+- `memory_upgrade.ps1` and the `bootstrap_project.ps1` memory-upgrade /
+  language-migration wrappers (Steps 5 and 6): legacy hot-memory layout
+  normalization and project-memory language migration.
+- First-session language scaffolds for `.agents/AGENTS.md`, hot memory
+  (`process.txt`, `plan.md`, `notes.md`), `.agents/commands/`, and
+  `CLAUDE.md`: legacy scaffold surfaces, not generated for a fresh C3.3
+  project.
+
 ## Workflow
 
-1. Ensure the global knowledge hub exists.
-2. Install or refresh templates into the target project.
-3. Write `.agents/hub.lock.json` with the pinned hub commit.
-4. Keep project-local files as higher-priority overrides by default.
+1. Bootstrap the target project with `bootstrap_project.ps1` (Step 2).
+2. Verify the resulting C3.3 workspace with
+   `skills/project-workspace/scripts/check-project-workspace.ps1` (Step 3).
+3. Only when an existing legacy project or a separately tracked knowledge hub
+   requires it, use the legacy / compatibility-only steps later in this Skill
+   (Steps 1, 2.5, 4, 5, 6).
 
 Command examples use `pwsh -NoProfile -File` (PowerShell 7.6+).
 
-## Step 1: Initialize Global Hub
+## Step 1: Initialize Global Hub (legacy / compatibility-only)
 
-Run the initialization script when `%USERPROFILE%\\.agents\\knowledge-hub` is missing or when you want to refresh hub templates from this skill's assets.
+This step is for maintaining a separately tracked knowledge hub repository.
+The active C3.3 default flow does not require it; a fresh C3.3 project records
+`hub_dir = ""` and does not Git-initialize a hub. Run this only when
+`%USERPROFILE%\\.agents\\knowledge-hub` is missing and a non-empty hub pin is
+required, or when refreshing hub templates for a separately tracked hub.
 
 ```powershell
 pwsh -NoProfile -File scripts/init_hub.ps1
@@ -63,18 +105,30 @@ Default behavior:
 - Copy template files only when missing.
 - Keep project-local edits untouched.
 - Write/refresh `.agents/hub.lock.json` with the current hub commit.
-- Run a read-only legacy memory analysis and print a short upgrade hint only when candidates are detected.
+- Record the installed template tree hash and whether the hub worktree was dirty at install time.
+- Unknown named parameters fail before bootstrap writes. The common
+  `-ProjectRoot` mistake reports that callers must use `-ProjectDir`.
+- The resolved project directory is printed before any bootstrap write.
+
+C3.3 default path (fresh and existing C3.3 projects):
 - For a fresh project, create the minimal C3.3 workspace layout: a short
   `AGENTS.md`, `.agents/README.md`, empty `work/`, `context/`, `procedures/`,
   and `skills/` roots, and `docs/specs/`. Do not create placeholder Work,
   Context, Procedure, Spec, glossary, or promoted Skill content. Fresh projects
   always use this path after the one-time default cutover.
+- Do not create `.agents/AGENTS.md`, `process.txt`, `plan.md`, `notes.md`,
+  `.agents/commands`, `CLAUDE.md`, or any legacy hot-memory first-session
+  scaffold. These are legacy surfaces and are not part of the fresh C3.3
+  workspace.
 - An existing C3.3 workspace is refreshed through the same minimal template
-  contract; an existing legacy project keeps the legacy scaffold path until an
-  explicit reviewed `migrate-project.ps1` Analyze -> Apply.
-- Record the installed template tree hash and whether the hub worktree was dirty at install time.
-- Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
-- Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
+  contract.
+- The C3.3 lock records `hub_dir = ""` on purpose. Do not interpret an empty
+  `hub_dir` as drift, a missing hub, or a reason to Git-initialize a knowledge
+  hub. Hub-lock validation is not part of the C3.3 default flow.
+- For a fresh C3.3 workspace, a read-only legacy memory analysis is not run by
+  default and no upgrade hint is printed. The C3.3 workspace is an empty
+  canonical layout; use `memory_upgrade.ps1 -Mode Analyze` only for an explicit
+  read-only check when a legacy project is being inspected.
 - Install the declarative `.claude/guardrails/` template reliability contract
   for Claude Code projects. This is not a security sandbox, permission
   isolation layer, or automatic external-write authorization.
@@ -82,20 +136,32 @@ Default behavior:
   so SessionStart, PreToolUse, and Stop checks execute against that contract.
   The runner must leave ordinary permissions and no-bot public contributor
   paths intact.
-- When `-ProjectLanguage` is supplied, write first-session language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and `docs/specs/`.
+- The C3.3 fresh-project path writes only layout metadata and preserves the
+  existing language contract. It does not write current branch, checks,
+  next-step state, or any temporary run state.
+
+Legacy project path (compatibility-only):
+- An existing legacy project keeps the legacy scaffold path until an explicit
+  reviewed `migrate-project.ps1` Analyze -> Apply. Bootstrap on a legacy
+  project may still write `.agents/AGENTS.md`, hot memory (`process.txt`,
+  `plan.md`, `notes.md`), `.agents/commands/`, and `CLAUDE.md` first-session
+  scaffolds, and may run a read-only legacy memory analysis that prints a
+  short upgrade hint only when candidates are detected.
+- Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
+- Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
+- When `-ProjectLanguage` is supplied on a legacy project, write first-session
+  language scaffolds for hot memory, `.agents/context/`, `.agents/commands/`,
+  and `docs/specs/`. This does not apply to a fresh C3.3 project.
 - Language scaffolds are loaded from the bundled hub snapshot under
   `skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/`.
 - Supported project memory template languages are `en` and `zh-CN` only. English remains the default for a new project without language metadata.
 - If a `zh-CN` template file is missing, the language helper falls back to the matching English template and reports fallback metadata. Treat that as a validation finding to fix, not as a reason to overwrite project-specific memory.
-- For existing projects, the wrapper inherits `project_language` from
+- For existing legacy projects, the wrapper inherits `project_language` from
   `.agents/hub.lock.json` when `-ProjectLanguage` is omitted, with the
   `.agents/AGENTS.md` declaration as a fallback when no lock language exists.
   Conflicting lock and guide declarations fail before scaffold or lock writes
   even when callers pass `-ProjectLanguage` explicitly. Do not infer project
   memory language from the current chat.
-- Unknown named parameters fail before bootstrap writes. The common
-  `-ProjectRoot` mistake reports that callers must use `-ProjectDir`.
-- The resolved project directory is printed before any bootstrap write.
 
 Optional flags:
 - `-HubDir <path>`: custom knowledge hub root; it must directly contain
@@ -103,6 +169,12 @@ Optional flags:
 - `-RefreshUnmodifiedTemplates`: refresh files that still match the previously installed template hash; preserve modified files for manual review.
 - `-OverwriteTemplates`: compatibility alias for `-RefreshUnmodifiedTemplates`. It emits a warning and does not overwrite modified project memory.
 - `-ForceResetScaffold`: explicit reset path for discarding scaffold customizations. It emits a warning, backs up existing files first, and cannot be combined with memory upgrade modes.
+- `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
+- `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language. On a fresh C3.3 project this only records the project language in the C3.3 lock; it does not write legacy first-session hot-memory scaffolds.
+
+Legacy / compatibility-only flags (existing legacy projects and explicit
+memory-upgrade / language-migration workflows only; not part of the fresh C3.3
+default flow):
 - `-AnalyzeMemoryUpgrade`: after the normal conservative bootstrap wrapper
   flow, inspect legacy `.agents` memory and report issues without changing
   memory files. The wrapper may still create missing scaffold files or refresh
@@ -117,8 +189,6 @@ Optional flags:
 - `-PlanNarrativeMigration -MigrationPlan <proposal.json>`: read Phase 1 manual-review artifacts and write a second narrative proposal with actions unapproved by default.
 - `-ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>`: apply reviewed narrative actions only after proposal, backup, source hash, and target hash checks.
 - `-ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>`: validate narrative result metadata, source artifacts, backup, and review markers.
-- `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
-- `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language.
 
 The C3.3 fresh-project path writes only layout metadata and preserves the
 existing language contract. It does not write current branch, checks, next-step
@@ -159,10 +229,10 @@ redact local paths before copying audit output into public issues, pull
 requests, or documents.
 
 Operating modes:
-- Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. Missing templates and first-session language scaffolds may be written.
+- Initialize empty project: run bootstrap on a project without existing `AGENTS.md` or `.agents` memory. A fresh C3.3 project gets the minimal canonical workspace; legacy first-session language scaffolds are not written on the C3.3 path.
 - Refresh missing templates: default for existing projects. Missing files are copied, existing files are preserved, and memory analysis remains read-only unless another mode is requested. This is the conservative answer to "refresh old project memory" when the user has not asked to rewrite content. Pass the project's current memory language explicitly when the project is not English-first or when lock metadata already records a language.
 - Refresh unmodified templates: use `-RefreshUnmodifiedTemplates` when the lock has prior template hashes. Files that still match the previous installed hash may be updated; modified files are preserved for manual review. This is a safe template upgrade, not a reset.
-- Conservative memory migration: use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration. Use `-PlanNarrativeMigration`, `-ApplyNarrativeMigration`, and `-ValidateNarrativeMigration` as the follow-up review step for manual-review artifacts.
+- Conservative memory migration (legacy / compatibility-only): use proposal-first and backup-first modes after review. Use `-AnalyzeMemoryUpgrade`, `-PlanMemoryUpgrade`, then `-ApplyMemoryUpgrade -UpgradePlan <path>` for legacy memory layout normalization. Use `-AnalyzeLanguageMigration`, `-PlanLanguageMigration`, `-ApplyLanguageMigration -MigrationPlan <path>`, then `-ValidateLanguageMigration -MigrationPlan <path>` for `en` / `zh-CN` language migration. Use `-PlanNarrativeMigration`, `-ApplyNarrativeMigration`, and `-ValidateNarrativeMigration` as the follow-up review step for manual-review artifacts.
 - Explicit force reset: use `-ForceResetScaffold` only when the caller intentionally discards scaffold customizations. Do not infer this from "refresh", "upgrade", "migrate", or "reinitialize" unless the caller also says old memory may be discarded. This is not a language migration path and remains backup-first.
 
 Standalone language update:
@@ -178,7 +248,12 @@ The standalone helper reads file templates from the bundled hub snapshot under
 by default. `-TemplateRoot` is available for validation fixtures and controlled
 template-source tests.
 
-## Step 2.5: Memory Upgrade Decision
+## Step 2.5: Memory Upgrade Decision (legacy / compatibility-only)
+
+This step applies to existing legacy projects with old `.agents` memory. A
+fresh C3.3 workspace does not run a legacy memory analysis by default and does
+not print a `Memory upgrade candidates detected` hint; continue directly to
+Step 3.
 
 When bootstrap reports `Memory upgrade candidates detected: N`, do not silently ignore it.
 
@@ -189,19 +264,35 @@ When bootstrap reports `Memory upgrade candidates detected: N`, do not silently 
 
 `-AutoUpgrade` is for non-interactive, caller-approved upgrades. It preserves the proposal-first and backup-first safety model by writing `.agents/upgrade/<timestamp>/proposal.md`, applying the checked default actions, and writing a result file next to the proposal.
 
-## Step 3: Verify Installation
+## Step 3: Verify the C3.3 workspace
 
-Check these paths:
+After a fresh or active C3.3 bootstrap, verify the workspace through the
+`project-workspace` Skill, not through hub-lock validation:
 
-- `<project>/AGENTS.md`
-- `<project>/docs/specs/_templates/` (if present in the installed hub)
-- `<project>/.agents/AGENTS.md`
-- `<project>/.agents/context/`
-- `<project>/.agents/hub.lock.json`
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/check-project-workspace.ps1 -ProjectRoot <project_path> -Json
+```
 
-If needed, review `references/maintenance-model.md` for long-term update rules.
+`check-project-workspace.ps1` is strictly read-only and never creates or
+refreshes the disposable Catalog cache. For a fresh C3.3 project it reports the
+minimal canonical layout (Work, Context, Procedure, Spec roots, `AGENTS.md`,
+`.agents/README.md`, `.agents/hub.lock.json`) without requiring a non-empty
+`hub_dir`. For canonical asset discovery and authoring, see the
+`project-workspace` Skill.
 
-## Step 4: Validate Hub Lock Drift
+For a fresh C3.3 project, do not check for `.agents/AGENTS.md`, `process.txt`,
+`plan.md`, `notes.md`, `.agents/commands`, or `CLAUDE.md`; those are legacy
+surfaces and are not part of the C3.3 workspace. If needed, review
+`references/maintenance-model.md` for long-term update rules.
+
+## Step 4: Validate Hub Lock Drift (legacy / compatibility-only)
+
+This step is for projects that pin a non-empty `hub_dir` against a separately
+tracked knowledge hub repository. A fresh C3.3 project records `hub_dir = ""`
+and is not a target for this check; running it on a fresh C3.3 project returns
+`invalid_hub_dir`, which is the expected behavior for the empty-pin contract,
+not a defect to fix by Git-initializing a knowledge hub. Do not run this as
+part of the active C3.3 default flow.
 
 Check whether a project's pinned `hub.lock.json` still matches the currently installed hub:
 
@@ -219,9 +310,12 @@ Optional flags:
 - `-ProjectDir <path1>,<path2>,...`: check more than one project in one run
 - `-HubDir <path>`: compare against a specific installed hub instead of the lock's `hub_dir`
 
-## Step 5: Upgrade Legacy Project Memory
+## Step 5: Upgrade Legacy Project Memory (legacy / compatibility-only)
 
-Use this when re-running bootstrap in a project that already has old `.agents` memory.
+Use this only when re-running bootstrap in a project that already has old
+`.agents` memory (`.agents/AGENTS.md`, `process.txt`, `plan.md`, `notes.md`,
+`.agents/commands`, or `CLAUDE.md`). It is not part of the fresh C3.3 default
+flow.
 
 Recommended flow:
 
@@ -255,11 +349,13 @@ Behavior:
 - Auto-upgrade mode runs Analyze first, then Plan and Apply only when findings exist.
 - Durable multi-stage work should move into `docs/specs/`; `.agents` remains session-local.
 
-## Step 6: Migrate Project Memory Language
+## Step 6: Migrate Project Memory Language (legacy / compatibility-only)
 
-Use this when an established project needs to move between the two supported
-engineering-memory template languages without discarding project-specific
-memory.
+Use this only when an established legacy project needs to move between the two
+supported engineering-memory template languages without discarding
+project-specific memory. It is not part of the fresh C3.3 default flow; a fresh
+C3.3 project records its language in the C3.3 lock and does not require
+language migration.
 
 English to Simplified Chinese:
 
@@ -304,7 +400,7 @@ Behavior:
 - Prefer pinned sync via `hub.lock.json` instead of dynamically reading live global state.
 - Treat project `.agents` as a local overlay. Shared templates are defaults, not hard constraints.
 - Treat `templates/languages/<language>/project-root/` as the home for long-lived project docs that should be committed with source, including `docs/specs/` scaffolds.
-- Use `check_hub_lock.ps1` when you need to verify whether a project's pin has drifted from the installed hub.
+- Use `check_hub_lock.ps1` only for legacy / compatibility-only pin-drift checks on projects that pin a non-empty `hub_dir`. It is not part of the active C3.3 default flow; a fresh C3.3 project records `hub_dir = ""` and is verified through `skills/project-workspace/scripts/check-project-workspace.ps1`.
 - Promote stable cross-project practices into the hub template, not per-project runtime files.
 - Keep global experience retrieval lightweight: projects should search the hub index on demand rather than preload global experience into every session.
 - Keep candidate intake separate from formal promotion. Use the installed hub's `scripts/manage_candidates.ps1` only with explicit project roots, explicit languages, and an explicit runtime inbox; it never promotes into `knowledge/experience/**`.
