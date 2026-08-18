@@ -53,7 +53,6 @@ $requiredFiles = @(
     "docs/powershell-helper-ownership.md",
     "docs/release-process.md",
     "docs/release-readiness.md",
-    "docs/roadmap/memory-diagnose-structural-diagnostics.md",
     "docs/shell-strategy.md",
     "docs/template-path-reference-audit.md",
     "docs/releases/README.md",

@@ -1,8 +1,16 @@
 # Old-Release Rehearsal Evidence
 
-This document records old-release upgrade rehearsal results for the public
-`agent-ecosystem` repository. Each rehearsal exercises a real published tag
-against the current `main` branch to validate the upgrade path.
+> **历史证据，非当前权威。** 本文是冻结的 old-release rehearsal evidence。
+> 每个 rehearsal 只描述当时记录的 source tag、target SHA、commands 和 results；
+> 文中的 “current main” 只表示该次 rehearsal 当时的 target，不表示今天的
+> current `main`。retired Skills、旧 PowerShell 命令和旧 `-Force` 语义均属于
+> 历史证据。当前 upgrade guidance 以
+> [`docs/old-release-upgrade-path.md`](old-release-upgrade-path.md) 为准，当前
+> Release authority 以 [`docs/release-process.md`](release-process.md) 为准。
+
+This frozen document records old-release upgrade rehearsal results for the
+public `agent-ecosystem` repository. Each rehearsal exercises a real published
+tag against the target `main` commit recorded at rehearsal time.
 
 ## Rehearsal: v0.4.6 → current main
 
