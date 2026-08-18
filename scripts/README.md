@@ -40,10 +40,11 @@ action so a caller timeout does not erase earlier evidence.
 The classifier, local-plan orchestrator, and normative repository validation
 entrypoints use the C3.3 PowerShell Core 7.6 control plane through
 `pwsh -NoProfile -NonInteractive -File` without a `powershell.exe` fallback.
-Slice A0 does not change the current v0.7.1 installer, Runtime, bootstrap,
-bridge, status, uninstall, or legacy Skill execution contracts documented in
-this file. Those transitional surfaces will be migrated or retired only in
-their designated later slices; this is not a commitment to long-lived
+The default cutover has completed: the installer, Runtime, bootstrap, bridge,
+status, uninstall, and Skill execution contracts documented in this file now
+reflect the active C3.3 Runtime authority (`project-bootstrap` +
+`project-workspace`). Earlier Slice A0 transitional surfaces have been
+migrated or retired by the cutover; this is not a commitment to long-lived
 dual-host or dual-semantics support.
 
 The heavyweight classifier regression entrypoint is
@@ -122,14 +123,21 @@ exposing runtime, source, target, manifest, or home-directory paths. Bridge
 health proves only the recorded filesystem discovery chain, not complete client
 compatibility. Project status is opt-in through `-ProjectDir`; without it,
 `project.status` is `unknown` with reason `not-requested`, and the command never
-discovers or scans a project from the current directory. The project section
-combines the read-only hub-lock machine contract, memory upgrade Analyze mode,
-and memory diagnostics. It reports only stable status, reason, language,
-counts, and finding codes; project paths, hub Git identity, hashes, and raw
-helper output are never copied into the payload. After all three sections are
-aggregated, `recommended_next_action` is derived once from that same payload.
-The first matching manifest, managed-file, bridge, or project rule wins;
-unrecognized or malformed state conservatively maps to `inspect-manually`.
+discovers or scans a project from the current directory. Under the active C3.3
+Runtime authority, the top-level `project.status` follows the
+`project.workspace` result: the workspace section is the active Project status
+authority, and `project.baseline` / `project.memory` keep their schema-1 shape
+but no longer drive the top-level status. It reports only stable status,
+reason, language, counts, and finding codes; project paths, hub Git identity,
+hashes, and raw helper output are never copied into the payload. The legacy
+hub-lock machine contract, memory upgrade Analyze mode, and memory diagnostics
+remain available only for non-C3.3 (legacy) runtimes as a compatibility path;
+they are not part of the active C3.3 Project status default. After the runtime,
+managed-file, bridge, and project sections are populated,
+`recommended_next_action` is derived once from that same payload by a linear
+first-match rule chain. The first matching manifest, managed-file, bridge, or
+project rule wins; unrecognized or malformed state conservatively maps to
+`inspect-manually`.
 `not-configured` bridge state and project `unknown / not-requested` are neutral,
 and missing provenance marked `not-recorded` does not imply reinstallation.
 The recommendation is an enum-only read-only result: the command never executes
