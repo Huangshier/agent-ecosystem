@@ -129,13 +129,13 @@ C3.3 default path (fresh and existing C3.3 projects):
   default and no upgrade hint is printed. The C3.3 workspace is an empty
   canonical layout; use `memory_upgrade.ps1 -Mode Analyze` only for an explicit
   read-only check when a legacy project is being inspected.
-- Install the declarative `.claude/guardrails/` template reliability contract
-  for Claude Code projects. This is not a security sandbox, permission
-  isolation layer, or automatic external-write authorization.
-- Install `.claude/settings.json` and the `.claude/hooks/guardrail.ps1` runner
-  so SessionStart, PreToolUse, and Stop checks execute against that contract.
-  The runner must leave ordinary permissions and no-bot public contributor
-  paths intact.
+- Do not install the legacy project-root `.claude/**` guardrail / hook
+  scaffold. The C3.3 project template
+  (`skills/project-bootstrap/assets/c3-3-project-template/<language>/`) does
+  not include `.claude/**`, and `bootstrap_project.ps1` does not create it on
+  the C3.3 path. `.claude/guardrails/`, `.claude/settings.json`, and
+  `.claude/hooks/guardrail.ps1` are legacy project-root template surfaces and
+  are not part of the fresh C3.3 workspace.
 - The C3.3 fresh-project path writes only layout metadata and preserves the
   existing language contract. It does not write current branch, checks,
   next-step state, or any temporary run state.
@@ -147,6 +147,14 @@ Legacy project path (compatibility-only):
   `plan.md`, `notes.md`), `.agents/commands/`, and `CLAUDE.md` first-session
   scaffolds, and may run a read-only legacy memory analysis that prints a
   short upgrade hint only when candidates are detected.
+- Install the declarative `.claude/guardrails/` template reliability contract
+  for Claude Code projects from the legacy `project-root` template. This is
+  not a security sandbox, permission isolation layer, or automatic
+  external-write authorization.
+- Install `.claude/settings.json` and the `.claude/hooks/guardrail.ps1` runner
+  so SessionStart, PreToolUse, and Stop checks execute against that contract.
+  The runner must leave ordinary permissions and no-bot public contributor
+  paths intact.
 - Install the shared `Global Experience Discovery` behavior contract from the language-specific `project-root/AGENTS.md` template, not `project-agent/AGENTS.md`, so projects know when to search the global experience index and when to keep lessons local.
 - Install the full `templates/languages/<language>/project-root/` tree, not only root `AGENTS.md`, so long-lived project docs like `docs/specs/_templates/` can be scaffolded safely.
 - When `-ProjectLanguage` is supplied on a legacy project, write first-session
