@@ -855,7 +855,13 @@ $unknownValues = @($preservedUnknown.ToArray() | Sort-Object -Unique)
 $skippedValues = @($skippedLocallyModified.ToArray() | Sort-Object -Unique)
 $conflictValues = @($conflicts.ToArray() | Sort-Object -Unique)
 $warningValues = @($warnings.ToArray())
-$manifestUpdated = -not ($previousSchemaVersion -eq 1 -and $conflictValues.Count -gt 0)
+# ! 当存在未解决的 conflict 时不得提交新 manifest：否则会写入一个声称
+# workspace.architecture=c3.3 / lifecycle=active / default_cutover=true 的
+# 基线，而实际 required managed content 仍是 legacy 或 stale（split-brain）。
+# 这覆盖 schema-1→schema-2 upgrade 与 existing schema-2 refresh 两种路径。
+# -ReplaceManaged 正常收敛后 conflictValues.Count 为 0，manifest 照常提交。
+# -ReplaceManaged 未能消除的 conflict（如 source-colliding unknown file）同样 fail closed。
+$manifestUpdated = $conflictValues.Count -eq 0
 $resultingManifestSchemaVersion = 2
 if (-not $manifestUpdated) {
     $resultingManifestSchemaVersion = $previousSchemaVersion

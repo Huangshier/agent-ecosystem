@@ -477,5 +477,92 @@ function Invoke-InstallerContractFixtureChecks {
     Assert-InstallerCondition -Condition (-not ((Get-Content -LiteralPath (Join-PathParts $legacyRuntime "install-manifest.json") -Raw).Contains([System.IO.Path]::GetFullPath($fixtureSource)))) -Message "Upgraded legacy manifest retained an absolute source path."
     $scenarioEvidence.Add([ordered]@{ scenario = "legacy-copy-replace-managed-migration"; exit_code = $legacyReplaceRun.exit_code; schema_version = [int]$legacyUpgradedManifest.schema_version })
 
+    # Issue #346 regression: schema-2 refresh conflict must fail closed before
+    # committing a C3.3 manifest, then converge with -ReplaceManaged and produce
+    # a C3.3 workspace on fresh bootstrap. Uses a full copy of the real repository
+    # as installer source so a source-side change can create a true source+target
+    # divergence conflict, and the converged runtime can bootstrap a fresh zh-CN
+    # project end-to-end.
+    $c33ConflictSource = Join-PathParts $ScratchRoot "installer-contract-c33-conflict-source"
+    $c33ConflictRuntime = Join-PathParts $ScratchRoot "installer-contract-c33-conflict-runtime"
+    $c33BootstrapProject = Join-PathParts $ScratchRoot "installer-contract-c33-bootstrap-project"
+    Assert-PathInsideRoot -Path $c33ConflictSource -Root $ScratchRoot
+    Assert-PathInsideRoot -Path $c33ConflictRuntime -Root $ScratchRoot
+    Assert-PathInsideRoot -Path $c33BootstrapProject -Root $ScratchRoot
+
+    # 完整复制真实 repository source，保留 project-bootstrap scripts 和 knowledge-hub。
+    Copy-Item -LiteralPath $RepositoryRoot -Destination $c33ConflictSource -Recurse -Force
+    # 清理副本中的 git 元数据，避免 provenance 干扰和 .git 嵌套。
+    $gitDirInCopy = Join-Path $c33ConflictSource ".git"
+    if (Test-Path -LiteralPath $gitDirInCopy) {
+        Remove-Item -LiteralPath $gitDirInCopy -Recurse -Force
+    }
+    $c33ConflictInstaller = Join-PathParts $c33ConflictSource "scripts" "install.ps1"
+
+    $c33Setup = Invoke-FixtureInstall -Installer $c33ConflictInstaller -RuntimeRoot $c33ConflictRuntime -Profile "recommended"
+    Assert-InstallerCondition -Condition ($c33Setup.exit_code -eq 0) -Message "C3.3 conflict fixture clean setup failed."
+    $c33BaselineManifest = Read-InstallArtifact -RuntimeRoot $c33ConflictRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ([int]$c33BaselineManifest.schema_version -eq 2 -and [string]$c33BaselineManifest.workspace.architecture -ceq "c3.3" -and [string]$c33BaselineManifest.workspace.lifecycle -ceq "active" -and [bool]$c33BaselineManifest.workspace.default_cutover) -Message "C3.3 conflict fixture baseline manifest was not an active C3.3 schema-2 manifest."
+    $c33BaselineManifestText = Get-Content -LiteralPath (Join-PathParts $c33ConflictRuntime "install-manifest.json") -Raw
+
+    # 制造 source+installed divergence conflict：同时修改 source 和 runtime 中的
+    # project-bootstrap SKILL.md，使两者都不匹配 baseline installed hash。
+    $bootstrapSourceFile = Join-PathParts $c33ConflictSource "skills" "project-bootstrap" "SKILL.md"
+    $bootstrapRuntimeFile = Join-PathParts $c33ConflictRuntime "skills" "project-bootstrap" "SKILL.md"
+    Assert-InstallerCondition -Condition (Test-Path -LiteralPath $bootstrapSourceFile -PathType Leaf) -Message "C3.3 conflict fixture could not locate source project-bootstrap SKILL.md."
+    $bootstrapOriginalContent = Get-Content -LiteralPath $bootstrapSourceFile -Raw
+    Write-FixtureText -Path $bootstrapSourceFile -Text ($bootstrapOriginalContent + "`n# source-side change for conflict fixture`n")
+    Write-FixtureText -Path $bootstrapRuntimeFile -Text ($bootstrapOriginalContent + "`n# local target modification for conflict fixture`n")
+
+    $c33ConflictRun = Invoke-FixtureInstall -Installer $c33ConflictInstaller -RuntimeRoot $c33ConflictRuntime -Profile "recommended"
+    $c33ConflictReport = Read-InstallArtifact -RuntimeRoot $c33ConflictRuntime -Name "install-report.json"
+    $c33ConflictManifest = Read-InstallArtifact -RuntimeRoot $c33ConflictRuntime -Name "install-manifest.json"
+    # 证明失败后不会出现 manifest=C3.3 active 但 live project-bootstrap=legacy/stale。
+    # fail-closed 不写新 manifest，保留失败前 baseline。
+    Assert-InstallerCondition -Condition ($c33ConflictRun.exit_code -ne 0) -Message "C3.3 schema-2 refresh conflict did not fail closed."
+    Assert-InstallerCondition -Condition ([string]$c33ConflictReport.status -ceq "conflict") -Message "C3.3 schema-2 refresh conflict did not report conflict status."
+    Assert-InstallerCondition -Condition (-not [bool]$c33ConflictReport.manifest_updated) -Message "C3.3 schema-2 refresh conflict committed a new manifest (split-brain)."
+    Assert-InstallerCondition -Condition ([int]$c33ConflictReport.manifest_schema_version -eq 2) -Message "C3.3 schema-2 refresh conflict did not preserve schema-2 baseline."
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath (Join-PathParts $c33ConflictRuntime "install-manifest.json") -Raw) -ceq $c33BaselineManifestText) -Message "C3.3 schema-2 refresh conflict overwrote the pre-failure manifest baseline."
+    # status/report 与最终 manifest state 一致：report 声称 manifest 未更新，manifest 确实是 baseline。
+    Assert-InstallerCondition -Condition ([string]$c33ConflictManifest.workspace.architecture -ceq "c3.3" -and [string]$c33ConflictManifest.workspace.lifecycle -ceq "active" -and [bool]$c33ConflictManifest.workspace.default_cutover) -Message "C3.3 conflict baseline manifest lost C3.3 workspace authority."
+    Assert-InstallerCondition -Condition (Test-ReportPath -Values @($c33ConflictReport.conflicts) -Path "skills/project-bootstrap/SKILL.md") -Message "C3.3 schema-2 refresh conflict did not report the project-bootstrap conflict path."
+    Assert-ReportCountConsistency -Report $c33ConflictReport
+    # 验证本地修改未被覆盖（conflict 时不覆写 target）。
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath $bootstrapRuntimeFile -Raw) -like "*local target modification for conflict fixture*") -Message "C3.3 schema-2 refresh conflict overwrote the locally modified target."
+
+    # -ReplaceManaged 收敛为完整 C3.3 Runtime。
+    $c33ReplaceRun = Invoke-FixtureInstall -Installer $c33ConflictInstaller -RuntimeRoot $c33ConflictRuntime -Profile "recommended" -AdditionalArguments @("-ReplaceManaged")
+    $c33ReplaceReport = Read-InstallArtifact -RuntimeRoot $c33ConflictRuntime -Name "install-report.json"
+    $c33ReplaceManifest = Read-InstallArtifact -RuntimeRoot $c33ConflictRuntime -Name "install-manifest.json"
+    Assert-InstallerCondition -Condition ($c33ReplaceRun.exit_code -eq 0 -and [string]$c33ReplaceReport.status -ceq "success") -Message "C3.3 -ReplaceManaged did not converge to success."
+    Assert-InstallerCondition -Condition ([bool]$c33ReplaceReport.manifest_updated -and [int]$c33ReplaceReport.manifest_schema_version -eq 2) -Message "C3.3 -ReplaceManaged did not commit a schema-2 manifest."
+    Assert-InstallerCondition -Condition ([int]$c33ReplaceReport.counts.conflicts -eq 0) -Message "C3.3 -ReplaceManaged left unresolved conflicts."
+    # 收敛后 runtime 文件应与 source 一致（source 已被修改的版本）。
+    $convergedSourceContent = Get-Content -LiteralPath $bootstrapSourceFile -Raw
+    Assert-InstallerCondition -Condition ((Get-Content -LiteralPath $bootstrapRuntimeFile -Raw) -ceq $convergedSourceContent) -Message "C3.3 -ReplaceManaged did not converge project-bootstrap SKILL.md to source."
+    Assert-ManifestFileHashes -Manifest $c33ReplaceManifest -RuntimeRoot $c33ConflictRuntime
+
+    # 用收敛后的 Runtime bootstrap 一个 fresh zh-CN project。
+    $convergedHubDir = Join-PathParts $c33ConflictRuntime "knowledge-hub"
+    $convergedBootstrapScript = Join-PathParts $c33ConflictRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
+    Assert-InstallerCondition -Condition (Test-Path -LiteralPath $convergedHubDir -PathType Container) -Message "Converged C3.3 runtime is missing knowledge-hub."
+    Assert-InstallerCondition -Condition (Test-Path -LiteralPath $convergedBootstrapScript -PathType Leaf) -Message "Converged C3.3 runtime is missing project-bootstrap bootstrap script."
+    New-Item -ItemType Directory -Force -Path $c33BootstrapProject | Out-Null
+    $bootstrapOutput = @(& $convergedBootstrapScript -ProjectDir $c33BootstrapProject -HubDir $convergedHubDir -ProjectLanguage "zh-CN" -SkipMemoryUpgradeAnalysis 2>&1 | ForEach-Object { [string]$_ })
+    Assert-InstallerCondition -Condition ($LASTEXITCODE -eq 0) -Message "C3.3 fresh zh-CN bootstrap failed after convergence. Output: $([string]::Join([System.Environment]::NewLine, $bootstrapOutput))"
+
+    # 验证生成 C3.3 canonical 目录。
+    foreach ($canonicalDir in @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")) {
+        Assert-InstallerCondition -Condition (Test-Path -LiteralPath (Join-PathParts $c33BootstrapProject $canonicalDir) -PathType Container) -Message "C3.3 fresh bootstrap did not create canonical directory: $canonicalDir"
+    }
+    # 验证不生成 legacy 目录/文件。
+    foreach ($legacyPath in @(".agents/process.txt", ".agents/plan.md", ".agents/notes.md", ".agents/commands")) {
+        Assert-InstallerCondition -Condition (-not (Test-Path -LiteralPath (Join-PathParts $c33BootstrapProject $legacyPath))) -Message "C3.3 fresh bootstrap generated a legacy path: $legacyPath"
+    }
+    $bootstrapLock = Get-Content -LiteralPath (Join-PathParts $c33BootstrapProject ".agents" "hub.lock.json") -Raw | ConvertFrom-Json
+    Assert-InstallerCondition -Condition ([string]$bootstrapLock.workspace_model -ceq "c3.3") -Message "C3.3 fresh bootstrap did not record workspace_model=c3.3."
+    $scenarioEvidence.Add([ordered]@{ scenario = "issue-346-manifest-fail-closed-c33-conflict"; conflict_exit = $c33ConflictRun.exit_code; replace_exit = $c33ReplaceRun.exit_code; bootstrap_exit = $LASTEXITCODE; workspace_model = [string]$bootstrapLock.workspace_model })
+
     return @($scenarioEvidence.ToArray())
 }
