@@ -535,8 +535,9 @@ backup.
 ### Limitations
 
 - This rehearsal ran on Windows in copy mode with the `recommended` profile;
-  full release validation separately covers every install profile, supported
-  hosted operating system, and both PowerShell runtimes.
+  full release validation separately covers every install profile and supported
+  hosted operating system under the current PowerShell Core 7.6+ validation
+  control plane.
 - The rehearsal exercised one representative existing project; it does not
   replace project-specific review before accepting a migration plan.
 - The Stage A candidate note (`docs/releases/v0.8.0.md`) is a release candidate;
