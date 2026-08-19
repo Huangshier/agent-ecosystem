@@ -469,8 +469,37 @@ default; no source-colliding unknown or manual deletion was needed.
    retired skills `stale`.
 
 Result: **PASS**. A legal `v0.7.1` bridge transitions to a visible, safe state
-after upgrade; current tooling provides an understandable cleanup/relink path
-(new bridging of active skills) without undocumented manual deletion.
+after upgrade without undocumented manual deletion. Newly bridging active
+skills keeps the stale retired records visible in status; it is not itself the
+cleanup path.
+
+### Bridge recovery path after upgrade (v0.7.1 → current main)
+
+The recovery flow below was rehearsed in isolation after the stale-after-upgrade
+state above. It is the supported way to leave the transition state:
+
+1. **Manifest-owned uninstall**: current
+   `scripts/uninstall.ps1 -TargetDir <isolated-runtime>` recognized the old
+   bridge manifest ownership (`runtime` binding and per-record source / target
+   path checks), safely removed the four manifest-owned client links including
+   the three stale retired links and the bridge manifest, completed the runtime
+   uninstall, and did not require any manual deletion. A user file placed in the
+   same isolated client skill directory was preserved byte-for-byte, and no
+   nested-unknown or locally-modified content blocked the run.
+2. **Reinstall current Runtime**: current `scripts/install.ps1 -Profile
+   recommended -TargetDir <isolated-runtime>` installed the current C3.3
+   runtime fresh.
+3. **Rebridge active skills**: current
+   `scripts/link-agent-skills.ps1` bridged only `project-bootstrap` and
+   `project-workspace`. The bridge manifest contained only those two active
+   records; the three retired links were absent from the client directory;
+   status reported `bridge.status=current` with both links `current`; and the
+   user file in the client directory remained unchanged.
+
+Result: **PASS**. A stale-after-upgrade bridge transitions cleanly through the
+supported path: manifest-owned uninstall, reinstall the current runtime, and
+re-bridge the active skills. No manual link or manifest deletion is required,
+and unrelated client content is never touched.
 
 ### Legacy project migration (Analyze → Apply → check/discover → Rollback)
 
