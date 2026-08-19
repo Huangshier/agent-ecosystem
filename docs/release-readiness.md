@@ -5,9 +5,9 @@ Status: `v0.8.0` published public release.
 ## Current Release Pointer
 
 - Latest published Release: `v0.8.0`。
-- 当前 `main` 已包含 `v0.8.0` 之后的变化；这些变化仍属于 `Unreleased`，不是
-  已发布 Release。
-- Current highest Release impact: `minor`。
+- 当前 `main` 与 `v0.8.0` publish-finalization metadata 对齐；当前 `Unreleased`
+  无新的 public changes。
+- Current highest Release impact: `none`。
 - 本页只记录当前状态和导航指针，不授权 `tag`、`publish` 或任何 GitHub
   Release 操作。
 
