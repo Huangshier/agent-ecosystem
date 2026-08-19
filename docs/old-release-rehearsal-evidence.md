@@ -390,3 +390,128 @@ Result: **PASS**. Runtime uninstall does not delete project canonical assets.
   replace project-specific review before accepting a migration plan.
 - C3.3 remains dormant. This rehearsal does not perform the `default` or
   `recommended` cutover, which requires a separate explicit maintainer decision.
+
+## Rehearsal: v0.7.1 → v0.8.0 candidate
+
+**Date**: 2026-08-19
+
+**Source tag**: `v0.7.1` (commit
+`df1de467ea0b19ca98d6994b5fb19001d4ec0334`)
+
+**Target**: current `main` (commit
+`be91fd279aca2b983bc714a0ff4a44fffa966236`)
+
+**Install mode**: copy
+
+**Profile**: `recommended`
+
+This rehearsal is part of Issue #345 Stage A (release-candidate / evidence) for
+`v0.8.0`. It runs entirely in isolated scratch directories; no live `~/.agents`
+runtime, real user project, real agent client skill directory, or private
+repository content is touched.
+
+### Runtime upgrade (v0.7.1 → current main)
+
+1. Installed the published `v0.7.1` `recommended` profile into an isolated copy
+   runtime, producing a schema-2 manifest with exact `v0.7.1` provenance
+   (`df1de467ea0b19ca98d6994b5fb19001d4ec0334`) and the four kernel skills:
+   `project-bootstrap`, `project-context-gate`, `workflow-spec-lite`,
+   `memory-governance`.
+2. Re-ran the current-main installer through the ordinary default incremental
+   path, without `-ReplaceManaged` or its deprecated compatibility alias.
+3. The upgrade updated 51 managed files and left 156 unchanged with 0 conflicts.
+   The resulting schema-2 manifest recorded the current-main source commit
+   (`be91fd279aca2b983bc714a0ff4a44fffa966236`) without inventing a release
+   version, listed only `project-bootstrap` and `project-workspace` as installed
+   skills, and declared `workspace.architecture=c3.3`, `lifecycle=active`,
+   `default_cutover=true` with `project-context-gate`, `memory-governance`, and
+   `workflow-spec-lite` in `retired_from_c3_3_authority`.
+4. Runtime status after upgrade reported all 191 managed files as `current` with
+   0 modified / 0 missing / 0 conflict, manifest status `current`, and workspace
+   ownership `manifest-scoped`. The only finding was `release_not_recorded`
+   (`info`), expected because the target `main` commit is not a version tag.
+
+Result: **PASS**. A clean `v0.7.1` copy runtime converges to the current C3.3
+runtime through the ordinary default installer path, without manual file
+deletion or `-ReplaceManaged`.
+
+### Managed-content protection
+
+1. A separate protection case added an unknown file at the runtime root and
+   appended content to a managed knowledge file.
+2. Re-running the ordinary installer preserved the unknown file, skipped the
+   locally modified managed file, reported 0 conflicts, and exited with status
+   `warning` instead of overwriting local content.
+3. Restoring the test changes and re-running the installer returned to
+   `success` with 191 unchanged files and no conflicts.
+
+Result: **PASS**. Unknown and locally modified content remains protected by
+default; no source-colliding unknown or manual deletion was needed.
+
+### Agent skill bridge transition
+
+1. Using the `v0.7.1` bridge helper, an explicit bridge was created in an
+   isolated client skill directory for all four `v0.7.1` kernel skills,
+   including the three later retired from C3.3 authority
+   (`project-context-gate`, `workflow-spec-lite`, `memory-governance`).
+2. The runtime was upgraded to current main through the ordinary default path.
+   The upgrade preserved the bridge manifest as unknown content and did not
+   delete client links.
+3. Post-upgrade status reported the bridge as `stale` with
+   `manifest_status=current`: `project-bootstrap` stayed `current`, and the
+   three retired skills were reported `stale` (not `current`), with
+   `bridge.skill.not_managed` warnings. The transition state is visible and
+   fails closed.
+4. The current bridge helper rejected newly bridging a retired skill
+   (`project-context-gate`) with a fail-closed preflight error and created no
+   links, and it successfully bridged `project-workspace` as a current managed
+   skill. Final status showed the two current skills `current` and the three
+   retired skills `stale`.
+
+Result: **PASS**. A legal `v0.7.1` bridge transitions to a visible, safe state
+after upgrade; current tooling provides an understandable cleanup/relink path
+(new bridging of active skills) without undocumented manual deletion.
+
+### Legacy project migration (Analyze → Apply → check/discover → Rollback)
+
+A representative existing project was created from the isolated `v0.7.1`
+runtime (`ProjectLanguage zh-CN`), then upgraded runtime and migrated with the
+current C3.3 runtime path:
+
+1. `migrate-project.ps1` Analyze reported the project `eligible` with no human
+   dispositions for its real Work (process.txt / plan.md), Context
+   (notes.md and context entries), Procedure (command cards), and Spec content.
+2. Apply with explicit confirmation created a complete project-owned backup,
+   applied the reviewed plan, and returned `workspace_check=PASS`.
+3. Post-Apply `check-project-workspace.ps1` reported `PASS` with all canonical
+   Work / Context / Procedure / Spec assets `canonical_valid`;
+   `discover-project-assets.ps1` refreshed the disposable catalog and returned
+   the migrated assets; `read-project-assets.ps1` parsed all four sampled
+   assets with 0 findings.
+4. The project `hub.lock` recorded `workspace_model=c3.3`,
+   `workspace_state=active`, and the project language.
+5. Guarded Rollback by `-BackupId` restored the project, and re-running Analyze
+   on the rolled-back project returned `eligible` with file hashes identical to
+   the pre-migration state. The backup directory was retained after rollback.
+6. Rollback is intentionally guarded: running `discover` (which writes the
+   disposable catalog) after Apply makes later Rollback fail closed with
+   `STATE_CONFLICT` until the catalog state is restored, confirming the
+   unchanged-project protection contract.
+
+Result: **PASS**. A `v0.7.1` existing project completes the canonical C3.3
+workspace migration through the ordinary Analyze → Apply → Rollback path, and
+Rollback restores the pre-migration state byte-for-byte while retaining the
+backup.
+
+### Limitations
+
+- This rehearsal ran on Windows in copy mode with the `recommended` profile;
+  full release validation separately covers every install profile, supported
+  hosted operating system, and both PowerShell runtimes.
+- The rehearsal exercised one representative existing project; it does not
+  replace project-specific review before accepting a migration plan.
+- The Stage A candidate note (`docs/releases/v0.8.0.md`) is a release candidate;
+  it does not claim a published release, tag target, or GitHub Release URL, and
+  it does not change any publish-finalization version entrypoint.
+- The rehearsal used isolated client skill directories, not production client
+  runtimes.
