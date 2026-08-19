@@ -4,6 +4,10 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
+- No unreleased public changes after the `v0.8.0` release.
+
+## v0.8.0 - 2026-08-19
+
 - Completed the C3.3 implementation and the public `project-workspace`
   capability, including the current project asset and discovery boundaries.
 - Completed the one-time default / recommended runtime cutover and converged
@@ -13,9 +17,10 @@ All notable public changes are summarized here.
 - Converged post-#333 validation responsibility: pull requests prove the diff
   and affected behavior, `main` push health remains a separate boundary, and
   full Release/checkpoint validation is explicit.
-- These post-`v0.7.1` C3.3 and default-cutover changes provide a minor-level basis
-  for the next Release review. This section remains `Unreleased` and does not
-  publish a version or date.
+- Preserved installer profiles, copy-first installation, the explicit opt-in
+  agent skill bridge, and the Analyze → Apply → Rollback project migration
+  boundary while completing the C3.3 cutover; PowerShell Core 7.6+ is the
+  current requirement.
 
 ## v0.7.1 - 2026-08-04
 
