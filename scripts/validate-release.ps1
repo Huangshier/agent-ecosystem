@@ -2,7 +2,7 @@
 param(
     [string]$ScratchRoot = "",
     [switch]$SkipLinkMode,
-    [string]$TargetVersion = "v0.7.1",
+    [string]$TargetVersion = "v0.8.0",
     [ValidateSet("Full", "PlatformNeutral", "RuntimePlatform", "RepositoryCheckpoint", "RepositoryCheckpointNeutral", "RepositoryCheckpointRuntime")]
     [string]$ValidationShard = "Full",
     [switch]$Json
@@ -108,7 +108,7 @@ $script:includeCheckpointChecks = $ValidationShard -in @("RepositoryCheckpoint",
 
 $targetReleaseVersion = $TargetVersion.Trim()
 if ([string]::IsNullOrWhiteSpace($targetReleaseVersion)) {
-    $targetReleaseVersion = "v0.7.1"
+    $targetReleaseVersion = "v0.8.0"
 }
 if ($targetReleaseVersion -notmatch '^v\d+\.\d+\.\d+$') {
     throw "TargetVersion must look like vMAJOR.MINOR.PATCH."
