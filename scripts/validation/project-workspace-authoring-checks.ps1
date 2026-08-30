@@ -49,6 +49,19 @@ function Invoke-WorkspaceJson {
     catch { throw "workspace operation returned malformed JSON" }
 }
 
+function Invoke-WorkspaceFileJson {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Arguments)
+
+    $processArguments = @("-NoProfile", "-NonInteractive", "-File", $dispatcher) + @($Arguments) + @("-Json")
+    $output = @(& pwsh @processArguments 2>&1 | ForEach-Object { [string]$_ })
+    $exitCode = [int]$LASTEXITCODE
+    $text = $output -join "`n"
+    if ([string]::IsNullOrWhiteSpace($text)) { throw "pwsh -File workspace operation returned no structured result" }
+    try { $payload = $text | ConvertFrom-Json -Depth 100 -DateKind String -ErrorAction Stop }
+    catch { throw "pwsh -File workspace operation returned malformed JSON" }
+    return [ordered]@{ exit_code = $exitCode; payload = $payload; text = $text }
+}
+
 function Invoke-ParserJson {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
@@ -126,6 +139,104 @@ try {
         [string]$procedure.path -ceq ".agents/procedures/slice-d-procedure.md" -and
         [string]$spec.path -ceq "docs/specs/slice-d-spec/spec.md")
     Add-Case -Name "create-valid-context-procedure-spec" -Passed $createdValid -Detail "Context, Procedure, and Spec creation returned canonical repository-relative paths."
+
+    $parserTokens = $null
+    $parseErrors = $null
+    $dispatcherAst = [Management.Automation.Language.Parser]::ParseFile($dispatcher, [ref]$parserTokens, [ref]$parseErrors)
+    $publicListParameters = @($dispatcherAst.ParamBlock.Parameters | Where-Object { $_.StaticType -eq [string[]] } | ForEach-Object { $_.Name.VariablePath.UserPath } | Sort-Object)
+    $listAssignment = $dispatcherAst.Find({
+            param($node)
+            $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -ceq '$script:ProjectWorkspaceListParameters'
+        }, $true)
+    $normalizedListParameters = if ($null -eq $listAssignment) { @() } else {
+        @($listAssignment.Right.FindAll({ param($node) $node -is [Management.Automation.Language.StringConstantExpressionAst] }, $true) | ForEach-Object { $_.Value } | Sort-Object)
+    }
+    $listCoverage = (@($parseErrors).Count -eq 0 -and $publicListParameters.Count -eq 20 -and
+        $publicListParameters.Count -eq $normalizedListParameters.Count -and
+        @((Compare-Object -ReferenceObject $publicListParameters -DifferenceObject $normalizedListParameters -CaseSensitive)).Count -eq 0)
+    Add-Case -Name "all-public-list-parameters-normalized" -Passed $listCoverage -Detail "All 20 public string-array parameters, including StopBoundaries, are registered with the shared list-input normalizer."
+
+    $skillText = [IO.File]::ReadAllText((Join-Path $repoRoot "skills/project-workspace/SKILL.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $walkthroughText = [IO.File]::ReadAllText((Join-Path $repoRoot "docs/walkthroughs/minimal-project-adoption.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $skillSpecLine = @($skillText -split "`n" | Where-Object { $_ -match 'project-workspace\.ps1 -Operation create-spec' })[0]
+    $walkthroughSpecLine = @($walkthroughText -split "`n" | Where-Object { $_ -match 'project-workspace\.ps1 -Operation create-spec' })[0]
+    $documentedExamples = ($skillText.Contains('-Type ''json:["work","spec"]'' -Status ''json:["active","draft"]''', [StringComparison]::Ordinal) -and
+        $skillText.Contains('`StopBoundaries`', [StringComparison]::Ordinal) -and
+        $skillSpecLine.Contains("-Goals <goal>", [StringComparison]::Ordinal) -and
+        -not $skillSpecLine.Contains("-RelatedWork", [StringComparison]::Ordinal) -and
+        -not $skillSpecLine.Contains("-Supersedes", [StringComparison]::Ordinal) -and
+        $walkthroughSpecLine.Contains("-Goals <goal>", [StringComparison]::Ordinal) -and
+        $walkthroughSpecLine.Contains("-Acceptance <criterion>", [StringComparison]::Ordinal) -and
+        -not $walkthroughSpecLine.Contains("-RelatedWork", [StringComparison]::Ordinal) -and
+        -not $walkthroughSpecLine.Contains("-Supersedes", [StringComparison]::Ordinal))
+    Add-Case -Name "public-list-examples-match-contract" -Passed $documentedExamples -Detail "The Skill and minimal walkthrough publish the JSON-array filter form and an executable unassociated create-spec command."
+
+    $cliRoot = Join-Path $runRoot "cli-subprocess"
+    foreach ($relativeDirectory in @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $cliRoot $relativeDirectory) | Out-Null
+    }
+    [IO.File]::WriteAllText((Join-Path $cliRoot "AGENTS.md"), "# CLI fixture project instructions`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $cliRoot ".agents/README.md"), "# CLI fixture C3.3 workspace`n", [Text.UTF8Encoding]::new($false))
+
+    $cliSpecOmitted = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "create-spec", "-ProjectRoot", $cliRoot, "-Id", "cli-spec-omitted",
+        "-Title", "CLI spec omitted relations", "-Summary", "Created through a fresh pwsh process.",
+        "-Status", "draft", "-Goals", "prove the public entrypoint", "-NonGoals", "change schema semantics",
+        "-Tradeoffs", "one explicit list encoding", "-Acceptance", "the child process succeeds"
+    )
+    $cliSpecOmittedText = [IO.File]::ReadAllText((Join-Path $cliRoot "docs/specs/cli-spec-omitted/spec.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $omittedRelations = ($cliSpecOmitted.exit_code -eq 0 -and $cliSpecOmitted.payload.status -ceq "PASS" -and
+        $cliSpecOmittedText -match '(?m)^related_work: \[\]$' -and $cliSpecOmittedText -match '(?m)^supersedes: \[\]$')
+    Add-Case -Name "file-create-spec-omits-empty-relations" -Passed $omittedRelations -Detail "A fresh pwsh -File process created a valid unassociated Spec while omitting RelatedWork and Supersedes."
+
+    $cliSpecEmpty = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "create-spec", "-ProjectRoot", $cliRoot, "-Id", "cli-spec-empty",
+        "-Title", "CLI spec explicit empty relations", "-Summary", "Created through a fresh pwsh process.",
+        "-Goals", "prove explicit empty lists", "-NonGoals", "change relation semantics",
+        "-Tradeoffs", "one explicit list encoding", "-Acceptance", "the child process succeeds",
+        "-RelatedWork", "json:[]", "-Supersedes", "json:[]"
+    )
+    $cliSpecEmptyText = [IO.File]::ReadAllText((Join-Path $cliRoot "docs/specs/cli-spec-empty/spec.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $explicitEmptyRelations = ($cliSpecEmpty.exit_code -eq 0 -and $cliSpecEmpty.payload.status -ceq "PASS" -and
+        $cliSpecEmptyText -match '(?m)^related_work: \[\]$' -and $cliSpecEmptyText -match '(?m)^supersedes: \[\]$')
+    Add-Case -Name "file-create-spec-explicit-empty-relations" -Passed $explicitEmptyRelations -Detail "Explicit JSON empty arrays remained bound empty lists through pwsh -File."
+
+    $cliWork = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "create-work", "-ProjectRoot", $cliRoot, "-Id", "cli-list-work",
+        "-Title", "CLI list work", "-Summary", "Created through a child process.", "-Next", "checkpoint the work",
+        "-ContinuityReason", "unfinished", "-Status", "active", "-Updated", "2026-08-30T00:00:00Z"
+    )
+    $verifiedJson = "json:" + (ConvertTo-Json -InputObject ([string[]]@("Parser output, exact", "Second verified fact")) -Compress)
+    $cliCheckpoint = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "checkpoint", "-ProjectRoot", $cliRoot, "-Id", "cli-list-work",
+        "-BaseRevision", [string]$cliWork.payload.revision, "-Verified", $verifiedJson, "-Updated", "2026-08-30T00:01:00Z"
+    )
+    $cliWorkText = [IO.File]::ReadAllText((Join-Path $cliRoot ".agents/work/cli-list-work.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $verifiedPreserved = ($cliWork.exit_code -eq 0 -and $cliWork.payload.status -ceq "PASS" -and
+        $cliCheckpoint.exit_code -eq 0 -and $cliCheckpoint.payload.status -ceq "PASS" -and
+        $cliWorkText.Contains("- Parser output, exact`n- Second verified fact", [StringComparison]::Ordinal))
+    Add-Case -Name "file-checkpoint-multi-verified-preserves-comma" -Passed $verifiedPreserved -Detail "A JSON string array crossed pwsh -File as two Verified values and preserved the natural-language comma exactly."
+
+    $cliSingleContext = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "create-context", "-ProjectRoot", $cliRoot, "-Id", "cli-single-context",
+        "-Title", "CLI single context", "-Summary", "Proves ordinary single-value compatibility.",
+        "-Keywords", "compatibility", "-Evidence", "[Source], exact"
+    )
+    $cliSingleContextText = [IO.File]::ReadAllText((Join-Path $cliRoot ".agents/context/cli-single-context.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    $singleNaturalValue = ($cliSingleContext.exit_code -eq 0 -and $cliSingleContext.payload.status -ceq "PASS" -and
+        $cliSingleContextText.Contains('- "[Source], exact"', [StringComparison]::Ordinal))
+    Add-Case -Name "file-single-natural-value-compatible" -Passed $singleNaturalValue -Detail "An ordinary single Evidence value beginning with a bracket and containing a comma remained one unchanged value."
+
+    $beforeMalformedList = Get-TreeFingerprint -Root $cliRoot
+    $malformedList = Invoke-WorkspaceFileJson -Arguments @(
+        "-Operation", "create-context", "-ProjectRoot", $cliRoot, "-Id", "malformed-list",
+        "-Title", "Malformed list", "-Summary", "Must fail before authoring.", "-Keywords", 'json:["valid",', "-Evidence", "unchanged"
+    )
+    $afterMalformedList = Get-TreeFingerprint -Root $cliRoot
+    $malformedListClosed = ($malformedList.exit_code -ne 0 -and $malformedList.payload.status -ceq "FAIL" -and
+        @($malformedList.payload.findings | Where-Object { [string]$_.code -ceq "invalid-list-input" -and [string]$_.field -ceq "Keywords" }).Count -eq 1 -and
+        $beforeMalformedList -ceq $afterMalformedList -and -not (Test-Path -LiteralPath (Join-Path $cliRoot ".agents/context/malformed-list.md")))
+    Add-Case -Name "file-malformed-list-fails-closed" -Passed $malformedListClosed -Detail "Malformed structured authoring input returned the stable list-input error before any project write."
 
     $catalogPath = Join-Path $runRoot ".agents/.cache/catalog.json"
     $createNoCatalog = (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf))

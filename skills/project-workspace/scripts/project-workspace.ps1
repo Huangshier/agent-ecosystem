@@ -66,6 +66,77 @@ $glossaryRelativePath = ".agents/glossary.yaml"
 $catalogSchemaPath = Join-Path $schemaRoot "catalog.v1.schema.json"
 $glossarySchemaPath = Join-Path $schemaRoot "glossary.v1.schema.json"
 
+$script:ProjectWorkspaceListParameters = @(
+    "Type", "Status", "Verified", "Boundary", "Blocker", "Keywords",
+    "Evidence", "Triggers", "SideEffects", "Preconditions", "Steps",
+    "Validation", "StopBoundaries", "Authorization", "Goals", "NonGoals",
+    "Tradeoffs", "Acceptance", "RelatedWork", "Supersedes"
+)
+
+# Test-ProjectWorkspaceParameterBound: preserve omitted versus explicitly empty list inputs.
+function Test-ProjectWorkspaceParameterBound {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$BoundParameters,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($BoundParameters.PSObject.Methods.Name -contains "ContainsKey") { return [bool]$BoundParameters.ContainsKey($Name) }
+    return [bool]$BoundParameters.Contains($Name)
+}
+
+# ConvertFrom-ProjectWorkspaceListInput: decode one tagged JSON string array or retain ordinary list values.
+function ConvertFrom-ProjectWorkspaceListInput {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Values
+    )
+
+    $items = @($Values)
+    if ($items.Count -ne 1) {
+        return [ordered]@{ success = $true; values = [string[]]@($items | ForEach-Object { [string]$_ }) }
+    }
+
+    $literal = [string]$items[0]
+    if (-not $literal.StartsWith("json:", [StringComparison]::Ordinal)) {
+        return [ordered]@{ success = $true; values = [string[]]@($literal) }
+    }
+    $candidate = $literal.Substring("json:".Length)
+
+    try {
+        $decoded = $candidate | ConvertFrom-Json -Depth 10 -DateKind String -NoEnumerate -ErrorAction Stop
+    }
+    catch {
+        return [ordered]@{ success = $false; parameter = $Name }
+    }
+    if ($decoded -isnot [System.Array]) {
+        return [ordered]@{ success = $false; parameter = $Name }
+    }
+
+    $normalized = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($item in @($decoded)) {
+        if ($null -eq $item -or $item -isnot [string]) {
+            return [ordered]@{ success = $false; parameter = $Name }
+        }
+        [void]$normalized.Add([string]$item)
+    }
+    return [ordered]@{ success = $true; values = [string[]]$normalized.ToArray() }
+}
+
+# Resolve-ProjectWorkspaceListInputs: normalize every public list parameter before operation routing.
+function Resolve-ProjectWorkspaceListInputs {
+    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$BoundParameters)
+
+    $resolved = [ordered]@{}
+    foreach ($name in $script:ProjectWorkspaceListParameters) {
+        if (-not (Test-ProjectWorkspaceParameterBound -BoundParameters $BoundParameters -Name $name)) { continue }
+        $conversion = ConvertFrom-ProjectWorkspaceListInput -Name $name -Values @($BoundParameters[$name])
+        if (-not [bool]$conversion.success) { return $conversion }
+        $resolved[$name] = [string[]]@($conversion.values)
+    }
+    foreach ($name in $resolved.Keys) { $BoundParameters[$name] = [string[]]@($resolved[$name]) }
+    return [ordered]@{ success = $true }
+}
+
 # Add-Finding: append one stable, public-safe finding to an operation result.
 function Add-Finding {
     param(
@@ -723,7 +794,26 @@ function Write-OperationResult {
 }
 
 try {
-    $result = if ($Operation -ceq "discover") {
+    $listInput = Resolve-ProjectWorkspaceListInputs -BoundParameters $PSBoundParameters
+    if ([bool]$listInput.success) {
+        if (Test-ProjectWorkspaceParameterBound -BoundParameters $PSBoundParameters -Name "Type") { $Type = [string[]]@($PSBoundParameters["Type"]) }
+        if (Test-ProjectWorkspaceParameterBound -BoundParameters $PSBoundParameters -Name "Status") { $Status = [string[]]@($PSBoundParameters["Status"]) }
+    }
+    $result = if (-not [bool]$listInput.success) {
+        [ordered]@{
+            operation = $Operation
+            status = "FAIL"
+            read_only = ($Operation -in @("check", "recover-work", "status-adapter") -or ($Operation -ceq "promote-skill" -and $Analyze.IsPresent))
+            findings = @([ordered]@{
+                    code = "invalid-list-input"
+                    path = ""
+                    field = [string]$listInput.parameter
+                    severity = "error"
+                    message = ("List parameter '{0}' must be one plain string or one 'json:'-prefixed JSON array containing only strings." -f [string]$listInput.parameter)
+                })
+        }
+    }
+    elseif ($Operation -ceq "discover") {
         Invoke-DiscoverOperation -Root $ProjectRoot
     }
     elseif ($Operation -ceq "check") {

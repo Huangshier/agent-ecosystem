@@ -379,6 +379,9 @@ function Get-SearchResults {
     foreach ($type in $typeFilter) {
         if ($type -notin @("work", "context", "procedure", "skill", "spec")) { Add-Finding -Findings $Findings -Code "invalid-filter" -Path "" -Field "type" -Message "Type filter contains an unsupported asset type." }
     }
+    foreach ($status in $statusFilter) {
+        if ($status -notin @("active", "paused", "blocked", "deferred", "draft", "accepted", "implemented", "superseded", "archived")) { Add-Finding -Findings $Findings -Code "invalid-filter" -Path "" -Field "status" -Message "Status filter contains an unsupported asset status." }
+    }
     $excludedStatuses = @("archived", "implemented", "superseded")
     $results = New-Object 'System.Collections.Generic.List[object]'
     $assetList = [System.Collections.Generic.List[object]]::new()

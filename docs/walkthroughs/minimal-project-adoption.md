@@ -90,6 +90,7 @@ inspect the workspace without writing:
 ```powershell
 pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
 pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\discover-project-assets.ps1 -ProjectRoot <project> -Query <query> -Type 'json:["work","spec"]' -Status 'json:["active","draft"]' -Json
 ```
 
 `check` is strictly read-only. `discover` reads canonical Markdown metadata and
@@ -102,8 +103,13 @@ For work that needs durable goals, non-goals, risks, and acceptance across
 sessions, use `project-workspace create-spec`:
 
 ```powershell
-pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\project-workspace.ps1 -Operation create-spec -ProjectRoot <project> -Id <spec-id> -Title <title> -Summary <summary> -Json
+pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\project-workspace.ps1 -Operation create-spec -ProjectRoot <project> -Id <spec-id> -Title <title> -Summary <summary> -Goals <goal> -NonGoals <non-goal> -Tradeoffs <tradeoff> -Acceptance <criterion> -Json
 ```
+
+`RelatedWork` and `Supersedes` are optional; omitting them creates empty
+relation lists. For any list-valued parameter, keep the existing plain
+single-value form or pass multiple values as one `json:`-prefixed JSON string
+array, as in the discovery example above. Untagged text is not split on commas.
 
 A useful first spec records:
 

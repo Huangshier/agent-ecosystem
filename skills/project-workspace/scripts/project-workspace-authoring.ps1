@@ -420,7 +420,7 @@ function Get-AuthoringCreateRequest {
     }
 
     if ($Operation -ceq "create-spec") {
-        foreach ($name in @("RelatedWork", "Supersedes", "Goals", "NonGoals", "Tradeoffs", "Acceptance")) {
+        foreach ($name in @("Goals", "NonGoals", "Tradeoffs", "Acceptance")) {
             $alias = switch ($name) { "Goals" { "Goal" } "NonGoals" { "NonGoal" } "Tradeoffs" { "Tradeoff" } default { "" } }
             if (-not (Get-AuthoringBound -BoundParameters $BoundParameters -Name $name) -and ([string]::IsNullOrWhiteSpace($alias) -or -not (Get-AuthoringBound -BoundParameters $BoundParameters -Name $alias))) { throw ("missing parameter: {0}" -f $name) }
         }

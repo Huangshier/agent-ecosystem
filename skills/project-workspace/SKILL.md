@@ -19,6 +19,27 @@ strictly read-only and never creates or refreshes that cache. Canonical Markdown
 remains the content authority; `glossary.yaml` is used only when it is present,
 evidence-backed, and valid.
 
+## List inputs under `pwsh -File`
+
+A plain argument remains one list value. To pass multiple values or an explicit
+empty list through the process boundary, pass one JSON string array as the
+argument value:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project-root> -Query <query> -Type 'json:["work","spec"]' -Status 'json:["active","draft"]' -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Verified 'json:["Parser output, exact","Second verified fact"]' -Json
+```
+
+This contract applies consistently to `Type`, `Status`, `Verified`, `Boundary`,
+`Blocker`, `Keywords`, `Evidence`, `Triggers`, `SideEffects`, `Preconditions`,
+`Steps`, `Validation`, `StopBoundaries`, `Authorization`, `Goals`, `NonGoals`,
+`Tradeoffs`, `Acceptance`, `RelatedWork`, and `Supersedes`. The exact lowercase
+`json:` prefix selects the structured form; malformed JSON, nested arrays,
+`null`, and non-string members fail closed. Untagged text remains a single value
+even when it starts with `[` or contains commas, so `[Source], exact` remains
+unchanged. An explicit empty list is `'json:[]'`; omission remains distinct from
+an explicit empty list when the operation gives those states different meanings.
+
 ## Canonical authoring
 
 Use the same dispatcher for explicit canonical asset creation. These operations
@@ -27,7 +48,7 @@ write only the requested repository-relative asset and never write Catalog:
 ```powershell
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-context -ProjectRoot <project-root> -Id <context-id> -Title <title> -Summary <summary> -Keywords <keyword> -Evidence <evidence> -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-procedure -ProjectRoot <project-root> -Id <procedure-id> -Title <title> -Kind command -Summary <summary> -Triggers <trigger> -SideEffects <side-effect> -Preconditions <precondition> -Steps <step> -Validation <validation> -StopBoundaries <stop-boundary> -Authorization <authorization> -Json
-pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-spec -ProjectRoot <project-root> -Id <spec-id> -Title <title> -Summary <summary> -Goals <goal> -NonGoals <non-goal> -Tradeoffs <tradeoff> -Acceptance <criterion> -RelatedWork <work-id> -Supersedes <spec-id> -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-spec -ProjectRoot <project-root> -Id <spec-id> -Title <title> -Summary <summary> -Goals <goal> -NonGoals <non-goal> -Tradeoffs <tradeoff> -Acceptance <criterion> -Json
 ```
 
 `create-context` records only stable, public-safe facts. `create-procedure`
@@ -36,7 +57,8 @@ Validation, Stop Boundaries, and Authorization sections as documentation, and
 never executes them. `create-spec` records a caller-confirmed stable design;
 none of these operations classifies task complexity or creates short-lived
 branch, check, log, or next-step state. Empty list parameters may be supplied
-when the canonical schema permits an empty relation list.
+when the canonical schema permits one. For `create-spec`, omitted `RelatedWork`
+and `Supersedes` inputs produce empty relation lists.
 
 ## Procedure promotion
 

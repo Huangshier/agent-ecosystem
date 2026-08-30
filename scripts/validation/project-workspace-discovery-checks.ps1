@@ -22,6 +22,7 @@ New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
 
 $fixtureRoot = Join-Path $scriptDir "project-workspace-fixtures/new-project"
 $discoveryPath = Join-Path $repoRoot "skills/project-workspace/scripts/project-workspace.ps1"
+$discoverWrapperPath = Join-Path $repoRoot "skills/project-workspace/scripts/discover-project-assets.ps1"
 $checkPath = Join-Path $repoRoot "skills/project-workspace/scripts/check-project-workspace.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 
@@ -278,17 +279,29 @@ function Invoke-Workspace {
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
         [AllowEmptyString()][string]$Query = "",
         [int]$Limit = 5,
+        [string[]]$Type = @(),
         [string[]]$Status = @(),
-        [switch]$CurrentBranchOnly
+        [switch]$CurrentBranchOnly,
+        [switch]$UseDiscoverWrapper
     )
 
     if ($Operation -eq "check") {
         $arguments = @("-NoProfile", "-NonInteractive", "-File", $checkPath, "-ProjectRoot", $ProjectRoot, "-Json")
     }
     else {
-        $arguments = @("-NoProfile", "-NonInteractive", "-File", $discoveryPath, "-Operation", $Operation, "-ProjectRoot", $ProjectRoot, "-Json")
+        $entryPath = if ($UseDiscoverWrapper.IsPresent) { $discoverWrapperPath } else { $discoveryPath }
+        $arguments = @("-NoProfile", "-NonInteractive", "-File", $entryPath)
+        if (-not $UseDiscoverWrapper.IsPresent) { $arguments += @("-Operation", $Operation) }
+        $arguments += @("-ProjectRoot", $ProjectRoot, "-Json")
         $arguments += @("-Query", $Query, "-Limit", [string]$Limit)
-        if (@($Status).Count -gt 0) { $arguments += @("-Status") + @($Status) }
+        if (@($Type).Count -gt 0) {
+            $typeArgument = if (@($Type).Count -eq 1) { [string]$Type[0] } else { "json:" + (ConvertTo-Json -InputObject ([string[]]$Type) -Compress) }
+            $arguments += @("-Type", $typeArgument)
+        }
+        if (@($Status).Count -gt 0) {
+            $statusArgument = if (@($Status).Count -eq 1) { [string]$Status[0] } else { "json:" + (ConvertTo-Json -InputObject ([string[]]$Status) -Compress) }
+            $arguments += @("-Status", $statusArgument)
+        }
         if ($CurrentBranchOnly.IsPresent) { $arguments += "-CurrentBranchOnly" }
     }
     $output = @(& pwsh @arguments 2>&1 | ForEach-Object { [string]$_ })
@@ -454,6 +467,40 @@ try {
     Add-CheckResult -Name "catalog-search-determinism" -Status "PASS" -Detail "Catalog build/reuse, glossary alias/symbol expansion, filters, default exclusion, and limit passed."
 }
 catch { Add-CheckResult -Name "catalog-search-determinism" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
+
+try {
+    $project = New-FixtureProject -Name "file-list-inputs"
+    Set-ValidWorkRevision -ProjectRoot $project
+    $single = Invoke-Workspace -Operation discover -ProjectRoot $project -Limit 20 -Type @("work") -Status @("active")
+    Assert-Condition ($single.exit_code -eq 0 -and $single.payload.status -ceq "PASS" -and
+        (@($single.payload.filters.type) -join ",") -ceq "work" -and
+        (@($single.payload.filters.status) -join ",") -ceq "active") "Plain single-value Type/Status inputs changed meaning through pwsh -File."
+
+    $multi = Invoke-Workspace -Operation discover -ProjectRoot $project -Limit 20 -Type @("work", "spec") -Status @("active", "draft")
+    Assert-Condition ($multi.exit_code -eq 0 -and $multi.payload.status -ceq "PASS" -and
+        (@($multi.payload.filters.type) -join ",") -ceq "work,spec" -and
+        (@($multi.payload.filters.status) -join ",") -ceq "active,draft" -and
+        [int]$multi.payload.result_count -eq 2) "JSON-array Type/Status inputs did not cross pwsh -File as exact ordered values."
+
+    $wrapper = Invoke-Workspace -Operation discover -ProjectRoot $project -Limit 20 -Type @("work", "spec") -Status @("active", "draft") -UseDiscoverWrapper
+    Assert-Condition ($wrapper.exit_code -eq 0 -and $wrapper.payload.status -ceq "PASS" -and
+        (@($wrapper.payload.filters.type) -join ",") -ceq "work,spec" -and
+        (@($wrapper.payload.filters.status) -join ",") -ceq "active,draft") "The public discover wrapper did not preserve the structured list contract."
+
+    $malformed = Invoke-Workspace -Operation discover -ProjectRoot $project -Type @('json:["work",')
+    Assert-Condition ($malformed.exit_code -ne 0 -and $malformed.payload.status -ceq "FAIL" -and
+        @($malformed.payload.findings | Where-Object { [string]$_.code -ceq "invalid-list-input" -and [string]$_.field -ceq "Type" }).Count -eq 1) "Malformed structured Type input did not fail closed with the stable list-input error."
+
+    $nonString = Invoke-Workspace -Operation discover -ProjectRoot $project -Status @('json:["active",1]')
+    Assert-Condition ($nonString.exit_code -ne 0 -and $nonString.payload.status -ceq "FAIL" -and
+        @($nonString.payload.findings | Where-Object { [string]$_.code -ceq "invalid-list-input" -and [string]$_.field -ceq "Status" }).Count -eq 1) "A non-string structured Status member did not fail closed."
+
+    $commaLiteral = Invoke-Workspace -Operation discover -ProjectRoot $project -Status @("active,draft")
+    Assert-Condition ($commaLiteral.exit_code -ne 0 -and $commaLiteral.payload.status -ceq "FAIL" -and
+        @($commaLiteral.payload.findings | Where-Object { [string]$_.code -ceq "invalid-filter" -and [string]$_.field -ceq "status" }).Count -eq 1) "A comma-delimited Status literal was silently treated as a multi-value filter."
+    Add-CheckResult -Name "file-list-input-contract" -Status "PASS" -Detail "Fresh pwsh -File processes preserved plain singles, decoded JSON arrays through the core and wrapper, and rejected malformed, non-string, and comma-delimited filter inputs."
+}
+catch { Add-CheckResult -Name "file-list-input-contract" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
 try {
     $project = New-FixtureProject -Name "deterministic-order-dedup"
