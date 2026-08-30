@@ -159,16 +159,52 @@ function Get-RevisionChecks {
     return @($checks.ToArray())
 }
 
-# Invoke-CheckOperation: strict read-only validation of source, cache, Git, and Work revisions.
+# Add-C33WorkspaceLayoutFindings: enforce the minimal layout created by
+# project-bootstrap without requiring any placeholder canonical assets.
+function Add-C33WorkspaceLayoutFindings {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Findings
+    )
+
+    $requiredPaths = @(
+        [ordered]@{ path = "AGENTS.md"; path_type = "Leaf" },
+        [ordered]@{ path = ".agents/README.md"; path_type = "Leaf" },
+        [ordered]@{ path = ".agents/work"; path_type = "Container" },
+        [ordered]@{ path = ".agents/context"; path_type = "Container" },
+        [ordered]@{ path = ".agents/procedures"; path_type = "Container" },
+        [ordered]@{ path = ".agents/skills"; path_type = "Container" },
+        [ordered]@{ path = "docs/specs"; path_type = "Container" }
+    )
+    foreach ($required in $requiredPaths) {
+        $relative = [string]$required.path
+        $pathType = [string]$required.path_type
+        $valid = $false
+        try {
+            $fullPath = Assert-ProjectPath -Root $Root -RelativePath $relative -AllowMissing
+            $valid = Test-Path -LiteralPath $fullPath -PathType $pathType
+        }
+        catch { $valid = $false }
+        if (-not $valid) {
+            Add-Finding -Findings $Findings -Code "workspace-layout-missing" -Path $relative -Message "Required C3.3 workspace path is missing, unsafe, or has the wrong type."
+        }
+    }
+}
+
+# Invoke-CheckOperation: strict read-only validation of layout, canonical source,
+# cache, Git, and Work revisions.
 function Invoke-CheckOperation {
     param([Parameter(Mandatory = $true)][string]$Root)
 
     $findings = New-Object 'System.Collections.Generic.List[object]'
     $rootFull = Get-NormalizedFullPath -Path $Root
+    $rootValid = $false
     try {
         if (-not (Test-Path -LiteralPath $rootFull -PathType Container)) { throw "project root is not a directory" }
+        $rootValid = $true
     }
     catch { Add-Finding -Findings $findings -Code "project-root-invalid" -Path "" -Message "Project root does not exist or is not a safe directory." }
+    if ($rootValid) { Add-C33WorkspaceLayoutFindings -Root $rootFull -Findings $findings }
     $canonicalFileRecords = @()
     $skillFileRecords = @()
     try { $canonicalFileRecords = @(Get-CanonicalFileRecords -Root $rootFull -Findings $findings) }
@@ -205,13 +241,21 @@ function Invoke-CheckOperation {
         $catalog = $catalogRead.payload
         $fingerprintsMatch = ([string](Get-PropertyValue $catalog "directory_fingerprint") -ceq $directoryFingerprint -and [string](Get-PropertyValue $catalog "schema_fingerprint") -ceq $schemaFingerprint -and [string](Get-PropertyValue $catalog "glossary_fingerprint") -ceq [string]$glossary.fingerprint)
         $catalogFresh = ($fingerprintsMatch -and (Test-CatalogMatchesFiles -Catalog $catalog -FileRecords $fileRecords))
-        if (-not $catalogFresh) { Add-Finding -Findings $findings -Code "catalog-stale" -Path $catalogRelativePath -Message "Catalog fingerprints or canonical file metadata are stale." }
+        if (-not $catalogFresh) { Add-Finding -Findings $findings -Code "catalog-stale" -Path $catalogRelativePath -Message "Catalog fingerprints or canonical file metadata are stale." -Severity warning }
         $catalogByPath = @{}
         foreach ($cached in @(Get-ValueArray -Value (Get-PropertyValue $catalog "assets"))) { $catalogByPath[[string](Get-PropertyValue $cached "path")] = $cached }
         foreach ($record in @($currentRecords)) {
             $path = [string]$record.path
-            if (-not $catalogByPath.ContainsKey($path) -or -not (Test-CatalogRecordEquality -Left $record -Right $catalogByPath[$path] -Findings $findings)) {
-                Add-Finding -Findings $findings -Code "catalog-content" -Path $path -Message "Catalog metadata or content hash differs from canonical Markdown."
+            $recordMatches = $false
+            if ($catalogByPath.ContainsKey($path)) {
+                $recordFindings = New-Object 'System.Collections.Generic.List[object]'
+                $recordMatches = Test-CatalogRecordEquality -Left $record -Right $catalogByPath[$path] -Findings $recordFindings
+                foreach ($finding in @($recordFindings.ToArray())) {
+                    Add-Finding -Findings $findings -Code ([string](Get-PropertyValue $finding "code")) -Path ([string](Get-PropertyValue $finding "path")) -Field ([string](Get-PropertyValue $finding "field")) -Message ([string](Get-PropertyValue $finding "message")) -Severity warning
+                }
+            }
+            if (-not $recordMatches) {
+                Add-Finding -Findings $findings -Code "catalog-content" -Path $path -Message "Catalog metadata or content hash differs from canonical Markdown." -Severity warning
             }
         }
     }

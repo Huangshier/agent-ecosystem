@@ -96,6 +96,11 @@ function Test-PublicCandidate {
 
 try {
     New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+    foreach ($relativeDirectory in @(".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $runRoot $relativeDirectory) | Out-Null
+    }
+    [IO.File]::WriteAllText((Join-Path $runRoot "AGENTS.md"), "# Fixture project instructions`n", [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $runRoot ".agents/README.md"), "# Fixture C3.3 workspace`n", [Text.UTF8Encoding]::new($false))
 
     $contextParameters = [ordered]@{
         Operation = "create-context"; ProjectRoot = $runRoot; Id = "slice-d-context"; Title = "Slice D context";
