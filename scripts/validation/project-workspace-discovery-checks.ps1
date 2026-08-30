@@ -22,6 +22,7 @@ New-Item -ItemType Directory -Force -Path $scratchRootFull | Out-Null
 
 $fixtureRoot = Join-Path $scriptDir "project-workspace-fixtures/new-project"
 $discoveryPath = Join-Path $repoRoot "skills/project-workspace/scripts/project-workspace.ps1"
+$checkPath = Join-Path $repoRoot "skills/project-workspace/scripts/check-project-workspace.ps1"
 $results = New-Object 'System.Collections.Generic.List[object]'
 
 function Add-CheckResult {
@@ -52,6 +53,9 @@ function New-FixtureProject {
     $specText = [System.IO.File]::ReadAllText($specPath, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
     $specText = [regex]::Replace($specText, '(?m)^supersedes:\n(?:  - .*\n)*', "supersedes: []`n")
     [System.IO.File]::WriteAllText($specPath, $specText, [Text.UTF8Encoding]::new($false))
+    Write-Utf8 -Path (Join-Path $destination "AGENTS.md") -Text "# Fixture project instructions`n"
+    Write-Utf8 -Path (Join-Path $destination ".agents/README.md") -Text "# Fixture C3.3 workspace`n"
+    Write-Utf8 -Path (Join-Path $destination ".agents/skills/.gitkeep") -Text ""
     return $destination
 }
 
@@ -278,8 +282,11 @@ function Invoke-Workspace {
         [switch]$CurrentBranchOnly
     )
 
-    $arguments = @("-NoProfile", "-NonInteractive", "-File", $discoveryPath, "-Operation", $Operation, "-ProjectRoot", $ProjectRoot, "-Json")
-    if ($Operation -eq "discover") {
+    if ($Operation -eq "check") {
+        $arguments = @("-NoProfile", "-NonInteractive", "-File", $checkPath, "-ProjectRoot", $ProjectRoot, "-Json")
+    }
+    else {
+        $arguments = @("-NoProfile", "-NonInteractive", "-File", $discoveryPath, "-Operation", $Operation, "-ProjectRoot", $ProjectRoot, "-Json")
         $arguments += @("-Query", $Query, "-Limit", [string]$Limit)
         if (@($Status).Count -gt 0) { $arguments += @("-Status") + @($Status) }
         if ($CurrentBranchOnly.IsPresent) { $arguments += "-CurrentBranchOnly" }
@@ -396,6 +403,22 @@ function Assert-Condition {
 }
 
 try {
+    $project = Join-Path $scratchRootFull "empty-workspace"
+    New-Item -ItemType Directory -Path $project -Force | Out-Null
+    $before = Get-ProjectFileMap -ProjectRoot $project -ExcludeGit
+    $check = Invoke-Workspace -Operation check -ProjectRoot $project
+    $after = Get-ProjectFileMap -ProjectRoot $project -ExcludeGit
+    $layoutFindings = @($check.payload.findings | Where-Object code -eq "workspace-layout-missing")
+    $expectedMissingPaths = @("AGENTS.md", ".agents/README.md", ".agents/work", ".agents/context", ".agents/procedures", ".agents/skills", "docs/specs")
+    Assert-Condition ($check.exit_code -ne 0 -and $check.payload.status -ceq "FAIL" -and [bool]$check.payload.read_only) "Empty workspace did not fail the read-only check."
+    Assert-Condition ($layoutFindings.Count -eq $expectedMissingPaths.Count -and @($expectedMissingPaths | Where-Object { $path = $_; @($layoutFindings | Where-Object path -eq $path).Count -ne 1 }).Count -eq 0) "Empty workspace did not report the exact minimal C3.3 layout findings."
+    Assert-Condition (@($layoutFindings | Where-Object severity -ne "error").Count -eq 0) "Missing C3.3 layout did not remain a canonical error."
+    Assert-Condition (@(Get-ChangedProjectPaths -Before $before -After $after).Count -eq 0 -and -not (Test-Path -LiteralPath (Join-Path $project ".agents/.cache/catalog.json"))) "Empty-workspace check created or changed project files."
+    Add-CheckResult -Name "workspace-layout-validity" -Status "PASS" -Detail "An empty project failed with the exact minimal C3.3 layout findings and no writes."
+}
+catch { Add-CheckResult -Name "workspace-layout-validity" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
+
+try {
     $project = New-FixtureProject -Name "catalog-and-search"
     Add-ArchivedContext -ProjectRoot $project
     $contextPath = Join-Path $project ".agents/context/fixture-context.md"
@@ -483,11 +506,15 @@ try {
     $contextPath = Join-Path $project ".agents/context/fixture-context.md"
     $contextText = [System.IO.File]::ReadAllText($contextPath, [Text.UTF8Encoding]::new($false, $true)).Replace("canonical Context fixture", "changed canonical Context fixture")
     Write-Utf8 -Path $contextPath -Text $contextText
+    $projectFingerprintBeforeCheck = Get-ProjectFingerprint -ProjectRoot $project
+    $canonicalFingerprintBeforeCheck = Get-CanonicalSourceFingerprint -ProjectRoot $project
     $catalogFingerprintBeforeCheck = (Get-FileHash -LiteralPath $catalogPath -Algorithm SHA256).Hash
     $stale = Invoke-Workspace -Operation check -ProjectRoot $project
     $catalogFingerprintAfterCheck = (Get-FileHash -LiteralPath $catalogPath -Algorithm SHA256).Hash
-    Assert-Condition ($stale.payload.status -ceq "FAIL" -and @($stale.payload.findings | Where-Object code -eq "catalog-stale").Count -eq 1) "Read-only check did not report stale catalog."
-    Assert-Condition ($catalogFingerprintBeforeCheck -ceq $catalogFingerprintAfterCheck) "Check changed the catalog cache."
+    $catalogDriftFindings = @($stale.payload.findings | Where-Object { [string]$_.code -in @("catalog-stale", "catalog-content", "catalog-content-field") })
+    Assert-Condition ($stale.exit_code -eq 0 -and $stale.payload.status -ceq "PASS" -and [bool]$stale.payload.read_only -and $stale.payload.catalog.fresh -is [bool] -and -not [bool]$stale.payload.catalog.fresh -and [string]$stale.payload.catalog.action -ceq "not-written" -and @($catalogDriftFindings | Where-Object code -eq "catalog-stale").Count -eq 1) "Read-only check did not degrade a stale-only Catalog without failing the canonical workspace."
+    Assert-Condition ($catalogDriftFindings.Count -ge 1 -and @($catalogDriftFindings | Where-Object severity -ne "warning").Count -eq 0 -and @($stale.payload.findings | Where-Object severity -eq "error").Count -eq 0) "Stale-only Catalog findings were not warning-only."
+    Assert-Condition ($projectFingerprintBeforeCheck -ceq (Get-ProjectFingerprint -ProjectRoot $project) -and $canonicalFingerprintBeforeCheck -ceq (Get-CanonicalSourceFingerprint -ProjectRoot $project) -and $catalogFingerprintBeforeCheck -ceq $catalogFingerprintAfterCheck) "Check changed canonical or Catalog bytes for a stale-only workspace."
     $rebuilt = Invoke-Workspace -Operation discover -ProjectRoot $project
     Assert-Condition ($rebuilt.payload.status -ceq "PASS" -and $rebuilt.payload.catalog.action -ceq "written") "Stale catalog was not rebuilt."
     Remove-Item -LiteralPath (Join-Path $project ".agents/context/fixture-context.md") -Force
@@ -501,7 +528,7 @@ try {
     $renamed = Invoke-Workspace -Operation discover -ProjectRoot $project
     $catalog = Get-Content -Raw $catalogPath | ConvertFrom-Json -Depth 50
     Assert-Condition (@($catalog.assets | Where-Object path -eq ".agents/procedures/renamed-procedure.md").Count -eq 1 -and @($catalog.assets | Where-Object path -eq ".agents/procedures/fixture-procedure.md").Count -eq 0) "Renamed canonical asset was not reflected in catalog."
-    Add-CheckResult -Name "cache-invalidation-matrix" -Status "PASS" -Detail "Missing/empty/corrupt/stale cache, deletion, rename, and read-only stale check passed."
+    Add-CheckResult -Name "cache-invalidation-matrix" -Status "PASS" -Detail "Missing/empty/corrupt/stale cache, deletion, rename, and warning-only read-only stale check passed."
 }
 catch { Add-CheckResult -Name "cache-invalidation-matrix" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
@@ -566,6 +593,22 @@ try {
 catch { Add-CheckResult -Name "catalog-shape-invalid" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
 try {
+    $project = New-FixtureProject -Name "canonical-invalid-read-only"
+    Set-ValidWorkRevision -ProjectRoot $project
+    $contextPath = Join-Path $project ".agents/context/fixture-context.md"
+    $contextText = [System.IO.File]::ReadAllText($contextPath, [Text.UTF8Encoding]::new($false, $true)).Replace("schema: agent-ecosystem/context/v1", "schema: agent-ecosystem/context/v999")
+    Write-Utf8 -Path $contextPath -Text $contextText
+    $projectBeforeCheck = Get-ProjectFingerprint -ProjectRoot $project
+    $canonicalBeforeCheck = Get-CanonicalSourceFingerprint -ProjectRoot $project
+    $check = Invoke-Workspace -Operation check -ProjectRoot $project
+    $schemaFindings = @($check.payload.findings | Where-Object code -eq "canonical-invalid-schema-version")
+    Assert-Condition ($check.exit_code -ne 0 -and $check.payload.status -ceq "FAIL" -and [bool]$check.payload.read_only -and $schemaFindings.Count -eq 1 -and [string]$schemaFindings[0].severity -ceq "error") "Canonical schema error did not fail the public read-only check subprocess."
+    Assert-Condition ($projectBeforeCheck -ceq (Get-ProjectFingerprint -ProjectRoot $project) -and $canonicalBeforeCheck -ceq (Get-CanonicalSourceFingerprint -ProjectRoot $project) -and -not (Test-Path -LiteralPath (Join-Path $project ".agents/.cache/catalog.json"))) "Canonical-invalid check changed source bytes or created Catalog."
+    Add-CheckResult -Name "canonical-invalid-read-only" -Status "PASS" -Detail "A canonical schema error failed the public check subprocess with stable findings and no writes."
+}
+catch { Add-CheckResult -Name "canonical-invalid-read-only" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
+
+try {
     $project = New-FixtureProject -Name "broken-canonical-references"
     Set-ValidWorkRevision -ProjectRoot $project
     Set-SpecReferences -ProjectRoot $project -RelatedWork @("missing-work", "fixture-context", "fixture-work-item", "fixture-work-item") -Supersedes @("fixture-spec", "fixture-work-item")
@@ -599,7 +642,7 @@ try {
     $referenceFindings = @($check.payload.findings | Where-Object { [string]$_.code -like "reference-*" })
     $repeatReferenceFindings = @($repeatCheck.payload.findings | Where-Object { [string]$_.code -like "reference-*" })
     Assert-Condition (($check.payload.references | ConvertTo-Json -Depth 20 -Compress) -ceq ($repeatCheck.payload.references | ConvertTo-Json -Depth 20 -Compress) -and ($referenceFindings | ConvertTo-Json -Depth 20 -Compress) -ceq ($repeatReferenceFindings | ConvertTo-Json -Depth 20 -Compress)) "Canonical reference findings or output changed across identical read-only checks."
-    Assert-Condition ($check.payload.status -ceq "FAIL" -and [bool]$check.payload.read_only) "Broken canonical references did not fail read-only check."
+    Assert-Condition ($check.exit_code -ne 0 -and $check.payload.status -ceq "FAIL" -and [bool]$check.payload.read_only) "Broken canonical references did not fail read-only check."
     Assert-Condition ($canonicalBeforeCheck -ceq (Get-CanonicalSourceFingerprint -ProjectRoot $project) -and $catalogBeforeCheck -ceq (Get-FileFingerprintOrMissing -Path $catalogPath) -and $projectBeforeCheck -ceq (Get-ProjectFingerprint -ProjectRoot $project)) "Broken-reference check repaired or rewrote project state."
     Add-CheckResult -Name "broken-canonical-references" -Status "PASS" -Detail "Missing, wrong-type, self, duplicate, and resolved canonical IDs returned stable read-only findings and states."
 }
@@ -623,10 +666,27 @@ try {
     $after = Get-ProjectFingerprint -ProjectRoot $project
     $catalogAfter = Get-ProjectFingerprint -ProjectRoot (Join-Path $project ".agents/.cache")
     Assert-Condition ($readOnly.payload.read_only -and $before -ceq $after -and $catalogBefore -ceq $catalogAfter) "Check changed project or catalog fingerprints."
+    $revisionMismatchText = [System.IO.File]::ReadAllText($workPath, [Text.UTF8Encoding]::new($false, $true)).Replace("format-valid fixture placeholder", "deliberately stale fixture placeholder")
+    Write-Utf8 -Path $workPath -Text $revisionMismatchText
+    $mismatchProjectBefore = Get-ProjectFingerprint -ProjectRoot $project
+    $mismatchCanonicalBefore = Get-CanonicalSourceFingerprint -ProjectRoot $project
+    $mismatchCatalogBefore = Get-FileFingerprintOrMissing -Path (Join-Path $project ".agents/.cache/catalog.json")
+    $revisionMismatch = Invoke-Workspace -Operation check -ProjectRoot $project
+    $revisionMismatchFindings = @($revisionMismatch.payload.findings | Where-Object code -eq "revision_mismatch")
+    $revisionMismatchErrors = @($revisionMismatch.payload.findings | Where-Object severity -eq "error")
+    Assert-Condition ($revisionMismatch.exit_code -ne 0 -and $revisionMismatch.payload.status -ceq "FAIL" -and [bool]$revisionMismatch.payload.read_only -and $revisionMismatch.payload.revisions[0].state -ceq "revision_mismatch") "A genuine Work revision mismatch did not fail read-only check."
+    Assert-Condition ($revisionMismatchFindings.Count -eq 1 -and [string]$revisionMismatchFindings[0].severity -ceq "error" -and $revisionMismatchErrors.Count -eq 1) "Work revision mismatch did not remain the only canonical error when Catalog also became stale."
+    Assert-Condition ($mismatchProjectBefore -ceq (Get-ProjectFingerprint -ProjectRoot $project) -and $mismatchCanonicalBefore -ceq (Get-CanonicalSourceFingerprint -ProjectRoot $project) -and $mismatchCatalogBefore -ceq (Get-FileFingerprintOrMissing -Path (Join-Path $project ".agents/.cache/catalog.json"))) "Revision-mismatch check repaired Work or rewrote Catalog bytes."
     $missingCatalogProject = New-FixtureProject -Name "check-without-catalog"
+    Set-ValidWorkRevision -ProjectRoot $missingCatalogProject
+    $missingProjectBefore = Get-ProjectFingerprint -ProjectRoot $missingCatalogProject
+    $missingCanonicalBefore = Get-CanonicalSourceFingerprint -ProjectRoot $missingCatalogProject
     $missingCheck = Invoke-Workspace -Operation check -ProjectRoot $missingCatalogProject
-    Assert-Condition ($missingCheck.payload.read_only -and -not (Test-Path -LiteralPath (Join-Path $missingCatalogProject ".agents/.cache/catalog.json"))) "Check created a missing catalog."
-    Add-CheckResult -Name "revision-and-read-only" -Status "PASS" -Detail "Revision match, CRLF/LF equivalence, check fingerprints, and missing-cache read-only behavior passed."
+    $missingCatalogFindings = @($missingCheck.payload.findings | Where-Object code -eq "catalog-missing")
+    Assert-Condition ($missingCheck.exit_code -eq 0 -and $missingCheck.payload.status -ceq "PASS" -and [bool]$missingCheck.payload.read_only -and [string]$missingCheck.payload.catalog.state -ceq "missing" -and [string]$missingCheck.payload.catalog.action -ceq "not-written" -and $missingCatalogFindings.Count -eq 1 -and [string]$missingCatalogFindings[0].severity -ceq "warning") "Canonical-valid workspace did not degrade cleanly when Catalog was missing."
+    Assert-Condition (@($missingCheck.payload.findings | Where-Object severity -eq "error").Count -eq 0) "Missing-only Catalog produced a canonical error."
+    Assert-Condition ($missingProjectBefore -ceq (Get-ProjectFingerprint -ProjectRoot $missingCatalogProject) -and $missingCanonicalBefore -ceq (Get-CanonicalSourceFingerprint -ProjectRoot $missingCatalogProject) -and -not (Test-Path -LiteralPath (Join-Path $missingCatalogProject ".agents/.cache/catalog.json"))) "Check created a missing Catalog or changed canonical bytes."
+    Add-CheckResult -Name "revision-and-read-only" -Status "PASS" -Detail "Revision match/mismatch, CRLF/LF equivalence, check fingerprints, and warning-only missing-Catalog behavior passed."
 }
 catch { Add-CheckResult -Name "revision-and-read-only" -Status "FAIL" -Detail (Get-SafeDetail $_.Exception.Message) }
 
