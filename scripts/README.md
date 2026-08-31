@@ -32,8 +32,9 @@ Use the classifier-owned local plan instead of manually composing validators:
 `iteration` never invokes the full release validator. `pre-push` remains the
 final freshness boundary: it reclassifies the current candidate, then reuses a
 complete successful iteration result only when the commit/tree, validation
-authority, routing plan, host/runtime identity, and action evidence match
-exactly. Otherwise it fail-closes by re-executing the affected plan.
+authority, routing plan, and host/runtime identity produce the same compact
+binding key, and every planned iteration action completed successfully.
+Otherwise it fail-closes by re-executing the affected plan.
 
 Pass the iteration result explicitly, or use the same `ScratchRoot` for both
 stages:

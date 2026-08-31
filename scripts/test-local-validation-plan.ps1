@@ -154,27 +154,21 @@ param([switch]$Json)
 $path = Join-Path $env:AGENT_ECOSYSTEM_LOCAL_EVIDENCE_COUNTER_ROOT "classifier.count"
 $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)) } else { 0 }
 [IO.File]::WriteAllText($path, [string]($count + 1))
-[ordered]@{ schema_version = 1; pass = 1; fail = 0; cases = @([ordered]@{ name = "fixture"; status = "PASS" }) } | ConvertTo-Json -Depth 4
+[ordered]@{ status = "PASS" } | ConvertTo-Json
 '@
         Write-FixtureFile "scripts/validate-targeted-change.ps1" @'
 param([string]$Mode, [string[]]$ChangedPath, [string]$BaseRef, [string]$HeadRef, [switch]$Json)
 $path = Join-Path $env:AGENT_ECOSYSTEM_LOCAL_EVIDENCE_COUNTER_ROOT "targeted.count"
 $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)) } else { 0 }
 [IO.File]::WriteAllText($path, [string]($count + 1))
-[ordered]@{
-    schema_version = 2; classification = [ordered]@{ detected_tier = 3 }
-    checks = @([ordered]@{ name = "fixture"; status = "PASS" })
-    executed_suites = @("fixture-suite"); executed_suite_count = 1
-    module_coverage = @([ordered]@{ module = "fixture"; coverage = "targeted-suite" })
-    summary = [ordered]@{ pass = 1; fail = 0 }
-} | ConvertTo-Json -Depth 6
+[ordered]@{ status = "PASS" } | ConvertTo-Json
 '@
         Write-FixtureFile "scripts/test-heavy-targeted-regression.ps1" @'
 param([switch]$Json)
 $path = Join-Path $env:AGENT_ECOSYSTEM_LOCAL_EVIDENCE_COUNTER_ROOT "oracle.count"
 $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)) } else { 0 }
 [IO.File]::WriteAllText($path, [string]($count + 1))
-[ordered]@{ schema_version = 2; status = "PASS"; routing = [ordered]@{ status = "PASS" }; sensitive_scan = [ordered]@{ status = "PASS" } } | ConvertTo-Json -Depth 4
+[ordered]@{ status = "PASS" } | ConvertTo-Json
 '@
         Write-FixtureFile "scripts/validate-release.ps1" 'param([switch]$Json)'
 
@@ -194,7 +188,7 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
         $iteration = Invoke-FixtureJson -Stage "iteration" -Base $baseCommit -Head $candidateCommit -Scratch $iterationScratch
         $iterationEvidencePath = [string]$iteration.result_path
         if ([string]$iteration.status -cne "PASS" -or -not [bool]$iteration.reuse_evidence.complete -or
-            @($iteration.actions | Where-Object { [string]$_.disposition -cne "executed" -or -not [bool]$_.evidence.complete }).Count -ne 0) {
+            @($iteration.actions | Where-Object { [string]$_.disposition -cne "executed" -or [string]$_.status -cne "PASS" -or [int]$_.exit_code -ne 0 }).Count -ne 0) {
             throw "Iteration did not produce complete successful execution evidence."
         }
         $fixtureResults.Add([ordered]@{ name = "iteration-complete-executed-evidence"; status = "PASS"; disposition = "executed" }) | Out-Null
@@ -230,11 +224,14 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
         $treeVariant = New-EvidenceVariant -Name "tree-changed" -Mutate { param($value) $value.reuse_evidence.binding.candidate.tree = "0" * 40 }
         Assert-Reexecuted -Name "candidate-tree-changed" -Evidence $treeVariant -ExpectedReason "candidate-tree-changed" -Head $candidateCommit
 
-        $routingVariant = New-EvidenceVariant -Name "routing-changed" -Mutate { param($value) $value.reuse_evidence.binding.routing.sha256 = "0" * 64 }
+        $routingVariant = New-EvidenceVariant -Name "routing-changed" -Mutate { param($value) $value.reuse_evidence.binding.routing_sha256 = "0" * 64 }
         Assert-Reexecuted -Name "validation-routing-changed" -Evidence $routingVariant -ExpectedReason "validation-routing-changed" -Head $candidateCommit
 
-        $runtimeVariant = New-EvidenceVariant -Name "runtime-changed" -Mutate { param($value) $value.reuse_evidence.binding.runtime.sha256 = "0" * 64 }
+        $runtimeVariant = New-EvidenceVariant -Name "runtime-changed" -Mutate { param($value) $value.reuse_evidence.binding.runtime_sha256 = "0" * 64 }
         Assert-Reexecuted -Name "host-runtime-changed" -Evidence $runtimeVariant -ExpectedReason "host-runtime-identity-changed" -Head $candidateCommit
+
+        $authorityVariant = New-EvidenceVariant -Name "authority-changed" -Mutate { param($value) $value.reuse_evidence.binding.authority_sha256 = "0" * 64 }
+        Assert-Reexecuted -Name "validation-authority-changed" -Evidence $authorityVariant -ExpectedReason "validation-authority-changed" -Head $candidateCommit
 
         $failedVariant = New-EvidenceVariant -Name "failed" -Mutate { param($value) $value.status = "FAIL" }
         Assert-Reexecuted -Name "failed-evidence" -Evidence $failedVariant -ExpectedReason "iteration-evidence-not-successful" -Head $candidateCommit
@@ -242,8 +239,8 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
         $incompleteVariant = New-EvidenceVariant -Name "incomplete" -Mutate { param($value) $value.reuse_evidence.complete = $false }
         Assert-Reexecuted -Name "incomplete-evidence" -Evidence $incompleteVariant -ExpectedReason "iteration-evidence-incomplete" -Head $candidateCommit
 
-        $missingFieldsVariant = New-EvidenceVariant -Name "missing-fields" -Mutate { param($value) $value.actions[0].PSObject.Properties.Remove("evidence") }
-        Assert-Reexecuted -Name "missing-fields-evidence" -Evidence $missingFieldsVariant -ExpectedReason "iteration-evidence-incomplete" -Head $candidateCommit
+        $incompleteActionVariant = New-EvidenceVariant -Name "incomplete-action" -Mutate { param($value) $value.actions[0].PSObject.Properties.Remove("exit_code") }
+        Assert-Reexecuted -Name "incomplete-action-evidence" -Evidence $incompleteActionVariant -ExpectedReason "iteration-evidence-incomplete" -Head $candidateCommit
 
         $malformedVariant = Join-Path $fixtureRoot "malformed.json"
         [System.IO.File]::WriteAllText($malformedVariant, "{")
@@ -253,7 +250,7 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
         $authorityPath = Join-Path $fixtureRepo "scripts/validate-targeted-change.ps1"
         $authorityBytes = [System.IO.File]::ReadAllBytes($authorityPath)
         Add-Content -LiteralPath $authorityPath -Value "# fixture authority drift"
-        Assert-Reexecuted -Name "validation-authority-changed" -Evidence $iterationEvidencePath -ExpectedReason "validation-authority-changed" -Head $candidateCommit
+        Assert-Reexecuted -Name "dirty-worktree" -Evidence $iterationEvidencePath -ExpectedReason "candidate-worktree-not-clean" -Head $candidateCommit
         [System.IO.File]::WriteAllBytes($authorityPath, $authorityBytes)
         if (@(Invoke-FixtureGit status --porcelain=v1).Count -ne 0) { throw "Authority fixture did not restore the committed tree." }
 
