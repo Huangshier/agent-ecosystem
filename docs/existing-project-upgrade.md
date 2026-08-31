@@ -14,7 +14,7 @@ New empty project 应使用 [minimal project adoption walkthrough](walkthroughs/
 | 在 new project 中采用 Agent Ecosystem | 使用 minimal project adoption walkthrough。 |
 | 刷新 existing project 中缺失的 scaffold file | 执行保守的 `project-bootstrap` refresh；保留 project-specific content。 |
 | 只升级未修改的旧 template | 检查当前 project memory language 后使用 `-RefreshUnmodifiedTemplates`。 |
-| 修改 project memory language | 使用保守的 language migration Analyze -> Plan -> Apply -> Validate flow。 |
+| 修改 existing legacy project memory language | 使用 compatibility-only language migration Analyze -> Plan -> Apply -> Validate flow。 |
 | 将 legacy project 迁移到 C3.3 | 运行 `scripts/migrate-project.ps1` 的 Analyze -> explicit Apply -> guarded Rollback。 |
 | 丢弃旧 scaffold customizations | 仅在调用方明确确认 backup 后可以覆盖旧 scaffold content 时使用 `-ForceResetScaffold`；它不是 legacy migration authority。 |
 | 只检查当前状态 | 不使用 apply mode，运行 `status.ps1`、`project-workspace check` 和 `project-workspace discover`。 |
@@ -38,9 +38,10 @@ surface 保留。它们不会使 retired Runtime Skill 重新 active，也不得
 legacy migration path。保留的 command boundary 和 standalone runtime packaging
 constraint 见 [Project Bootstrap Command Boundaries](project-bootstrap-command-boundaries.md)。
 
-## 当前 Template Model
+## Legacy Template Model (Compatibility-Only)
 
-public template model 使用 language-scoped project-memory templates：
+existing legacy project 的 refresh/migration 仍使用 language-scoped
+project-memory templates：
 
 ```text
 knowledge-hub/templates/languages/<language>/project-root|project-agent/
@@ -128,12 +129,13 @@ legacy project 使用当前 C3.3 flow：
 workspace check。scaffold refresh 仍是独立的 `project-bootstrap` operation，不是
 implicit migration。
 
-scaffold refresh 前，从 project 的 `.agents/AGENTS.md` 或现有
-`.agents/hub.lock.json` 的 `project_language` field 确定 project memory
-language。当 `project-bootstrap` 可能创建缺失 scaffold 或 lock metadata 时，
-使用 `-ProjectLanguage` 显式传入该 language。不要从当前 chat 推断 project
-memory language。此 language check 不能替代 `scripts/migrate-project.ps1` 要求
-的 migration evidence。
+legacy scaffold refresh 前，优先从现有 `.agents/hub.lock.json` 的
+`project_language` field 确定 project memory language；只有 lock 未记录语言时，
+才把 `.agents/AGENTS.md` declaration 作为 compatibility fallback。当
+`project-bootstrap` 可能创建缺失 scaffold 或 lock metadata 时，使用
+`-ProjectLanguage` 显式传入该 language。不要从当前 chat 推断 project memory
+language。此 language check 不能替代 `scripts/migrate-project.ps1` 要求的
+migration evidence。
 
 1. 不编辑文件，检查已安装的 Runtime 和 project。
 
@@ -178,8 +180,9 @@ memory language。此 language check 不能替代 `scripts/migrate-project.ps1` 
    pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mode Rollback -ProjectRoot <project> -BackupId <backup-id> -ConfirmRollback -Json
    ```
 
-变更 project-memory language 时，使用带有 explicit source 和 target language 的
-保守 language migration Analyze、Plan、Apply 和 Validate mode。Phase 1 替换
+**Compatibility-only：**变更 existing legacy project-memory language 时，使用
+带有 explicit source 和 target language 的保守 language migration Analyze、
+Plan、Apply 和 Validate mode。Phase 1 替换
 template 并 stage project-specific content；Phase 2 应用已 review 的
 target-language narrative，同时保留 protected literal。Manual-review-only
 artifact 只用于 uncertain 或 unsupported content，不是普通完成路径。

@@ -25,20 +25,21 @@ surfaces because copy-mode installs do not include the repository-level
 The current allowed local definitions are:
 
 - `scripts/lib/path-guard.ps1`: authoritative repository helper.
-- `skills/project-context-gate/scripts/context_gate.ps1`: standalone context
-  gate runtime entrypoint.
+- `skills/project-context-gate/scripts/context_gate.ps1`: retired
+  compatibility-only context-gate helper retained for fixtures and historical
+  contracts; it is not an active Runtime entrypoint.
 - `skills/project-bootstrap/scripts/bootstrap_project.ps1`: standalone
   bootstrap runtime entrypoint.
 - `skills/project-bootstrap/scripts/init_hub.ps1`: bootstraps the installed hub
   template and runtime script surface.
-- `skills/project-bootstrap/scripts/audit_memory_language.ps1`: standalone
-  project-memory language audit helper.
+- `skills/project-bootstrap/scripts/audit_memory_language.ps1`: legacy
+  compatibility-only project-memory language audit helper.
 - `skills/project-bootstrap/scripts/check_hub_lock.ps1`: standalone hub lock
   drift helper.
-- `skills/project-bootstrap/scripts/language_migration.ps1`: standalone
-  project-memory language migration helper.
-- `skills/project-bootstrap/scripts/set_project_language.ps1`: standalone
-  first-session language scaffold helper.
+- `skills/project-bootstrap/scripts/language_migration.ps1`: legacy
+  compatibility-only project-memory language migration helper.
+- `skills/project-bootstrap/scripts/set_project_language.ps1`: legacy
+  compatibility-only first-session language scaffold helper.
 - `skills/project-bootstrap/scripts/promote_experience.ps1`: compatibility copy
   for bootstrap-time hub setup.
 - `skills/project-bootstrap/scripts/manage_candidates.ps1`: compatibility copy

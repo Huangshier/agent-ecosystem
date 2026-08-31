@@ -22,8 +22,8 @@ It is for maintainers and teams that want to:
 
 - help Codex, Claude Code, or another agent load the right project constraints
   before work starts;
-- preserve state, scope, and acceptance evidence across sessions with hot
-  memory and optional work packages;
+- preserve necessary state, scope, and acceptance evidence across sessions
+  with canonical Work, Context, Procedure, and Spec assets;
 - install, inspect, and update a shared runtime safely while preserving
   project-specific content;
 - separate project lessons from reusable cross-project knowledge.
@@ -56,14 +56,13 @@ Release → installed Runtime → optional Agent bridge → Project
   runtime or this repository.
 
 At the project layer, root `AGENTS.md` is the only complete project behavior
-contract. `.agents/AGENTS.md` is an engineering-memory guide that explains how
-to read and maintain `.agents/`; it is not a second behavior contract. The
+contract, and `.agents/README.md` explains the project-local workspace. The
 canonical workspace assets are Work, Context, Procedure, and Spec;
 `project-workspace` handles discover, check, continuity, and create-spec.
-`.agents/process.txt`, `.agents/plan.md`, and `.agents/notes.md` are retired
-paths after the C3.3 hot-memory convergence, not the current canonical
-hot-state authority; `.agents/context/` holds discoverable knowledge, and
-target projects may use `docs/specs/` for durable cross-session work packages.
+`.agents/context/` holds discoverable knowledge, and target projects may use
+`docs/specs/` for durable cross-session work packages. Nested guides,
+hot-memory files, and command indexes in older projects are compatibility-only
+migration inputs, not fresh/default authority.
 
 See [Architecture](docs/architecture.md) and
 [Runtime adoption bridge](docs/runtime-adoption-bridge.md) for the complete
@@ -261,7 +260,6 @@ Advanced architecture:
 - [Runtime adoption bridge](docs/runtime-adoption-bridge.md)
 - [Agent-specific skill link bridge](docs/agent-skill-bridge.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
-- [Claude Code hooks guardrails](docs/claude-code-hooks-guardrails.md)
 
 Maintainer entrypoints:
 

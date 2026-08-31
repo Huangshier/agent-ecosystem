@@ -27,9 +27,10 @@ target-project 的 `ProjectLanguage` / Runtime 语言行为。两者不是同一
 在 public/private workflow 中：
 
 - public GitHub Issue/PR 的解释性维护记录默认使用简体中文；
-- private control docs 和 private memory 遵循 private repository 的
-  `.agents/AGENTS.md`；
-- project-local memory 遵循 target-project 的 `.agents/AGENTS.md`；
+- private control docs 和 private memory 遵循 private repository 自己的行为
+  authority；
+- project-local memory 遵循 target-project 的 root `AGENTS.md` 与当前 C3.3
+  workspace contract；
 - code identifiers、commands、paths、APIs、file names、Markdown field labels
   和 raw error text 可以保留英文或原文。
 
@@ -39,121 +40,81 @@ target-project 的 `ProjectLanguage` / Runtime 语言行为。两者不是同一
 ## B. Target-Project ProjectLanguage And Runtime Language Behavior
 
 以下规则只描述 target-project 的工程记忆和 Runtime 行为，不规定本公开仓库
-的 Issue/PR 治理语言。本 PR 不改变 existing runtime fallback、language
-migration 或 `ProjectLanguage` product semantics。
+的 Issue/PR 治理语言。
 
-## Project Memory
+### Fresh C3.3 Contract
 
-Project memory should follow the language declared by that project's
-`Project Language Policy`. The authoritative declaration belongs in the
-project's `.agents/AGENTS.md`.
-
-Bootstrap templates install a `Project Language Policy` section into
-`.agents/AGENTS.md`. If the project has not chosen a language yet, the first
-non-trivial session that writes engineering memory should fill that section
-from the user's primary language.
-
-`project-bootstrap` provides a script-driven closeout path for that first write.
-An agent or workflow can pass the user's primary language explicitly:
+fresh bootstrap 支持 `en` 和 `zh-CN` 两个 `ProjectLanguage` 值；未显式传入时
+默认使用 `en`。agent 或 workflow 可以在首次 bootstrap 时明确选择：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
-On non-Windows systems, or when PowerShell 7+ is already available, use
-`pwsh -NoProfile -File` with the same script arguments.
+`project-bootstrap` 不自行推断 chat language。fresh C3.3 路径从
+`skills/project-bootstrap/assets/c3-3-project-template/<language>/` 选择模板，
+写入对应语言的 root `AGENTS.md` 与 `.agents/README.md`，并把规范化后的值保存为
+`.agents/hub.lock.json` 的 `project_language`。同一 lock 还记录
+`workspace_model = "c3.3"`；`hub_dir = ""` 是 active C3.3 的预期状态。
 
-The helper does not infer chat language by itself. It writes the supplied
-language into `.agents/AGENTS.md` and localizes the initial project memory
-scaffolds for hot memory, `.agents/context/`, `.agents/commands/`, and
-`docs/specs/`.
+root `AGENTS.md` 是项目行为 authority；`.agents/hub.lock.json` 是 bootstrap
+metadata，不是第二份行为契约。fresh bootstrap 同时写入 `.agents/.gitignore`，
+并创建 `.agents/work/`、`.agents/context/`、`.agents/procedures/`、
+`.agents/skills/` 与 `docs/specs/` 空根目录，不创建占位 canonical asset。
 
-Project memory scaffolds are backed by tracked file templates under
-`knowledge-hub/templates/languages/<language>/project-root|project-agent/` as
-the repository authority, with a bundled runtime snapshot under
-`skills/project-bootstrap/assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
-The only first-class template languages are `en` and `zh-CN`; this is not
-arbitrary-language i18n. For target-project memory, English remains the default
-and fallback language, so plain bootstrap is equivalent to `-ProjectLanguage en`.
-If a `zh-CN` template file is missing, the helper falls back to the matching
-English template and reports fallback metadata so validation can flag the gap.
+fresh/default 路径不创建 nested project guide、hot-memory 文件、command index、
+`CLAUDE.md` 或 legacy `.claude/**` scaffold。`-ProjectLanguage` 也不会把这些
+retired surface 恢复为语言 authority。
 
-For established project memory, changing the project memory language is a
-conservative migration task, not a scaffold overwrite. Bootstrap preserves
-existing files by default; migration work should follow a backup, analyze,
-plan, review, apply, and validate flow. Force reset options are only for
-intentional scaffold reset scenarios where project-specific memory can be
-discarded.
+对已经定制的 C3.3 项目，bootstrap 默认保留已有文件。不要把语言参数理解为
+自动翻译或覆盖授权；需要改变现有叙述语言时，应先审阅 project-owned content
+与目标项目自己的约束。
 
-Intent matters:
+### Legacy Language Migration (Compatibility-Only)
 
-- Refresh or template upgrade preserves project-specific memory by default and
-  updates only missing or unmodified scaffold surfaces unless a reviewed
-  proposal says otherwise.
-- Language migration changes the project-memory language with target-language
-  templates and reviewed target-language narrative. Commands, paths, APIs,
-  filenames, raw errors, and code symbols stay in their original form.
-- Reset or reinitialize discards old scaffold customizations only when the
-  caller explicitly says old project memory may be discarded. Do not treat
-  refresh, upgrade, migrate, or casual reinitialization wording as reset
-  permission.
+以下行为只适用于 existing legacy project，不是 fresh/default C3.3 adoption path：
 
-The supported conservative language migration flow is explicit about direction:
+- legacy project 可能仍有 `.agents/AGENTS.md`、hot memory、
+  `.agents/commands/`、`CLAUDE.md` 或 `.claude/**` project-owned content；
+- wrapper 优先读取 `.agents/hub.lock.json` 的 `project_language`，仅在 lock
+  没有语言值时把 nested guide declaration 作为 compatibility fallback；互相
+  冲突的声明会在写入前失败；
+- `knowledge-hub/templates/languages/<language>/project-root|project-agent/` 及
+  bundled `assets/knowledge-hub-template/` 是 legacy scaffold、upgrade 和
+  language-migration template source，不是 fresh C3.3 template authority；
+- legacy template 的 `zh-CN` 文件缺失时可以回退到对应 English template，并
+  报告 fallback metadata 供验证处理。
+
+不要对 fresh C3.3 project 运行这些 language-migration 或 first-session helper；
+其语言已经由 C3.3 lock 记录，这些 helper 会面向 legacy surface 规划动作。
+
+legacy language migration 保留明确方向、proposal-first 与 backup-first 契约：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyLanguageMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateLanguageMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanNarrativeMigration -MigrationPlan <proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyLanguageMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateLanguageMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -PlanNarrativeMigration -MigrationPlan <proposal.json>
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ApplyNarrativeMigration -MigrationPlan <narrative-proposal.json>
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ValidateNarrativeMigration -MigrationPlan <narrative-proposal.json>
 ```
 
-Use `-SourceLanguage zh-CN -TargetLanguage en` for the reverse direction. Plan
-mode writes a reviewable proposal and creates the backup required by apply.
-Apply mode refuses to write if the proposal, backup, or planned source hashes no
-longer match. Apply and validate also refuse a proposal whose recorded project
-path differs from the current `-ProjectDir`.
+反向迁移使用 `-SourceLanguage zh-CN -TargetLanguage en`。Plan 写入可审阅
+proposal 并创建 Apply 所需 backup；Apply/Validate 在 proposal、backup、source
+hash 或 recorded project path 失配时 fail closed。Narrative action 默认未批准，
+必须先审阅目标语言文本。无法安全确定的内容保留并进入 manual review，不能静默
+翻译或丢弃。
 
-The narrative follow-up reads retained review artifacts and creates a second
-proposal. It routes stable facts to durable context, active plan and process
-state to concise hot memory updates, reusable lessons to
-`.agents/context/experience/`, and durable specs to `docs/specs/`. Narrative
-actions are unapproved by default; review the proposed target-language text
-before applying it. The normal completion path applies reviewed narrative back
-to project memory while protected literals stay unchanged. Manual-review-only
-items are exception paths for uncertain or unsupported content.
-
-For review-only body-language checks, run the standalone audit helper:
+legacy review 需要独立 body-language audit 时可以运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
+pwsh -NoProfile -File .\skills\project-bootstrap\scripts\audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json
 ```
 
-The audit ignores `Summary` / `Keywords` discovery metadata, fenced code, and
-protected literals before reporting heuristic findings. It is read-only and
-does not translate or rewrite project memory. Language migration validation
-records this audit evidence and treats blocking source-language leftovers as a
-completion failure. When using `-Json`, the output includes the resolved
-`project_dir`; review or redact local paths before copying audit output into
-public issues, pull requests, or documents.
+该 helper 只读，不翻译、不重写、也不批准 migration。JSON 包含 resolved
+`project_dir`；复制到公开产物前必须检查并去除 local path。
 
-The file templates are structural baselines for scaffold generation, language
-updates, and conservative migration planning. They are not a reason to replace
-customized project memory with generic scaffolds. Exact source-template matches
-can be replaced with target-language templates. Project-specific narrative that
-cannot be safely migrated deterministically is preserved verbatim and routed to
-manual review instead of being silently translated or dropped. Concise hot
-memory files route original source content to migration artifacts instead of
-appending the full source back into `.agents/plan.md`, `.agents/process.txt`, or
-`.agents/notes.md`.
-
-Memory governance and upgrade diagnostics recognize English discovery headings
-and localized Simplified Chinese equivalents for context discovery metadata.
-For target-project memory only, Public templates remain English-first; this
-existing runtime rule does not govern the public GitHub templates in `.github/`.
-
-Filenames, directory names, Markdown field labels, commands, paths, API names,
-and error text should remain in English or in their original form.
+无论 fresh 或 legacy，filename、directory name、Markdown field label、command、
+path、API name、code symbol 与 raw error text 均可保留 English 或原文。

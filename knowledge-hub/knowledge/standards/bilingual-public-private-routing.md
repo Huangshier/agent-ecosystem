@@ -26,14 +26,14 @@ memory policy.
 - Public community-facing artifacts should stay English-first unless the
   repository explicitly defines a translation path such as `README.zh-CN.md` or
   `docs/zh-CN/`.
-- Project-local memory should follow the target project's `.agents/AGENTS.md`
-  language policy.
+- Project-local memory should follow the target project's root `AGENTS.md` and
+  the C3.3 `project_language` metadata selected at bootstrap.
 - Private control docs and private overlay memory should stay in the private
   repository and use that repository's language policy.
 - Code identifiers, commands, paths, APIs, file names, Markdown field labels,
   and raw error text may stay in English or their original form.
-- Cross-repository work should run a context gate for each repository before
-  writing files there.
+- Cross-repository work should load each repository's behavior authority and
+  run its active read-only workspace checks before writing files there.
 
 ## Public Boundary
 

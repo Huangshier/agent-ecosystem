@@ -1,121 +1,125 @@
 # Project Bootstrap
 
-Bootstrap and maintain project-level `.agents` structure from a shared knowledge hub.
+`project-bootstrap` initializes and conservatively refreshes a project-owned
+C3.3 workspace. The executable workflow and compatibility boundaries are in
+[`SKILL.md`](SKILL.md).
 
-## Main Files
-- `SKILL.md`: workflow and usage entry
-- `scripts/check_hub_lock.ps1 -Json`: fail-soft read-only lock status contract.
-  It emits schema-1 `in-sync`, `drift`, or `unknown` results with stable reason
-  codes and resolved `en` / `zh-CN` language, without paths, remote identity,
-  branch, commit, template hash, or raw Git errors. Text mode retains its
-  historical nonzero drift semantics.
-- `scripts/project_language.ps1`: shared bootstrap and lock-checker language
-  normalization and project-guide declaration reader.
-- `scripts/init_hub.ps1`: initialize global knowledge-hub template repo and minimal runtime scripts
-- `scripts/bootstrap_project.ps1`: install/update project `.agents` scaffold; auto-initializes a missing hub template set from bundled assets
-- `scripts/set_project_language.ps1`: write first-session project memory language scaffolds when an agent/workflow supplies the language
-- `scripts/language_migration.ps1`: analyze, plan, apply, and validate conservative `en` / `zh-CN` project memory language migration, including Phase 2 narrative proposals from manual-review artifacts
-- `scripts/audit_memory_language.ps1`: read-only body-level project-memory language audit that ignores discovery metadata, fenced code, and protected literals before reporting heuristic findings
-- `scripts/memory_upgrade.ps1`: analyze, plan, and apply legacy project memory upgrades
-- `scripts/check_hub_lock.ps1`: compare project `hub.lock.json` against the installed hub git state
-- `scripts/promote_experience.ps1`: compatibility copy; prefer `knowledge-hub/scripts/promote_experience.ps1` for routine hub maintenance
-- `scripts/rebuild_experience_index.ps1`: compatibility copy used by hub initialization; prefer `knowledge-hub/scripts/rebuild_experience_index.ps1` after manual hub edits
-- `assets/knowledge-hub-template/templates/languages/en/`: bundled English project memory template snapshot used for default bootstrap, language setup, and fallback
-- `assets/knowledge-hub-template/templates/languages/zh-CN/`: bundled Simplified Chinese project memory template snapshot used for language setup
-- `references/maintenance-model.md`: long-term maintenance model
-- `assets/knowledge-hub-template/templates/languages/<language>/project-root/`: root-level committed docs and scaffolds, including `docs/specs/_templates/`
-- `assets/knowledge-hub-template/templates/languages/<language>/project-root/.claude/guardrails/`: declarative Claude Code template reliability guardrails
-- `assets/knowledge-hub-template/templates/languages/<language>/project-root/.claude/settings.json|hooks/`: executable Claude Code lifecycle registration and public hook runner
+## Active C3.3 Default
 
-## Lock Metadata
-- `bootstrap_project.ps1` writes hub git metadata plus `template_tree_hash_sha256`.
-- `init_hub.ps1` leaves the hub as an ordinary directory unless `-InitializeGit` or `-CommitInitial` is supplied.
-- The lock records the normalized project language; plain bootstrap records `en`.
-- When language templates are missing, the lock records fallback warnings and paths; English is the fallback template language.
-- `check_hub_lock.ps1` compares the template hash when present and fails on dirty hub state, so uncommitted hub changes are not treated as reproducible pins.
+Run the installed Skill against an existing target directory:
 
-## Repository Role
-- Source repository for the skill itself
-- Upstream source for `knowledge-hub` aggregate sync
-- Bootstrap does not own routine global experience promotion. It installs project scaffolds and upgrade helpers; the installed `knowledge-hub/scripts` directory is the runtime entrypoint for promoted experience.
+```powershell
+pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
+```
 
-## Command Boundary
-- `bootstrap_project.ps1` owns scaffold creation, safe missing-template
-  refresh, unmodified-template refresh, and explicit backup-first force reset.
-- Dedicated helpers own upgrade and migration logic:
-  `memory_upgrade.ps1`, `language_migration.ps1`, `audit_memory_language.ps1`,
-  and `check_hub_lock.ps1`.
-- Existing bootstrap upgrade and migration switches remain compatibility and
-  discoverability wrappers. They should route to dedicated helpers instead of
-  making the bootstrap script the default home for more orchestration logic.
-- Future old-release upgrade orchestration should live in a dedicated helper or
-  command card that composes context gate, bootstrap refresh, memory upgrade,
-  language migration, and validation steps.
-- For the full boundary and standalone runtime packaging constraints, see
-  `docs/project-bootstrap-command-boundaries.md`.
+Use `-ProjectLanguage zh-CN` for the Simplified Chinese C3.3 templates. The
+script does not infer chat language; omitted language defaults to `en` for a
+fresh project.
 
-## Legacy Memory Upgrade
-- `memory_upgrade.ps1 -Mode Analyze` is the strict no-edit memory-only
-  analysis path.
-- `bootstrap_project.ps1 -AnalyzeMemoryUpgrade` reports old memory issues
-  without editing memory files, but it is a wrapper flow: it may first refresh
-  missing scaffold files or `.agents/hub.lock.json`.
-- `bootstrap_project.ps1 -PlanMemoryUpgrade` writes a reviewable proposal under `.agents/upgrade/`.
-- `bootstrap_project.ps1 -ApplyMemoryUpgrade -UpgradePlan <path>` backs up and normalizes hot memory after review.
-- During Apply, `memory_upgrade.ps1` deterministically preserves compact bullet
-  facts only from explicit stable notes sections: `# Confirmed Notes`,
-  `## Stable Facts`, `# 已确认记录`, or `## 稳定事实`. It filters volatile task
-  and session-state lines such as TODOs, checkboxes, next-step notes, current
-  branch / waiting-PR status, and temporary runtime notes. It does not use NLP
-  or infer stable facts from arbitrary prose; the backup remains the source for
-  reviewing any material that was not safely preserved.
-- `bootstrap_project.ps1 -AutoUpgrade` runs Analyze, then creates and applies the default proposal when the caller has explicitly approved memory normalization.
-- When ordinary bootstrap detects memory upgrade candidates, the skill workflow decides whether to auto-upgrade, ask first, or skip based on the user's stated intent.
-- For existing projects moving to the post-`v0.4.2` template model, see
-  `docs/existing-project-upgrade.md` before applying changes.
+Fresh bootstrap creates only the current C3.3 surface:
 
-## Conservative Language Migration
-- `language_migration.ps1 -Mode Analyze -SourceLanguage en -TargetLanguage zh-CN` reports planned actions without editing memory.
-- `language_migration.ps1 -Mode Plan -SourceLanguage en -TargetLanguage zh-CN` writes a reviewable proposal under `.agents/language-migration/` and creates a backup under `.agents/_backup/language-migration-<timestamp>/`.
-- `language_migration.ps1 -Mode Apply -MigrationPlan <proposal.json>` requires the proposal and recorded backup, refuses changed source hashes, and applies only approved actions.
-- `language_migration.ps1 -Mode Validate -MigrationPlan <proposal.json>` checks result metadata, backup presence, migration metadata, per-action output hashes, manual-review source hash records, and body-level audit evidence. Phase 1 can be structurally valid while `completion_ready` remains false until reviewed narrative migration is applied.
-- `language_migration.ps1 -Mode PlanNarrative -MigrationPlan <proposal.json>` reads Phase 1 `.agents/language-migration/<timestamp>/manual-review/` artifacts and writes a second, unapproved-by-default narrative proposal.
-- `language_migration.ps1 -Mode ApplyNarrative -MigrationPlan <narrative-proposal.json>` applies only reviewed narrative actions after checking the proposal, backup, source artifact hashes, target file hashes, and protected literal preservation.
-- `language_migration.ps1 -Mode ValidateNarrative -MigrationPlan <narrative-proposal.json>` validates the narrative result, source artifacts, backup, review markers, protected literals, and body-level audit findings.
-- The same flow supports `zh-CN` to `en` by reversing `SourceLanguage` and `TargetLanguage`.
-- Target language templates are structural baselines. Customized project content is backed up and staged for review first; the normal completion path is reviewed target-language narrative applied back to the right memory surface while protected literals stay unchanged. Manual-review-only routing is an exception path for uncertain or unsupported content, not the ordinary migration result.
-- Run `audit_memory_language.ps1 -ProjectDir <project> -ExpectedLanguage zh-CN -IncludeSpecs -IncludeCommands -Json` when review needs a standalone body-level audit. The helper is read-only and reports warning-level findings; it does not translate, rewrite, or approve memory changes.
+```text
+<project>/
+  AGENTS.md
+  .agents/
+    README.md
+    .gitignore
+    hub.lock.json
+    work/
+    context/
+    procedures/
+    skills/
+  docs/
+    specs/
+```
 
-## Intent Semantics
-- Refresh or upgrade keeps project-specific memory by default. Missing
-  scaffolds may be added, and unmodified template matches may be updated, but
-  customized files are preserved or routed to review.
-- Language migration changes the project-memory language between `en` and
-  `zh-CN`. It combines target-language templates, reviewed narrative migration,
-  and protected literal preservation for commands, paths, APIs, filenames, raw
-  errors, and code symbols.
-- Reset or reinitialize is the destructive scaffold path. Use
-  `-ForceResetScaffold` only when the caller explicitly says old project memory
-  can be discarded, and keep the backup-first safety record.
+`assets/c3-3-project-template/<language>/` is the fresh template source.
+`ProjectLanguage` selects the localized root `AGENTS.md` and
+`.agents/README.md`; the normalized value is persisted as
+`.agents/hub.lock.json.project_language`. The lock also records
+`workspace_model = "c3.3"`, `workspace_state = "active"`, and `hub_dir = ""`.
+An empty `hub_dir` is the expected active state, not hub drift.
 
-## Operating Modes
-- Empty project initialization: default bootstrap writes missing scaffold files and optional first-session language scaffolds. English remains the default when no project language metadata exists.
-- Missing-template refresh: default bootstrap on an existing project copies only missing files and preserves local memory. This is the conservative response to "refresh old project memory" when the user has not asked to rewrite content. When `-ProjectLanguage` is omitted, the wrapper inherits `.agents/hub.lock.json` `project_language`, or the `.agents/AGENTS.md` declaration when the lock has no language. Conflicting declarations fail before writes.
-- Unmodified-template refresh: `-RefreshUnmodifiedTemplates` updates files that still match the prior installed template hash and preserves modified files for manual review. This is a safe template upgrade, not a reset.
-- Compatibility overwrite: `-OverwriteTemplates` is retained as a warning-emitting alias for unmodified-template refresh. It is not a force reset.
-- Conservative memory migration: use Analyze, Plan, Apply, and Validate modes with reviewable proposals and backups. Use legacy memory upgrade modes for layout normalization, and language migration modes for `en` / `zh-CN` project memory language changes.
-- Explicit force reset: `-ForceResetScaffold` is the only reset path for intentionally discarding scaffold customizations. Do not infer it from refresh, upgrade, migration, or reinitialization wording unless the caller also says old memory may be discarded. It warns, backs up first, and cannot be combined with memory upgrade modes.
+Bootstrap creates no placeholder Work, Context, Procedure, Spec, glossary, or
+project-local Skill. It also does not create a nested project guide, hot-memory
+files, a command index, `CLAUDE.md`, or legacy `.claude/**` content.
 
-## Project Memory Templates
-- `en` and `zh-CN` are the only first-class project memory template languages.
-- English remains the public default and fallback language for projects without existing language metadata.
-- The bootstrap helper does not infer project memory language from chat. Agents
-  and workflows may pass `-ProjectLanguage` explicitly. When omitted during an
-  established-project refresh or analysis, the wrapper inherits existing lock
-  metadata instead of silently changing the project to English.
-- The authoritative source lives under `knowledge-hub/templates/languages/<language>/project-root|project-agent/`.
-- The bundled runtime snapshot lives under `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`.
-- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-root/` map to project-root files such as `AGENTS.md`, `CLAUDE.md`, `.claude/settings.json`, `.claude/guardrails|hooks/`, and `docs/specs/_templates/`.
-- Template files under `assets/knowledge-hub-template/templates/languages/<language>/project-agent/` map to `.agents/` files such as `.agents/AGENTS.md`, hot memory, context starters, and commands starters.
-- The templates are structural baselines for scaffold generation, language updates, and future conservative migration planning. They do not authorize overwriting project-specialized memory.
-- Conservative language migration uses these templates to replace exact source-template matches and to frame customized content for manual review without dropping it.
+Verify the result with the other active Runtime Skill:
+
+```powershell
+pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\check-project-workspace.ps1 -ProjectRoot <project> -Json
+```
+
+## Active Files
+
+- `SKILL.md`: public workflow, safety boundary, and full command reference.
+- `scripts/bootstrap_project.ps1`: fresh C3.3 initialization and conservative
+  existing-project refresh wrapper.
+- `scripts/project_language.ps1`: shared language normalization and legacy
+  declaration reader used by the wrapper.
+- `assets/c3-3-project-template/en/` and `zh-CN/`: fresh C3.3 templates.
+- [`docs/project-bootstrap-command-boundaries.md`](../../docs/project-bootstrap-command-boundaries.md):
+  helper ownership and orchestration boundary.
+
+Default refresh preserves project-owned edits. `-RefreshUnmodifiedTemplates`
+updates only files that still match prior installed template hashes.
+`-OverwriteTemplates` remains a warning-emitting compatibility alias for that
+same conservative behavior; it is not a force overwrite.
+
+## Legacy / Compatibility-Only Surface
+
+The following tools and assets remain for existing legacy projects or explicit
+maintenance of a separately tracked knowledge hub. They are not fresh/default
+C3.3 adoption entrypoints:
+
+- `scripts/init_hub.ps1` and `scripts/check_hub_lock.ps1`: initialize or check
+  a separately tracked hub and legacy non-empty hub pins.
+- `scripts/set_project_language.ps1`: legacy first-session scaffold writer.
+- `scripts/memory_upgrade.ps1`: legacy hot-memory layout analysis and upgrade.
+- `scripts/language_migration.ps1` and
+  `scripts/audit_memory_language.ps1`: legacy `en` / `zh-CN` migration and
+  review-only body-language audit.
+- `assets/knowledge-hub-template/templates/languages/<language>/project-root|project-agent/`:
+  bundled legacy scaffold/migration templates.
+- compatibility copies of knowledge-hub promotion and index helpers under
+  `scripts/`; routine hub maintenance uses the installed
+  `knowledge-hub/scripts/` entrypoints.
+
+The legacy templates include nested project guides, hot memory, commands,
+`CLAUDE.md`, `.claude/**`, context starters, and older Spec templates. Their
+presence in compatibility assets does not make them current Runtime authority.
+Do not run the language-migration or first-session scaffold helpers on a fresh
+C3.3 project; they operate on the legacy surface.
+
+For an existing legacy project, omitted `-ProjectLanguage` first reads
+`.agents/hub.lock.json.project_language` and uses a nested guide declaration
+only as a compatibility fallback when the lock has no language. Conflicting
+declarations fail before writes. Legacy Simplified Chinese template gaps may
+fall back to English and are reported as validation findings.
+
+Legacy migration remains explicit, proposal-first, and backup-first. Use the
+Runtime-level `scripts/migrate-project.ps1` Analyze -> explicit Apply -> guarded
+Rollback flow for C3.3 workspace migration. The bootstrap memory/language
+switches are compatibility wrappers, not a second migration authority.
+
+## Intent And Safety
+
+- **Refresh or template upgrade:** preserve project-specific content; add
+  missing surfaces or refresh only verified unmodified templates.
+- **Legacy language/memory migration:** use explicit Analyze, Plan, Apply, and
+  Validate steps with reviewable proposals and backups.
+- **Reset:** use `-ForceResetScaffold` only when the caller explicitly permits
+  discarding scaffold customizations. It warns and backs up before replacement.
+
+Commands, paths, APIs, filenames, raw errors, and code symbols remain protected
+literals during language migration. Audit JSON includes the resolved project
+path; remove local paths before copying evidence into public artifacts.
+
+## Focused Validation
+
+```powershell
+pwsh -NoProfile -NonInteractive -File <repo>\scripts\validation\project-bootstrap-safety-fixture.ps1 -Json
+```
+
+Repository-wide Release validation is not part of the ordinary bootstrap or
+documentation workflow; use the classifier-selected local validation plan.
