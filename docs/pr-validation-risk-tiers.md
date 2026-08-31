@@ -30,13 +30,15 @@ and `release`. Run it through the single local entrypoint:
 ./scripts/invoke-local-validation.ps1 -Stage pre-push -BaseRef origin/main -HeadRef HEAD
 ```
 
-Iteration always runs the real affected suites on the current host and never runs a release profile. Pre-push repeats the affected suites and adds the independent self-protection oracle only for validation control-plane or conservative-fallback changes. Tier 3 is therefore not synonymous with full validation. Release keeps the pwsh 7.6 host and uses the repository checkpoint profile.
+Iteration always runs the real affected suites on the current host and never runs a release profile. Pre-push keeps the same affected plan and final freshness boundary, but it may reuse complete successful iteration evidence when the compact candidate/tree, validation authority, routing plan, and host/runtime binding matches exactly and every planned iteration action completed successfully. Missing, failed, incomplete, malformed, or mismatched evidence causes the whole affected plan to be re-executed. The independent self-protection oracle remains in that plan only for validation control-plane or conservative-fallback changes. Tier 3 is therefore not synonymous with full validation. Release keeps the pwsh 7.6 host and uses the repository checkpoint profile.
 Dry-run output includes exact commands, hosts, suites, reasons, and explicit
 skips. Executed plans add actual action and stage timestamps and durations;
 timing is observational and never changes pass/fail.
 Executed stages also checkpoint `local-validation-result.json` after each
 completed action, preserving prior evidence if a later long-running action is
-interrupted by the caller.
+interrupted by the caller. A caller can pass a completed iteration result to
+pre-push with `-IterationEvidencePath`, or use the same explicit `ScratchRoot`;
+action output records `executed`, `reused`, or `re-executed` plus the reason.
 
 The targeted mappings reuse existing release helpers and fixtures: knowledge changes run catalog/index, entry metadata, public-safe metadata, experience search/regeneration, promotion, and helper consistency contracts; project bootstrap changes run the bootstrap safety fixture; bridge changes run the agent-skill bridge fixture; hooks run executable runtime fixtures; installer/runtime changes run installer contracts and runtime smoke; template and bundled snapshot changes run bootstrap safety plus language/template consistency. Project workspace schemas, canonical asset templates, the read-only parser, and the reserved continuity and migration paths run the `workspace-assets` fixture suite on Windows, Ubuntu, and macOS. Runtime skills and local fixtures without a reliable mapping conservatively escalate to Tier 3.
 

@@ -29,13 +29,27 @@ Use the classifier-owned local plan instead of manually composing validators:
 .\invoke-local-validation.ps1 -Stage release -ChangedPath CHANGELOG.md
 ```
 
-`iteration` never invokes the full release validator. `pre-push` runs affected
-checks for Tier 0-2 and preserves the PowerShell 7.6 validation full boundary
-for Tier 3. `release` always preserves that single-host full validation
-boundary. `-DryRun -Json` reports each command, host, suite, reason, skipped
-action, and non-negative observational timing without executing validation.
-Executed stages checkpoint `local-validation-result.json` after every completed
-action so a caller timeout does not erase earlier evidence.
+`iteration` never invokes the full release validator. `pre-push` remains the
+final freshness boundary: it reclassifies the current candidate, then reuses a
+complete successful iteration result only when the commit/tree, validation
+authority, routing plan, and host/runtime identity produce the same compact
+binding key, and every planned iteration action completed successfully.
+Otherwise it fail-closes by re-executing the affected plan.
+
+Pass the iteration result explicitly, or use the same `ScratchRoot` for both
+stages:
+
+```powershell
+$iteration = .\invoke-local-validation.ps1 -Stage iteration -BaseRef origin/main -HeadRef HEAD -Json | ConvertFrom-Json
+.\invoke-local-validation.ps1 -Stage pre-push -BaseRef origin/main -HeadRef HEAD -IterationEvidencePath $iteration.result_path
+```
+
+`release` keeps its existing single-host full validation boundary. `-DryRun -Json`
+reports each command, host, suite, reason, skipped action, and
+non-negative observational timing without executing validation. Executed
+stages checkpoint `local-validation-result.json` after every completed action;
+JSON and text output report `executed`, `reused`, or `re-executed` with the
+decision reason.
 
 The classifier, local-plan orchestrator, and normative repository validation
 entrypoints use the C3.3 PowerShell Core 7.6 control plane through
