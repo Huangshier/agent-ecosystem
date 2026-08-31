@@ -249,6 +249,51 @@ function ConvertTo-ContinuitySectionContent {
     return ($lines.ToArray() -join "`n")
 }
 
+# Get-ContinuitySectionValues: 从托管 section 的平铺列表中返回逐字值；无法安全解析时 fail closed。
+function Get-ContinuitySectionValues {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$State,
+        [Parameter(Mandatory = $true)][string]$Heading
+    )
+
+    $section = $State.sections[$Heading]
+    if (-not $section.present) { return [string[]]@() }
+    $contentLines = New-Object 'System.Collections.Generic.List[string]'
+    for ($index = [int]$section.start + 1; $index -lt [int]$section.end; $index++) {
+        [void]$contentLines.Add([string]$State.lines[$index])
+    }
+    while ($contentLines.Count -gt 0 -and [string]$contentLines[0] -ceq "") { $contentLines.RemoveAt(0) }
+    while ($contentLines.Count -gt 0 -and [string]$contentLines[$contentLines.Count - 1] -ceq "") { $contentLines.RemoveAt($contentLines.Count - 1) }
+
+    $values = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($line in @($contentLines.ToArray())) {
+        if (-not ([string]$line).StartsWith("- ", [StringComparison]::Ordinal)) { throw "invalid managed section content" }
+        $value = ([string]$line).Substring(2)
+        if (-not (Test-ContinuityScalar -Value $value)) { throw "invalid managed section value" }
+        [void]$values.Add($value)
+    }
+    return [string[]]$values.ToArray()
+}
+
+# Merge-ContinuitySectionValues: 保留既有条目，只按 ordinal 相等规则追加首次出现的新值。
+function Merge-ContinuitySectionValues {
+    param(
+        [AllowEmptyCollection()][string[]]$Existing = @(),
+        [AllowEmptyCollection()][string[]]$Additions = @()
+    )
+
+    $merged = New-Object 'System.Collections.Generic.List[string]'
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($value in @($Existing)) {
+        [void]$seen.Add([string]$value)
+        [void]$merged.Add([string]$value)
+    }
+    foreach ($value in @($Additions)) {
+        if ($seen.Add([string]$value)) { [void]$merged.Add([string]$value) }
+    }
+    return [string[]]$merged.ToArray()
+}
+
 function Set-ContinuityManagedSections {
     param(
         [Parameter(Mandatory = $true)][string]$Body,
@@ -452,15 +497,50 @@ function Get-ContinuityRequestMetadata {
 }
 
 function Get-ContinuitySectionUpdates {
-    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$BoundParameters)
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$BoundParameters,
+        [Parameter(Mandatory = $true)][string]$Body
+    )
+
+    $state = Get-ContinuitySectionState -Body $Body
     $updates = [ordered]@{}
-    foreach ($pair in @(@{ parameter = "Verified"; heading = "Verified" }, @{ parameter = "Boundary"; heading = "Boundaries" }, @{ parameter = "Blocker"; heading = "Blockers" })) {
-        $provided = Get-ContinuityBound -BoundParameters $BoundParameters -Name $pair.parameter
-        $values = if ($provided) { @($BoundParameters[$pair.parameter] | ForEach-Object { [string]$_ }) } else { @() }
-        foreach ($value in $values) {
-            if (-not (Test-ContinuityScalar -Value $value)) { throw ("invalid section value: {0}" -f $pair.parameter) }
+    foreach ($pair in @(
+        @{ replace = "Verified"; add = "AddVerified"; heading = "Verified" },
+        @{ replace = "Boundary"; add = "AddBoundary"; heading = "Boundaries" },
+        @{ replace = "Blocker"; add = "AddBlocker"; heading = "Blockers" }
+    )) {
+        $replaceProvided = Get-ContinuityBound -BoundParameters $BoundParameters -Name $pair.replace
+        $addProvided = Get-ContinuityBound -BoundParameters $BoundParameters -Name $pair.add
+        if ($replaceProvided -and $addProvided) { throw ("conflicting section update intent: {0}" -f $pair.heading) }
+
+        if ($replaceProvided) {
+            $values = @($BoundParameters[$pair.replace] | ForEach-Object { [string]$_ })
+            foreach ($value in $values) {
+                if (-not (Test-ContinuityScalar -Value $value)) { throw ("invalid section value: {0}" -f $pair.replace) }
+            }
+            $updates[$pair.heading] = [ordered]@{ provided = $true; values = $values; content = ConvertTo-ContinuitySectionContent -Values $values }
+            continue
         }
-        $updates[$pair.heading] = [ordered]@{ provided = $provided; values = $values; content = ConvertTo-ContinuitySectionContent -Values $values }
+
+        if ($addProvided) {
+            $additions = @($BoundParameters[$pair.add] | ForEach-Object { [string]$_ })
+            foreach ($value in $additions) {
+                if (-not (Test-ContinuityScalar -Value $value)) { throw ("invalid section value: {0}" -f $pair.add) }
+            }
+            if ($additions.Count -eq 0) {
+                $updates[$pair.heading] = [ordered]@{ provided = $false; values = @(); content = "" }
+                continue
+            }
+
+            $existing = @(Get-ContinuitySectionValues -State $state -Heading $pair.heading)
+            $values = @(Merge-ContinuitySectionValues -Existing $existing -Additions $additions)
+            $content = ConvertTo-ContinuitySectionContent -Values $values
+            $provided = ($values.Count -gt $existing.Count)
+            $updates[$pair.heading] = [ordered]@{ provided = $provided; values = $values; content = $content }
+            continue
+        }
+
+        $updates[$pair.heading] = [ordered]@{ provided = $false; values = @(); content = "" }
     }
     return $updates
 }
@@ -501,6 +581,22 @@ function Get-ContinuityChangedFields {
     return @($changed.ToArray())
 }
 
+# Test-ContinuityAppendOnlyNoChange: 仅当纯 Add 请求没有任何有效变化时允许跳过写入。
+function Test-ContinuityAppendOnlyNoChange {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$BoundParameters,
+        [AllowEmptyCollection()][string[]]$ChangedFields = @()
+    )
+
+    $appendProvided = @("AddVerified", "AddBoundary", "AddBlocker") | Where-Object { Get-ContinuityBound -BoundParameters $BoundParameters -Name $_ }
+    if (@($appendProvided).Count -eq 0 -or @($ChangedFields).Count -ne 0) { return $false }
+
+    foreach ($name in @("Title", "Status", "Summary", "Next", "Verified", "Boundary", "Blocker", "GitBranch", "GitWorktree", "GitLastVerifiedCommit", "Updated")) {
+        if (Get-ContinuityBound -BoundParameters $BoundParameters -Name $name) { return $false }
+    }
+    return $true
+}
+
 function Assert-ContinuityId {
     param([Parameter(Mandatory = $true)][string]$Id)
     if ($Id -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') { throw "invalid work id" }
@@ -513,7 +609,7 @@ function Assert-ContinuityOperationParameters {
     )
     $allowed = switch ($Operation) {
         "create-work" { @("Operation", "Mode", "ProjectRoot", "Id", "Title", "Summary", "Next", "ContinuityReason", "Status", "GitBranch", "GitWorktree", "GitLastVerifiedCommit", "Updated", "Json", "NoExit") }
-        "checkpoint" { @("Operation", "Mode", "ProjectRoot", "Id", "BaseRevision", "Title", "Status", "Summary", "Next", "Verified", "Boundary", "Blocker", "GitBranch", "GitWorktree", "GitLastVerifiedCommit", "Updated", "Json", "NoExit") }
+        "checkpoint" { @("Operation", "Mode", "ProjectRoot", "Id", "BaseRevision", "Title", "Status", "Summary", "Next", "Verified", "AddVerified", "Boundary", "AddBoundary", "Blocker", "AddBlocker", "GitBranch", "GitWorktree", "GitLastVerifiedCommit", "Updated", "Json", "NoExit") }
         "set-status" { @("Operation", "Mode", "ProjectRoot", "Id", "BaseRevision", "Status", "Updated", "Json", "NoExit") }
         "complete" { @("Operation", "Mode", "ProjectRoot", "Id", "BaseRevision", "ResultPersisted", "Json", "NoExit") }
         "recover-work" { @("Operation", "Mode", "ProjectRoot", "Id", "Json", "NoExit") }
@@ -747,16 +843,24 @@ function Invoke-ContinuityCheckpoint {
     $id = [string]$BoundParameters.Id
     $snapshot = Get-ContinuitySnapshot -Root $Root -Id $id
     if ($snapshot.state -ne "valid") { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code ("work-{0}" -f $snapshot.state) -Message "Canonical Work is not valid for checkpoint.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
-    try { $sectionUpdates = Get-ContinuitySectionUpdates -BoundParameters $BoundParameters; $newBody = Set-ContinuityManagedSections -Body $snapshot.body -Updates $sectionUpdates } catch { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "sections-ambiguous" -Message "Managed Work sections are ambiguous or invalid.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
+    try { $sectionUpdates = Get-ContinuitySectionUpdates -BoundParameters $BoundParameters -Body $snapshot.body; $newBody = Set-ContinuityManagedSections -Body $snapshot.body -Updates $sectionUpdates } catch { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "sections-ambiguous" -Message "Managed Work sections are ambiguous or invalid.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
     $metadata = Get-ContinuityRequestMetadata -Snapshot $snapshot -BoundParameters $BoundParameters
+    $expected = [string]$BoundParameters.BaseRevision
+    $changedFields = @(Get-ContinuityChangedFields -Current $snapshot -BoundParameters $BoundParameters -SectionUpdates $sectionUpdates)
+    if ($expected -cne [string]$snapshot.revision) { return New-ContinuityConflictResult -Operation "checkpoint" -Id $id -Expected $expected -Current ([string]$snapshot.revision) -Changed $changedFields }
+    if (Test-ContinuityAppendOnlyNoChange -BoundParameters $BoundParameters -ChangedFields $changedFields) {
+        return New-ContinuityResult -Operation "checkpoint" -Status "PASS" -Extra ([ordered]@{ id = $id; path = $snapshot.path; result = "unchanged"; previous_revision = $expected; revision = [string]$snapshot.revision; read_only = $false })
+    }
     if (-not (Get-ContinuityBound $BoundParameters "Updated")) { $metadata.updated = Get-ContinuityUtcNow }
     if ([string]$metadata.updated -eq [string](Get-PropertyValue $snapshot.metadata "updated") -and $BoundParameters.Keys.Count -le 2) { $metadata.updated = Get-ContinuityUtcNow }
-    $expected = [string]$BoundParameters.BaseRevision
-    if ($expected -cne [string]$snapshot.revision) { return New-ContinuityConflictResult -Operation "checkpoint" -Id $id -Expected $expected -Current ([string]$snapshot.revision) -Changed @(Get-ContinuityChangedFields -Current $snapshot -BoundParameters $BoundParameters -SectionUpdates $sectionUpdates) }
     try { $candidate = New-ContinuityCandidate -Root $Root -Id $id -Metadata $metadata -Body $newBody } catch { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "candidate-invalid" -Message "Checkpoint candidate did not pass the canonical parser.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
     try { $mutation = Write-ContinuityReplace -Root $Root -Id $id -Snapshot $snapshot -Text $candidate.text }
     catch { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "write-failed" -Message "Canonical Work could not be atomically replaced.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
-    if ($mutation.state -eq "conflict") { return New-ContinuityConflictResult -Operation "checkpoint" -Id $id -Expected $expected -Current ([string]$mutation.snapshot.revision) -Changed @(Get-ContinuityChangedFields -Current $mutation.snapshot -BoundParameters $BoundParameters -SectionUpdates $sectionUpdates) }
+    if ($mutation.state -eq "conflict") {
+        try { $conflictSectionUpdates = Get-ContinuitySectionUpdates -BoundParameters $BoundParameters -Body $mutation.snapshot.body }
+        catch { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "sections-ambiguous" -Message "Managed Work sections are ambiguous or invalid.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
+        return New-ContinuityConflictResult -Operation "checkpoint" -Id $id -Expected $expected -Current ([string]$mutation.snapshot.revision) -Changed @(Get-ContinuityChangedFields -Current $mutation.snapshot -BoundParameters $BoundParameters -SectionUpdates $conflictSectionUpdates)
+    }
     if ($mutation.state -ne "written") { return New-ContinuityResult -Operation "checkpoint" -Status "FAIL" -Findings @((New-ContinuityFinding -Code "concurrent-change" -Message "Canonical Work changed during the final write guard.")) -Extra ([ordered]@{ id = $id; path = $snapshot.path }) }
     return New-ContinuityResult -Operation "checkpoint" -Status "PASS" -Extra ([ordered]@{ id = $id; path = $snapshot.path; result = "updated"; previous_revision = $expected; revision = [string]$candidate.revision; read_only = $false })
 }

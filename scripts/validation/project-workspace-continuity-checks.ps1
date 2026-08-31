@@ -205,6 +205,23 @@ function Invoke-Workspace {
     return [ordered]@{ exit_code = $exitCode; payload = $payload; text = $text }
 }
 
+# Invoke-WorkspaceFile: 在全新 pwsh -File 子进程中调用公开 dispatcher，并返回结构化结果。
+function Invoke-WorkspaceFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectRoot,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Arguments
+    )
+
+    $processArguments = @("-NoProfile", "-NonInteractive", "-File", $workspacePath) + @($Arguments) + @("-Json")
+    $output = @(& pwsh @processArguments 2>&1 | ForEach-Object { [string]$_ })
+    $exitCode = [int]$LASTEXITCODE
+    $text = $output -join "`n"
+    Assert-Condition -Condition (Test-PublicSafeOutput -Text $text -ProjectRoot $ProjectRoot) -Message "pwsh -File checkpoint emitted non-public-safe material."
+    try { $payload = $text | ConvertFrom-Json -Depth 50 -DateKind String -ErrorAction Stop }
+    catch { throw "pwsh -File checkpoint did not return structured JSON." }
+    return [ordered]@{ exit_code = $exitCode; payload = $payload; text = $text }
+}
+
 function Invoke-Parser {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectRoot,
@@ -506,7 +523,7 @@ Invoke-Scenario -Name "checkpoint-malformed-fail-closed" -Action {
     $duplicate = New-Work -ProjectRoot $duplicateProject -Id "duplicate-section-work"
     Set-WorkBody -Path $duplicate.state.path -Body "## Verified`n`n- first`n`n## Verified`n`n- second"
     $duplicateBefore = Get-FileHashText -Path $duplicate.state.path
-    $duplicateRun = Invoke-Workspace -Operation checkpoint -ProjectRoot $duplicateProject -Parameters ([ordered]@{ Id = "duplicate-section-work"; BaseRevision = (Get-WorkState -ProjectRoot $duplicateProject -Id "duplicate-section-work").metadata.revision; Verified = @("replacement"); Updated = "2026-08-07T00:01:05Z" })
+    $duplicateRun = Invoke-Workspace -Operation checkpoint -ProjectRoot $duplicateProject -Parameters ([ordered]@{ Id = "duplicate-section-work"; BaseRevision = (Get-WorkState -ProjectRoot $duplicateProject -Id "duplicate-section-work").metadata.revision; AddVerified = @("appended value"); Updated = "2026-08-07T00:01:05Z" })
     Assert-FailClosed -Run $duplicateRun -Operation "checkpoint"
     Assert-Condition -Condition ($duplicateBefore -ceq (Get-FileHashText -Path $duplicate.state.path)) -Message "Ambiguous managed sections were rewritten."
 }
@@ -514,17 +531,170 @@ Invoke-Scenario -Name "checkpoint-malformed-fail-closed" -Action {
 Invoke-Scenario -Name "checkpoint-body-preservation" -Action {
     $project = New-FixtureProject -Name "checkpoint-body"
     $created = New-Work -ProjectRoot $project -Id "body-work"
-    Set-WorkBody -Path $created.state.path -Body "Human introduction remains exact.`n`n## Notes`n`nUnmanaged sentinel remains exact.`n`n## Verified`n`n- verified-old`n`n## Boundaries`n`n- boundary-old`n`n## Blockers`n`n- blocker-old"
+    $unmanaged = "Human introduction remains exact.`n`n## Notes`n`nUnmanaged sentinel remains exact.`n`n"
+    Set-WorkBody -Path $created.state.path -Body ($unmanaged + "## Verified`n`n- verified-old`n`n## Boundaries`n`n- boundary-old`n`n## Blockers`n`n- blocker-old")
     $base = [string](Get-WorkState -ProjectRoot $project -Id "body-work").metadata.revision
     $run = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{ Id = "body-work"; BaseRevision = $base; Verified = @("verified-new"); Boundary = @("boundary-new"); Updated = "2026-08-07T00:01:06Z" })
     Assert-Success -Run $run -Operation "checkpoint"
     $text = [IO.File]::ReadAllText($created.state.path, [Text.UTF8Encoding]::new($false, $true))
-    Assert-Condition -Condition ($text.Contains("Human introduction remains exact.", [StringComparison]::Ordinal) -and $text.Contains("Unmanaged sentinel remains exact.", [StringComparison]::Ordinal)) -Message "checkpoint discarded unmanaged Work body content."
+    Assert-Condition -Condition $text.Contains($unmanaged, [StringComparison]::Ordinal) -Message "checkpoint changed unmanaged Work body bytes."
     foreach ($heading in @("Verified", "Boundaries", "Blockers")) {
         Assert-Condition -Condition ([regex]::Matches($text, ("(?m)^## {0}$" -f [regex]::Escape($heading))).Count -eq 1) -Message ("checkpoint did not preserve exactly one managed heading: {0}" -f $heading)
     }
     foreach ($value in @("verified-new", "boundary-new", "blocker-old")) { Assert-Condition -Condition $text.Contains($value, [StringComparison]::Ordinal) -Message ("checkpoint omitted an updated or unprovided managed value: {0}" -f $value) }
     foreach ($value in @("verified-old", "boundary-old")) { Assert-Condition -Condition (-not $text.Contains($value, [StringComparison]::Ordinal)) -Message ("checkpoint retained a replaced managed value: {0}" -f $value) }
+}
+
+Invoke-Scenario -Name "checkpoint-section-update-intents" -Action {
+    $project = New-FixtureProject -Name "checkpoint-section-intents"
+    $created = New-Work -ProjectRoot $project -Id "section-intent-work"
+    $unmanaged = "Unmanaged preface remains byte exact.`n`n## Notes`n`n  Spacing stays exact.  `n`n"
+    Set-WorkBody -Path $created.state.path -Body ($unmanaged + "## Verified`n`n- verified-old`n`n## Boundaries`n`n- boundary-old`n`n## Blockers`n`n- blocker-old")
+
+    $state = Get-WorkState -ProjectRoot $project -Id "section-intent-work"
+    $replace = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "section-intent-work"; BaseRevision = [string]$state.metadata.revision
+            Boundary = @("boundary-replaced"); Blocker = @("blocker-replaced"); Updated = "2026-08-07T00:01:10Z"
+        })
+    Assert-Success -Run $replace -Operation "checkpoint"
+    $text = [IO.File]::ReadAllText($created.state.path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    Assert-Condition -Condition ($text.Contains("verified-old", [StringComparison]::Ordinal) -and $text.Contains("boundary-replaced", [StringComparison]::Ordinal) -and $text.Contains("blocker-replaced", [StringComparison]::Ordinal)) -Message "Replace or omitted-section semantics changed."
+    Assert-Condition -Condition (-not $text.Contains("boundary-old", [StringComparison]::Ordinal) -and -not $text.Contains("blocker-old", [StringComparison]::Ordinal)) -Message "Boundary or Blocker replace retained old values."
+
+    $state = Get-WorkState -ProjectRoot $project -Id "section-intent-work"
+    $clear = Invoke-WorkspaceFile -ProjectRoot $project -Arguments @(
+        "-Operation", "checkpoint", "-ProjectRoot", $project, "-Id", "section-intent-work",
+        "-BaseRevision", [string]$state.metadata.revision, "-Verified", "json:[]", "-Boundary", "json:[]", "-Blocker", "json:[]",
+        "-Updated", "2026-08-07T00:01:11Z"
+    )
+    Assert-Success -Run $clear -Operation "checkpoint"
+    $text = [IO.File]::ReadAllText($created.state.path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    foreach ($value in @("verified-old", "boundary-replaced", "blocker-replaced")) {
+        Assert-Condition -Condition (-not $text.Contains($value, [StringComparison]::Ordinal)) -Message ("Explicit section clear retained {0}." -f $value)
+    }
+
+    $state = Get-WorkState -ProjectRoot $project -Id "section-intent-work"
+    $append = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "section-intent-work"; BaseRevision = [string]$state.metadata.revision
+            AddVerified = @("verified-one", "verified-one", "Verified-one", "verified-one ")
+            AddBoundary = @("boundary-one", "boundary-one")
+            AddBlocker = @("blocker-one", "blocker-one")
+            Updated = "2026-08-07T00:01:12Z"
+        })
+    Assert-Success -Run $append -Operation "checkpoint"
+    $text = [IO.File]::ReadAllText($created.state.path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    Assert-Condition -Condition $text.Contains("## Verified`n`n- verified-one`n- Verified-one`n- verified-one `n", [StringComparison]::Ordinal) -Message "Verified append did not preserve order, exact case, whitespace, or first occurrence."
+    Assert-Condition -Condition ($text.Contains("## Boundaries`n`n- boundary-one", [StringComparison]::Ordinal) -and $text.Contains("## Blockers`n`n- blocker-one", [StringComparison]::Ordinal)) -Message "Boundary or Blocker append did not persist."
+
+    $state = Get-WorkState -ProjectRoot $project -Id "section-intent-work"
+    $omitted = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "section-intent-work"; BaseRevision = [string]$state.metadata.revision
+            AddVerified = @("verified-two"); Updated = "2026-08-07T00:01:13Z"
+        })
+    Assert-Success -Run $omitted -Operation "checkpoint"
+    $text = [IO.File]::ReadAllText($created.state.path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    Assert-Condition -Condition ($text.Contains("- boundary-one", [StringComparison]::Ordinal) -and $text.Contains("- blocker-one", [StringComparison]::Ordinal)) -Message "Omitted managed sections changed during append."
+    Assert-Condition -Condition $text.Contains($unmanaged, [StringComparison]::Ordinal) -Message "Managed section updates changed unmanaged body bytes."
+}
+
+Invoke-Scenario -Name "checkpoint-append-noop-and-conflict" -Action {
+    $project = New-FixtureProject -Name "checkpoint-append-noop"
+    $created = New-Work -ProjectRoot $project -Id "append-noop-work"
+    Set-WorkBody -Path $created.state.path -Body "## Verified`n`n- verified-existing`n`n## Boundaries`n`n- boundary-existing`n`n## Blockers`n`n- blocker-existing"
+    $state = Get-WorkState -ProjectRoot $project -Id "append-noop-work"
+    $base = [string]$state.metadata.revision
+    $before = Get-StateFingerprint -Root $project
+    Start-Sleep -Milliseconds 20
+    $duplicate = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "append-noop-work"; BaseRevision = $base; AddVerified = @("verified-existing", "verified-existing")
+        })
+    Assert-Success -Run $duplicate -Operation "checkpoint"
+    Assert-Condition -Condition ([string]$duplicate.payload.result -ceq "unchanged" -and [string]$duplicate.payload.revision -ceq $base -and $before -ceq (Get-StateFingerprint -Root $project)) -Message "Duplicate append rewrote Work or changed its revision."
+
+    $beforeEmpty = Get-StateFingerprint -Root $project
+    Start-Sleep -Milliseconds 20
+    $empty = Invoke-WorkspaceFile -ProjectRoot $project -Arguments @(
+        "-Operation", "checkpoint", "-ProjectRoot", $project, "-Id", "append-noop-work",
+        "-BaseRevision", $base, "-AddBoundary", "json:[]"
+    )
+    Assert-Success -Run $empty -Operation "checkpoint"
+    Assert-Condition -Condition ([string]$empty.payload.result -ceq "unchanged" -and [string]$empty.payload.revision -ceq $base -and $beforeEmpty -ceq (Get-StateFingerprint -Root $project)) -Message "Explicit empty append was not a byte-identical no-op."
+
+    foreach ($pair in @(
+        @{ replace = "Verified"; add = "AddVerified" },
+        @{ replace = "Boundary"; add = "AddBoundary" },
+        @{ replace = "Blocker"; add = "AddBlocker" }
+    )) {
+        $parameters = [ordered]@{ Id = "append-noop-work"; BaseRevision = $base }
+        $parameters[$pair.replace] = @("replacement")
+        $parameters[$pair.add] = @("addition")
+        $beforeConflict = Get-StateFingerprint -Root $project
+        $conflict = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters $parameters
+        Assert-FailClosed -Run $conflict -Operation "checkpoint"
+        Assert-Condition -Condition ($beforeConflict -ceq (Get-StateFingerprint -Root $project)) -Message ("Conflicting {0}/{1} intents changed Work." -f $pair.replace, $pair.add)
+    }
+
+    $beforeInvalid = Get-StateFingerprint -Root $project
+    $invalidScalar = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "append-noop-work"; BaseRevision = $base; AddVerified = @("invalid`nvalue")
+        })
+    Assert-FailClosed -Run $invalidScalar -Operation "checkpoint"
+    Assert-Condition -Condition ($beforeInvalid -ceq (Get-StateFingerprint -Root $project)) -Message "Invalid Add scalar changed Work."
+
+    $advance = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "append-noop-work"; BaseRevision = $base; AddBlocker = @("blocker-new"); Updated = "2026-08-07T00:01:20Z"
+        })
+    Assert-Success -Run $advance -Operation "checkpoint"
+    $current = Get-WorkState -ProjectRoot $project -Id "append-noop-work"
+    $beforeStale = Get-FileHashText -Path $current.path
+    $staleDuplicate = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "append-noop-work"; BaseRevision = $base; AddBlocker = @("blocker-new", "blocker-new")
+        })
+    Assert-Condition -Condition ([string]$staleDuplicate.payload.status -ceq "revision-conflict" -and [string]$staleDuplicate.payload.current_revision -ceq [string]$current.metadata.revision) -Message "Stale duplicate append did not preserve CAS conflict semantics."
+    Assert-Condition -Condition (-not (@($staleDuplicate.payload.changed_fields | ForEach-Object { [string]$_ }) -ccontains "blockers")) -Message "Duplicate append falsely reported blockers as changed."
+    Assert-Condition -Condition ($beforeStale -ceq (Get-FileHashText -Path $current.path)) -Message "Stale duplicate append changed canonical Work bytes."
+
+    $staleNovel = Invoke-Workspace -Operation checkpoint -ProjectRoot $project -Parameters ([ordered]@{
+            Id = "append-noop-work"; BaseRevision = $base; AddVerified = @("verified-new")
+        })
+    Assert-Condition -Condition ([string]$staleNovel.payload.status -ceq "revision-conflict" -and (@($staleNovel.payload.changed_fields | ForEach-Object { [string]$_ }) -ccontains "verified")) -Message "Stale novel append did not report the effective section change."
+    Assert-Condition -Condition ($beforeStale -ceq (Get-FileHashText -Path $current.path)) -Message "Stale novel append changed canonical Work bytes."
+}
+
+Invoke-Scenario -Name "checkpoint-file-add-list-inputs" -Action {
+    $project = New-FixtureProject -Name "checkpoint-file-add"
+    $create = Invoke-WorkspaceFile -ProjectRoot $project -Arguments @(
+        "-Operation", "create-work", "-ProjectRoot", $project, "-Id", "file-add-work",
+        "-Title", "File add work", "-Summary", "Exercise the public process boundary.", "-Next", "Append exact values.",
+        "-ContinuityReason", "unfinished", "-Updated", "2026-08-07T00:01:30Z"
+    )
+    Assert-Success -Run $create -Operation "create-work"
+
+    $plain = Invoke-WorkspaceFile -ProjectRoot $project -Arguments @(
+        "-Operation", "checkpoint", "-ProjectRoot", $project, "-Id", "file-add-work",
+        "-BaseRevision", [string]$create.payload.revision,
+        "-AddVerified", "one fact, exact", "-AddBoundary", "one boundary", "-AddBlocker", "one blocker",
+        "-Updated", "2026-08-07T00:01:31Z"
+    )
+    Assert-Success -Run $plain -Operation "checkpoint"
+
+    $verifiedJson = "json:" + (ConvertTo-Json -InputObject ([string[]]@("one fact, exact", "another fact")) -Compress)
+    $boundaryJson = "json:" + (ConvertTo-Json -InputObject ([string[]]@("one boundary", "another boundary")) -Compress)
+    $blockerJson = "json:" + (ConvertTo-Json -InputObject ([string[]]@("one blocker", "another blocker")) -Compress)
+    $multi = Invoke-WorkspaceFile -ProjectRoot $project -Arguments @(
+        "-Operation", "checkpoint", "-ProjectRoot", $project, "-Id", "file-add-work",
+        "-BaseRevision", [string]$plain.payload.revision,
+        "-AddVerified", $verifiedJson, "-AddBoundary", $boundaryJson, "-AddBlocker", $blockerJson,
+        "-Updated", "2026-08-07T00:01:32Z"
+    )
+    Assert-Success -Run $multi -Operation "checkpoint"
+    $state = Get-WorkState -ProjectRoot $project -Id "file-add-work"
+    Assert-RevisionValid -State $state
+    $text = [IO.File]::ReadAllText($state.path, [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
+    Assert-Condition -Condition $text.Contains("## Verified`n`n- one fact, exact`n- another fact", [StringComparison]::Ordinal) -Message "JSON Verified append did not cross pwsh -File with stable dedupe or preserve the comma sentinel."
+    Assert-Condition -Condition $text.Contains("## Boundaries`n`n- one boundary`n- another boundary", [StringComparison]::Ordinal) -Message "JSON Boundary append did not cross pwsh -File."
+    Assert-Condition -Condition $text.Contains("## Blockers`n`n- one blocker`n- another blocker", [StringComparison]::Ordinal) -Message "JSON Blocker append did not cross pwsh -File."
+    Assert-Condition -Condition ([string]$create.payload.revision -cne [string]$plain.payload.revision -and [string]$plain.payload.revision -cne [string]$multi.payload.revision) -Message "Real append changes did not advance revision."
 }
 
 Invoke-Scenario -Name "set-status-four-values" -Action {

@@ -28,17 +28,19 @@ argument value:
 ```powershell
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/discover-project-assets.ps1 -ProjectRoot <project-root> -Query <query> -Type 'json:["work","spec"]' -Status 'json:["active","draft"]' -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Verified 'json:["Parser output, exact","Second verified fact"]' -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -AddVerified 'json:["One new fact","Another new fact"]' -Json
 ```
 
-This contract applies consistently to `Type`, `Status`, `Verified`, `Boundary`,
-`Blocker`, `Keywords`, `Evidence`, `Triggers`, `SideEffects`, `Preconditions`,
-`Steps`, `Validation`, `StopBoundaries`, `Authorization`, `Goals`, `NonGoals`,
-`Tradeoffs`, `Acceptance`, `RelatedWork`, and `Supersedes`. The exact lowercase
-`json:` prefix selects the structured form; malformed JSON, nested arrays,
-`null`, and non-string members fail closed. Untagged text remains a single value
-even when it starts with `[` or contains commas, so `[Source], exact` remains
-unchanged. An explicit empty list is `'json:[]'`; omission remains distinct from
-an explicit empty list when the operation gives those states different meanings.
+This contract applies consistently to `Type`, `Status`, `Verified`,
+`AddVerified`, `Boundary`, `AddBoundary`, `Blocker`, `AddBlocker`, `Keywords`,
+`Evidence`, `Triggers`, `SideEffects`, `Preconditions`, `Steps`, `Validation`,
+`StopBoundaries`, `Authorization`, `Goals`, `NonGoals`, `Tradeoffs`,
+`Acceptance`, `RelatedWork`, and `Supersedes`. The exact lowercase `json:`
+prefix selects the structured form; malformed JSON, nested arrays, `null`, and
+non-string members fail closed. Untagged text remains a single value even when
+it starts with `[` or contains commas, so `[Source], exact` remains unchanged.
+An explicit empty list is `'json:[]'`; omission remains distinct from an
+explicit empty list when the operation gives those states different meanings.
 
 ## Canonical authoring
 
@@ -147,18 +149,34 @@ only when the caller can name one of the frozen continuity risks:
 ```powershell
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation create-work -ProjectRoot <project-root> -Id <work-id> -Title <title> -Summary <summary> -Next <next-step> -ContinuityReason unfinished -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Summary <snapshot> -Next <next-step> -Verified <fact> -Boundary <boundary> -Blocker <blocker> -Json
+pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation checkpoint -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -AddVerified <fact> -AddBoundary <boundary> -AddBlocker <blocker> -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation set-status -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -Status paused -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation complete -ProjectRoot <project-root> -Id <work-id> -BaseRevision <sha256:...> -ResultPersisted -Json
 pwsh -NoProfile -NonInteractive -File skills/project-workspace/scripts/project-workspace.ps1 -Operation recover-work -ProjectRoot <project-root> -Id <work-id> -Json
 ```
 
 `create-work` may also accept one status value, `GitBranch`, `GitWorktree`,
-`GitLastVerifiedCommit`, and `Updated`. `checkpoint` updates only explicitly
-provided metadata or the exact `## Verified`, `## Boundaries`, and
-`## Blockers` sections; all other Markdown body content is preserved.
-`set-status` accepts exactly one of `active`, `paused`, `blocked`, or
-`deferred`, plus an optional deterministic `Updated`. If `Updated` is omitted,
-write operations use the current UTC RFC3339 timestamp.
+`GitLastVerifiedCommit`, and `Updated`. For each exact managed section,
+`checkpoint` uses these intent rules:
+
+- Omitting both parameters leaves that section unchanged.
+- `Verified`, `Boundary`, or `Blocker` replaces the entire corresponding
+  section. Passing `'json:[]'` explicitly clears it.
+- `AddVerified`, `AddBoundary`, or `AddBlocker` preserves existing entries and
+  appends only missing values. Equality is exact and ordinal: existing order is
+  retained, new values keep caller order, and only the first occurrence among
+  candidate additions is appended. No case folding, trimming, or fuzzy
+  normalization is performed. Passing `'json:[]'` is a no-op.
+- Supplying replace and add parameters for the same section fails closed. If an
+  append contains no new value and requests no other update, the file is not
+  rewritten and its revision is unchanged; the operation returns
+  `result: unchanged`.
+
+All section values continue to use the existing scalar safety validation, and
+all other Markdown body content is preserved exactly. `set-status` accepts
+exactly one of `active`, `paused`, `blocked`, or `deferred`, plus an optional
+deterministic `Updated`. If `Updated` is omitted, write operations use the
+current UTC RFC3339 timestamp.
 
 Every update or deletion requires the current `BaseRevision`. A stale request
 returns top-level `status: revision-conflict`, the expected and current
