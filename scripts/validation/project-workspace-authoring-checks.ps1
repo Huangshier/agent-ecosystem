@@ -151,10 +151,10 @@ try {
     $normalizedListParameters = if ($null -eq $listAssignment) { @() } else {
         @($listAssignment.Right.FindAll({ param($node) $node -is [Management.Automation.Language.StringConstantExpressionAst] }, $true) | ForEach-Object { $_.Value } | Sort-Object)
     }
-    $listCoverage = (@($parseErrors).Count -eq 0 -and $publicListParameters.Count -eq 20 -and
+    $listCoverage = (@($parseErrors).Count -eq 0 -and $publicListParameters.Count -eq 23 -and
         $publicListParameters.Count -eq $normalizedListParameters.Count -and
         @((Compare-Object -ReferenceObject $publicListParameters -DifferenceObject $normalizedListParameters -CaseSensitive)).Count -eq 0)
-    Add-Case -Name "all-public-list-parameters-normalized" -Passed $listCoverage -Detail "All 20 public string-array parameters, including StopBoundaries, are registered with the shared list-input normalizer."
+    Add-Case -Name "all-public-list-parameters-normalized" -Passed $listCoverage -Detail "All 23 public string-array parameters, including the checkpoint Add parameters, are registered with the shared list-input normalizer."
 
     $skillText = [IO.File]::ReadAllText((Join-Path $repoRoot "skills/project-workspace/SKILL.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")
     $walkthroughText = [IO.File]::ReadAllText((Join-Path $repoRoot "docs/walkthroughs/minimal-project-adoption.md"), [Text.UTF8Encoding]::new($false, $true)).Replace("`r`n", "`n").Replace("`r", "`n")

@@ -20,8 +20,11 @@ param(
     [string]$GitWorktree = "",
     [string]$GitLastVerifiedCommit = "",
     [string[]]$Verified = @(),
+    [string[]]$AddVerified = @(),
     [string[]]$Boundary = @(),
+    [string[]]$AddBoundary = @(),
     [string[]]$Blocker = @(),
+    [string[]]$AddBlocker = @(),
     [Alias("Keyword")][string[]]$Keywords = @(),
     [string[]]$Evidence = @(),
     [Alias("Trigger")][string[]]$Triggers = @(),
@@ -67,7 +70,8 @@ $catalogSchemaPath = Join-Path $schemaRoot "catalog.v1.schema.json"
 $glossarySchemaPath = Join-Path $schemaRoot "glossary.v1.schema.json"
 
 $script:ProjectWorkspaceListParameters = @(
-    "Type", "Status", "Verified", "Boundary", "Blocker", "Keywords",
+    "Type", "Status", "Verified", "AddVerified", "Boundary", "AddBoundary",
+    "Blocker", "AddBlocker", "Keywords",
     "Evidence", "Triggers", "SideEffects", "Preconditions", "Steps",
     "Validation", "StopBoundaries", "Authorization", "Goals", "NonGoals",
     "Tradeoffs", "Acceptance", "RelatedWork", "Supersedes"
