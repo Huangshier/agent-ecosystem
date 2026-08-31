@@ -1,13 +1,8 @@
 # AGENTS.md
 
-Project-level agent entrypoint for the minimal example.
+This file is the project behavior entrypoint.
 
-Primary instructions are in `.agents/AGENTS.md`. Read that file before planning
-or editing non-trivial work.
-
-Minimum read order:
-1. `.agents/AGENTS.md`
-2. `.agents/process.txt`
-3. `.agents/plan.md`
-4. `.agents/commands/README.md`, then only relevant command cards
-5. active `docs/specs/<slug>/spec.md` and `tasks.md`
+- Canonical durable assets are Work, Context, Procedure, and Spec.
+- Project-local Skills are a separate promoted surface; they are not a fifth canonical asset type.
+- The packaged runtime owns only its installed, manifest-managed content. Project workspace files remain project-local.
+- Discovery and status are read-only unless an explicit authoring operation is requested.

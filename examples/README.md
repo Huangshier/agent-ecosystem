@@ -5,8 +5,8 @@ without private overlay knowledge.
 
 ## Available Examples
 
-- [Minimal Project](minimal-project/README.md): a small `.agents` and
-  `docs/specs` layout for a project that uses the Workflow Kernel.
+- [Minimal Project](minimal-project/README.md): the current minimal C3.3
+  workspace, plus one illustrative canonical Spec.
 
 For the adaptation process, see [How To Adapt](../docs/how-to-adapt.md).
 For a continuous empty-project walkthrough, see

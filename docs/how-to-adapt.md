@@ -59,17 +59,19 @@ dev links 继续使用基本的 manifest-based uninstall path；manifest destina
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project>
 ```
 
-当 agent 或 workflow 知道用户的 primary language 时，在第一次 non-trivial
-memory write 时显式设置 project memory language：
+当 agent 或 workflow 已知项目需要的语言时，在 fresh bootstrap 时显式设置
+`ProjectLanguage`：
 
 ```powershell
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
 pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage zh-CN
 ```
 
-该 script 不会自行推断 chat language。支持的 project memory template languages
-只有 `en` 和 `zh-CN`；English 是 fallback。这是 scaffold-language feature，
-不是 arbitrary-language i18n。
+该 script 不会自行推断 chat language。支持的 C3.3 template languages 只有 `en`
+和 `zh-CN`；English 是默认与 fallback。fresh bootstrap 使用对应模板写入根
+`AGENTS.md` 和 `.agents/README.md`，并把规范化值记录在
+`.agents/hub.lock.json`。这是 scaffold-language feature，不是
+arbitrary-language i18n。
 
 对于 existing project，应把 bootstrap 视为 conservative scaffold refresh，而
 不是 legacy migration：
@@ -83,8 +85,8 @@ pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-bootstrap\scripts
 - 不要使用 reset language 进行 memory migration。使用 Analyze、Plan、Apply 和
   Validate flows，确保 project-specific content 在应用变更前经过 review 并完成
   backup。
-- established project memory language 变更使用带有明确方向的 conservative
-  language migration switches，例如
+- **Compatibility-only：** established legacy project memory language 变更使用
+  带有明确方向的 conservative language migration switches，例如
   `-AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN`，然后使用
   `-PlanLanguageMigration`、`-ApplyLanguageMigration -MigrationPlan
   <proposal.json>` 和 `-ValidateLanguageMigration -MigrationPlan
@@ -111,10 +113,16 @@ pwsh -NoProfile -NonInteractive -File <runtime>\scripts\migrate-project.ps1 -Mod
 Procedure 和 Spec asset。不要把 retired 的 context-gate 或 memory-governance
 helper 当作当前 entrypoint。
 
-对于 Claude Code project，保留生成的 `CLAUDE.md`、`.claude/settings.json`、
-`.claude/guardrails/` 和 `.claude/hooks/` surfaces。lifecycle hooks 会检查
-entry loading、project context、write authorization profile、危险的 memory
-reset mode 和 stop point，但不会变成 security sandbox，也不会绕过正常权限。
+fresh C3.3 bootstrap 不生成 client-specific startup 或 hook scaffold。项目已在
+`.agents/skills/` 发布本地 Skill 且需要 Claude Code discovery 时，可显式创建
+`project-workspace` 的 `claude-code` adapter：
+
+```powershell
+pwsh -NoProfile -NonInteractive -File <runtime>\skills\project-workspace\scripts\project-workspace.ps1 -Operation create-adapter -ProjectRoot <project> -Target claude-code -Json
+```
+
+该 adapter 只管理 `.agents/skills/<name>` 到 `.claude/skills/<name>` 的派生副本；
+它不创建行为入口、不修改 `.gitignore`，也不改变权限或外部写入授权。
 
 在 target project 中，需要 durable goal、non-goal、acceptance evidence、risk
 或 multi-phase execution 时，使用 `project-workspace create-spec`。

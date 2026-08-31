@@ -89,6 +89,79 @@ New-Item -ItemType Directory -Force -Path $ScratchRoot | Out-Null
 $scratchFull = (Resolve-Path -LiteralPath $ScratchRoot).Path
 $results = New-Object 'System.Collections.Generic.List[object]'
 
+# NOTE: minimal example 是 fresh/default adoption surface，只做精确路径与明确文档
+# term 检查，避免把 compatibility fixture 或历史文档纳入通用字符串扫描。
+$minimalExampleRoot = Join-Path $RepositoryRoot "examples/minimal-project"
+$minimalRequiredPaths = @(
+    "AGENTS.md",
+    "README.md",
+    ".agents/.gitignore",
+    ".agents/README.md",
+    ".agents/work",
+    ".agents/context",
+    ".agents/procedures",
+    ".agents/skills",
+    "docs/specs/example-work/spec.md",
+    "docs/specs/example-work/tasks.md"
+)
+$minimalRetiredPaths = @(
+    ".agents/AGENTS.md",
+    ".agents/process.txt",
+    ".agents/plan.md",
+    ".agents/notes.md",
+    ".agents/commands",
+    "CLAUDE.md",
+    ".claude"
+)
+$minimalMissingPaths = @($minimalRequiredPaths | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $minimalExampleRoot $_))
+})
+$minimalPresentRetiredPaths = @($minimalRetiredPaths | Where-Object {
+    Test-Path -LiteralPath (Join-Path $minimalExampleRoot $_)
+})
+if ($minimalMissingPaths.Count -gt 0 -or $minimalPresentRetiredPaths.Count -gt 0) {
+    throw "Minimal C3.3 example layout drifted. Missing: $($minimalMissingPaths -join ', '); retired: $($minimalPresentRetiredPaths -join ', ')."
+}
+$results.Add([ordered]@{ name = "minimal-example-c3-3-layout"; status = "PASS" }) | Out-Null
+
+$minimalGuidanceFiles = @(
+    "AGENTS.md",
+    "README.md",
+    "docs/specs/example-work/spec.md",
+    "docs/specs/example-work/tasks.md"
+)
+$minimalGuidanceText = ($minimalGuidanceFiles | ForEach-Object {
+    [IO.File]::ReadAllText((Join-Path $minimalExampleRoot $_), [Text.UTF8Encoding]::new($false, $true))
+}) -join "`n"
+$minimalRetiredGuidanceTokens = @(
+    ".agents/AGENTS.md",
+    ".agents/process.txt",
+    ".agents/plan.md",
+    ".agents/notes.md",
+    ".agents/commands",
+    "project-context-gate",
+    "workflow-spec-lite",
+    "memory-governance",
+    "CLAUDE.md",
+    ".claude/"
+)
+$minimalPresentRetiredTokens = @($minimalRetiredGuidanceTokens | Where-Object {
+    $minimalGuidanceText.Contains($_, [StringComparison]::Ordinal)
+})
+$minimalRequiredGuidanceTokens = @(
+    "project-bootstrap",
+    "project-workspace check",
+    "project-workspace",
+    "docs/specs/<slug>/"
+)
+$minimalMissingGuidanceTokens = @($minimalRequiredGuidanceTokens | Where-Object {
+    -not $minimalGuidanceText.Contains($_, [StringComparison]::Ordinal)
+})
+if ($minimalPresentRetiredTokens.Count -gt 0 -or $minimalMissingGuidanceTokens.Count -gt 0) {
+    throw "Minimal C3.3 example guidance drifted. Missing active terms: $($minimalMissingGuidanceTokens -join ', '); retired terms: $($minimalPresentRetiredTokens -join ', ')."
+}
+$results.Add([ordered]@{ name = "minimal-example-active-guidance"; status = "PASS" }) | Out-Null
+
 $repositoryStyleHub = Join-Path $scratchFull "repository-style-hub"
 $repositoryStyleProject = Join-Path $scratchFull "repository-style-project"
 New-Item -ItemType Directory -Path (Join-Path $repositoryStyleHub "skills") -Force | Out-Null

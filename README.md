@@ -19,7 +19,7 @@ Agent Ecosystem 提供一组可安装、可验证、可扩展的基础工作流�
 它适合希望改善以下工作的维护者和团队：
 
 - 让 Codex、Claude Code 或其他 agent 在开始任务时加载正确的项目约束；
-- 用热记忆和可选工作包跨会话保留状态、范围与验收证据；
+- 用 canonical Work、Context、Procedure、Spec 跨会话保留必要状态、范围与验收证据；
 - 安全地安装、检查和更新共享 runtime，同时保留项目特化内容；
 - 将项目经验与跨项目公共知识分层维护。
 
@@ -44,12 +44,12 @@ Release → installed Runtime → optional Agent bridge → Project
 - **Project**：目标项目自己的行为契约、工程记忆和可选工作包。它们属于目标项目，不属于
   runtime 或本仓库。
 
-在项目层，根 `AGENTS.md` 是唯一完整的项目行为契约。`.agents/AGENTS.md` 是工程记忆
-指南，说明如何读取和维护 `.agents/`；它不是第二份行为契约。canonical workspace
-资产为 Work、Context、Procedure、Spec；`project-workspace` 负责 discover、check、
-continuity 和 create-spec。`.agents/process.txt`、`.agents/plan.md` 和 `.agents/notes.md`
-是 C3.3 hot-memory 收敛后的 retired 路径，不是当前 canonical hot-state authority；
+在项目层，根 `AGENTS.md` 是唯一完整的项目行为契约，`.agents/README.md` 说明
+project-local workspace。canonical workspace 资产为 Work、Context、Procedure、
+Spec；`project-workspace` 负责 discover、check、continuity 和 create-spec。
 `.agents/context/` 保存按需发现的知识，`docs/specs/` 供目标项目保存跨会话工作包。
+旧项目中的 nested guide、hot-memory 文件与 command index 仅是 compatibility-only
+迁移输入，不是 fresh/default authority。
 
 完整边界见 [Architecture](docs/architecture.md) 和
 [Runtime adoption bridge](docs/runtime-adoption-bridge.md)。
@@ -216,7 +216,6 @@ backup-first 的 `-ForceResetScaffold`。完整决策表与命令见
 - [Runtime adoption bridge](docs/runtime-adoption-bridge.md)
 - [Agent-specific skill link bridge](docs/agent-skill-bridge.md)
 - [Knowledge catalog](knowledge-hub/knowledge-catalog.md)
-- [Claude Code hooks guardrails](docs/claude-code-hooks-guardrails.md)
 
 维护者入口：
 

@@ -56,9 +56,10 @@ Create the canonical C3.3 workspace:
 pwsh -NoProfile -File <runtime>\skills\project-bootstrap\scripts\bootstrap_project.ps1 -ProjectDir <project> -ProjectLanguage en
 ```
 
-Use `-ProjectLanguage zh-CN` instead when the project memory should be written
-in Simplified Chinese. The bootstrap script does not infer chat language by
-itself.
+Use `-ProjectLanguage zh-CN` instead to select the Simplified Chinese C3.3
+templates. The bootstrap script localizes root `AGENTS.md` and
+`.agents/README.md`, records the normalized value in
+`.agents/hub.lock.json`, and does not infer chat language by itself.
 
 Expected project files:
 
@@ -68,6 +69,7 @@ Expected project files:
   .agents/
     README.md
     .gitignore
+    hub.lock.json
     work/
     context/
     procedures/
@@ -79,8 +81,8 @@ Expected project files:
 Bootstrap creates this layout only; it does not create placeholder Work,
 Context, Procedure, Spec, glossary, or promoted Skill content. `AGENTS.md` is
 the project entrypoint, `.agents/README.md` explains the project-local
-workspace surface, and the four canonical durable asset types are Work,
-Context, Procedure, and Spec.
+workspace surface, `.agents/hub.lock.json` stores bootstrap metadata, and the
+four canonical durable asset types are Work, Context, Procedure, and Spec.
 
 ## 3. Discover And Check Project Assets
 
@@ -171,14 +173,18 @@ pwsh -NoProfile -File <runtime>\skills\project-workspace\scripts\check-project-w
 pwsh -NoProfile -File <runtime>\scripts\status.ps1 -RuntimeDir <runtime> -ProjectDir <project> -Json
 ```
 
-If you are changing this public repository itself, use the full release gate:
+If you are changing this public repository itself, run the classifier-selected
+iteration and pre-push plans:
 
 ```powershell
-pwsh -NoProfile -File <repo>\scripts\validate-release.ps1 -ScratchRoot <scratch>
+pwsh -NoProfile -File <repo>\scripts\invoke-local-validation.ps1 -Stage iteration -BaseRef origin/main -HeadRef HEAD
+pwsh -NoProfile -File <repo>\scripts\invoke-local-validation.ps1 -Stage pre-push -BaseRef origin/main -HeadRef HEAD
 ```
 
-For an ordinary adopted project, define validation in that project's own spec.
-The Workflow Kernel does not prescribe a universal test suite.
+The complete Release validator is reserved for an explicit Release or
+repository-checkpoint decision. For an ordinary adopted project, define
+validation in that project's own spec; the Workflow Kernel does not prescribe
+a universal test suite.
 
 ## 8. Clean Up Evaluation Artifacts
 
@@ -216,5 +222,5 @@ After the minimal path works:
 - incubate custom skills outside the public kernel until they are stable and
   public-safe.
 
-The companion [minimal project example](../../examples/minimal-project/README.md)
+The companion [current C3.3 minimal project example](../../examples/minimal-project/README.md)
 shows the intended project-local file layout after bootstrap.

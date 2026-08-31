@@ -36,7 +36,7 @@ upgrade validation, or any release-candidate work.
 | Hub lock drift checks | `check_hub_lock.ps1` | No owner role | Lock drift validation stays a standalone read-only helper. Bootstrap writes lock metadata but should not become the general drift-audit command. |
 | Experience promotion and index rebuild | `knowledge-hub/scripts/` runtime helpers; compatibility copies under `skills/project-bootstrap/scripts/` | Compatibility copy only | Routine global experience maintenance belongs in the installed knowledge hub, not in bootstrap. Bootstrap can install or copy the helper surface needed for standalone runtime setup. |
 | Candidate intake and triage | `knowledge-hub/scripts/manage_candidates.ps1`; compatibility copy under `skills/project-bootstrap/scripts/` | Compatibility copy only | Candidate intake writes only an explicit runtime inbox, treats explicit project roots as read-only, and remains separate from formal experience promotion. |
-| Future old-release upgrade orchestration | Dedicated upgrade orchestration helper | Compatibility alias only if needed | Release-to-release upgrade rehearsals should live in a dedicated helper or command card that composes context gate, bootstrap refresh, memory upgrade, language migration, and validation steps. Do not add more orchestration logic to `bootstrap_project.ps1` by default. |
+| Future old-release upgrade orchestration | Dedicated upgrade orchestration helper | Compatibility alias only if needed | Release-to-release upgrade rehearsals should live in a dedicated helper or command card that composes workspace inspection, bootstrap refresh, memory upgrade, language migration, and validation steps. Do not add more orchestration logic to `bootstrap_project.ps1` by default. |
 
 ## Compatibility Rules
 
@@ -58,7 +58,7 @@ Old-release upgrade work should be designed as an orchestration flow, not as a
 new set of bootstrap modes. The orchestration should:
 
 - choose the target project and release baseline;
-- run `project-context-gate` or equivalent context reconstruction;
+- run active `project-workspace` `check` / `discover` or equivalent context reconstruction;
 - run bootstrap refresh only for scaffold and lock surfaces;
 - call `memory_upgrade.ps1` for legacy memory normalization;
 - call `language_migration.ps1` and `audit_memory_language.ps1` for language
