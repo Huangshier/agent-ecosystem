@@ -346,7 +346,7 @@ try {
                     $matched = $true
                     $tier = [int]$rule.tier
                     if ($tier -gt $maxTier) { $maxTier = $tier }
-                    $reasons.Add("$path matched $($rule.id) (Tier $tier)")
+                    $reasons.Add("$path matched explicit rule $($rule.id) (Tier $tier)")
                     foreach ($module in @($rule.modules)) { $modules.Add([string]$module) }
                     $controlPlaneProperty = @($rule.PSObject.Properties | Where-Object { $_.Name -ceq "control_plane" })
                     if ($controlPlaneProperty.Count -eq 1) {
@@ -359,9 +359,46 @@ try {
                 }
             }
             if (-not $matched) {
-                $maxTier = [Math]::Max($maxTier, [int]$config.unknown_tier)
+                $highRiskUnknown = $config.high_risk_unknown
+                if ($path -match [string]$highRiskUnknown.pattern) {
+                    $matched = $true
+                    $tier = [int]$config.unknown_tier
+                    $maxTier = [Math]::Max($maxTier, $tier)
+                    foreach ($module in @($highRiskUnknown.modules)) { $modules.Add([string]$module) }
+                    $reasons.Add("$path matched high-risk unknown fallback (Tier $tier)")
+                }
+            }
+            if (-not $matched) {
+                foreach ($namespaceDefault in @($config.namespace_defaults)) {
+                    if ($path -match [string]$namespaceDefault.pattern) {
+                        $matched = $true
+                        $tier = [int]$namespaceDefault.tier
+                        $maxTier = [Math]::Max($maxTier, $tier)
+                        foreach ($module in @($namespaceDefault.modules)) { $modules.Add([string]$module) }
+                        $reasons.Add("$path matched namespace default $($namespaceDefault.id) (Tier $tier)")
+                        break
+                    }
+                }
+            }
+            if (-not $matched) {
+                $ordinaryUnknown = $config.ordinary_unknown
+                $ordinaryUnknownPattern = [string]$ordinaryUnknown.pattern
+                if ([string]::IsNullOrWhiteSpace($ordinaryUnknownPattern)) {
+                    throw "ordinary_unknown requires a non-empty safe content pattern."
+                }
+                if ($path -match $ordinaryUnknownPattern) {
+                    $matched = $true
+                    $tier = [int]$ordinaryUnknown.tier
+                    $maxTier = [Math]::Max($maxTier, $tier)
+                    foreach ($module in @($ordinaryUnknown.modules)) { $modules.Add([string]$module) }
+                    $reasons.Add("$path matched ordinary content default (Tier $tier)")
+                }
+            }
+            if (-not $matched) {
+                $tier = [int]$config.unknown_tier
+                $maxTier = [Math]::Max($maxTier, $tier)
                 $modules.Add("unknown")
-                $reasons.Add("$path is unknown; conservatively escalated to Tier $($config.unknown_tier)")
+                $reasons.Add("$path remained unresolved; conservatively escalated to Tier $tier")
             }
         }
         $result = New-ChangeResult -Tier $maxTier -Paths $normalized -Reasons @($reasons.ToArray()) -Modules @($modules.ToArray()) -Base $normalizedBase -Head $normalizedHead -ControlPlane:$hasControlPlane
