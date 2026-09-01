@@ -724,6 +724,9 @@ foreach ($case in @($cases)) {
     if ($null -ne $case.self_protection_reason -and [string]$value.self_protection_reason -cne [string]$case.self_protection_reason) {
         throw "Case '$($case.name)' has an incorrect explicit self-protection reason."
     }
+    if ($null -ne $case.routing_reason_contains -and -not ([string]$value.escalation_reason).Contains([string]$case.routing_reason_contains)) {
+        throw "Case '$($case.name)' did not explain the expected routing source."
+    }
     foreach ($field in @("required_checks", "skipped_checks")) {
         if ($null -ne $case.$field -and (@($value.$field) -join ',') -cne (@($case.$field) -join ',')) {
             throw "Case '$($case.name)' has an incorrect $field contract."

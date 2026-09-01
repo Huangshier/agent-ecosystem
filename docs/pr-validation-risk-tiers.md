@@ -1,6 +1,6 @@
 # PR validation risk tiers
 
-Pull requests are classified before expensive validation starts. The classifier is deterministic, takes the highest tier when paths from multiple categories change, and escalates unknown or ambiguous input to Tier 3.
+Pull requests are classified before expensive validation starts. The classifier is deterministic, takes the highest tier when paths from multiple categories change, and escalates unresolved or high-risk unknown input to Tier 3.
 
 | Tier | Typical changes | Hosted validation |
 |---|---|---|
@@ -9,7 +9,7 @@ Pull requests are classified before expensive validation starts. The classifier 
 | 2 | Mapped bootstrap, templates, installer, bridge, hooks, and project workspace asset surfaces | Cross-platform affected-module fixtures and runtime checks plus base and identity guards |
 | 3 | Release, schema, profile, cross-module contracts, workflows, validation routing | Real affected suites on their declared hosts; validation control-plane changes also run an independent self-protection oracle |
 
-`scripts/validation/change-risk-rules.json` is the single path-routing source. Workflows consume schema-2 `scripts/validate-change.ps1` output and do not maintain a second path table. The classifier returns affected suites, each suite's host dependencies, the required host union, and the independent self-protection decision. Unknown suites, hosts, mappings, or classifier failures fail closed.
+`scripts/validation/change-risk-rules.json` is the single path-routing source. Workflows consume schema-2 `scripts/validate-change.ps1` output and do not maintain a second path table. Explicit rules run first; unmatched executable or control-plane surfaces fail closed, known content namespaces use their limited defaults, and remaining ordinary content uses the ordinary-unknown default. The classifier returns affected suites, each suite's host dependencies, the required host union, and the independent self-protection decision. Unknown suites, hosts, high-risk mappings, or classifier failures fail closed.
 
 `scripts/validate-release.ps1` owns two explicit Release authority profiles defined by `scripts/validation/release-shard-contract.json`. `Full` is the smaller product-runtime Release profile. `RepositoryCheckpoint` adds release archive, governance, evaluation, benchmark, historical, compatibility-observation, and roadmap-adjacent assertions for manual checkpoints. `main` pushes use the separate thin `main health` contract; they do not select either Release profile. The executable contract requires exact coverage and disjoint shards before either Release profile can pass.
 
@@ -20,7 +20,7 @@ Pull requests are classified before expensive validation starts. The classifier 
 ./scripts/validate-change.ps1 -ChangedPath README.md,scripts/install.ps1 -Json
 ```
 
-Text and JSON report the detected tier, required checks, skipped checks, escalation reason, changed paths, affected modules, and required suites. Schema 2 lists each affected suite as `affected-suite:<name>`, includes `validation-self-protection` only when its plan decision requires it, and always reports the PR-only `full-release-matrix` as skipped. Targeted JSON evidence records the executed suite names, counts, and per-module coverage. A skipped check means it was not required; it is never reported as passing.
+Text and JSON report the detected tier, required checks, skipped checks, routing reason, changed paths, affected modules, and required suites. Routing reasons distinguish an explicit rule, a namespace default, the ordinary-unknown default, and a high-risk unknown fallback. Schema 2 lists each affected suite as `affected-suite:<name>`, includes `validation-self-protection` only when its plan decision requires it, and always reports the PR-only `full-release-matrix` as skipped. Targeted JSON evidence records the executed suite names, counts, and per-module coverage. A skipped check means it was not required; it is never reported as passing.
 
 Classifier JSON also owns a schema-2 `local_plan` for `iteration`, `pre_push`,
 and `release`. Run it through the single local entrypoint:
@@ -84,7 +84,7 @@ The classifier adds one auditable job. Pull requests run only real affected suit
 
 ## Conservative boundaries
 
-- Empty diffs, unresolved refs, malformed Git diff records, unknown paths, unmapped runtime skills or fixtures, and classifier failures escalate to Tier 3.
+- Empty diffs, unresolved refs, malformed Git diff records, unknown executable or control-plane paths, unmapped runtime skills or fixtures, and classifier failures escalate to Tier 3. Ordinary unmatched content does not receive the global fallback suites or self-protection solely because its path is new.
 - Every Tier 1 or Tier 2 affected module must execute at least one mapped suite. Zero module checks fail validation; classification or parsing alone cannot produce a targeted PASS.
 - Renames classify both the old and new path; deletions classify the deleted path.
 - `main` pushes run main health against the pushed SHA. Manual dispatches run the repository checkpoint profile; Release publication retains the complete Release validator path.

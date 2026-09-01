@@ -2,6 +2,14 @@
   "schema_version": 2,
   "unknown_tier": 3,
   "empty_tier": 3,
+  "ordinary_unknown": { "tier": 0, "modules": ["documentation"] },
+  "high_risk_unknown": {
+    "pattern": "^(\\.github/|scripts/)|(^|/)(\\.claude/|(workflow|validation|routing|control-plane)([-_.][^/]*)?(/|$))|\\.(ps1|psm1|psd1|sh|bash|zsh|fish|cmd|bat|exe|dll|com|js|mjs|cjs|ts|mts|cts|py|rb|pl|php|jar|class|bin)$",
+    "modules": ["unknown"]
+  },
+  "namespace_defaults": [
+    { "id": "examples-content", "tier": 0, "pattern": "^examples/", "modules": ["documentation"] }
+  ],
   "base_check_modules": ["documentation"],
   "fallback_suites": ["agent-skill-bridge", "bootstrap-safety", "hooks-runtime", "installer-contract", "knowledge-contracts", "project-context-gate", "repository-guards", "runtime-smoke", "template-consistency", "workspace-assets"],
   "suite_hosts": {
@@ -58,7 +66,7 @@
     { "id": "validation-leaf-repository", "tier": 1, "pattern": "^scripts/validation/release-(governance-workflow|repository)-checks\\.ps1$", "modules": ["repository"] },
     { "id": "agent-skill-bridge", "tier": 2, "pattern": "^scripts/link-agent-skills\\.ps1$", "modules": ["bridge"] },
     { "id": "installer-runtime", "tier": 2, "pattern": "^scripts/(install|uninstall)\\.ps1$", "modules": ["installer", "runtime"] },
-    { "id": "hooks", "tier": 2, "pattern": "(^|/)\\.claude/|hooks?", "modules": ["hooks"] },
+    { "id": "hooks", "tier": 2, "pattern": "((^|/)\\.claude/(hooks/|settings(\\.local)?\\.json$)|^scripts/validation/(claude-hooks-(guardrails|runtime)-fixtures/|test-claude-hooks-runtime\\.ps1$))", "modules": ["hooks"] },
     { "id": "bundled-bootstrap-template", "tier": 2, "pattern": "^skills/project-bootstrap/assets/knowledge-hub-template/templates/", "modules": ["bootstrap", "templates"] },
     { "id": "bootstrap-knowledge-helper", "tier": 2, "pattern": "^skills/project-bootstrap/scripts/(manage_candidates|promote_experience|rebuild_experience_index|search_experience)\\.ps1$", "modules": ["bootstrap", "knowledge"] },
     { "id": "project-bootstrap", "tier": 2, "pattern": "^skills/project-bootstrap/", "modules": ["bootstrap"] },

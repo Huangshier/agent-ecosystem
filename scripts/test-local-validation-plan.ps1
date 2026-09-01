@@ -276,6 +276,8 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
 }
 
 Assert-PlanCase -Name "tier-zero" -Path "README.md" -Tier 0 -ExpectPrePushHeavy $false
+Assert-PlanCase -Name "examples-namespace-default" -Path "examples/future-adoption/config.json" -Tier 0 -ExpectPrePushHeavy $false
+Assert-PlanCase -Name "ordinary-unknown-default" -Path "future-surface/notes.txt" -Tier 0 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-one" -Path "knowledge-hub/knowledge/catalog.md" -Tier 1 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-two" -Path "scripts/install.ps1" -Tier 2 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-three-covered" -Path "CHANGELOG.md" -Tier 3 -ExpectPrePushHeavy $false
