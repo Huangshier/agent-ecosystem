@@ -382,10 +382,23 @@ try {
             }
             if (-not $matched) {
                 $ordinaryUnknown = $config.ordinary_unknown
-                $tier = [int]$ordinaryUnknown.tier
+                $ordinaryUnknownPattern = [string]$ordinaryUnknown.pattern
+                if ([string]::IsNullOrWhiteSpace($ordinaryUnknownPattern)) {
+                    throw "ordinary_unknown requires a non-empty safe content pattern."
+                }
+                if ($path -match $ordinaryUnknownPattern) {
+                    $matched = $true
+                    $tier = [int]$ordinaryUnknown.tier
+                    $maxTier = [Math]::Max($maxTier, $tier)
+                    foreach ($module in @($ordinaryUnknown.modules)) { $modules.Add([string]$module) }
+                    $reasons.Add("$path matched ordinary content default (Tier $tier)")
+                }
+            }
+            if (-not $matched) {
+                $tier = [int]$config.unknown_tier
                 $maxTier = [Math]::Max($maxTier, $tier)
-                foreach ($module in @($ordinaryUnknown.modules)) { $modules.Add([string]$module) }
-                $reasons.Add("$path used ordinary unknown default (Tier $tier)")
+                $modules.Add("unknown")
+                $reasons.Add("$path remained unresolved; conservatively escalated to Tier $tier")
             }
         }
         $result = New-ChangeResult -Tier $maxTier -Paths $normalized -Reasons @($reasons.ToArray()) -Modules @($modules.ToArray()) -Base $normalizedBase -Head $normalizedHead -ControlPlane:$hasControlPlane

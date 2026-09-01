@@ -2,7 +2,7 @@
   "schema_version": 2,
   "unknown_tier": 3,
   "empty_tier": 3,
-  "ordinary_unknown": { "tier": 0, "modules": ["documentation"] },
+  "ordinary_unknown": { "tier": 0, "pattern": "\\.(md|txt|rst|adoc)$", "modules": ["documentation"] },
   "high_risk_unknown": {
     "pattern": "^(\\.github/|scripts/)|(^|/)(\\.claude/|(workflow|validation|routing|control-plane)([-_.][^/]*)?(/|$))|\\.(ps1|psm1|psd1|sh|bash|zsh|fish|cmd|bat|exe|dll|com|js|mjs|cjs|ts|mts|cts|py|rb|pl|php|jar|class|bin)$",
     "modules": ["unknown"]

@@ -277,12 +277,13 @@ $count = if (Test-Path -LiteralPath $path) { [int]([IO.File]::ReadAllText($path)
 
 Assert-PlanCase -Name "tier-zero" -Path "README.md" -Tier 0 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "examples-namespace-default" -Path "examples/future-adoption/config.json" -Tier 0 -ExpectPrePushHeavy $false
-Assert-PlanCase -Name "ordinary-unknown-default" -Path "future-surface/notes.txt" -Tier 0 -ExpectPrePushHeavy $false
+Assert-PlanCase -Name "ordinary-content-default" -Path "future-surface/notes.txt" -Tier 0 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-one" -Path "knowledge-hub/knowledge/catalog.md" -Tier 1 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-two" -Path "scripts/install.ps1" -Tier 2 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-three-covered" -Path "CHANGELOG.md" -Tier 3 -ExpectPrePushHeavy $false
 Assert-PlanCase -Name "tier-three-self-protection" -Path "scripts/validate-change.ps1" -Tier 3 -ExpectPrePushHeavy $true
 Assert-PlanCase -Name "tier-three-unknown" -Path "future-surface/value.bin" -Tier 3 -ExpectPrePushHeavy $true
+Assert-PlanCase -Name "tier-three-unresolved" -Path "src/future.c" -Tier 3 -ExpectPrePushHeavy $true
 
 $iterationDryRun = ((@(& $orchestrator -Stage iteration -ChangedPath "scripts/validate-change.ps1" -DryRun -Json) -join "`n") | ConvertFrom-Json)
 if (@($iterationDryRun.actions | Where-Object suite -eq "full-release-validation").Count -ne 0) { throw "Tier 3 iteration dry-run planned full validation." }
