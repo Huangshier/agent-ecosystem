@@ -9,28 +9,34 @@ $workflowPath = Join-Path $repoRoot ".github/workflows/release-validation.yml"
 $cases = @((Get-Content -LiteralPath $fixturePath -Raw | ConvertFrom-Json) | ForEach-Object { $_ })
 $results = New-Object 'System.Collections.Generic.List[object]'
 
-foreach ($case in $cases) {
-    $arguments = @{
-        EventName = [string]$case.event_name
-        Tier = [string]$case.tier
-        ClassifyResult = [string]$case.classify
-        QuickResult = [string]$case.quick
-        TargetedResult = [string]$case.targeted
-        SelfProtectionResult = [string]$case.self_protection
-        SelfProtectionRequired = [string]$case.self_protection_required
-        MainHealthResult = if ($case.PSObject.Properties.Name -contains "main_health") {
-            [string]$case.main_health
+function Get-GateFixtureArguments {
+    param([object]$Case)
+
+    return @{
+        EventName = [string]$Case.event_name
+        Tier = [string]$Case.tier
+        ClassifyResult = [string]$Case.classify
+        QuickResult = [string]$Case.quick
+        TargetedResult = [string]$Case.targeted
+        SelfProtectionResult = [string]$Case.self_protection
+        SelfProtectionRequired = [string]$Case.self_protection_required
+        MainHealthResult = if ($Case.PSObject.Properties.Name -contains "main_health") {
+            [string]$Case.main_health
         }
-        elseif ([string]$case.event_name -ceq "push") {
+        elseif ([string]$Case.event_name -ceq "push") {
             "success"
         }
         else {
             "skipped"
         }
-        PlatformNeutralResult = [string]$case.platform_neutral
-        PwshMatrixResult = [string]$case.pwsh_matrix
+        PlatformNeutralResult = [string]$Case.platform_neutral
+        PwshMatrixResult = [string]$Case.pwsh_matrix
         Json = $true
     }
+}
+
+foreach ($case in $cases) {
+    $arguments = Get-GateFixtureArguments -Case $case
     $passed = $false
     $failure = ""
     try {
@@ -86,9 +92,44 @@ if (-not $mainHealthJob.Contains("name: main health") -or
     throw "main-health job does not expose the thin push and validation-routing health contract."
 }
 
+# Weakening fixture: a gate that stops requiring self-protection success must be
+# rejected by the fixed fixture corpus above. The mutation weakens a scratch copy of
+# the gate and proves the corpus case "self-protection-missing" (should_pass=false)
+# would pass against it, so the corpus fails closed on this weakening.
+$weakeningRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-gate-weakening-{0}" -f ([Guid]::NewGuid().ToString("N")))
+try {
+    New-Item -ItemType Directory -Force -Path $weakeningRoot | Out-Null
+    $gateSource = Get-Content -LiteralPath $gate -Raw
+    $selfProtectionRequirement = 'if ($SelfProtectionRequired -ceq "true" -and $EventName -ceq "pull_request") { "success" } else { "skipped" }'
+    if (-not $gateSource.Contains($selfProtectionRequirement)) {
+        throw "Gate weakening fixture cannot find the required self-protection contract condition."
+    }
+    $weakenedGatePath = Join-Path $weakeningRoot "required-validation-gate-weakened.ps1"
+    Set-Content -LiteralPath $weakenedGatePath -Value $gateSource.Replace($selfProtectionRequirement, '"skipped"') -Encoding UTF8
+    $missingProtectionCase = @($cases | Where-Object { [string]$_.name -ceq "self-protection-missing" })[0]
+    if ($null -eq $missingProtectionCase) {
+        throw "Gate fixture corpus is missing the self-protection-missing case."
+    }
+    $weakenedArguments = Get-GateFixtureArguments -Case $missingProtectionCase
+    $weakenedPassed = $false
+    try {
+        $weakenedRaw = @(& $weakenedGatePath @weakenedArguments) -join "`n"
+        $weakenedValue = $weakenedRaw | ConvertFrom-Json
+        if ([string]$weakenedValue.status -ceq "PASS") { $weakenedPassed = $true }
+    }
+    catch { }
+    if (-not $weakenedPassed) {
+        throw "Weakened gate still rejected the missing self-protection case; weakening detection cannot be proven."
+    }
+    $results.Add([ordered]@{ name = "gate-self-protection-requirement-weakening-detected"; expected = "FAIL"; status = "PASS" }) | Out-Null
+}
+finally {
+    if (Test-Path -LiteralPath $weakeningRoot) { Remove-Item -LiteralPath $weakeningRoot -Recurse -Force }
+}
+
 $summary = [ordered]@{
     schema_version = 1
-    pass = $results.Count + 5
+    pass = $results.Count + 6
     fail = 0
     cases = @($results.ToArray())
     workflow_job_name = "PASS"
@@ -96,6 +137,7 @@ $summary = [ordered]@{
     workflow_needs = "PASS"
     workflow_no_matrix = "PASS"
     workflow_main_health = "PASS"
+    gate_weakening_detected = "PASS"
 }
 if ($Json.IsPresent) {
     $summary | ConvertTo-Json -Depth 5

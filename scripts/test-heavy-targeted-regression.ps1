@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $changeValidator = Join-Path $PSScriptRoot "validate-change.ps1"
 $routingTester = Join-Path $PSScriptRoot "test-validate-change.ps1"
+$gateTester = Join-Path $PSScriptRoot "test-required-validation-gate.ps1"
 $sensitiveScanTester = Join-Path $PSScriptRoot "validation/test-sensitive-scan.ps1"
 
 function Normalize-ChangedPaths {
@@ -211,7 +212,11 @@ function Get-SensitiveScanDecision {
 
 $boundary = Get-ValidationChangedPaths -ExplicitPaths $ChangedPath
 $sensitiveDecision = Get-SensitiveScanDecision -Boundary $boundary
-$routingResult = Invoke-JsonChild -ScriptPath $routingTester -Arguments @("-RunTargetedRegression", "-Json")
+$routingResult = Invoke-JsonChild -ScriptPath $routingTester -Arguments @("-RunSelfProtectionOracle", "-Json")
+$gateResult = Invoke-JsonChild -ScriptPath $gateTester -Arguments @("-Json")
+if ([int]$gateResult.fail -ne 0 -or [int]$gateResult.pass -lt 1) {
+    throw "Required validation gate fixtures returned incomplete evidence within self-protection."
+}
 
 $sensitiveResult = [ordered]@{
     status = "NOT_RUN"
@@ -243,6 +248,7 @@ $summary = [ordered]@{
     schema_version = 2
     status = "PASS"
     routing = $routingResult
+    required_validation_gate = $gateResult
     sensitive_scan = $sensitiveResult
     sensitive_scan_regression = $sensitiveDecision
 }
