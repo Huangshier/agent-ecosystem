@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$Json,
-    [switch]$RunTargetedRegression,
+    [switch]$RunSelfProtectionOracle,
     [string]$OutputPath
 )
 
@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $validator = Join-Path $PSScriptRoot "validate-change.ps1"
 $cases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/change-risk-fixtures/cases.json") -Raw | ConvertFrom-Json
+$rulesPath = Join-Path $PSScriptRoot "validation/change-risk-rules.json"
 $classifierOutputContract = Join-Path $PSScriptRoot "validation/release-classifier-output-contract.ps1"
 $classifierOutputCases = Get-Content -LiteralPath (Join-Path $PSScriptRoot "validation/release-classifier-output-fixtures/cases.json") -Raw | ConvertFrom-Json
 $sensitiveScanFileName = "pr-" + ("se" + "cret") + "-keyword-scan.ps1"
@@ -19,8 +20,7 @@ $runtimeRequirementValidator = Join-Path $PSScriptRoot "test-powershell-runtime-
 $results = New-Object 'System.Collections.Generic.List[object]'
 $targetedValidator = Join-Path $PSScriptRoot "validate-targeted-change.ps1"
 $targetedScratch = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-ecosystem-targeted-regression-{0}" -f ([Guid]::NewGuid().ToString("N")))
-$targetedExecutionCache = @{}
-$targetedExecutionSequence = 0
+$emittedSuites = New-Object 'System.Collections.Generic.List[string]'
 
 $runtimeRequirementRaw = @(& $runtimeRequirementValidator -Json) -join "`n"
 $runtimeRequirementResult = $runtimeRequirementRaw | ConvertFrom-Json
@@ -491,38 +491,6 @@ function Assert-TargetedRoutingEvidence {
     }
 }
 
-function Assert-TargetedSuiteEvidence {
-    param(
-        [string]$Name,
-        [object]$Value,
-        [string[]]$ExpectedModule,
-        [string[]]$ExpectedSuite
-    )
-
-    if ([int]$Value.executed_suite_count -lt 1) { throw "Targeted case '$Name' executed no actual module suite." }
-    foreach ($suite in $ExpectedSuite) { if (@($Value.executed_suites) -notcontains $suite) { throw "Targeted case '$Name' did not execute '$suite'." } }
-    foreach ($module in $ExpectedModule) {
-        $coverage = @($Value.module_coverage | Where-Object module -eq $module)
-        if ($coverage.Count -ne 1 -or [int]$coverage[0].executed_check_count -lt 1) { throw "Targeted case '$Name' has no actual check coverage for '$module'." }
-        $expectedCoverage = if ($module -eq "documentation") { "base-checks" } else { "targeted-suite" }
-        if ([string]$coverage[0].coverage -ne $expectedCoverage) { throw "Targeted case '$Name' used '$($coverage[0].coverage)' coverage for '$module', expected '$expectedCoverage'." }
-    }
-    if (@($Value.checks.name) -contains "skill-metadata" -or @($Value.checks.name) -contains "targeted-module-matrix") { throw "Targeted case '$Name' emitted a forbidden empty/generic PASS." }
-    $telemetry = @($Value.telemetry)
-    if ($telemetry.Count -lt 2) { throw "Targeted case '$Name' emitted incomplete suite telemetry." }
-    foreach ($record in $telemetry) {
-        if ([string]::IsNullOrWhiteSpace([string]$record.suite) -or
-            [string]::IsNullOrWhiteSpace([string]$record.case) -or
-            [string]::IsNullOrWhiteSpace([string]$record.host) -or
-            [string]::IsNullOrWhiteSpace([string]$record.started_at_utc) -or
-            [string]::IsNullOrWhiteSpace([string]$record.completed_at_utc) -or
-            [long]$record.duration_ms -lt 0 -or
-            [string]::IsNullOrWhiteSpace([string]$record.unique_coverage_category)) {
-            throw "Targeted case '$Name' emitted an invalid suite telemetry record."
-        }
-    }
-}
-
 function Invoke-ExecutionDedupContractFixtures {
     $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
 
@@ -613,67 +581,280 @@ function Invoke-ExecutionDedupContractFixtures {
     return @($fixtureResults.ToArray())
 }
 
-function Invoke-TargetedRegression {
+function Assert-ClassificationContract {
     param(
-        [string]$Name,
-        [string[]]$Path,
-        [int]$ExpectedTier,
-        [string[]]$ExpectedModule,
-        [string[]]$ExpectedSuite,
-        [string]$Mode,
-        [string]$ExecutionHost = "current"
+        [Parameter(Mandatory = $true)][object]$Case,
+        [Parameter(Mandatory = $true)][object]$Value
     )
 
-    $startedAt = [DateTimeOffset]::UtcNow
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    # NOTE: ChangedPath is routing evidence, not a suite execution input. Every case
-    # is classified independently before an equivalent suite result can be reused.
-    $routing = Assert-TargetedRoutingEvidence -Name $Name -Path $Path -ExpectedTier $ExpectedTier -ExpectedModule $ExpectedModule -ExpectedSuite $ExpectedSuite -Mode $Mode
-    $executionContract = New-TargetedExecutionContract -ExpectedSuite $ExpectedSuite -Mode $Mode -ExecutionHost $ExecutionHost
-    $executionKey = Get-TargetedExecutionKey -Contract $executionContract
-    $execution = Invoke-SharedTargetedExecution `
-        -Cache $script:targetedExecutionCache `
-        -Sequence ([ref]$script:targetedExecutionSequence) `
-        -CaseName $Name `
-        -ExecutionKey $executionKey `
-        -ExecutionContract $executionContract `
-        -Executor {
-            $caseScratch = Join-Path $targetedScratch $Name
-            $raw = @(& $targetedValidator -ChangedPath $Path -Mode $Mode -ExecutionHost $ExecutionHost -ScratchRoot $caseScratch -Json) -join "`n"
-            if ($LASTEXITCODE -ne 0) { throw "Targeted suite executor failed for '$Name'." }
-            $value = $raw | ConvertFrom-Json
-            Assert-TargetedSuiteEvidence -Name $Name -Value $value -ExpectedModule $ExpectedModule -ExpectedSuite $ExpectedSuite
-            [ordered]@{ status = "PASS"; check_count = [int]$value.summary.pass }
-        }
-    $stopwatch.Stop()
-    $completedAt = [DateTimeOffset]::UtcNow
-    return [ordered]@{
-        name = $Name
-        case = $Name
-        modules = $ExpectedModule
-        suite = $ExpectedSuite
-        suites = $ExpectedSuite
-        host = [string]$executionContract.runner_identity
-        started_at_utc = $startedAt.ToString("o")
-        completed_at_utc = $completedAt.ToString("o")
-        duration_ms = [long]$stopwatch.ElapsedMilliseconds
-        unique_coverage_category = ("routing-regression:{0}" -f $Name)
-        check_count = [int]$execution.check_count
-        routing = $routing
-        execution = [ordered]@{
-            suite = $ExpectedSuite
-            host = [string]$executionContract.execution_host
-            runner_identity = [string]$executionContract.runner_identity
-            execution_contract = $executionContract
-            execution_key = $execution.execution_key
-            shared_execution_id = $execution.shared_execution_id
-            executed = [bool]$execution.executed
-            reused = [bool]$execution.reused
-            status = [string]$execution.status
-            error = $execution.error
-        }
-        status = [string]$execution.status
+    & $classifierOutputContract -Result $Value | Out-Null
+    if ([int]$Value.detected_tier -ne [int]$Case.tier) { throw "Case '$($Case.name)' expected Tier $($Case.tier), got Tier $($Value.detected_tier)." }
+    if ($null -ne $Case.full_validator_calls -and [int]$Value.hosted_plan.full_validator_calls -ne [int]$Case.full_validator_calls) { throw "Case '$($Case.name)' has an incorrect hosted full-validator call count." }
+    if ($null -ne $Case.platform_neutral_validator_calls -and [int]$Value.hosted_plan.platform_neutral_validator_calls -ne [int]$Case.platform_neutral_validator_calls) { throw "Case '$($Case.name)' has an incorrect hosted platform-neutral call count." }
+    if ($null -ne $Case.runtime_platform_validator_calls -and [int]$Value.hosted_plan.runtime_platform_validator_calls -ne [int]$Case.runtime_platform_validator_calls) { throw "Case '$($Case.name)' has an incorrect hosted runtime-platform call count." }
+    if ($null -ne $Case.targeted_os_jobs -and [int]$Value.hosted_plan.targeted_os_jobs -ne [int]$Case.targeted_os_jobs) { throw "Case '$($Case.name)' has an incorrect hosted targeted OS job count." }
+    if ($null -ne $Case.affected_modules) {
+        $actualModules = @($Value.affected_modules | Sort-Object)
+        $expectedModules = @($Case.affected_modules | Sort-Object)
+        if (($actualModules -join ',') -cne ($expectedModules -join ',')) { throw "Case '$($Case.name)' has incorrect affected modules." }
     }
+    if ($null -ne $Case.required_suites) {
+        $actualSuites = @($Value.required_suites | Sort-Object)
+        $expectedSuites = @($Case.required_suites | Sort-Object)
+        if (($actualSuites -join ',') -cne ($expectedSuites -join ',')) { throw "Case '$($Case.name)' has incorrect required suites." }
+    }
+    if ($null -ne $Case.required_hosts) {
+        $actualHosts = @($Value.required_hosts | Sort-Object)
+        $expectedHosts = @($Case.required_hosts | Sort-Object)
+        if (($actualHosts -join ',') -cne ($expectedHosts -join ',')) { throw "Case '$($Case.name)' has incorrect required hosts." }
+    }
+    if ($null -ne $Case.run_heavy_targeted_regression -and [bool]$Value.run_heavy_targeted_regression -ne [bool]$Case.run_heavy_targeted_regression) {
+        throw "Case '$($Case.name)' has an incorrect heavy targeted decision."
+    }
+    if ($null -ne $Case.heavy_targeted_reason -and [string]$Value.heavy_targeted_reason -cne [string]$Case.heavy_targeted_reason) {
+        throw "Case '$($Case.name)' has an incorrect heavy targeted reason."
+    }
+    if ($null -ne $Case.conservative_fallback -and [bool]$Value.conservative_fallback -ne [bool]$Case.conservative_fallback) {
+        throw "Case '$($Case.name)' has an incorrect conservative fallback decision."
+    }
+    if ($null -ne $Case.validation_self_protection_reason -and [string]$Value.validation_self_protection_reason -cne [string]$Case.validation_self_protection_reason) {
+        throw "Case '$($Case.name)' has an incorrect validation self-protection reason."
+    }
+    foreach ($field in @("run_validation_self_protection", "control_plane", "self_protection_required")) {
+        if ($null -ne $Case.$field -and [bool]$Value.$field -ne [bool]$Case.$field) {
+            throw "Case '$($Case.name)' has an incorrect $field decision."
+        }
+    }
+    if ($null -ne $Case.self_protection_reason -and [string]$Value.self_protection_reason -cne [string]$Case.self_protection_reason) {
+        throw "Case '$($Case.name)' has an incorrect explicit self-protection reason."
+    }
+    if ($null -ne $Case.routing_reason_contains -and -not ([string]$Value.escalation_reason).Contains([string]$Case.routing_reason_contains)) {
+        throw "Case '$($Case.name)' did not explain the expected routing source."
+    }
+    foreach ($field in @("required_checks", "skipped_checks")) {
+        if ($null -ne $Case.$field -and (@($Value.$field) -join ',') -cne (@($Case.$field) -join ',')) {
+            throw "Case '$($Case.name)' has an incorrect $field contract."
+        }
+    }
+    if ((@($Value.heavy_targeted_required_suites) -join ',') -cne (@($Value.full_validator_coverage_suites) -join ',')) {
+        throw "Case '$($Case.name)' does not prove full coverage for the heavy targeted suite set."
+    }
+}
+
+function Invoke-WeakeningMutation {
+    param(
+        [string]$Name,
+        [object]$Fixture,
+        [string]$RulesPath,
+        [string]$MutationRulesPath,
+        [string]$MutationClassifier,
+        [scriptblock]$RuleMutation,
+        [scriptblock]$WeakenedEvidence
+    )
+
+    $rules = Get-Content -LiteralPath $RulesPath -Raw | ConvertFrom-Json
+    & $RuleMutation $rules
+    $rules | ConvertTo-Json -Depth 24 | Set-Content -LiteralPath $MutationRulesPath -Encoding UTF8
+    $mutatedRaw = @(& $MutationClassifier -ChangedPath @($Fixture.paths) -Json) -join "`n"
+    $mutated = $mutatedRaw | ConvertFrom-Json
+    if (-not (& $WeakenedEvidence $mutated)) {
+        throw "Weakening mutation '$Name' did not produce the expected weakened classification."
+    }
+    $detection = ""
+    try {
+        Assert-ClassificationContract -Case $Fixture -Value $mutated | Out-Null
+    }
+    catch {
+        $detection = [string]$_.Exception.Message
+    }
+    if ([string]::IsNullOrWhiteSpace($detection)) {
+        throw "The fixed classification contract accepted weakened control-plane behavior '$Name'."
+    }
+    return [ordered]@{ name = $Name; status = "PASS"; detected_by = $detection }
+}
+
+function Invoke-ControlPlaneWeakeningFixtures {
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+    $mutationRoot = Join-Path $targetedScratch "control-plane-weakening"
+    $mutationScriptsRoot = Join-Path $mutationRoot "scripts"
+    New-Item -ItemType Directory -Force -Path $mutationRoot | Out-Null
+    Copy-Item -Recurse -Path (Join-Path $repoRoot "scripts") -Destination $mutationScriptsRoot
+    $mutationClassifier = Join-Path $mutationScriptsRoot "validate-change.ps1"
+    $mutationRulesPath = Join-Path $mutationScriptsRoot "validation/change-risk-rules.json"
+    if (-not (Test-Path -LiteralPath $mutationClassifier -PathType Leaf) -or -not (Test-Path -LiteralPath $mutationRulesPath -PathType Leaf)) {
+        throw "Control-plane weakening fixtures could not stage a classifier mutation copy."
+    }
+    function Get-CorpusFixture {
+        param([string]$Name)
+        $fixture = @($cases | Where-Object { [string]$_.name -ceq $Name })[0]
+        if ($null -eq $fixture) { throw "Corpus fixture '$Name' is required by the weakening fixtures." }
+        return $fixture
+    }
+
+    # NOTE: Each mutation below weakens only the scratch rule copy, proves the weakened
+    # classification was actually produced, and proves the fixed corpus contract above
+    # rejects it. The repository itself is never mutated.
+    $fixtureResults.Add((Invoke-WeakeningMutation `
+        -Name "routing-tier-downgrade-detected" `
+        -Fixture (Get-CorpusFixture "pr-c-stable-patch-id-control-plane") `
+        -RulesPath $rulesPath -MutationRulesPath $mutationRulesPath -MutationClassifier $mutationClassifier `
+        -RuleMutation {
+            param($rules)
+            $rule = @($rules.rules | Where-Object { [string]$_.id -ceq "validation-routing" })[0]
+            if ($null -eq $rule) { throw "validation-routing rule is missing." }
+            $rule.tier = 1
+        } `
+        -WeakenedEvidence { param($value) [int]$value.detected_tier -eq 1 }))
+
+    $fixtureResults.Add((Invoke-WeakeningMutation `
+        -Name "control-plane-marker-removal-detected" `
+        -Fixture (Get-CorpusFixture "pr-c-stable-patch-id-control-plane") `
+        -RulesPath $rulesPath -MutationRulesPath $mutationRulesPath -MutationClassifier $mutationClassifier `
+        -RuleMutation {
+            param($rules)
+            $rule = @($rules.rules | Where-Object { [string]$_.id -ceq "validation-routing" })[0]
+            if ($null -eq $rule) { throw "validation-routing rule is missing." }
+            $rule.PSObject.Properties.Remove("control_plane")
+        } `
+        -WeakenedEvidence { param($value) [int]$value.detected_tier -eq 3 -and -not [bool]$value.control_plane }))
+
+    $fixtureResults.Add((Invoke-WeakeningMutation `
+        -Name "required-suite-loss-detected" `
+        -Fixture (Get-CorpusFixture "runtime-installer-leaf") `
+        -RulesPath $rulesPath -MutationRulesPath $mutationRulesPath -MutationClassifier $mutationClassifier `
+        -RuleMutation {
+            param($rules)
+            foreach ($moduleName in @("installer", "runtime")) {
+                $mapping = $rules.module_suites.PSObject.Properties[$moduleName]
+                if ($null -eq $mapping) { throw "module_suites.$moduleName is missing." }
+                $mapping.Value = @($mapping.Value | Where-Object { [string]$_ -cne "runtime-smoke" })
+            }
+        } `
+        -WeakenedEvidence { param($value) (@($value.required_suites | Sort-Object) -join ",") -ceq "installer-contract" }))
+
+    $fixtureResults.Add((Invoke-WeakeningMutation `
+        -Name "runtime-skill-escalation-cancelled-detected" `
+        -Fixture (Get-CorpusFixture "unsupported-runtime-skill") `
+        -RulesPath $rulesPath -MutationRulesPath $mutationRulesPath -MutationClassifier $mutationClassifier `
+        -RuleMutation {
+            param($rules)
+            $rule = @($rules.rules | Where-Object { [string]$_.id -ceq "unsupported-runtime-skill" })[0]
+            if ($null -eq $rule) { throw "unsupported-runtime-skill rule is missing." }
+            $rule.tier = 0
+            $rule.modules = @("bootstrap")
+        } `
+        -WeakenedEvidence { param($value) [int]$value.detected_tier -eq 0 -and -not [bool]$value.run_validation_self_protection }))
+
+    $fixtureResults.Add((Invoke-WeakeningMutation `
+        -Name "unknown-input-escalation-cancelled-detected" `
+        -Fixture (Get-CorpusFixture "unknown") `
+        -RulesPath $rulesPath -MutationRulesPath $mutationRulesPath -MutationClassifier $mutationClassifier `
+        -RuleMutation {
+            param($rules)
+            $rules.unknown_tier = 0
+        } `
+        -WeakenedEvidence { param($value) [int]$value.detected_tier -eq 0 }))
+
+    return @($fixtureResults.ToArray())
+}
+
+function Invoke-TargetedDispatchContractFixtures {
+    $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
+
+    $rulesConfig = Get-Content -LiteralPath $rulesPath -Raw | ConvertFrom-Json
+    $suiteUniverse = @(
+        @($rulesConfig.suite_hosts.PSObject.Properties | ForEach-Object { [string]$_.Name }) +
+        @($rulesConfig.module_suites.PSObject.Properties | ForEach-Object { @($_.Value) | ForEach-Object { [string]$_ } }) +
+        @($rulesConfig.fallback_suites | ForEach-Object { [string]$_ })
+    ) | Sort-Object -Unique
+    if ($suiteUniverse.Count -eq 0) {
+        throw "Classifier routing rules declared no dispatchable suites."
+    }
+
+    # Behavioral consumption: the targeted executor must consume the classifier output
+    # for a suite-bearing path without executing the business suites themselves.
+    $dispatchPath = "scripts/install.ps1"
+    $directClassification = @(& $validator -ChangedPath $dispatchPath -Json) -join "`n" | ConvertFrom-Json
+    $consumedRaw = @(& $targetedValidator -ChangedPath $dispatchPath -Mode targeted -RoutingOnly -ScratchRoot (Join-Path $targetedScratch "dispatch-consumption") -Json) -join "`n"
+    $consumed = $consumedRaw | ConvertFrom-Json
+    if (-not [bool]$consumed.routing_only -or [int]$consumed.executed_suite_count -ne 0) {
+        throw "Dispatch consumption fixture must produce routing-only evidence without executing business suites."
+    }
+    foreach ($classification in @($directClassification, $consumed.classification)) {
+        if ([int]$classification.detected_tier -ne 2 -or
+            (@($classification.affected_modules | Sort-Object) -join ",") -cne "installer,runtime" -or
+            (@($classification.required_suites | Sort-Object) -join ",") -cne "installer-contract,runtime-smoke") {
+            throw "Classifier dispatch selection for '$dispatchPath' did not require the installer and runtime suites."
+        }
+    }
+    $fixtureResults.Add([ordered]@{ name = "classifier-output-consumed-by-targeted-executor"; status = "PASS" })
+
+    # Structural dispatch contract: every dispatchable suite must select a guarded
+    # execution path in the targeted executor that records the executed suite.
+    $astLexemes = $null
+    $parseErrors = $null
+    $executorAst = [System.Management.Automation.Language.Parser]::ParseFile($targetedValidator, [ref]$astLexemes, [ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) { throw "Targeted executor did not parse: $($parseErrors[0].Message)" }
+    $assignments = @($executorAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] }, $true))
+    $suiteSource = @($assignments | Where-Object {
+        [string]$_.Left.Extent.Text -ceq '$allRequiredSuites' -and [string]$_.Right.Extent.Text -like '*$classification.required_suites*'
+    })
+    if ($suiteSource.Count -ne 1) {
+        throw "Targeted executor must derive its required-suite set from the classifier required_suites output exactly once."
+    }
+    $fixtureResults.Add([ordered]@{ name = "required-suites-derived-from-classifier-output"; status = "PASS" })
+
+    $hostFilter = @($assignments | Where-Object {
+        [string]$_.Left.Extent.Text -ceq '$requiredSuites' -and
+        [string]$_.Right.Extent.Text -like '*$allRequiredSuites*' -and
+        [string]$_.Right.Extent.Text -like '*suite_host_map*' -and
+        [string]$_.Right.Extent.Text -like '*$ExecutionHost*'
+    })
+    if ($hostFilter.Count -ne 1) {
+        throw "Targeted executor must select per-host execution paths through the classifier suite_host_map."
+    }
+    $fixtureResults.Add([ordered]@{ name = "host-filtered-dispatch-selection"; status = "PASS" })
+
+    $dispatchGuards = @($executorAst.FindAll({ param($node)
+        $node -is [System.Management.Automation.Language.BinaryExpressionAst] -and
+        $node.Operator -eq [System.Management.Automation.Language.TokenKind]::Icontains -and
+        [string]$node.Left.Extent.Text -ceq '$requiredSuites' -and
+        $node.Right -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true))
+    $guardSuites = @($dispatchGuards | ForEach-Object { [string]$_.Right.Value })
+    $guardSuiteSet = @($guardSuites | Sort-Object -Unique)
+    if ($guardSuites.Count -ne $guardSuiteSet.Count) {
+        throw "A targeted executor dispatch guard is duplicated."
+    }
+    if (($guardSuiteSet -join ",") -cne ($suiteUniverse -join ",")) {
+        throw "Targeted executor dispatch guards do not cover exactly the classifier's dispatchable suites."
+    }
+    $fixtureResults.Add([ordered]@{ name = "dispatch-guards-cover-dispatchable-suites"; suites = $guardSuiteSet; status = "PASS" })
+
+    $executedRegistrations = @($executorAst.FindAll({ param($node)
+        $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+        [string]$node.Expression.Extent.Text -ceq '$executedSuites' -and
+        $node.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        [string]$node.Member.Value -ceq 'Add' -and
+        $null -ne $node.Arguments -and
+        @($node.Arguments).Count -eq 1 -and
+        $node.Arguments[0] -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true))
+    $registeredSuites = @($executedRegistrations | ForEach-Object { [string]$_.Arguments[0].Value })
+    $registeredSuiteSet = @($registeredSuites | Sort-Object -Unique)
+    if ($registeredSuites.Count -ne $registeredSuiteSet.Count) {
+        throw "A targeted executor executed-suite registration is duplicated."
+    }
+    if (($registeredSuiteSet -join ",") -cne ($suiteUniverse -join ",")) {
+        throw "Targeted executor dispatch paths do not record execution for every dispatchable suite."
+    }
+    $fixtureResults.Add([ordered]@{ name = "dispatch-registrations-record-executed-suites"; suites = $registeredSuiteSet; status = "PASS" })
+
+    $emittedSet = @($emittedSuites | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+    if (($emittedSet -join ",") -cne ($suiteUniverse -join ",")) {
+        throw "The classification corpus must exercise every dispatchable suite."
+    }
+    $fixtureResults.Add([ordered]@{ name = "corpus-exercises-every-dispatchable-suite"; status = "PASS" })
+
+    return @($fixtureResults.ToArray())
 }
 
 foreach ($case in @($cases)) {
@@ -683,57 +864,9 @@ foreach ($case in @($cases)) {
         @(& $validator -ChangedPath @($case.paths) -Json) -join "`n"
     }
     $value = $raw | ConvertFrom-Json
-    & $classifierOutputContract -Result $value | Out-Null
-    if ([int]$value.detected_tier -ne [int]$case.tier) { throw "Case '$($case.name)' expected Tier $($case.tier), got Tier $($value.detected_tier)." }
-    if ($null -ne $case.full_validator_calls -and [int]$value.hosted_plan.full_validator_calls -ne [int]$case.full_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted full-validator call count." }
-    if ($null -ne $case.platform_neutral_validator_calls -and [int]$value.hosted_plan.platform_neutral_validator_calls -ne [int]$case.platform_neutral_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted platform-neutral call count." }
-    if ($null -ne $case.runtime_platform_validator_calls -and [int]$value.hosted_plan.runtime_platform_validator_calls -ne [int]$case.runtime_platform_validator_calls) { throw "Case '$($case.name)' has an incorrect hosted runtime-platform call count." }
-    if ($null -ne $case.targeted_os_jobs -and [int]$value.hosted_plan.targeted_os_jobs -ne [int]$case.targeted_os_jobs) { throw "Case '$($case.name)' has an incorrect hosted targeted OS job count." }
-    if ($null -ne $case.affected_modules) {
-        $actualModules = @($value.affected_modules | Sort-Object)
-        $expectedModules = @($case.affected_modules | Sort-Object)
-        if (($actualModules -join ',') -cne ($expectedModules -join ',')) { throw "Case '$($case.name)' has incorrect affected modules." }
-    }
-    if ($null -ne $case.required_suites) {
-        $actualSuites = @($value.required_suites | Sort-Object)
-        $expectedSuites = @($case.required_suites | Sort-Object)
-        if (($actualSuites -join ',') -cne ($expectedSuites -join ',')) { throw "Case '$($case.name)' has incorrect required suites." }
-    }
-    if ($null -ne $case.required_hosts) {
-        $actualHosts = @($value.required_hosts | Sort-Object)
-        $expectedHosts = @($case.required_hosts | Sort-Object)
-        if (($actualHosts -join ',') -cne ($expectedHosts -join ',')) { throw "Case '$($case.name)' has incorrect required hosts." }
-    }
-    if ($null -ne $case.run_heavy_targeted_regression -and [bool]$value.run_heavy_targeted_regression -ne [bool]$case.run_heavy_targeted_regression) {
-        throw "Case '$($case.name)' has an incorrect heavy targeted decision."
-    }
-    if ($null -ne $case.heavy_targeted_reason -and [string]$value.heavy_targeted_reason -cne [string]$case.heavy_targeted_reason) {
-        throw "Case '$($case.name)' has an incorrect heavy targeted reason."
-    }
-    if ($null -ne $case.conservative_fallback -and [bool]$value.conservative_fallback -ne [bool]$case.conservative_fallback) {
-        throw "Case '$($case.name)' has an incorrect conservative fallback decision."
-    }
-    if ($null -ne $case.validation_self_protection_reason -and [string]$value.validation_self_protection_reason -cne [string]$case.validation_self_protection_reason) {
-        throw "Case '$($case.name)' has an incorrect validation self-protection reason."
-    }
-    foreach ($field in @("run_validation_self_protection", "control_plane", "self_protection_required")) {
-        if ($null -ne $case.$field -and [bool]$value.$field -ne [bool]$case.$field) {
-            throw "Case '$($case.name)' has an incorrect $field decision."
-        }
-    }
-    if ($null -ne $case.self_protection_reason -and [string]$value.self_protection_reason -cne [string]$case.self_protection_reason) {
-        throw "Case '$($case.name)' has an incorrect explicit self-protection reason."
-    }
-    if ($null -ne $case.routing_reason_contains -and -not ([string]$value.escalation_reason).Contains([string]$case.routing_reason_contains)) {
-        throw "Case '$($case.name)' did not explain the expected routing source."
-    }
-    foreach ($field in @("required_checks", "skipped_checks")) {
-        if ($null -ne $case.$field -and (@($value.$field) -join ',') -cne (@($case.$field) -join ',')) {
-            throw "Case '$($case.name)' has an incorrect $field contract."
-        }
-    }
-    if ((@($value.heavy_targeted_required_suites) -join ',') -cne (@($value.full_validator_coverage_suites) -join ',')) {
-        throw "Case '$($case.name)' does not prove full coverage for the heavy targeted suite set."
+    Assert-ClassificationContract -Case $case -Value $value
+    foreach ($suite in @($value.required_suites)) {
+        if (-not $emittedSuites.Contains([string]$suite)) { $emittedSuites.Add([string]$suite) }
     }
     $text = if (@($case.paths).Count -eq 0) {
         @(& $validator -BaseRef HEAD -HeadRef HEAD) -join "`n"
@@ -823,6 +956,9 @@ foreach ($duplicatedRuleToken in @("knowledge-hub/", "skills/", "docs/releases/"
 if (@([regex]::Matches($workflow, "test-validate-change\.ps1 -Json")).Count -ne 1) { throw "Classifier must have exactly one lightweight classification-test invocation." }
 if (@([regex]::Matches($workflow, "test-heavy-targeted-regression\.ps1 -Json")).Count -ne 1) { throw "Hosted control-plane changes must run one independent self-protection oracle." }
 if (-not $heavyRegression.Contains("validation/test-sensitive-scan.ps1") -or -not $heavyRegression.Contains("control_plane")) { throw "Heavy self-protection must own the full sensitive scan and gate it through classifier control-plane evidence." }
+if ($heavyRegression.Contains("-RunTargetedRegression")) { throw "Self-protection must not replay full business validation suites." }
+if (-not $heavyRegression.Contains("-RunSelfProtectionOracle")) { throw "Self-protection must run the focused control-plane oracle contracts." }
+if (-not $heavyRegression.Contains("test-required-validation-gate.ps1")) { throw "Self-protection must run the required validation gate fixture corpus." }
 if ($workflow.Contains("test-sensitive-scan.ps1")) { throw "The hosted classifier workflow must not invoke the full sensitive scan directly." }
 if (@([regex]::Matches($workflow, '-BaseRef "\$\{\{ needs\.classify\.outputs\.base \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier base boundary." }
 if (@([regex]::Matches($workflow, '-HeadRef "\$\{\{ needs\.classify\.outputs\.head \}\}"')).Count -ne 2) { throw "Quick and affected jobs must reuse the classifier head boundary." }
@@ -846,28 +982,11 @@ if ([int]$unmappedTest.detected_tier -ne 3 -or -not [bool]$unmappedTest.conserva
 $workflowHostArrayResults = @(Invoke-WorkflowHostArrayFixtures -Workflow $workflow -FallbackClassification $unmappedTest)
 $executionDedupResults = @(Invoke-ExecutionDedupContractFixtures)
 
-$targetedResults = @()
-if ($RunTargetedRegression.IsPresent) {
-    $tierZeroRaw = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero") -Json) -join "`n"
-    $tierZero = $tierZeroRaw | ConvertFrom-Json
-    if ([int]$tierZero.executed_suite_count -ne 0 -or @($tierZero.checks.name) -contains "quick-repository-checks") { throw "Tier 0 incorrectly executed heavy or module checks." }
-    $targetedResults = @(
-        Invoke-TargetedRegression -Name "knowledge" -Path "knowledge-hub/knowledge/catalog.md" -ExpectedTier 1 -ExpectedModule "knowledge" -ExpectedSuite "knowledge-contracts" -Mode "quick"
-        Invoke-TargetedRegression -Name "bootstrap" -Path "skills/project-bootstrap/scripts/bootstrap_project.ps1" -ExpectedTier 2 -ExpectedModule "bootstrap" -ExpectedSuite "bootstrap-safety" -Mode "targeted"
-        Invoke-TargetedRegression -Name "bridge" -Path "scripts/link-agent-skills.ps1" -ExpectedTier 2 -ExpectedModule "bridge" -ExpectedSuite "agent-skill-bridge" -Mode "targeted"
-        Invoke-TargetedRegression -Name "context-gate" -Path "skills/project-context-gate/scripts/context_gate.ps1" -ExpectedTier 2 -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
-        Invoke-TargetedRegression -Name "context-gate-check" -Path "scripts/validation/project-context-gate-checks.ps1" -ExpectedTier 2 -ExpectedModule "context-gate" -ExpectedSuite "project-context-gate" -Mode "targeted"
-        Invoke-TargetedRegression -Name "workspace-assets" -Path @("schemas/project-workspace/work-item.schema.json", "skills/project-workspace/scripts/read-project-assets.ps1", "skills/project-workspace/scripts/project-continuity.ps1", "scripts/migrate-project.ps1") -ExpectedTier 2 -ExpectedModule @("workspace-schema", "workspace", "continuity", "migration") -ExpectedSuite "workspace-assets" -Mode "targeted"
-        Invoke-TargetedRegression -Name "docs-knowledge" -Path @("README.md", "knowledge-hub/knowledge/catalog.md") -ExpectedTier 1 -ExpectedModule @("documentation", "knowledge") -ExpectedSuite "knowledge-contracts" -Mode "quick"
-        Invoke-TargetedRegression -Name "docs-installer" -Path @("README.md", "scripts/install.ps1") -ExpectedTier 2 -ExpectedModule @("documentation", "installer", "runtime") -ExpectedSuite @("installer-contract", "runtime-smoke") -Mode "targeted"
-        Invoke-TargetedRegression -Name "docs-context-gate" -Path @("README.md", "skills/project-context-gate/scripts/context_gate.ps1") -ExpectedTier 2 -ExpectedModule @("documentation", "context-gate") -ExpectedSuite "project-context-gate" -Mode "targeted"
-    )
-    $targetedFailures = @($targetedResults | Where-Object { [string]$_.status -cne "PASS" })
-    if ($targetedFailures.Count -gt 0) {
-        throw ("Targeted regression contained failed routing or shared execution cases: {0}" -f (($targetedFailures | ForEach-Object { "{0}: {1}" -f $_.name, $_.execution.error }) -join "; "))
-    }
-    $tierZeroText = @(& $targetedValidator -ChangedPath "README.md" -Mode quick -ScratchRoot (Join-Path $targetedScratch "tier-zero-text")) -join "`n"
-    if ($tierZeroText -notmatch "0 actual module suites") { throw "Targeted text output disagrees with Tier 0 JSON evidence." }
+$dispatchResults = @()
+$weakeningResults = @()
+if ($RunSelfProtectionOracle.IsPresent) {
+    $dispatchResults = @(Invoke-TargetedDispatchContractFixtures)
+    $weakeningResults = @(Invoke-ControlPlaneWeakeningFixtures)
 }
 
 $orderA = (& $validator -ChangedPath @("README.md", "scripts/install.ps1") -Json | Out-String) | ConvertFrom-Json
@@ -878,7 +997,7 @@ if (($orderA | ConvertTo-Json -Depth 8 -Compress) -ne ($orderB | ConvertTo-Json 
 # leak to the caller.  This check catches regressions of the invalid-base-ref cleanup above.
 if ($LASTEXITCODE -ne 0) { throw "Stale LASTEXITCODE=$LASTEXITCODE after all tests passed." }
 
-$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 1 + 8 + [int]$runtimeRequirementResult.pass + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $executionDedupResults.Count + $targetedResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_runtime_requirement = $runtimeRequirementResult; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; execution_dedup_contract = $executionDedupResults; local_plan = $localPlanResult; targeted_regression_executed = $RunTargetedRegression.IsPresent; targeted_execution = $targetedResults; tier_zero_no_heavy_checks = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; text_json_evidence = $(if ($RunTargetedRegression.IsPresent) { "PASS" } else { "NOT_RUN" }); invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
+$summary = [ordered]@{ schema_version = 1; pass = $results.Count + 7 + [int]$runtimeRequirementResult.pass + $pushRoutingResults.Count + $classifierOutputResults.Count + $powerShellEncodingResults.Count + $workflowHostArrayResults.Count + $executionDedupResults.Count + $dispatchResults.Count + $weakeningResults.Count; fail = 0; cases = @($results.ToArray()); sensitive_scan = $sensitiveScanSummary; sensitive_scan_case_count = $sensitiveScanCaseCount; sensitive_scan_status = [string]$sensitiveScanSummary.status; sensitive_scan_contract = $sensitiveScanContractCheck; push_routing = $pushRoutingResults; classifier_output_contract = $classifierOutputResults; powershell_runtime_requirement = $runtimeRequirementResult; powershell_encoding = $powerShellEncodingResults; workflow_host_array_serialization = $workflowHostArrayResults; execution_dedup_contract = $executionDedupResults; local_plan = $localPlanResult; control_plane_weakening_fixtures = $(if ($RunSelfProtectionOracle.IsPresent) { @($weakeningResults) } else { "NOT_RUN" }); targeted_dispatch_contract = $(if ($RunSelfProtectionOracle.IsPresent) { @($dispatchResults) } else { "NOT_RUN" }); unsupported_runtime_skill_escalation = "PASS"; unmapped_test_escalation = "PASS"; invalid_base_ref = "PASS"; direct_path_classifier = "PASS"; hosted_routing_contract = "PASS"; deterministic_order = "PASS"; lastexitcode_clean = "PASS" }
 $summaryJson = $summary | ConvertTo-Json -Depth 8
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
     Set-Content -LiteralPath $OutputPath -Value $summaryJson -Encoding UTF8
