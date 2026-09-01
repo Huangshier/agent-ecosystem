@@ -758,6 +758,68 @@ function Invoke-ControlPlaneWeakeningFixtures {
     return @($fixtureResults.ToArray())
 }
 
+function Assert-TargetedDispatchBranchPairing {
+    param(
+        [System.Management.Automation.Language.Ast]$ExecutorAst,
+        [string[]]$SuiteUniverse
+    )
+
+    $pairedSuites = New-Object 'System.Collections.Generic.List[string]'
+    $dispatchBranches = @($ExecutorAst.FindAll({ param($node)
+        $node -is [System.Management.Automation.Language.IfStatementAst] -and
+        @($node.Clauses | Where-Object {
+            @($_.Item1.FindAll({ param($conditionNode)
+                $conditionNode -is [System.Management.Automation.Language.BinaryExpressionAst] -and
+                $conditionNode.Operator -eq [System.Management.Automation.Language.TokenKind]::Icontains -and
+                [string]$conditionNode.Left.Extent.Text -ceq '$requiredSuites' -and
+                $conditionNode.Right -is [System.Management.Automation.Language.StringConstantExpressionAst]
+            }, $true)).Count -gt 0
+        }).Count -gt 0
+    }, $true))
+
+    foreach ($branch in $dispatchBranches) {
+        foreach ($clause in $branch.Clauses) {
+            $guards = @($clause.Item1.FindAll({ param($node)
+                $node -is [System.Management.Automation.Language.BinaryExpressionAst] -and
+                $node.Operator -eq [System.Management.Automation.Language.TokenKind]::Icontains -and
+                [string]$node.Left.Extent.Text -ceq '$requiredSuites' -and
+                $node.Right -is [System.Management.Automation.Language.StringConstantExpressionAst]
+            }, $true))
+            if ($guards.Count -eq 0) { continue }
+            if ($guards.Count -ne 1) {
+                throw "A targeted executor dispatch branch must contain exactly one required-suite guard."
+            }
+
+            $guardSuite = [string]$guards[0].Right.Value
+            $registrations = @($clause.Item2.FindAll({ param($node)
+                $node -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+                [string]$node.Expression.Extent.Text -ceq '$executedSuites' -and
+                $node.Member -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+                [string]$node.Member.Value -ceq 'Add' -and
+                $null -ne $node.Arguments -and
+                @($node.Arguments).Count -eq 1 -and
+                $node.Arguments[0] -is [System.Management.Automation.Language.StringConstantExpressionAst]
+            }, $true))
+            if ($registrations.Count -ne 1) {
+                throw "Targeted executor dispatch branch '$guardSuite' must contain exactly one executed-suite registration."
+            }
+
+            $registeredSuite = [string]$registrations[0].Arguments[0].Value
+            if ($registeredSuite -cne $guardSuite) {
+                throw "Targeted executor dispatch branch '$guardSuite' records execution for '$registeredSuite'."
+            }
+            $pairedSuites.Add($guardSuite)
+        }
+    }
+
+    $pairedSuiteSet = @($pairedSuites | Sort-Object -Unique)
+    if ($pairedSuites.Count -ne $pairedSuiteSet.Count -or
+        ($pairedSuiteSet -join ",") -cne (@($SuiteUniverse | Sort-Object -Unique) -join ",")) {
+        throw "Targeted executor dispatch branches do not pair exactly with the classifier's dispatchable suites."
+    }
+    return $pairedSuiteSet
+}
+
 function Invoke-TargetedDispatchContractFixtures {
     $fixtureResults = New-Object 'System.Collections.Generic.List[object]'
 
@@ -847,6 +909,33 @@ function Invoke-TargetedDispatchContractFixtures {
         throw "Targeted executor dispatch paths do not record execution for every dispatchable suite."
     }
     $fixtureResults.Add([ordered]@{ name = "dispatch-registrations-record-executed-suites"; suites = $registeredSuiteSet; status = "PASS" })
+
+    $pairedSuiteSet = @(Assert-TargetedDispatchBranchPairing -ExecutorAst $executorAst -SuiteUniverse $suiteUniverse)
+    $fixtureResults.Add([ordered]@{ name = "dispatch-branches-pair-guard-and-registration"; suites = $pairedSuiteSet; status = "PASS" })
+
+    $mutatedExecutorPath = Join-Path $targetedScratch "dispatch-registration-mismatch.ps1"
+    $mutatedExecutor = Get-Content -LiteralPath $targetedValidator -Raw
+    $expectedRegistration = '$executedSuites.Add("installer-contract")'
+    if ([regex]::Matches($mutatedExecutor, [regex]::Escape($expectedRegistration)).Count -ne 1) {
+        throw "Dispatch registration mismatch fixture requires exactly one installer-contract registration."
+    }
+    $mutatedExecutor = $mutatedExecutor.Replace($expectedRegistration, '$executedSuites.Add("runtime-smoke")')
+    Set-Content -LiteralPath $mutatedExecutorPath -Value $mutatedExecutor -Encoding UTF8
+    $mutatedLexemes = $null
+    $mutatedParseErrors = $null
+    $mutatedExecutorAst = [System.Management.Automation.Language.Parser]::ParseFile($mutatedExecutorPath, [ref]$mutatedLexemes, [ref]$mutatedParseErrors)
+    if (@($mutatedParseErrors).Count -gt 0) { throw "Mutated targeted executor did not parse: $($mutatedParseErrors[0].Message)" }
+    $mismatchDetection = ""
+    try {
+        Assert-TargetedDispatchBranchPairing -ExecutorAst $mutatedExecutorAst -SuiteUniverse $suiteUniverse | Out-Null
+    }
+    catch {
+        $mismatchDetection = [string]$_.Exception.Message
+    }
+    if ([string]::IsNullOrWhiteSpace($mismatchDetection)) {
+        throw "The focused dispatch oracle accepted a branch-local suite registration mismatch."
+    }
+    $fixtureResults.Add([ordered]@{ name = "dispatch-registration-mismatch-detected"; status = "PASS"; detected_by = $mismatchDetection })
 
     $emittedSet = @($emittedSuites | ForEach-Object { [string]$_ } | Sort-Object -Unique)
     if (($emittedSet -join ",") -cne ($suiteUniverse -join ",")) {
