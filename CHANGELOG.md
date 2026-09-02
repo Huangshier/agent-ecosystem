@@ -4,7 +4,23 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.8.0` release.
+- No unreleased public changes after the `v0.8.1` release.
+
+## v0.8.1 - 2026-09-02
+
+- Fixed `project-workspace` layout validation so a canonical workspace no longer
+  reports failure just because the rebuildable knowledge Catalog is missing or
+  stale; Catalog findings are now warnings while canonical schema, reference,
+  and revision errors still fail closed.
+- Made `project-workspace` list inputs reliable under `pwsh -File` with a
+  consistent `json:` expression for multiple values and empty lists, and made
+  checkpoint append vs. replace semantics explicit to avoid silent fact loss
+  during a continuation update. (#358, #359, #360)
+- Converged post-`v0.8.0` C3.3 adoption and documentation surfaces. (#361)
+- Reduced duplicate local validation replay between the iteration and pre-push
+  stages and converged unknown-risk routing to a conservative, fail-closed
+  fallback by risk surface; self-protection is now a focused control-plane
+  oracle rather than a full business-suite replay. (#363, #365, #367)
 
 ## v0.8.0 - 2026-08-19
 

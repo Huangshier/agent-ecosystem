@@ -22,7 +22,7 @@ try {
         "skills/project-bootstrap/assets/knowledge-hub-template/knowledge/standards/bilingual-public-private-routing.md" = @("Maturity: verified", "Scope: cross-project", "User-facing conversation", "Public Boundary")
         "knowledge-hub/knowledge-catalog.md" = @("Bilingual Public/Private Routing", "language routing")
         "skills/project-bootstrap/assets/knowledge-hub-template/knowledge-catalog.md" = @("Bilingual Public/Private Routing")
-        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Simplified Chinese repository homepage", "Public templates remain English-first")
+        "docs/language-policy.md" = @("Conversation And Artifact Routing", "Bilingual Public/Private Routing", "Simplified Chinese repository homepage", "-ProjectLanguage en", "-ProjectLanguage zh-CN", "未显式传入时")
         "docs/release-readiness.md" = @("Bilingual Public/Private Routing", "localized context discovery headings")
         "docs/release-process.md" = @("localized context discovery headings", "bilingual public/private routing")
     }

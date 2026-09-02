@@ -100,7 +100,9 @@ fall back to English and are reported as validation findings.
 Legacy migration remains explicit, proposal-first, and backup-first. Use the
 Runtime-level `scripts/migrate-project.ps1` Analyze -> explicit Apply -> guarded
 Rollback flow for C3.3 workspace migration. The bootstrap memory/language
-switches are compatibility wrappers, not a second migration authority.
+switches are compatibility wrappers, not a second migration authority. The full
+upgrade path for an existing project is documented in
+[docs/existing-project-upgrade.md](../../docs/existing-project-upgrade.md).
 
 ## Intent And Safety
 
