@@ -1,35 +1,35 @@
 # Release Readiness
 
-Status: `v0.8.0` published public release.
+Status: `v0.8.1` published public release.
 
 ## Current Release Pointer
 
-- Latest published Release: `v0.8.0`。
-- 当前 `main` 与 `v0.8.0` publish-finalization metadata 对齐；当前 `Unreleased`
+- Latest published Release: `v0.8.1`。
+- 当前 `main` 与 `v0.8.1` publish-finalization metadata 对齐；当前 `Unreleased`
   无新的 public changes。
 - Current highest Release impact: `none`。
 - 本页只记录当前状态和导航指针，不授权 `tag`、`publish` 或任何 GitHub
   Release 操作。
 
-GitHub Release `v0.8.0` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.8.0
+GitHub Release `v0.8.1` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.8.1
 
 已发布 Release 的正文与维护者记录位于
-`docs/releases/v0.8.0.md`；本页不重复保存 tag target、验证计数或 hosted
+`docs/releases/v0.8.1.md`；本页不重复保存 tag target、验证计数或 hosted
 run 记录。
 
-## v0.8.0 Release
+## v0.8.1 Release
 
-`v0.8.0` 将 `v0.7.1` 之后的 C3.3 实现与一次性的 default / recommended runtime
-cutover 收敛为新的版本基线。active Runtime authority 为 `project-bootstrap` 与
-`project-workspace`；`project-context-gate`、`workflow-spec-lite`、
-`memory-governance` 不再是当前 Runtime authority。既有项目通过
-`scripts/migrate-project.ps1` 的 Analyze → explicit Apply → guarded Rollback
-迁移。
+`v0.8.1` 是 `v0.8.0` 之后的向后兼容 patch Release。它修复了
+`project-workspace` 在 `pwsh -File` 下的列表输入可靠性、checkpoint 追加与
+替换语义，以及将 canonical workspace 的 layout 有效性从可重建知识 Catalog
+的新鲜度中解耦；同时收敛了 `v0.8.0` 之后的 C3.3 adoption 文档，并消除了
+iteration / pre-push 之间的重复本地重放、将未知风险路由收敛为按风险面的
+fail-closed 保守回退。
 
-从 `v0.7.1` 的旧版 Runtime、旧版 agent skill bridge 与旧版项目工作区到当前
-C3.3 基线的升级路径已在 Issue #345 Stage A 演练并收口；演练证据记录在
-`docs/old-release-rehearsal-evidence.md`。
+`v0.8.1` 不改变 C3.3 active Runtime authority（仍为 `project-bootstrap` 与
+`project-workspace`）、PowerShell Core 7.6+ 基线、install profiles 或
+default / recommended cutover。
 
 ## Unreleased
 

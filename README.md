@@ -4,7 +4,7 @@ English: [README.en.md](README.en.md) | 简体中文（当前）
 
 > 面向 Agent 辅助软件项目的轻量工作流内核（Workflow Kernel）。
 
-当前版本：`v0.8.0`（最新已发布版本）
+当前版本：`v0.8.1`（最新已发布版本）
 
 当前 README 描述 `main`。使用已发布版本时，请以对应 tag 中的 README 与
 Release Notes 为准。
