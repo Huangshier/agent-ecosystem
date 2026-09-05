@@ -31,6 +31,96 @@ function Get-TreeFingerprint {
     return ($records.ToArray() -join "`n")
 }
 
+# Get-TreeFileHashMap: 返回目录下全部文件的相对路径到 SHA256 的映射；参数 Root 为目标目录。
+function Get-TreeFileHashMap {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Root)) {
+        return $map
+    }
+    $rootFull = (Resolve-Path -LiteralPath $Root).Path.TrimEnd([char[]]"\/")
+    Get-ChildItem -LiteralPath $rootFull -Recurse -File -Force | ForEach-Object {
+        $relative = $_.FullName.Substring($rootFull.Length).TrimStart([char[]]"\/") -replace "\\", "/"
+        $map[$relative] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    return $map
+}
+
+# Get-LegacyTemplateRelativePaths: 枚举指定语言 legacy 模板树映射到项目内的相对路径；参数 HubDir、LanguageCode。
+function Get-LegacyTemplateRelativePaths {
+    param(
+        [Parameter(Mandatory = $true)][string]$HubDir,
+        [Parameter(Mandatory = $true)][string]$LanguageCode
+    )
+
+    $paths = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($templatePair in @(@{ dir = "project-root"; prefix = "" }, @{ dir = "project-agent"; prefix = ".agents/" })) {
+        $templateDir = Join-Path $HubDir ("templates/languages/{0}/{1}" -f $LanguageCode, $templatePair.dir)
+        Get-ChildItem -LiteralPath $templateDir -Recurse -File | ForEach-Object {
+            $templateRelative = $_.FullName.Substring($templateDir.Length).TrimStart([char[]]"\/") -replace "\\", "/"
+            if ($templatePair.prefix) {
+                $templateRelative = "{0}{1}" -f $templatePair.prefix, $templateRelative
+            }
+            $paths.Add($templateRelative)
+        }
+    }
+    return $paths.ToArray()
+}
+
+# Assert-ExistingFilesUnchanged: 断言运行前存在的所有文件在运行后仍存在且哈希不变；参数 BeforeMap、AfterMap、Name 为前后文件哈希映射和用例名。
+function Assert-ExistingFilesUnchanged {
+    param(
+        [Parameter(Mandatory = $true)]$BeforeMap,
+        [Parameter(Mandatory = $true)]$AfterMap,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    foreach ($existingFile in $BeforeMap.Keys) {
+        if (-not $AfterMap.ContainsKey($existingFile)) {
+            throw "$Name deleted an existing file: $existingFile"
+        }
+        if ($AfterMap[$existingFile] -cne $BeforeMap[$existingFile]) {
+            throw "$Name modified an existing file: $existingFile"
+        }
+    }
+}
+
+# Assert-ExplicitLegacyAddedFiles: 断言显式 legacy bootstrap 的新增文件集合恰为
+# 模板树与 lock 中运行前不存在的文件；参数 BeforeMap、AfterMap、HubDir 为运行前
+# 后文件哈希映射和 hub 根，返回实际新增文件数。
+function Assert-ExplicitLegacyAddedFiles {
+    param(
+        [Parameter(Mandatory = $true)]$BeforeMap,
+        [Parameter(Mandatory = $true)]$AfterMap,
+        [Parameter(Mandatory = $true)][string]$HubDir
+    )
+
+    $expectedAdded = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($templateRelative in (Get-LegacyTemplateRelativePaths -HubDir $HubDir -LanguageCode "en")) {
+        if (-not $BeforeMap.ContainsKey($templateRelative)) {
+            $expectedAdded.Add($templateRelative)
+        }
+    }
+    if (-not $BeforeMap.ContainsKey(".agents/hub.lock.json")) {
+        $expectedAdded.Add(".agents/hub.lock.json")
+    }
+
+    $actualAdded = @($AfterMap.Keys | Where-Object { -not $BeforeMap.ContainsKey($_) } | Sort-Object)
+    $expectedSorted = @($expectedAdded.ToArray() | Sort-Object)
+    if ($actualAdded.Count -ne $expectedSorted.Count) {
+        $unexpectedAdded = @($actualAdded | Where-Object { $expectedSorted -cnotcontains $_ })
+        $missingAdded = @($expectedSorted | Where-Object { $actualAdded -cnotcontains $_ })
+        throw ("Explicit legacy bootstrap added an unexpected file set. Unexpected: {0}; missing: {1}" -f ($unexpectedAdded -join ', '), ($missingAdded -join ', '))
+    }
+    for ($addedIndex = 0; $addedIndex -lt $expectedSorted.Count; $addedIndex++) {
+        if ($expectedSorted[$addedIndex] -cne $actualAdded[$addedIndex]) {
+            throw ("Explicit legacy bootstrap added-file mismatch: expected '{0}', got '{1}'." -f $expectedSorted[$addedIndex], $actualAdded[$addedIndex])
+        }
+    }
+    return $actualAdded.Count
+}
+
 # Assert-ExpectedFailure: 执行预期失败的命令并校验错误文本；参数 Name、Command、ExpectedToken 描述用例。
 function Assert-ExpectedFailure {
     param(
@@ -305,6 +395,203 @@ $conflictExplicitFailure = Assert-ExpectedFailure -Name "language-conflict-expli
 }
 Assert-Unchanged -Root $conflictExplicitProject -Before $conflictExplicitBefore -Name "language-conflict-explicit"
 $results.Add([ordered]@{ name = "language-conflict-explicit"; status = "PASS"; error = $conflictExplicitFailure.error }) | Out-Null
+
+# NOTE: Issue #369 —— workspace 身份歧义只限定为"既有 memory 且
+# .agents/hub.lock.json 文件缺失"，默认 fail closed；-LegacyWorkspace 只表达
+# 调用方的 legacy 意图，适用条件在任何写入或迁移委托前校验；既有 lock 文件
+# （含无 workspace_model 的旧格式）保持原行为，不走歧义分支。
+$identityHubBefore = Get-TreeFingerprint -Root $HubDir
+
+$identityNoLockProject = Join-Path $scratchFull "workspace-identity-no-lock"
+New-Item -ItemType Directory -Path $identityNoLockProject | Out-Null
+Set-Content -LiteralPath (Join-Path $identityNoLockProject "AGENTS.md") -Value "# fixture legacy memory" -Encoding ASCII
+$identityNoLockBefore = Get-TreeFingerprint -Root $identityNoLockProject
+$identityNoLockFailure = Assert-ExpectedFailure -Name "workspace-identity-missing-no-lock" -ExpectedToken "Ambiguous workspace identity" -Command {
+    & $BootstrapScript -ProjectDir $identityNoLockProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $identityNoLockProject -Before $identityNoLockBefore -Name "workspace-identity-missing-no-lock-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "workspace-identity-missing-no-lock-hub"
+$results.Add([ordered]@{ name = "workspace-identity-missing-no-lock"; status = "PASS"; error = $identityNoLockFailure.error }) | Out-Null
+
+$identityNoLockAnalyzeProject = Join-Path $scratchFull "workspace-identity-no-lock-analyze"
+New-Item -ItemType Directory -Path $identityNoLockAnalyzeProject | Out-Null
+Set-Content -LiteralPath (Join-Path $identityNoLockAnalyzeProject "AGENTS.md") -Value "# fixture legacy memory" -Encoding ASCII
+$identityNoLockAnalyzeBefore = Get-TreeFingerprint -Root $identityNoLockAnalyzeProject
+$identityNoLockAnalyzeFailure = Assert-ExpectedFailure -Name "workspace-identity-missing-analyze-wrapper" -ExpectedToken "Ambiguous workspace identity" -Command {
+    & $BootstrapScript -ProjectDir $identityNoLockAnalyzeProject -HubDir $HubDir -AnalyzeMemoryUpgrade
+}
+Assert-Unchanged -Root $identityNoLockAnalyzeProject -Before $identityNoLockAnalyzeBefore -Name "workspace-identity-missing-analyze-wrapper-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "workspace-identity-missing-analyze-wrapper-hub"
+$results.Add([ordered]@{ name = "workspace-identity-missing-analyze-wrapper"; status = "PASS"; error = $identityNoLockAnalyzeFailure.error }) | Out-Null
+
+$identityLegacyProject = Join-Path $scratchFull "workspace-identity-legacy-selected"
+New-Item -ItemType Directory -Path $identityLegacyProject | Out-Null
+Set-Content -LiteralPath (Join-Path $identityLegacyProject "AGENTS.md") -Value "# fixture legacy memory" -Encoding ASCII
+$identityLegacyBeforeMap = Get-TreeFileHashMap -Root $identityLegacyProject
+& $BootstrapScript -ProjectDir $identityLegacyProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis | Out-Null
+$identityLegacyAfterMap = Get-TreeFileHashMap -Root $identityLegacyProject
+Assert-ExistingFilesUnchanged -BeforeMap $identityLegacyBeforeMap -AfterMap $identityLegacyAfterMap -Name "Explicit legacy bootstrap"
+$identityLegacyAddedCount = Assert-ExplicitLegacyAddedFiles -BeforeMap $identityLegacyBeforeMap -AfterMap $identityLegacyAfterMap -HubDir $HubDir
+$identityLegacyLock = Get-Content -LiteralPath (Join-Path $identityLegacyProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
+if ([string]$identityLegacyLock.workspace_model -ne "legacy" -or [string]$identityLegacyLock.workspace_state -ne "not-enabled") {
+    throw "Explicit -LegacyWorkspace did not persist the declared legacy workspace identity."
+}
+foreach ($legacySurface in @(".agents/process.txt", ".agents/AGENTS.md", "CLAUDE.md", ".claude/settings.json")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $identityLegacyProject $legacySurface))) {
+        throw "Explicit legacy bootstrap did not create the declared legacy scaffold surface: $legacySurface"
+    }
+}
+foreach ($c33Surface in @(".agents/work", ".agents/skills")) {
+    if (Test-Path -LiteralPath (Join-Path $identityLegacyProject $c33Surface)) {
+        throw "Explicit legacy bootstrap must not create the C3.3 workspace surface: $c33Surface"
+    }
+}
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "workspace-identity-legacy-selected-hub"
+$results.Add([ordered]@{ name = "workspace-identity-legacy-selected"; status = "PASS"; added_file_count = $identityLegacyAddedCount }) | Out-Null
+
+# NOTE: 既有 lock（无 workspace_model 的旧格式）保持原行为：不带参数仍按既有
+# 选择执行；-LegacyWorkspace 因 lock 文件存在而不适用，在任何写入前拒绝。
+$identityOldLockProject = Join-Path $scratchFull "workspace-identity-old-lock"
+New-Item -ItemType Directory -Path (Join-Path $identityOldLockProject ".agents") -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $identityOldLockProject "AGENTS.md") -Value "# fixture legacy memory" -Encoding ASCII
+$identityOldLockMemoryHash = (Get-FileHash -LiteralPath (Join-Path $identityOldLockProject "AGENTS.md") -Algorithm SHA256).Hash
+$identityOldLockData = [ordered]@{
+    schema_version = 1
+    installed_at_utc = "2026-01-01T00:00:00.0000000Z"
+    installer = "project-bootstrap"
+    project_dir = $identityOldLockProject
+    project_language = "en"
+}
+$identityOldLockData | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $identityOldLockProject ".agents/hub.lock.json") -Encoding ASCII
+$identityOldLockBefore = Get-TreeFingerprint -Root $identityOldLockProject
+$identityOldLockMisuseFailure = Assert-ExpectedFailure -Name "legacy-workspace-existing-lock-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $identityOldLockProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $identityOldLockProject -Before $identityOldLockBefore -Name "legacy-workspace-existing-lock-misuse-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "legacy-workspace-existing-lock-misuse-hub"
+$results.Add([ordered]@{ name = "legacy-workspace-existing-lock-misuse"; status = "PASS"; error = $identityOldLockMisuseFailure.error }) | Out-Null
+
+& $BootstrapScript -ProjectDir $identityOldLockProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis | Out-Null
+$identityOldLockPlain = Get-Content -LiteralPath (Join-Path $identityOldLockProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
+if ([string]$identityOldLockPlain.workspace_model -ne "legacy") {
+    throw "Plain bootstrap on an existing lock without workspace_model must keep the original legacy selection behavior."
+}
+if ((Get-FileHash -LiteralPath (Join-Path $identityOldLockProject "AGENTS.md") -Algorithm SHA256).Hash -ne $identityOldLockMemoryHash) {
+    throw "Plain bootstrap on an existing old-format lock modified existing project memory."
+}
+$results.Add([ordered]@{ name = "existing-lock-plain-original-behavior"; status = "PASS" }) | Out-Null
+
+# NOTE: 真实故障 fixture —— 正式 bootstrap 建立完整 C3.3 后仅移除 lock，
+# 两个独立且初始状态相同的副本分别验证默认拒绝与显式 legacy 选择（首次
+# legacy 接入）；不能用旧格式 lock 替代该场景。
+$identityC33BaseProject = Join-Path $scratchFull "workspace-identity-c33-base"
+New-Item -ItemType Directory -Path $identityC33BaseProject | Out-Null
+& $BootstrapScript -ProjectDir $identityC33BaseProject -HubDir $HubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Null
+$identityC33BaseLock = Get-Content -LiteralPath (Join-Path $identityC33BaseProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
+if ([string]$identityC33BaseLock.workspace_model -cne "c3.3") {
+    throw "C3.3 lock-removed fixture base was not established by a real bootstrap."
+}
+$identityC33BaseFingerprint = Get-TreeFingerprint -Root $identityC33BaseProject
+
+$identityC33RejectProject = Join-Path $scratchFull "workspace-identity-c33-lock-removed-reject"
+$identityC33LegacySelectedProject = Join-Path $scratchFull "workspace-identity-c33-lock-removed-legacy"
+Copy-Item -LiteralPath $identityC33BaseProject -Destination $identityC33RejectProject -Recurse
+Copy-Item -LiteralPath $identityC33BaseProject -Destination $identityC33LegacySelectedProject -Recurse
+foreach ($copiedProject in @($identityC33RejectProject, $identityC33LegacySelectedProject)) {
+    if ((Get-TreeFingerprint -Root $copiedProject) -cne $identityC33BaseFingerprint) {
+        throw "Lock-removed fixture copies did not start from an identical C3.3 state: $copiedProject"
+    }
+}
+foreach ($copiedProject in @($identityC33RejectProject, $identityC33LegacySelectedProject)) {
+    Remove-Item -LiteralPath (Join-Path $copiedProject ".agents/hub.lock.json") -Force
+}
+
+$identityC33RejectBefore = Get-TreeFingerprint -Root $identityC33RejectProject
+$identityC33RejectFailure = Assert-ExpectedFailure -Name "workspace-identity-c33-lock-removed-reject" -ExpectedToken "Ambiguous workspace identity" -Command {
+    & $BootstrapScript -ProjectDir $identityC33RejectProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $identityC33RejectProject -Before $identityC33RejectBefore -Name "workspace-identity-c33-lock-removed-reject-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "workspace-identity-c33-lock-removed-reject-hub"
+$results.Add([ordered]@{ name = "workspace-identity-c33-lock-removed-reject"; status = "PASS"; error = $identityC33RejectFailure.error }) | Out-Null
+
+$identityC33BeforeMap = Get-TreeFileHashMap -Root $identityC33LegacySelectedProject
+& $BootstrapScript -ProjectDir $identityC33LegacySelectedProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis | Out-Null
+$identityC33AfterMap = Get-TreeFileHashMap -Root $identityC33LegacySelectedProject
+Assert-ExistingFilesUnchanged -BeforeMap $identityC33BeforeMap -AfterMap $identityC33AfterMap -Name "Explicit legacy bootstrap on a lock-less C3.3 project"
+$identityC33AddedCount = Assert-ExplicitLegacyAddedFiles -BeforeMap $identityC33BeforeMap -AfterMap $identityC33AfterMap -HubDir $HubDir
+$identityC33LegacyLock = Get-Content -LiteralPath (Join-Path $identityC33LegacySelectedProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
+if ([string]$identityC33LegacyLock.workspace_model -cne "legacy" -or [string]$identityC33LegacyLock.workspace_state -cne "not-enabled") {
+    throw "Explicit legacy bootstrap on a lock-less C3.3 project did not record the legacy workspace identity."
+}
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "workspace-identity-c33-lock-removed-legacy-hub"
+$results.Add([ordered]@{ name = "workspace-identity-c33-lock-removed-legacy-selected"; status = "PASS"; added_file_count = $identityC33AddedCount }) | Out-Null
+
+$identityEmptyMisuseProject = Join-Path $scratchFull "workspace-identity-empty-misuse"
+New-Item -ItemType Directory -Path $identityEmptyMisuseProject | Out-Null
+$identityEmptyMisuseBefore = Get-TreeFingerprint -Root $identityEmptyMisuseProject
+$identityEmptyMisuseFailure = Assert-ExpectedFailure -Name "legacy-workspace-empty-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $identityEmptyMisuseProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $identityEmptyMisuseProject -Before $identityEmptyMisuseBefore -Name "legacy-workspace-empty-misuse-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "legacy-workspace-empty-misuse-hub"
+$results.Add([ordered]@{ name = "legacy-workspace-empty-misuse"; status = "PASS"; error = $identityEmptyMisuseFailure.error }) | Out-Null
+
+$identityLegacyDeclaredBefore = Get-TreeFingerprint -Root $identityLegacyProject
+$identityLegacyMisuseFailure = Assert-ExpectedFailure -Name "legacy-workspace-declared-legacy-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $identityLegacyProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $identityLegacyProject -Before $identityLegacyDeclaredBefore -Name "legacy-workspace-declared-legacy-misuse-project"
+$results.Add([ordered]@{ name = "legacy-workspace-declared-legacy-misuse"; status = "PASS"; error = $identityLegacyMisuseFailure.error }) | Out-Null
+
+$identityC33MisuseBefore = Get-TreeFingerprint -Root $inheritProject
+$identityC33MisuseFailure = Assert-ExpectedFailure -Name "legacy-workspace-declared-c33-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $inheritProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis
+}
+Assert-Unchanged -Root $inheritProject -Before $identityC33MisuseBefore -Name "legacy-workspace-declared-c33-misuse-project"
+$results.Add([ordered]@{ name = "legacy-workspace-declared-c33-misuse"; status = "PASS"; error = $identityC33MisuseFailure.error }) | Out-Null
+
+$identityLegacyRefreshMemoryHash = (Get-FileHash -LiteralPath (Join-Path $identityLegacyProject "AGENTS.md") -Algorithm SHA256).Hash
+& $BootstrapScript -ProjectDir $identityLegacyProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis | Out-Null
+$identityLegacyRefreshLock = Get-Content -LiteralPath (Join-Path $identityLegacyProject ".agents/hub.lock.json") -Raw | ConvertFrom-Json
+if ([string]$identityLegacyRefreshLock.workspace_model -ne "legacy") {
+    throw "Plain bootstrap on a declared legacy lock must keep the legacy workspace."
+}
+if ((Get-FileHash -LiteralPath (Join-Path $identityLegacyProject "AGENTS.md") -Algorithm SHA256).Hash -ne $identityLegacyRefreshMemoryHash) {
+    throw "Plain legacy refresh modified existing project memory."
+}
+$results.Add([ordered]@{ name = "legacy-lock-plain-refresh"; status = "PASS" }) | Out-Null
+
+$identityComboProject = Join-Path $scratchFull "workspace-identity-language-migration-combo"
+New-Item -ItemType Directory -Path $identityComboProject | Out-Null
+Set-Content -LiteralPath (Join-Path $identityComboProject "AGENTS.md") -Value "# fixture legacy memory" -Encoding ASCII
+$identityComboBefore = Get-TreeFingerprint -Root $identityComboProject
+& $BootstrapScript -ProjectDir $identityComboProject -HubDir $HubDir -LegacyWorkspace -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN | Out-Null
+if ((Get-TreeFingerprint -Root $identityComboProject) -ne $identityComboBefore) {
+    throw "Language migration analysis combined with -LegacyWorkspace must not write project files."
+}
+$results.Add([ordered]@{ name = "workspace-identity-language-migration-combo"; status = "PASS" }) | Out-Null
+
+# NOTE: 不适用输入上的显式 -LegacyWorkspace 组合必须在迁移委托前拒绝；
+# Apply 分支用不存在的 proposal 直接证明拒绝发生在委托之前，不依赖 Analyze 的只读性。
+$identityComboAnalyzeProject = Join-Path $scratchFull "workspace-identity-combo-analyze-misuse"
+New-Item -ItemType Directory -Path $identityComboAnalyzeProject | Out-Null
+$identityComboAnalyzeBefore = Get-TreeFingerprint -Root $identityComboAnalyzeProject
+$identityComboAnalyzeFailure = Assert-ExpectedFailure -Name "legacy-workspace-combo-analyze-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $identityComboAnalyzeProject -HubDir $HubDir -LegacyWorkspace -AnalyzeLanguageMigration -SourceLanguage en -TargetLanguage zh-CN
+}
+Assert-Unchanged -Root $identityComboAnalyzeProject -Before $identityComboAnalyzeBefore -Name "legacy-workspace-combo-analyze-misuse-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "legacy-workspace-combo-analyze-misuse-hub"
+$results.Add([ordered]@{ name = "legacy-workspace-combo-analyze-misuse"; status = "PASS"; error = $identityComboAnalyzeFailure.error }) | Out-Null
+
+$identityComboApplyProject = Join-Path $scratchFull "workspace-identity-combo-apply-misuse"
+New-Item -ItemType Directory -Path $identityComboApplyProject | Out-Null
+$identityComboApplyBefore = Get-TreeFingerprint -Root $identityComboApplyProject
+$identityComboApplyFailure = Assert-ExpectedFailure -Name "legacy-workspace-combo-apply-misuse" -ExpectedToken "applies only when existing project memory is present" -Command {
+    & $BootstrapScript -ProjectDir $identityComboApplyProject -HubDir $HubDir -LegacyWorkspace -ApplyLanguageMigration -MigrationPlan (Join-Path $scratchFull "nonexistent-migration-plan.json")
+}
+Assert-Unchanged -Root $identityComboApplyProject -Before $identityComboApplyBefore -Name "legacy-workspace-combo-apply-misuse-project"
+Assert-Unchanged -Root $HubDir -Before $identityHubBefore -Name "legacy-workspace-combo-apply-misuse-hub"
+$results.Add([ordered]@{ name = "legacy-workspace-combo-apply-misuse"; status = "PASS"; error = $identityComboApplyFailure.error }) | Out-Null
 
 $missingProject = Join-Path $scratchFull "missing-target"
 $missingFailure = Assert-ExpectedFailure -Name "missing-target" -ExpectedToken "does not exist" -Command {

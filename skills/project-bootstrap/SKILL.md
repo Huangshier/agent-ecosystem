@@ -141,12 +141,19 @@ C3.3 default path (fresh and existing C3.3 projects):
   next-step state, or any temporary run state.
 
 Legacy project path (compatibility-only):
-- An existing legacy project keeps the legacy scaffold path until an explicit
-  reviewed `migrate-project.ps1` Analyze -> Apply. Bootstrap on a legacy
-  project may still write `.agents/AGENTS.md`, hot memory (`process.txt`,
-  `plan.md`, `notes.md`), `.agents/commands/`, and `CLAUDE.md` first-session
-  scaffolds, and may run a read-only legacy memory analysis that prints a
-  short upgrade hint only when candidates are detected.
+- An existing legacy project whose `.agents/hub.lock.json` declares
+  `workspace_model = "legacy"` keeps the legacy scaffold path until an
+  explicit reviewed `migrate-project.ps1` Analyze -> Apply. An existing lock
+  file keeps its current behavior: bootstrap does not treat a missing or
+  unknown `workspace_model` value as ambiguity and does not re-decide the
+  workspace identity from the directory layout. A project that has existing
+  memory while `.agents/hub.lock.json` does not exist is ambiguous: bootstrap
+  fails closed before any write unless the caller explicitly passes
+  `-LegacyWorkspace`. Bootstrap on a legacy project may still write
+  `.agents/AGENTS.md`, hot memory (`process.txt`, `plan.md`, `notes.md`),
+  `.agents/commands/`, and `CLAUDE.md` first-session scaffolds, and may run a
+  read-only legacy memory analysis that prints a short upgrade hint only when
+  candidates are detected.
 - Install the declarative `.claude/guardrails/` template reliability contract
   for Claude Code projects from the legacy `project-root` template. This is
   not a security sandbox, permission isolation layer, or automatic
@@ -171,6 +178,34 @@ Legacy project path (compatibility-only):
   even when callers pass `-ProjectLanguage` explicitly. Do not infer project
   memory language from the current chat.
 
+Workspace identity recovery for an ambiguous bootstrap target
+(compatibility-only):
+
+When bootstrap fails with the ambiguous workspace identity error,
+`.agents/hub.lock.json` is missing: it may have been lost, or it may never
+have been created for this project. Bootstrap never auto-restores the lock
+and never infers the workspace identity from the directory layout. Only a
+trusted Git history of the lock supports restoring the original file:
+
+1. In the project's own repository, list the trusted history of the lock:
+   `git log --oneline --all -- .agents/hub.lock.json`.
+2. Confirm a candidate revision belongs to this project:
+   `git show <revision>:.agents/hub.lock.json` — check that the recorded
+   project identity/path corresponds to this project.
+3. Before restoring, confirm the target still does not exist. If
+   `.agents/hub.lock.json` is now present, stop: do not overwrite it, and
+   re-verify which file applies before any further step.
+4. Restore only the confirmed original file without editing its content:
+   `git restore --source=<revision> -- .agents/hub.lock.json` (or
+   `git checkout <revision> -- .agents/hub.lock.json`), then re-run bootstrap
+   and review the reported workspace contract.
+
+Do not hand-write or patch a `workspace_model` value to unblock bootstrap. If
+no trusted revision of the lock exists, state that honestly: the previous
+workspace identity cannot be proven, so it cannot be guaranteed to have been
+C3.3; the caller must then explicitly choose `-LegacyWorkspace` for a
+deliberate legacy adoption.
+
 Optional flags:
 - `-HubDir <path>`: custom knowledge hub root; it must directly contain
   `templates/languages` once initialized.
@@ -179,6 +214,7 @@ Optional flags:
 - `-ForceResetScaffold`: explicit reset path for discarding scaffold customizations. It emits a warning, backs up existing files first, and cannot be combined with memory upgrade modes.
 - `-SkipMemoryUpgradeAnalysis`: skip the default read-only legacy memory check.
 - `-ProjectLanguage en|zh-CN`: explicitly set the project memory language during bootstrap. The agent or workflow supplies the user's primary language; the script does not infer chat language. On a fresh C3.3 project this only records the project language in the C3.3 lock; it does not write legacy first-session hot-memory scaffolds.
+- `-LegacyWorkspace`: explicit legacy workspace selection for a project that has existing memory while `.agents/hub.lock.json` does not exist. The flag expresses caller intent and grants no additional permissions; agents must not add it on their own to bypass the default rejection. Applicability is validated before any project or hub write and before any memory-upgrade or language-migration delegation; bootstrap rejects the flag when the target is a fresh/empty project or any lock file already exists. See the workspace identity recovery guidance for restoring a lost lock.
 
 Legacy / compatibility-only flags (existing legacy projects and explicit
 memory-upgrade / language-migration workflows only; not part of the fresh C3.3
