@@ -4,7 +4,11 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
-- No unreleased public changes after the `v0.8.1` release.
+- Made `project-bootstrap` fail closed when a project has existing memory but
+  `.agents/hub.lock.json` does not exist; the legacy workspace now requires
+  explicit `-LegacyWorkspace` selection, validated before any write or
+  migration delegation, while existing lock files keep their current
+  behavior. (#369)
 
 ## v0.8.1 - 2026-09-02
 

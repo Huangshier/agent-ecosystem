@@ -65,7 +65,7 @@ function Invoke-DirectBootstrapRegressionChecks {
     }
 
     New-LegacyProjectSeed -ProjectDir $legacyProject
-    & $BootstrapScript -ProjectDir $legacyProject -HubDir $HubDir -SkipMemoryUpgradeAnalysis | Out-Null
+    & $BootstrapScript -ProjectDir $legacyProject -HubDir $HubDir -LegacyWorkspace -SkipMemoryUpgradeAnalysis | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Existing legacy bootstrap regression fixture failed with exit code $LASTEXITCODE."
     }
@@ -153,8 +153,8 @@ try {
     }
 
     $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
-    & $bootstrapScript -ProjectDir $projectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
-    & $bootstrapScript -ProjectDir $batchProjectFixture -HubDir $hubFixture -SkipMemoryUpgradeAnalysis | Out-Host
+    & $bootstrapScript -ProjectDir $projectFixture -HubDir $hubFixture -LegacyWorkspace -SkipMemoryUpgradeAnalysis | Out-Host
+    & $bootstrapScript -ProjectDir $batchProjectFixture -HubDir $hubFixture -LegacyWorkspace -SkipMemoryUpgradeAnalysis | Out-Host
     $checkHubLockScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "check_hub_lock.ps1"
     $hubLockOutput = @(& $checkHubLockScript -ProjectDir $projectFixture -HubDir $hubFixture)
     $hubLockStatusLine = @($hubLockOutput | Where-Object { $_ -match '^Status:\s+' } | Select-Object -Last 1)
@@ -801,7 +801,7 @@ try {
         # 显式建立 legacy fixture，使 bootstrap 写出源语言模板，供 language_migration 识别 replace-template。
         Assert-PathInsideRoot -Path $projectDir -Root $scratchRootFull
         New-LegacyProjectSeed -ProjectDir $projectDir
-        & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -ProjectLanguage $SourceLanguage -SkipMemoryUpgradeAnalysis | Out-Host
+        & $bootstrapScript -ProjectDir $projectDir -HubDir $hubDir -LegacyWorkspace -ProjectLanguage $SourceLanguage -SkipMemoryUpgradeAnalysis | Out-Host
 
         $agentGuidePath = Join-PathParts $projectDir ".agents" "AGENTS.md"
         $planPath = Join-PathParts $projectDir ".agents" "plan.md"
@@ -1088,7 +1088,7 @@ try {
 
     $hubDir = Join-PathParts $script:recommendedCopyRuntime "knowledge-hub"
     $bootstrapScript = Join-PathParts $script:recommendedCopyRuntime "skills" "project-bootstrap" "scripts" "bootstrap_project.ps1"
-    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
+    & $bootstrapScript -ProjectDir $preserveProject -HubDir $hubDir -LegacyWorkspace -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
 
     $rootAgentsPath = Join-PathParts $preserveProject "AGENTS.md"
     $agentGuidePath = Join-PathParts $preserveProject ".agents" "AGENTS.md"
@@ -1272,7 +1272,7 @@ try {
         # NOTE: ownership guides（AGENTS.md + .agents/AGENTS.md）的保守刷新只存在于 legacy 路径；
         # 显式建立 legacy fixture，使 bootstrap 写出两份 ownership guide 及对应 prior hash。
         New-LegacyProjectSeed -ProjectDir $ProjectDir
-        & $bootstrapScript -ProjectDir $ProjectDir -HubDir $hubDir -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
+        & $bootstrapScript -ProjectDir $ProjectDir -HubDir $hubDir -LegacyWorkspace -ProjectLanguage "en" -SkipMemoryUpgradeAnalysis | Out-Host
 
         $rootPath = Join-PathParts $ProjectDir "AGENTS.md"
         $nestedPath = Join-PathParts $ProjectDir ".agents" "AGENTS.md"

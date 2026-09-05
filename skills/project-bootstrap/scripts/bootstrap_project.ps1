@@ -17,6 +17,7 @@ param(
     [switch]$ApplyNarrativeMigration,
     [switch]$ValidateNarrativeMigration,
     [switch]$SkipMemoryUpgradeAnalysis,
+    [switch]$LegacyWorkspace,
     [string]$UpgradePlan = "",
     [string]$MigrationPlan = "",
     [string]$SourceLanguage = "",
@@ -505,6 +506,16 @@ if ($hubDirWasProvided -and (Test-Path -LiteralPath $HubDir -PathType Container)
     }
 }
 
+# ! -LegacyWorkspace 的适用条件（既有 memory 且 lock 文件缺失）必须在任何项目
+# ! 或 hub 写入、任何 memory-upgrade / 语言迁移委托之前校验；不带该参数时本块
+# ! 不产生任何行为变化，语言迁移路径的既有语义保持不变。
+$preflightLockPath = Join-PathParts $ProjectDir ".agents" "hub.lock.json"
+$hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
+$legacyWorkspaceApplicable = ($hadExistingProjectMemory -and -not (Test-Path -LiteralPath $preflightLockPath -PathType Leaf))
+if ($LegacyWorkspace.IsPresent -and -not $legacyWorkspaceApplicable) {
+    throw "-LegacyWorkspace applies only when existing project memory is present and .agents/hub.lock.json does not exist. The target is a fresh/empty project or an existing lock file is present, so the parameter was rejected before any write or delegation."
+}
+
 $languageMigrationScript = Join-PathParts $PSScriptRoot "language_migration.ps1"
 if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or $ApplyLanguageMigration.IsPresent -or $ValidateLanguageMigration.IsPresent -or $PlanNarrativeMigration.IsPresent -or $ApplyNarrativeMigration.IsPresent -or $ValidateNarrativeMigration.IsPresent) {
     if (-not (Test-Path -LiteralPath $languageMigrationScript)) {
@@ -529,7 +540,6 @@ if ($AnalyzeLanguageMigration.IsPresent -or $PlanLanguageMigration.IsPresent -or
     return
 }
 
-$preflightLockPath = Join-PathParts $ProjectDir ".agents" "hub.lock.json"
 $lockedProjectLanguage = Read-BootstrapLockLanguage -LockPath $preflightLockPath
 $declaredProjectLanguage = Read-ProjectGuideLanguage -ProjectPath $ProjectDir
 if (-not [string]::IsNullOrWhiteSpace($lockedProjectLanguage) -and
@@ -548,12 +558,19 @@ if (-not $projectLanguageWasProvided) {
 
 $projectLanguageCode = Resolve-BootstrapProjectLanguage -Language $ProjectLanguage
 $existingWorkspaceModel = Read-BootstrapWorkspaceModel -LockPath $preflightLockPath
-$hadExistingProjectMemory = Test-ExistingProjectMemory -Root $ProjectDir
 # Post-cutover: a fresh project (no existing project memory) always bootstraps into
 # the canonical C3.3 workspace. An existing c3.3 lock stays authoritative on later
-# bootstrap, and an existing legacy project keeps the legacy scaffold path until an
-# explicit reviewed migrate-project.ps1 Analyze -> Apply.
+# bootstrap; an existing legacy lock keeps the legacy scaffold path until an
+# explicit reviewed migrate-project.ps1 Analyze -> Apply; and an existing lock file
+# without a workspace_model value keeps the pre-existing selection behavior. Only
+# existing memory with a missing lock file is ambiguous: it fails closed below
+# unless the caller explicitly passes -LegacyWorkspace.
 $useC33Workspace = ($existingWorkspaceModel -eq "c3.3") -or (-not $hadExistingProjectMemory)
+# ! 默认歧义拒绝必须保持在任何项目或 hub 写入之前：失败路径不允许产生模板复制、
+# ! 语言 scaffold、backup evidence、hub 初始化或 lock 写入。
+if ($legacyWorkspaceApplicable -and -not $LegacyWorkspace.IsPresent) {
+    throw "Ambiguous workspace identity: existing project memory was detected, but .agents/hub.lock.json does not exist. Pass -LegacyWorkspace to explicitly keep the legacy workspace, or restore the original lock file from a trusted revision of this project's own repository before retrying. No bootstrap files were written."
+}
 
 $templateRoot = Join-PathParts $HubDir "templates" "languages"
 $projectRootTemplate = ""
