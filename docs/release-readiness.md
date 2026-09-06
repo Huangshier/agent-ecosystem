@@ -1,35 +1,38 @@
 # Release Readiness
 
-Status: `v0.8.1` published public release.
+Status: `v0.9.0` published public release.
 
 ## Current Release Pointer
 
-- Latest published Release: `v0.8.1`。
-- 当前 `main` 与 `v0.8.1` publish-finalization metadata 对齐；当前 `Unreleased`
+- Latest published Release: `v0.9.0`。
+- 当前 `main` 与 `v0.9.0` publish-finalization metadata 对齐；当前 `Unreleased`
   无新的 public changes。
 - Current highest Release impact: `none`。
 - 本页只记录当前状态和导航指针，不授权 `tag`、`publish` 或任何 GitHub
   Release 操作。
 
-GitHub Release `v0.8.1` has been published:
-https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.8.1
+GitHub Release `v0.9.0` has been published:
+https://github.com/Huangshier/agent-ecosystem/releases/tag/v0.9.0
 
 已发布 Release 的正文与维护者记录位于
-`docs/releases/v0.8.1.md`；本页不重复保存 tag target、验证计数或 hosted
+`docs/releases/v0.9.0.md`；本页不重复保存 tag target、验证计数或 hosted
 run 记录。
 
-## v0.8.1 Release
+## v0.9.0 Release
 
-`v0.8.1` 是 `v0.8.0` 之后的向后兼容 patch Release。它修复了
-`project-workspace` 在 `pwsh -File` 下的列表输入可靠性、checkpoint 追加与
-替换语义，以及将 canonical workspace 的 layout 有效性从可重建知识 Catalog
-的新鲜度中解耦；同时收敛了 `v0.8.0` 之后的 C3.3 adoption 文档，并消除了
-iteration / pre-push 之间的重复本地重放、将未知风险路由收敛为按风险面的
-fail-closed 保守回退。
+`v0.9.0` 是 `v0.8.0` 之后的 minor Release。它在既有 memory 但
+`.agents/hub.lock.json` 缺失的项目上让 `project-bootstrap` fail closed，
+legacy workspace 需要显式 `-LegacyWorkspace` 选择并在写入与迁移委托前校验
+适用性；同时包含 `project-workspace` 的可靠性修复（canonical workspace 的
+layout 有效性独立于可重建知识 Catalog 的新鲜度、`pwsh -File` 下的列表输入、
+checkpoint 追加与替换语义）、`v0.8.0` 之后的 C3.3 adoption 文档收敛，以及
+iteration / pre-push 重复本地重放消除与按风险面的 fail-closed 未知路由
+收敛。
 
-`v0.8.1` 不改变 C3.3 active Runtime authority（仍为 `project-bootstrap` 与
+`v0.9.0` 不改变 C3.3 active Runtime authority（仍为 `project-bootstrap` 与
 `project-workspace`）、PowerShell Core 7.6+ 基线、install profiles 或
-default / recommended cutover。
+default / recommended cutover。`v0.8.0` 之后曾准备的 `v0.8.1` 元数据从未
+tag 或发布，其用户可见内容已并入本版本。
 
 ## Unreleased
 

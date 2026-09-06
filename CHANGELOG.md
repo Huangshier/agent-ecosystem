@@ -4,14 +4,15 @@ All notable public changes are summarized here.
 
 ## Unreleased
 
+- No unreleased public changes after the `v0.9.0` release.
+
+## v0.9.0 - 2026-09-06
+
 - Made `project-bootstrap` fail closed when a project has existing memory but
   `.agents/hub.lock.json` does not exist; the legacy workspace now requires
   explicit `-LegacyWorkspace` selection, validated before any write or
   migration delegation, while existing lock files keep their current
   behavior. (#369)
-
-## v0.8.1 - 2026-09-02
-
 - Fixed `project-workspace` layout validation so a canonical workspace no longer
   reports failure just because the rebuildable knowledge Catalog is missing or
   stale; Catalog findings are now warnings while canonical schema, reference,
