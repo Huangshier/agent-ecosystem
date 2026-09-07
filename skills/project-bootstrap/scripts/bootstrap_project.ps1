@@ -461,7 +461,7 @@ function Get-TemplateTreeHash {
             continue
         }
 
-        Get-ChildItem -LiteralPath $root.Path -Recurse -File |
+        Get-ChildItem -LiteralPath $root.Path -Recurse -File -Force |
             Sort-Object FullName |
             ForEach-Object {
                 $relative = $_.FullName.Substring($root.Path.Length).TrimStart([char[]]"\/")
@@ -693,7 +693,7 @@ function Record-InstalledTemplateHash {
 }
 
 if (-not $useC33Workspace) {
-    Get-ChildItem -Path $projectRootTemplate -Recurse -File | ForEach-Object {
+    Get-ChildItem -Path $projectRootTemplate -Recurse -File -Force | ForEach-Object {
         $relative = $_.FullName.Substring($projectRootTemplate.Length).TrimStart([char[]]"\/")
         $destination = Join-Path $ProjectDir $relative
         $normalizedRelative = Normalize-RelativePath -Path $relative
@@ -722,7 +722,7 @@ if (-not $useC33Workspace) {
 
     Ensure-Dir -Path $projectAgentDir
 
-    Get-ChildItem -Path $projectAgentTemplate -Recurse -File | ForEach-Object {
+    Get-ChildItem -Path $projectAgentTemplate -Recurse -File -Force | ForEach-Object {
         $relative = $_.FullName.Substring($projectAgentTemplate.Length).TrimStart([char[]]"\/")
         $destination = Join-Path $projectAgentDir $relative
         $normalizedRelative = Normalize-RelativePath -Path (Join-Path ".agents" $relative)

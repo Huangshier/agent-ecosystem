@@ -57,7 +57,7 @@ function Get-LegacyTemplateRelativePaths {
     $paths = New-Object 'System.Collections.Generic.List[string]'
     foreach ($templatePair in @(@{ dir = "project-root"; prefix = "" }, @{ dir = "project-agent"; prefix = ".agents/" })) {
         $templateDir = Join-Path $HubDir ("templates/languages/{0}/{1}" -f $LanguageCode, $templatePair.dir)
-        Get-ChildItem -LiteralPath $templateDir -Recurse -File | ForEach-Object {
+        Get-ChildItem -LiteralPath $templateDir -Recurse -File -Force | ForEach-Object {
             $templateRelative = $_.FullName.Substring($templateDir.Length).TrimStart([char[]]"\/") -replace "\\", "/"
             if ($templatePair.prefix) {
                 $templateRelative = "{0}{1}" -f $templatePair.prefix, $templateRelative

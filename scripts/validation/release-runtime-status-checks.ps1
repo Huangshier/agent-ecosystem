@@ -146,7 +146,7 @@
         foreach ($entry in @("project-root", "project-agent")) {
             $root = Join-PathParts $HubRoot "templates" "languages" $Language $entry
             if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
-            Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName | ForEach-Object {
+            Get-ChildItem -LiteralPath $root -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
                 $relative = $_.FullName.Substring($root.Length).TrimStart([char[]]"\/") -replace "\\", "/"
                 $records += ("{0}/{1}:{2}" -f $entry, $relative, (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())
             }
