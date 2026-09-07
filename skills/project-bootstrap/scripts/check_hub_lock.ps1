@@ -43,7 +43,7 @@ function Get-TemplateTreeHash {
             @{ Label = "project-agent"; Path = (Join-Path $templateRoot "project-agent") }
         )) {
         if (-not (Test-Path -LiteralPath $root.Path -PathType Container)) { continue }
-        Get-ChildItem -LiteralPath $root.Path -Recurse -File | Sort-Object FullName | ForEach-Object {
+        Get-ChildItem -LiteralPath $root.Path -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
             $relative = $_.FullName.Substring($root.Path.Length).TrimStart([char[]]"\/") -replace "\\", "/"
             $records += ("{0}/{1}:{2}" -f $root.Label, $relative, (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())
         }
